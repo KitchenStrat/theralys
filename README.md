@@ -4,8 +4,9 @@ SaaS de création et de gestion de sites internet pour les praticiens en médeci
 (ostéopathes, sophrologues, masseurs bien-être, hypnothérapeutes, naturopathes…), développé
 par Kitchen Strategy.
 
-**État actuel : Phase 1 livrée** — générateur de démos + template de site public.
-Le cahier des charges complet vit dans le prompt de production (phases 1 → 4).
+**État actuel : Phases 1 et 2 livrées** — générateur de démos + template de site
+public + back office client (« studio »). Le cahier des charges complet vit dans le
+prompt de production (phases 1 → 4).
 
 ## Architecture
 
@@ -15,17 +16,21 @@ Monorepo pnpm + Turborepo, TypeScript strict, Next.js App Router.
 apps/
   sites/      Rendu multi-tenant des sites publics (démos + clients) — port 3000
   admin/      Back office agence (onglet Démos, auth admin)          — port 3001
+  studio/     Back office client (dashboard, blog, éditeur de site)  — port 3002
 packages/
-  db/         Schéma PostgreSQL (Drizzle ORM), formules & gating, seed
-  ai/         Pipelines de génération (Anthropic claude-sonnet-5 + mode mock),
+  db/         Schéma PostgreSQL (Drizzle ORM), formules & gating, migrations
+  ai/         Génération de contenu (Anthropic claude-sonnet-5 + mode mock),
+              articles avec « voix » du client, images (fal.ai FLUX.1 + mock),
               garde-fous « marketing éthique »
+  jobs/       Moteur éditorial + ticks planifiés (rédaction J-7, publication
+              auto, sync Search Console) + seed
   analytics/  Tracking maison (consentement CNIL, agrégation des stats)
   ui/         Design system Theralys (admin/studio)
-  shared/     Types de contenu (sections), slugs, preview tokens, dates
+  shared/     Types de contenu (sections), slugs, preview tokens, chiffrement
 ```
 
-Le back office client (`apps/studio`) arrive en Phase 2 ; les entités de données des
-phases 2-4 (abonnements, domaines, connexions Google, leads…) existent déjà dans le schéma.
+Les entités des phases 3-4 (abonnements Stripe, domaines, leads…) existent déjà
+dans le schéma.
 
 ## Démarrage
 
@@ -44,7 +49,13 @@ Puis :
 
 - **Admin** : http://localhost:3001 — identifiants du seed
   (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, par défaut `contact@kitchenstrategy.fr`).
+- **Studio client** : http://localhost:3002 — compte seedé
+  (`SEED_CLIENT_EMAIL` / `SEED_CLIENT_PASSWORD`, par défaut `claire@demo-theralys.fr`).
 - **Démo seedée** : http://localhost:3000/claire-dupont-sophrologue-albi
+
+Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sync
+Search Console) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en production,
+un cron horaire appelle ce point d'entrée (état porté par Postgres, ticks idempotents).
 
 ### Mode mock (aucune clé API requise)
 
@@ -54,8 +65,44 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   contenu français crédible et déterministe à partir d'un catalogue de spécialités par métier.
   Avec une clé, chaque étape appelle Claude (`ANTHROPIC_MODEL`, défaut `claude-sonnet-5`)
   avec validation zod + retry.
+- **IA images** : provider retenu **fal.ai** (FLUX.1 schnell, ~0,0024 $/image d'article,
+  vs 0,003 $ chez Replicate ; ≈ 50 $/an pour 100 clients Scale). Sans `FAL_API_KEY`,
+  illustrations SVG déterministes.
+- **Google (Search Console + fiche)** : sans `GOOGLE_CLIENT_ID`, la connexion depuis le
+  studio crée une connexion mock et des statistiques réalistes (décalées de 2-3 jours).
 - **Fiche Google** : la recherche du formulaire de démo renvoie des résultats factices
   (l'API Places réelle se branchera derrière `PlacesProvider`).
+
+## Ce que couvre la Phase 2
+
+- **Studio client** (http://localhost:3002) : connexion par email/mot de passe
+  (rôle `client`, rattaché à son site).
+- **Accueil** : « Bonjour {prénom} », périodes 7j/30j/6m, cartes Visiteurs et
+  Clics RDV avec variation vs période précédente et courbe journalière (tracking
+  maison réel) ; tâches d'onboarding (visite guidée + 4 tâches, barre de
+  progression) ; **Visibilité Google** (formules Boost/Scale) : connexion OAuth
+  de la propriété, total mensuel vs mois précédent à durée égale, chips des
+  requêtes principales + « +N non détaillées » ; cartes Consulteo/BoostTonCab et
+  parrainage.
+- **Publications** : calendrier mensuel (Publié vert plein · Brouillon vert
+  pointillé · Planifié bleu pointillé · Retiré jaune, badge IA, légende),
+  modale d'article (statut daté, spécialité, temps de lecture, image, « Voir sur
+  le site » avec preview token, « Modifier l'article »), édition complète
+  (texte markdown, image régénérable par IA ou remplaçable, replanifier /
+  publier maintenant / refuser / retirer), **Paramètres du blog** (publication
+  Automatique/Manuelle ; voix : Nous/Je/On, Féminin/Masculin, Vous/Tu, 5 tons —
+  appliqués aux futurs articles).
+- **Moteur éditorial** : sujets générés depuis les pages de spécialités + la
+  ville (maillage SEO local, sans doublon), cadence 2/sem (Boost) ou 4/sem
+  (Scale) ; tick J-7 : rédaction (Claude/mock, voix du client) + image IA →
+  brouillon ou planifié selon le réglage ; tick de publication automatique ;
+  tick de sync Search Console. Cron + état Postgres (ticks idempotents),
+  migration vers une file durable prévue si besoin.
+- **Éditer site** : barre supérieure (← Retour, sélecteur de page, Tutoriel,
+  Style, Paramètres, Voir mon site), prévisualisation fidèle (iframe du vrai
+  site), édition structurée des textes et images de chaque section, panneau
+  Style (5 palettes + 3 jeux de polices), panneau Paramètres (nom, lien RDV,
+  ville). Enregistrer = publier (le site public est rendu depuis la base).
 
 ## Ce que couvre la Phase 1
 

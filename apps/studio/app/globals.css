@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@import "@theralys/ui/styles.css";
+
+/* Les composants du design system vivent dans packages/ui */
+@source "../../../packages/ui/src";
+
+body {
+  background: var(--color-cream-100);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

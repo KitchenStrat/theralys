@@ -1,29 +1,26 @@
 {
-  "name": "@theralys/db",
+  "name": "@theralys/jobs",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema.ts",
-    "./plans": "./src/plans.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/migrate.ts"
+    "tick": "tsx src/run.ts",
+    "seed": "tsx src/seed.ts"
   },
   "dependencies": {
+    "@theralys/ai": "workspace:*",
+    "@theralys/db": "workspace:*",
     "@theralys/shared": "workspace:*",
-    "drizzle-orm": "^0.44.0",
-    "pg": "^8.13.1"
+    "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.10",
     "dotenv": "^16.4.7",
-    "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"

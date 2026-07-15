@@ -1,0 +1,176 @@
+/**
+ * Rédaction d'un article du calendrier éditorial (job J-7), paramétrée par
+ * « Votre voix » (réglages du blog) : désignation (nous/je/on), accord
+ * (féminin/masculin), lecteur (vous/tu), ton.
+ */
+
+import { z } from "zod";
+import { slugify } from "@theralys/shared";
+import { completeStructured } from "./anthropic";
+import { resolveAiMode } from "./generate-site";
+import { checkEthicalComplianceDeep } from "./guardrails";
+import { resolveProfession } from "./mock/catalog";
+
+export type BlogVoice = {
+  designation: "nous" | "je" | "on";
+  accord: "feminin" | "masculin";
+  reader: "vous" | "tu";
+  tone: "chaleureux" | "rassurant" | "pose" | "direct" | "pedagogue";
+};
+
+export const DEFAULT_VOICE: BlogVoice = {
+  designation: "je",
+  accord: "feminin",
+  reader: "vous",
+  tone: "chaleureux",
+};
+
+export type ArticleBrief = {
+  topic: string;
+  motifSlug: string | null;
+  motifTitle: string | null;
+  profession: string;
+  city: string;
+  firstName: string;
+};
+
+export type VoicedArticle = {
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+};
+
+const voicedArticleSchema = z.object({
+  title: z.string().min(10),
+  slug: z.string().min(3),
+  excerpt: z.string().min(20),
+  content: z.string().min(300),
+});
+
+const TONE_LABEL: Record<BlogVoice["tone"], string> = {
+  chaleureux: "chaleureux et accueillant",
+  rassurant: "rassurant et apaisant",
+  pose: "posé et sobre",
+  direct: "direct et concret",
+  pedagogue: "pédagogue et explicatif",
+};
+
+export type ArticleGenerator = {
+  mode: "anthropic" | "mock";
+  generateArticle(brief: ArticleBrief, voice: BlogVoice): Promise<VoicedArticle>;
+};
+
+export function createArticleGenerator(env: NodeJS.ProcessEnv = process.env): ArticleGenerator {
+  const mode = resolveAiMode(env);
+  if (mode === "mock") {
+    return {
+      mode,
+      generateArticle: async (brief, voice) => {
+        const article = mockVoicedArticle(brief, voice);
+        const { ok, violations } = checkEthicalComplianceDeep(article);
+        if (!ok) throw new Error(`Article mock non conforme : ${violations[0]?.rule}`);
+        return article;
+      },
+    };
+  }
+  return {
+    mode,
+    generateArticle: (brief, voice) =>
+      completeStructured(
+        { apiKey: env.ANTHROPIC_API_KEY!, model: env.ANTHROPIC_MODEL },
+        articleSystemPrompt(voice),
+        articleUserPrompt(brief, voice),
+        voicedArticleSchema,
+      ),
+  };
+}
+
+function articleSystemPrompt(voice: BlogVoice): string {
+  return `Tu rédiges un article de blog SEO local pour le site d'un praticien en médecines douces.
+~450 mots en markdown, titres ##, maillage naturel avec la spécialité et la ville.
+
+VOIX IMPOSÉE (réglages du client, à respecter strictement) :
+- Désignation du praticien : « ${voice.designation} » (${voice.designation === "je" ? "première personne du singulier" : voice.designation === "nous" ? "première personne du pluriel" : "pronom « on »"}), accords au ${voice.accord}.
+- Adresse au lecteur : ${voice.reader === "vous" ? "vouvoiement" : "tutoiement"}.
+- Ton : ${TONE_LABEL[voice.tone]}.
+L'article se termine par une phrase rappelant que la pratique ne se substitue pas à un avis médical.`;
+}
+
+function articleUserPrompt(brief: ArticleBrief, voice: BlogVoice): string {
+  return `CONTEXTE :
+- Praticien : ${brief.firstName}, ${brief.profession} à ${brief.city}
+- Sujet imposé (calendrier éditorial) : « ${brief.topic} »
+- Spécialité rattachée : ${brief.motifTitle ?? "aucune en particulier"}
+- Lecteur : ${voice.reader === "vous" ? "vouvoyé" : "tutoyé"}
+
+Produis un JSON de la forme :
+{ "title": "…", "slug": "slug-url", "excerpt": "1-2 phrases", "content": "markdown ~450 mots" }`;
+}
+
+// ─── Mock déterministe, sensible à la voix ────────────────────────────────────
+
+export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): VoicedArticle {
+  const practice = resolveProfession(brief.profession).practiceName;
+  const you = voice.reader === "vous" ? "vous" : "tu";
+
+  // Petites briques accordées à la voix
+  const subj = (je: string, nous: string, on: string) =>
+    voice.designation === "je" ? je : voice.designation === "nous" ? nous : on;
+  const yourAdj = voice.reader === "vous" ? "votre" : "ton";
+  const yourPl = voice.reader === "vous" ? "vos" : "tes";
+  const canYou = voice.reader === "vous" ? "vous pouvez" : "tu peux";
+  const feelYou = voice.reader === "vous" ? "vous ressentez" : "tu ressens";
+
+  const toneIntro: Record<BlogVoice["tone"], string> = {
+    chaleureux: `Si ${you} ${voice.reader === "vous" ? "lisez" : "lis"} ces lignes, c'est sans doute que ${yourAdj} corps ${you} envoie des signaux. Bonne nouvelle : il existe des réponses douces, et cet article est là pour ${voice.reader === "vous" ? "vous" : "te"} guider.`,
+    rassurant: `Ce que ${you} ${feelYou} est fréquent, et il n'y a aucune raison de s'inquiéter outre mesure. Prenons le temps de comprendre ce qui se joue, calmement.`,
+    pose: `Prenons quelques minutes pour examiner ce sujet posément, loin des promesses toutes faites.`,
+    direct: `Allons droit au but : voici ce qu'il faut savoir, et ce que ${canYou} mettre en place dès aujourd'hui.`,
+    pedagogue: `Pour bien comprendre, commençons par le commencement : que se passe-t-il exactement dans ${yourAdj} corps, et comment agir ?`,
+  };
+
+  const title = brief.topic;
+  const content = [
+    toneIntro[voice.tone],
+    "",
+    `## Ce qui se joue dans ${yourAdj} quotidien`,
+    "",
+    `Rythme soutenu, sollicitations permanentes, pauses qui se font rares : le corps encaisse, puis finit par le faire savoir. ${capitalize(feelYou)} peut-être des tensions qui s'installent, un sommeil moins réparateur, une énergie en dents de scie. C'est précisément là que ${practice} trouve sa place.`,
+    "",
+    `## Comment ${subj("je travaille", "nous travaillons", "on travaille")} à ${brief.city}`,
+    "",
+    `${capitalize(subj("Je commence", "Nous commençons", "On commence"))} toujours par un temps d'échange : où en ${voice.reader === "vous" ? "êtes-vous" : "es-tu"}, qu'est-ce qui pèse en ce moment ? ${capitalize(subj("Je construis", "Nous construisons", "On construit"))} ensuite la séance autour de ${yourPl} besoins du jour${brief.motifTitle ? `, en particulier autour de « ${brief.motifTitle.toLowerCase()} »` : ""}.`,
+    "",
+    `Chaque séance se termine en douceur, avec des repères simples à emporter : une respiration, une posture, un rituel du soir.`,
+    "",
+    `## Trois habitudes qui changent la donne`,
+    "",
+    `1. **Des micro-pauses dans la journée** : deux minutes, ${voice.reader === "vous" ? "les épaules relâchées, votre" : "les épaules relâchées, ta"} respiration qui descend dans le ventre.`,
+    `2. **Un vrai sas en fin de journée** : écrans en veille, lumière douce, quelques étirements.`,
+    `3. **La régularité** : c'est la répétition des séances et des bons gestes qui installe durablement la détente.`,
+    "",
+    `## En pratique`,
+    "",
+    `${capitalize(subj("Je vous accueille", voice.reader === "tu" ? "Nous t'accueillons" : "Nous vous accueillons", voice.reader === "tu" ? "On t'accueille" : "On vous accueille"))} sur rendez-vous à ${brief.city}, dans un cadre calme et chaleureux. ${capitalize(canYou)} réserver un créneau en quelques clics depuis ce site.`,
+    "",
+    `*Cette pratique de bien-être ne se substitue ni à un avis médical ni à un suivi par un professionnel de santé.*`,
+  ].join("\n");
+
+  // Correction du "Je vous accueille" quand le lecteur est tutoyé
+  const fixed =
+    voice.designation === "je" && voice.reader === "tu"
+      ? content.replace("Je vous accueille", "Je t'accueille")
+      : content;
+
+  return {
+    title,
+    slug: slugify(title),
+    excerpt: toneIntro[voice.tone],
+    content: fixed,
+  };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

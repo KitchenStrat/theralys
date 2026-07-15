@@ -1,0 +1,31 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { jwtVerify } from "jose";
+
+const SESSION_COOKIE = "tl_studio_session";
+
+/** Tout le studio est réservé aux clients connectés, sauf /login. */
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/login") return NextResponse.next();
+
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (token && process.env.AUTH_SECRET) {
+    try {
+      const { payload } = await jwtVerify(token, new TextEncoder().encode(process.env.AUTH_SECRET));
+      if (payload.role === "client" && typeof payload.siteId === "string") {
+        return NextResponse.next();
+      }
+    } catch {
+      // session invalide/expirée → login
+    }
+  }
+
+  const loginUrl = request.nextUrl.clone();
+  loginUrl.pathname = "/login";
+  loginUrl.search = "";
+  return NextResponse.redirect(loginUrl);
+}
+
+export const config = {
+  matcher: ["/((?!_next/|favicon.ico).*)"],
+};

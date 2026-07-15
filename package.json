@@ -14,7 +14,7 @@
     "test": "turbo run test",
     "db:generate": "pnpm --filter @theralys/db db:generate",
     "db:migrate": "pnpm --filter @theralys/db db:migrate",
-    "db:seed": "pnpm --filter @theralys/db db:seed"
+    "db:seed": "pnpm --filter @theralys/jobs seed"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
