@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Builds
+.next/
+dist/
+out/
+.turbo/
+
+# Env — keep .env.example only
+.env
+.env.local
+.env.*.local
+
+# Logs & misc
+*.log
+.DS_Store
+coverage/
+
+# Drizzle local artifacts (migrations ARE committed)
+packages/db/drizzle/meta/_journal.json.bak
+
+# TypeScript incremental build info
+*.tsbuildinfo

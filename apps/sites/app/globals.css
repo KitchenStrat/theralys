@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+ * Template public thémable : toutes les couleurs/polices proviennent des
+ * variables CSS injectées par site (voir lib/theme.ts).
+ */
+
+:root {
+  --site-primary: #b05038;
+  --site-primary-dark: #8a3d2a;
+  --site-bg: #faf5ef;
+  --site-surface: #ffffff;
+  --site-text: #3d2c24;
+  --site-soft: #f6e8de;
+  --site-font-heading: Georgia, "Times New Roman", serif;
+  --site-font-body: ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: var(--site-font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--site-font-heading);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prose minimaliste pour le markdown (articles + pages de motifs) */
+.site-prose {
+  line-height: 1.75;
+}
+.site-prose h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 2rem 0 0.75rem;
+}
+.site-prose h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.site-prose p {
+  margin: 0.75rem 0;
+}
+.site-prose ul,
+.site-prose ol {
+  margin: 0.75rem 0 0.75rem 1.25rem;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.site-prose ol {
+  list-style: decimal;
+}
+.site-prose strong {
+  font-weight: 650;
+}
+.site-prose em {
+  font-style: italic;
+  opacity: 0.85;
+}
+.site-prose a {
+  color: var(--site-primary);
+  text-decoration: underline;
+}
