@@ -1,0 +1,25 @@
+{
+  "name": "@theralys/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./billing": "./src/billing/index.ts",
+    "./registrar": "./src/registrar/index.ts",
+    "./hosting": "./src/hosting/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@theralys/db": "workspace:*",
+    "stripe": "^17.5.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

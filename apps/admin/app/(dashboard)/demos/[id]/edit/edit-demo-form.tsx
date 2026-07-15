@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, ProgressDots, Select, Spinner } from "@theralys/ui";
 import { regenerateDemo, updateDemo } from "../../actions";
+import { ConvertModal } from "./convert-modal";
 
 type DemoData = {
   siteId: string;
@@ -44,6 +45,7 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
   const [copied, setCopied] = useState(false);
   const [motifs, setMotifs] = useState(demo.highlightedMotifs);
   const [motifInput, setMotifInput] = useState("");
+  const [convertOpen, setConvertOpen] = useState(false);
 
   const generating = demo.status === "generating";
   useEffect(() => {
@@ -101,8 +103,19 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
         <h1 className="text-2xl font-bold">
           {demo.firstName} {demo.lastName}
         </h1>
-        <StatusBadge status={demo.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={demo.status} />
+          <Button
+            size="sm"
+            disabled={demo.status !== "ready"}
+            title={demo.status !== "ready" ? "La génération doit être terminée" : undefined}
+            onClick={() => setConvertOpen(true)}
+          >
+            Convertir en site client
+          </Button>
+        </div>
       </div>
+      <ConvertModal siteId={demo.siteId} open={convertOpen} onClose={() => setConvertOpen(false)} />
       {demo.googleBusinessName ? (
         <p className="mt-1 text-sm text-ink-500">Fiche Google : {demo.googleBusinessName}</p>
       ) : null}

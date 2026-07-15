@@ -4,9 +4,10 @@ SaaS de création et de gestion de sites internet pour les praticiens en médeci
 (ostéopathes, sophrologues, masseurs bien-être, hypnothérapeutes, naturopathes…), développé
 par Kitchen Strategy.
 
-**État actuel : Phases 1 et 2 livrées** — générateur de démos + template de site
-public + back office client (« studio »). Le cahier des charges complet vit dans le
-prompt de production (phases 1 → 4).
+**État actuel : Phases 1, 2 et 3 livrées** — générateur de démos, template de site
+public, back office client (« studio »), et multi-tenant production : conversion
+démo → client, domaines custom (OVH), facturation Stripe, avis Google synchronisés.
+Le cahier des charges complet vit dans le prompt de production (phases 1 → 4).
 
 ## Architecture
 
@@ -25,12 +26,13 @@ packages/
   jobs/       Moteur éditorial + ticks planifiés (rédaction J-7, publication
               auto, sync Search Console) + seed
   analytics/  Tracking maison (consentement CNIL, agrégation des stats)
+  providers/  Facturation (Stripe Billing), registrar (OVH), hébergement
+              (Vercel Domains) — chacun avec mock par défaut sans clé
   ui/         Design system Theralys (admin/studio)
   shared/     Types de contenu (sections), slugs, preview tokens, chiffrement
 ```
 
-Les entités des phases 3-4 (abonnements Stripe, domaines, leads…) existent déjà
-dans le schéma.
+Les entités de la phase 4 (leads, vue d'ensemble) existent déjà dans le schéma.
 
 ## Démarrage
 
@@ -72,6 +74,49 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   studio crée une connexion mock et des statistiques réalistes (décalées de 2-3 jours).
 - **Fiche Google** : la recherche du formulaire de démo renvoie des résultats factices
   (l'API Places réelle se branchera derrière `PlacesProvider`).
+
+## Ce que couvre la Phase 3
+
+- **Conversion démo → site client** (admin, activation manuelle) : depuis la page
+  d&apos;édition d&apos;une démo « Prête à vérifier » — choix de la formule et de la
+  période, création du compte client (identifiants affichés une seule fois),
+  abonnement Stripe démarré (lien de paiement en mode réel, actif direct en mock),
+  site publié sans expiration. L&apos;onglet **Clients** liste les sites clients
+  (formule, statut d&apos;abonnement, domaine).
+- **Domaines custom** : le client cherche et achète son domaine depuis
+  « Mon compte » (prix par TLD, commande OVH, DNS pointés vers Vercel,
+  rattachement au projet + SSL automatique). Le middleware multi-tenant sert le
+  site sur son domaine dès le rattachement ; robots.txt passe en `Allow` avec
+  sitemap.
+- **Stripe Billing** : abonnements par formule (mensuel / engagement annuel),
+  webhook (`/api/stripe/webhook` sur l&apos;admin) — impayé → `past_due` (bandeau
+  studio), annulation → `canceled` + site archivé, réactivation → site republié ;
+  portail de facturation client. **Le gating suit l&apos;abonnement** : la formule en
+  base est synchronisée depuis Stripe.
+- **Gating au rendu public** : seules les pages de motifs de la formule sont
+  servies et maillées (Boost = 3, Scale = 6) ; les pages excédentaires restent en
+  base et se réactivent en cas d&apos;upgrade.
+- **Sync des avis Google** : tick périodique (upsert par identifiant source,
+  jamais de doublon), affichés sur le site public.
+- **Jobs en production** : cron Vercel horaire → `GET /api/jobs/tick` (admin),
+  protégé par `CRON_SECRET`.
+
+### Déploiement (Vercel — décision kickoff Phase 3)
+
+Trois projets Vercel pointant sur ce monorepo (Root Directory : `apps/sites`,
+`apps/admin`, `apps/studio` ; build command par défaut, pnpm détecté) :
+
+1. **sites** : domaine wildcard de démos (`demo.theralys-web.fr`) + les domaines
+   custom des clients (rattachés automatiquement via l&apos;API par `VERCEL_TOKEN`
+   / `VERCEL_SITES_PROJECT_ID`).
+2. **admin** : `admin.theralys-web.fr` — porte le cron des jobs
+   (`vercel.json`) et le webhook Stripe (à déclarer dans le dashboard Stripe).
+3. **studio** : `app.theralys-web.fr`.
+
+Base de données : PostgreSQL managé (Neon/Supabase — sauvegardes automatiques ;
+activer le point-in-time recovery). Variables : voir `.env.example` — toutes les
+intégrations tombent en mock si la clé correspondante est absente, ce qui permet
+un environnement de préproduction sans aucun compte externe.
 
 ## Ce que couvre la Phase 2
 

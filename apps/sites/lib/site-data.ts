@@ -3,6 +3,7 @@ import {
   blogArticles,
   getDb,
   googleReviews,
+  motifPagesAllowance,
   pages,
   prospects,
   sites,
@@ -41,20 +42,25 @@ export async function getHomePage(siteId: string): Promise<Page | null> {
   return page ?? null;
 }
 
-export async function getMotifPages(siteId: string): Promise<Page[]> {
+/**
+ * Pages de motifs visibles — le gating suit la formule (Starter 0, Boost 3,
+ * Scale 6). Les pages excédentaires restent en base : un passage à la formule
+ * supérieure les réactive sans régénération.
+ */
+export async function getMotifPages(site: Site): Promise<Page[]> {
   const db = getDb();
-  return db.query.pages.findMany({
-    where: and(eq(pages.siteId, siteId), eq(pages.type, "motif")),
+  const all = await db.query.pages.findMany({
+    where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
     orderBy: (p, { asc }) => [asc(p.position)],
   });
+  // Les démos présentent toujours l'offre complète
+  if (site.type === "demo") return all;
+  return all.slice(0, motifPagesAllowance(site.plan));
 }
 
-export async function getMotifPage(siteId: string, slug: string): Promise<Page | null> {
-  const db = getDb();
-  const page = await db.query.pages.findFirst({
-    where: and(eq(pages.siteId, siteId), eq(pages.type, "motif"), eq(pages.slug, slug)),
-  });
-  return page ?? null;
+export async function getMotifPage(site: Site, slug: string): Promise<Page | null> {
+  const allowed = await getMotifPages(site);
+  return allowed.find((p) => p.slug === slug) ?? null;
 }
 
 export async function getReviews(siteId: string) {

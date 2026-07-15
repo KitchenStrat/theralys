@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Sections } from "@/components/sections";
 import {
   getHomePage,
+  getMotifPages,
   getProspect,
   getReviews,
   getSiteByKey,
@@ -41,9 +42,10 @@ export default async function HomePage({ params }: Props) {
   const home = await getHomePage(site.id);
   if (!home) notFound();
 
-  const [reviews, prospect] = await Promise.all([
+  const [reviews, prospect, motifPages] = await Promise.all([
     getReviews(site.id),
     getProspect(site.prospectId),
+    getMotifPages(site),
   ]);
 
   const googleRating =
@@ -66,7 +68,14 @@ export default async function HomePage({ params }: Props) {
       />
       <Sections
         sections={home.sections}
-        ctx={{ site, prefix: `/${siteKey}`, reviews, googleRating, googleReviewCount }}
+        ctx={{
+          site,
+          prefix: `/${siteKey}`,
+          reviews,
+          googleRating,
+          googleReviewCount,
+          allowedMotifSlugs: motifPages.map((p) => p.slug),
+        }}
       />
     </main>
   );

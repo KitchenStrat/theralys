@@ -40,13 +40,20 @@ export default async function StudioLayout({ children }: { children: ReactNode }
             >
               ↗ Voir site
             </a>
+            <Link
+              href="/compte"
+              className="ml-1 rounded-full bg-cream-200 px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-300"
+            >
+              {session.name.split(" ")[0]}
+            </Link>
             <form action={logoutAction}>
               <button
                 type="submit"
                 title="Déconnexion"
-                className="ml-1 rounded-full bg-cream-200 px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-300"
+                aria-label="Déconnexion"
+                className="rounded-full px-2 py-1.5 text-sm text-ink-500 hover:bg-cream-200"
               >
-                {session.name.split(" ")[0]} ⏻
+                ⏻
               </button>
             </form>
           </div>

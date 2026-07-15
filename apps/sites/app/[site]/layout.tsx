@@ -26,6 +26,21 @@ export default async function SiteLayout({ children, params }: Props) {
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
 
+  // Abonnement annulé → site archivé, plus servi publiquement
+  if (site.status === "archived") {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-8 text-center">
+        <div className="max-w-md">
+          <h1 className="text-2xl font-bold">Ce site n&apos;est plus disponible</h1>
+          <p className="mt-3 opacity-70">
+            Le site que vous cherchez a été désactivé. Si vous en êtes le propriétaire,
+            contactez Theralys pour le réactiver.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   if (isDemoExpired(site)) {
     return (
       <main className="flex min-h-screen items-center justify-center p-8 text-center">
@@ -40,7 +55,7 @@ export default async function SiteLayout({ children, params }: Props) {
     );
   }
 
-  const motifPages = await getMotifPages(site.id);
+  const motifPages = await getMotifPages(site);
   const prefix = `/${siteKey}`;
 
   return (

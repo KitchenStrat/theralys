@@ -16,6 +16,7 @@ import {
   editorialCalendarEntries,
   getDb,
   googleConnections,
+  googleReviews,
   hasBlog,
   pages,
   prospects,
@@ -33,6 +34,7 @@ import {
 import { readingTimeMinutes, slugify } from "@theralys/shared";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
 import { generateMockSearchStats } from "./google-mock";
+import { generateMockReviews } from "./reviews-mock";
 
 const HORIZON_WEEKS = 6;
 /** L'IA rédige chaque article 7 jours avant sa date de publication. */
@@ -249,12 +251,64 @@ export async function syncGoogleData(now = new Date()): Promise<TickReport> {
   return { task: "sync-google", processed };
 }
 
+/**
+ * Synchronisation des avis Google (toutes formules) : upsert par
+ * sourceReviewId — jamais de doublon, les nouveaux avis apparaissent sur le
+ * site public à la prochaine visite.
+ */
+export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
+  const db = getDb();
+  const connections = await db.query.googleConnections.findMany({
+    where: eq(googleConnections.status, "connected"),
+  });
+  let processed = 0;
+
+  for (const connection of connections) {
+    const site = await db.query.sites.findFirst({ where: eq(sites.id, connection.siteId) });
+    if (!site) continue;
+    const prospect = site.prospectId
+      ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
+      : null;
+
+    const incoming = generateMockReviews({
+      siteId: site.id,
+      firstName: prospect?.firstName ?? "votre praticien",
+      city: prospect?.city ?? "",
+      now,
+    });
+
+    const existing = await db.query.googleReviews.findMany({
+      where: eq(googleReviews.siteId, site.id),
+      columns: { sourceReviewId: true },
+    });
+    const known = new Set(existing.map((r) => r.sourceReviewId).filter(Boolean));
+
+    const fresh = incoming.filter((r) => !known.has(r.sourceReviewId));
+    if (fresh.length > 0) {
+      await db.insert(googleReviews).values(
+        fresh.map((r) => ({
+          siteId: site.id,
+          sourceReviewId: r.sourceReviewId,
+          authorName: r.authorName,
+          rating: r.rating,
+          text: r.text,
+          reviewedAt: r.reviewedAt,
+          syncedAt: now,
+        })),
+      );
+      processed += fresh.length;
+    }
+  }
+  return { task: "sync-google-reviews", processed };
+}
+
 export async function runAllTicks(now = new Date()): Promise<TickReport[]> {
   return [
     await ensureEditorialCalendars(now),
     await generateDueArticles(now),
     await publishDueArticles(now),
     await syncGoogleData(now),
+    await syncGoogleReviews(now),
   ];
 }
 

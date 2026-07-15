@@ -9,7 +9,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { site: siteKey, slug } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) return {};
-  const page = await getMotifPage(site.id, slug);
+  const page = await getMotifPage(site, slug);
   if (!page) return {};
   return {
     title: { absolute: page.metaTitle ?? page.title },
@@ -28,7 +28,7 @@ export default async function MotifPage({ params }: Props) {
   const { site: siteKey, slug } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
-  const page = await getMotifPage(site.id, slug);
+  const page = await getMotifPage(site, slug);
   if (!page) notFound();
 
   const reviews = await getReviews(site.id);

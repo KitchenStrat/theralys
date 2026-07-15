@@ -11,6 +11,8 @@ export type SectionContext = {
   reviews: GoogleReview[];
   googleRating: number | null;
   googleReviewCount: number | null;
+  /** Slugs des pages de motifs visibles (gating par formule) — null = tous */
+  allowedMotifSlugs?: string[] | null;
 };
 
 /** Rendu d'une liste de sections typées (contenu structuré, jamais de HTML libre). */
@@ -92,12 +94,16 @@ function Specialties({
   section: Extract<Section, { type: "specialties" }>;
   ctx: SectionContext;
 }) {
+  const items = ctx.allowedMotifSlugs
+    ? section.items.filter((item) => ctx.allowedMotifSlugs!.includes(item.slug))
+    : section.items;
+  if (items.length === 0) return null;
   return (
     <section id="specialites" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-14">
       <h2 className="text-3xl font-bold">{section.title}</h2>
       {section.intro ? <p className="mt-3 max-w-2xl opacity-80">{section.intro}</p> : null}
       <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {section.items.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.slug}
             href={`${ctx.prefix}/motifs/${item.slug}`}

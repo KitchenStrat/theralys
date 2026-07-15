@@ -18,7 +18,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ site: stri
   if (site.type !== "demo") {
     const base = siteBaseUrl(site);
     const [motifs, articles] = await Promise.all([
-      getMotifPages(site.id),
+      getMotifPages(site),
       getPublishedArticles(site.id),
     ]);
     urls.push({ loc: base, lastmod: site.updatedAt.toISOString() });

@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     "@theralys/db",
     "@theralys/shared",
     "@theralys/ai",
-    "@theralys/ui",
+    "@theralys/ui", "@theralys/providers",
     "@theralys/analytics",
     "@theralys/jobs",
   ],

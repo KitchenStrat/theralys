@@ -3,10 +3,13 @@ import { jwtVerify } from "jose";
 
 const SESSION_COOKIE = "tl_admin_session";
 
-/** Garde d'authentification : tout l'admin est protégé sauf /login. */
+/**
+ * Garde d'authentification : tout l'admin est protégé sauf /login et les
+ * routes API (webhook Stripe, cron des jobs), qui portent leur propre auth.
+ */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/login") return NextResponse.next();
+  if (pathname === "/login" || pathname.startsWith("/api/")) return NextResponse.next();
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (token && process.env.AUTH_SECRET) {
