@@ -3,6 +3,9 @@ import { DemosPageClient } from "./demos-page-client";
 
 export const metadata = { title: "Démos" };
 export const dynamic = "force-dynamic";
+// La génération IA (job après réponse) fait ~10 appels Claude (jusqu'à ~5 min) :
+// sur Vercel, la fonction doit vivre assez longtemps (plan Pro requis, cf. DEPLOY.md)
+export const maxDuration = 300;
 
 type Props = { searchParams: Promise<{ q?: string; page?: string }> };
 
