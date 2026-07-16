@@ -43,7 +43,7 @@ export function TasksCard({ tasks }: { tasks: OnboardingTask[] }) {
           </span>
           <span>
             <span className="block text-sm font-semibold">Visite guidée</span>
-            <span className="block text-xs text-ink-500">2 minutes pour découvrir Theralys</span>
+            <span className="block text-xs text-ink-500">2 minutes pour découvrir Harmony</span>
           </span>
         </button>
       ) : null}

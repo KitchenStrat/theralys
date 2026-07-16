@@ -41,7 +41,7 @@ export function DomainSection({
           <a href={`https://${currentDomain}`} className="underline" target="_blank" rel="noopener noreferrer">
             https://{currentDomain}
           </a>
-          . Le renouvellement est géré par Theralys.
+          . Le renouvellement est géré par Harmony.
         </p>
       </Card>
     );

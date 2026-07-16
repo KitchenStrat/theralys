@@ -1,5 +1,5 @@
 /**
- * Formules Theralys et gating des fonctionnalités.
+ * Formules Harmony et gating des fonctionnalités.
  * Source : pricing de theralys-web.fr (cahier des charges §2).
  */
 

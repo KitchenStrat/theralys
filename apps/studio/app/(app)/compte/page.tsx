@@ -65,7 +65,7 @@ export default async function AccountPage() {
           </>
         ) : (
           <p className="mt-3 text-sm text-ink-500">
-            Site de démonstration — l&apos;abonnement démarre à l&apos;activation par Theralys.
+            Site de démonstration — l&apos;abonnement démarre à l&apos;activation par Harmony.
           </p>
         )}
       </Card>

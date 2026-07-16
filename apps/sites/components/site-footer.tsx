@@ -17,7 +17,7 @@ export function SiteFooter({ site }: { site: Site }) {
             rel="noopener noreferrer"
             className="underline hover:text-[var(--site-primary)]"
           >
-            Theralys
+            Harmony
           </a>
         </p>
       </div>

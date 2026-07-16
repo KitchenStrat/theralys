@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Theralys — Sites de praticiens",
+  title: "Harmony — Sites de praticiens",
   robots: { index: false, follow: false },
 };
 
@@ -10,7 +10,7 @@ export default function RootPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8 text-center">
       <div>
-        <h1 className="text-2xl font-bold">Theralys</h1>
+        <h1 className="text-2xl font-bold">Harmony</h1>
         <p className="mt-2 opacity-70">
           Les sites de démonstration sont accessibles via leur lien dédié.
         </p>

@@ -33,7 +33,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
           <div className="flex items-center gap-8">
             <Link href="/" className="text-xl font-bold text-primary-500">
-              Theralys
+              Harmony
             </Link>
             <StudioNav />
           </div>

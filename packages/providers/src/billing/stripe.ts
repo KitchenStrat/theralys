@@ -32,7 +32,7 @@ export class StripeBillingProvider implements BillingProvider {
       unit_amount: (period === "annual" ? def.annualMonthlyPrice : def.monthlyPrice) * 100,
       recurring: { interval: "month" },
       metadata: { plan, period },
-      product_data: { name: `Theralys ${def.label} (${period === "annual" ? "engagement annuel" : "mensuel"})` },
+      product_data: { name: `Harmony ${def.label} (${period === "annual" ? "engagement annuel" : "mensuel"})` },
     });
     return price.id;
   }

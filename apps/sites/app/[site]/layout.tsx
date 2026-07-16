@@ -34,7 +34,7 @@ export default async function SiteLayout({ children, params }: Props) {
           <h1 className="text-2xl font-bold">Ce site n&apos;est plus disponible</h1>
           <p className="mt-3 opacity-70">
             Le site que vous cherchez a été désactivé. Si vous en êtes le propriétaire,
-            contactez Theralys pour le réactiver.
+            contactez Harmony pour le réactiver.
           </p>
         </div>
       </main>
@@ -47,7 +47,7 @@ export default async function SiteLayout({ children, params }: Props) {
         <div className="max-w-md">
           <h1 className="text-2xl font-bold">Cette démonstration a expiré</h1>
           <p className="mt-3 opacity-70">
-            Le lien de ce site de démonstration n&apos;est plus actif. Contactez Theralys pour le
+            Le lien de ce site de démonstration n&apos;est plus actif. Contactez Harmony pour le
             réactiver.
           </p>
         </div>

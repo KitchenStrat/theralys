@@ -81,9 +81,9 @@ export default async function HomePage({ searchParams }: Props) {
             />
           </div>
 
-          <h2 className="mt-6 font-semibold">Faites découvrir Theralys</h2>
+          <h2 className="mt-6 font-semibold">Faites découvrir Harmony</h2>
           <a
-            href="mailto:contact@kitchenstrategy.fr?subject=Parrainage%20Theralys"
+            href="mailto:contact@kitchenstrategy.fr?subject=Parrainage%20Harmony"
             className="mt-3 block rounded-2xl border border-dashed border-primary-300 bg-primary-50 p-4 transition-colors hover:border-primary-400"
           >
             <p className="flex items-center gap-2 text-sm font-semibold text-ink-900">

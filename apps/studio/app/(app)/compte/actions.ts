@@ -45,7 +45,7 @@ export async function purchaseDomain(raw: string): Promise<{ error?: string; dom
   if (!site) return { error: "Site introuvable" };
   if (site.domain) return { error: `Un domaine est déjà rattaché : ${site.domain}` };
   const taken = await db.query.domains.findFirst({ where: eq(domains.name, domainName) });
-  if (taken) return { error: "Ce domaine est déjà géré par Theralys" };
+  if (taken) return { error: "Ce domaine est déjà géré par Harmony" };
 
   const registrar = createRegistrar();
   const availability = await registrar.checkAvailability(domainName);
