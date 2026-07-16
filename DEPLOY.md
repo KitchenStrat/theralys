@@ -142,9 +142,13 @@ chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 
 ## Étape 6 — Le cron des jobs (déjà câblé, à vérifier)
 
-`apps/admin/vercel.json` déclare le cron horaire sur `/api/jobs/tick`
+`apps/admin/vercel.json` déclare le cron sur `/api/jobs/tick`
 (calendrier éditorial, rédaction J-7, publication auto, syncs Google).
 Vercel envoie automatiquement `Authorization: Bearer <CRON_SECRET>`.
+
+Cadence : **quotidienne à 6h UTC** (compatible plan Hobby — les articles étant
+rédigés 7 jours à l'avance, c'est suffisant). Une fois en Pro, vous pouvez
+passer à l'horaire en changeant `"schedule"` en `"0 * * * *"` dans ce fichier.
 
 Vérification : projet admin → onglet **Cron Jobs** → « Run » → le log doit
 répondre `{"ok":true,…}`.
