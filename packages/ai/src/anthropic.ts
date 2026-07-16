@@ -39,7 +39,7 @@ export async function completeStructured<T>(
       .join("");
 
     try {
-      const raw: unknown = JSON.parse(stripCodeFences(text));
+      const raw: unknown = parseModelJson(text);
       const parsed = schema.parse(raw);
       const compliance = checkEthicalComplianceDeep(parsed);
       if (!compliance.ok) {
@@ -66,4 +66,42 @@ function stripCodeFences(text: string): string {
   const trimmed = text.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/m.exec(trimmed);
   return fenced?.[1] ?? trimmed;
+}
+
+/**
+ * JSON.parse tolérant : le modèle glisse parfois des caractères de contrôle
+ * bruts (retour à la ligne, tabulation…) dans les chaînes, ce que JSON
+ * interdit (« Bad control character in string literal »).
+ */
+export function parseModelJson(text: string): unknown {
+  const cleaned = stripCodeFences(text);
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return JSON.parse(escapeControlCharsInStrings(cleaned));
+  }
+}
+
+function escapeControlCharsInStrings(json: string): string {
+  const named: Record<string, string> = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const char of json) {
+    const code = char.codePointAt(0) ?? 0;
+    if (inString && code < 0x20) {
+      out += named[char] ?? `\\u${code.toString(16).padStart(4, "0")}`;
+      escaped = false;
+      continue;
+    }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    }
+    out += char;
+  }
+  return out;
 }
