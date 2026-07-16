@@ -1,4 +1,4 @@
-# Déployer Theralys sur Vercel — guide pas à pas
+# Déployer Harmony sur Vercel — guide pas à pas
 
 Cible : 3 projets Vercel (sites publics, admin, studio) + une base PostgreSQL
 managée (Neon). Durée totale : ~45 minutes. Aucune ligne de commande n'est
@@ -71,7 +71,7 @@ Pour chacun des trois, sur [vercel.com/new](https://vercel.com/new) :
 
 | Réglage | Projet 1 | Projet 2 | Projet 3 |
 |---|---|---|---|
-| **Project Name** | `theralys-sites` | `theralys-admin` | `theralys-studio` |
+| **Project Name** | `harmony-sites` | `harmony-admin` | `harmony-studio` |
 | **Root Directory** (Edit) | `apps/sites` | `apps/admin` | `apps/studio` |
 | Framework | Next.js (auto) | Next.js (auto) | Next.js (auto) |
 
@@ -86,21 +86,23 @@ Communes aux **3 projets** :
 |---|---|
 | `DATABASE_URL` | l'URL Neon *pooled* |
 | `AUTH_SECRET` | votre secret unique (identique partout !) |
-| `SITES_BASE_URL` | `https://theralys-sites.vercel.app` pour commencer (voir étape 5) |
+| `SITES_BASE_URL` | `https://harmony-sites.vercel.app` pour commencer (voir étape 5) |
 
-En plus, sur **theralys-admin** :
+En plus, sur **harmony-admin** :
 
 | Nom | Valeur |
 |---|---|
 | `ANTHROPIC_API_KEY` | votre clé `sk-ant-…` |
+| `ANTHROPIC_MODEL` | `claude-opus-4-8` (recommandé pour la qualité rédactionnelle ; défaut : `claude-sonnet-5`) |
 | `CRON_SECRET` | votre second secret |
-| `STUDIO_BASE_URL` | `https://theralys-studio.vercel.app` pour commencer |
+| `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer |
 
-En plus, sur **theralys-studio** :
+En plus, sur **harmony-studio** :
 
 | Nom | Valeur |
 |---|---|
 | `ANTHROPIC_API_KEY` | la même clé (régénérations depuis l'espace client) |
+| `ANTHROPIC_MODEL` | la même valeur que sur admin |
 
 ⚠️ Ne définissez `AI_MOCK` nulle part (il forcerait le mode mock).
 Les intégrations non configurées (fal.ai, Google, Stripe, OVH) restent en mock
@@ -110,14 +112,14 @@ Cliquez **Deploy** pour chaque projet (2-3 min de build chacun).
 
 ## Étape 4 — Premières vérifications (5 min)
 
-1. `https://theralys-admin.vercel.app` → connexion avec votre email/mot de
+1. `https://harmony-admin.vercel.app` → connexion avec votre email/mot de
    passe admin → **Vue d'ensemble** : badge vert
    « Rédaction : API Anthropic (claude-sonnet-5) ».
 2. Onglet **Démos** → la démo d'exemple est là → œil 👁 : elle s'ouvre sur
-   `theralys-sites.vercel.app`.
+   `harmony-sites.vercel.app`.
 3. Créez une démo de test réelle (~4 min, ~0,35 €) pour valider la génération
    en production.
-4. `https://theralys-studio.vercel.app` → connexion avec le compte client seedé.
+4. `https://harmony-studio.vercel.app` → connexion avec le compte client seedé.
 
 ## Étape 5 — Brancher vos domaines (10 min)
 
@@ -125,20 +127,22 @@ Dans chaque projet : **Settings → Domains → Add** :
 
 | Projet | Domaine |
 |---|---|
-| theralys-sites | `demo.theralys-web.fr` |
-| theralys-admin | `admin.theralys-web.fr` |
-| theralys-studio | `app.theralys-web.fr` |
+| harmony-sites | `demo.harmony-web.fr` |
+| harmony-admin | `admin.harmony-web.fr` |
+| harmony-studio | `app.harmony-web.fr` |
 
 Vercel affiche l'enregistrement DNS à créer : chez votre registrar (là où est
-géré `theralys-web.fr`), ajoutez pour chacun un **CNAME** vers
+géré `harmony-web.fr`), ajoutez pour chacun un **CNAME** vers
 `cname.vercel-dns.com.` (TTL par défaut). Propagation : de quelques minutes à
 1 h ; le SSL est automatique.
 
 Puis **mettez à jour les variables** (Settings → Environment Variables de
 chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 
-- `SITES_BASE_URL` = `https://demo.theralys-web.fr` (sur les 3 projets) ;
-- `STUDIO_BASE_URL` = `https://app.theralys-web.fr` (sur admin).
+- `SITES_BASE_URL` = `https://demo.harmony-web.fr` (sur les 3 projets) ;
+- `STUDIO_BASE_URL` = `https://app.harmony-web.fr` (sur admin) ;
+- sur **harmony-sites**, ajoutez aussi `DEMO_HOST` = `harmony-sites.vercel.app`
+  pour que les anciens liens de démo `.vercel.app` déjà envoyés restent valides.
 
 ## Étape 6 — Le cron des jobs (déjà câblé, à vérifier)
 
@@ -158,7 +162,7 @@ répondre `{"ok":true,…}`.
 | Intégration | Variables à ajouter | Où |
 |---|---|---|
 | Images fal.ai | `FAL_API_KEY` ([fal.ai/dashboard](https://fal.ai/dashboard)) | admin + studio |
-| Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.theralys-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
+| Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
 | Google (GSC + fiche) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` | studio + admin |
 | Domaines clients OVH | `OVH_APP_KEY`, `OVH_APP_SECRET`, `OVH_CONSUMER_KEY` + `VERCEL_TOKEN`, `VERCEL_SITES_PROJECT_ID` (rattachement auto des domaines clients au projet sites) | studio |
 
@@ -172,4 +176,4 @@ Après chaque ajout de variable : **Redeploy**.
 | Badge « mode mock » malgré la clé | Variable absente de l'environnement **Production**, ou pas de redéploiement après ajout |
 | Démo bloquée « En préparation » puis « Erreur … timeout » | Plan Hobby (60 s max) — passer Pro, ou tester en mock |
 | Connexion admin/studio en boucle | `AUTH_SECRET` différent entre projets |
-| Sites clients 404 sur leur domaine | Domaine non ajouté au projet **theralys-sites** |
+| Sites clients 404 sur leur domaine | Domaine non ajouté au projet **harmony-sites** |
