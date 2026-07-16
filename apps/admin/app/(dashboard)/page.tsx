@@ -10,6 +10,7 @@ import {
   sites,
   type PlanId,
 } from "@theralys/db";
+import { resolveAiMode } from "@theralys/ai";
 import { requireAdmin } from "@/lib/auth";
 import { computeMrr, estimateAiCosts, type SubscriptionLike } from "@/lib/metrics";
 
@@ -82,6 +83,8 @@ export default async function OverviewPage() {
     demosGenerated: monthDemos[0]?.value ?? 0,
   });
   const jobsHealthy = erroredSites.length === 0 && lateCount === 0;
+  const aiMode = resolveAiMode();
+  const imageMode = process.env.IMAGE_PROVIDER !== "mock" && process.env.FAL_API_KEY ? "fal" : "mock";
 
   return (
     <div>
@@ -141,6 +144,21 @@ export default async function OverviewPage() {
               <Badge tone="danger">
                 {erroredSites.length + lateCount} problème{erroredSites.length + lateCount > 1 ? "s" : ""}
               </Badge>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2 border-b border-cream-200 pb-3">
+            {aiMode === "anthropic" ? (
+              <Badge tone="success">
+                Rédaction : API Anthropic ({process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5"})
+              </Badge>
+            ) : (
+              <Badge tone="warning">Rédaction : mode mock — aucune clé Anthropic active</Badge>
+            )}
+            {imageMode === "fal" ? (
+              <Badge tone="success">Images : fal.ai (FLUX.1 schnell)</Badge>
+            ) : (
+              <Badge tone="neutral">Images : mock (SVG)</Badge>
             )}
           </div>
 

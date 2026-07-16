@@ -60,6 +60,25 @@ Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sy
 Search Console) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en production,
 un cron horaire appelle ce point d'entrée (état porté par Postgres, ticks idempotents).
 
+### Brancher la vraie clé Anthropic
+
+Le code est prêt : la génération bascule sur l&apos;API dès qu&apos;une clé est présente.
+
+1. Créer la clé sur [console.anthropic.com](https://console.anthropic.com) → *API Keys*
+   (prévoir une limite de dépense ; ordre de grandeur : ~0,03 €/article,
+   ~0,30 €/démo, soit &lt; 10 €/an par client Scale).
+2. La renseigner dans `.env` (local) **et** dans les variables du projet Vercel
+   `admin` (jobs du blog) et `apps/admin`/`apps/sites` si la génération y tourne :
+   `ANTHROPIC_API_KEY=sk-ant-…` — et laisser `AI_MOCK` **vide**.
+3. Vérifier dans l&apos;admin → Vue d&apos;ensemble : le badge « Jobs IA » doit passer de
+   « Rédaction : mode mock » à « Rédaction : API Anthropic (claude-sonnet-5) ».
+4. Créer une démo de test : le contenu est généré par Claude, validé par zod et
+   passé aux garde-fous marketing éthique (retry automatique en cas d&apos;écart,
+   statut « Erreur » relançable sinon).
+
+La clé n&apos;est jamais commitée (`.env` est ignoré par git) ; seule la variable
+d&apos;environnement compte.
+
 ### Mode mock (aucune clé API requise)
 
 Toutes les APIs externes ont un mode mock pour développer sans clé :
