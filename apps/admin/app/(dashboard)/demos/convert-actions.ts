@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, prospects, sites, subscriptions, users } from "@theralys/db";
+import { getDb, leads, prospects, sites, subscriptions, users } from "@theralys/db";
 import { createBillingProvider } from "@theralys/providers/billing";
 import { hashPassword, requireAdmin } from "@/lib/auth";
 
@@ -99,6 +99,11 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
       updatedAt: new Date(),
     })
     .where(eq(sites.id, siteId));
+
+  // Pipeline commercial : le lead de ce prospect est gagné
+  if (site.prospectId) {
+    await db.update(leads).set({ status: "won" }).where(eq(leads.prospectId, site.prospectId));
+  }
 
   // Pas de revalidatePath ici : la page d'édition de la démo n'existe plus
   // après conversion (elle deviendrait un 404 sous la modale d'identifiants).

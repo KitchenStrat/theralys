@@ -4,10 +4,11 @@ SaaS de création et de gestion de sites internet pour les praticiens en médeci
 (ostéopathes, sophrologues, masseurs bien-être, hypnothérapeutes, naturopathes…), développé
 par Kitchen Strategy.
 
-**État actuel : Phases 1, 2 et 3 livrées** — générateur de démos, template de site
-public, back office client (« studio »), et multi-tenant production : conversion
-démo → client, domaines custom (OVH), facturation Stripe, avis Google synchronisés.
-Le cahier des charges complet vit dans le prompt de production (phases 1 → 4).
+**État actuel : les 4 phases du cahier des charges sont livrées** — générateur de
+démos, template de site public, back office client (« studio »), multi-tenant
+production (conversion démo → client, domaines OVH, facturation Stripe, avis
+Google synchronisés) et back office admin complet (vue d'ensemble, clients avec
+impersonation, pipeline de leads).
 
 ## Architecture
 
@@ -74,6 +75,23 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   studio crée une connexion mock et des statistiques réalistes (décalées de 2-3 jours).
 - **Fiche Google** : la recherche du formulaire de démo renvoie des résultats factices
   (l'API Places réelle se branchera derrière `PlacesProvider`).
+
+## Ce que couvre la Phase 4
+
+- **Vue d'ensemble** (accueil de l&apos;admin) : MRR (actifs + impayés, au tarif de
+  la période souscrite, réparti par formule), nombre de sites clients/démos,
+  **jobs IA en erreur** (générations échouées avec lien de relance + articles du
+  calendrier en retard de rédaction), **coûts API du mois** estimés (barème
+  documenté : article ≈ 0,03 €, image ≈ 0,0025 €, démo ≈ 0,30 €).
+- **Onglet Clients enrichi** : statut d&apos;abonnement, domaine, **santé du blog**
+  (à jour / en retard selon la cadence de la formule, dernier article publié,
+  premier article planifié) et **impersonation** : « Studio » ouvre le back
+  office du client dans sa session via un jeton signé de 2 minutes — bannière
+  « Mode support » et session courte (1 h) côté studio.
+- **Onglet Leads** : pipeline commercial (Nouveau → Démo envoyée → Rendez-vous →
+  Gagné / Perdu), statuts et notes éditables en ligne, ajout manuel
+  (landing/parrainage). Un lead est **créé automatiquement à chaque démo** et
+  passe à « Gagné » à la conversion en client.
 
 ## Ce que couvre la Phase 3
 

@@ -27,6 +27,7 @@ import {
   getDb,
   googleConnections,
   googleReviews,
+  leads,
   motifPagesAllowance,
   onboardingTasks,
   pages,
@@ -148,6 +149,35 @@ async function main() {
   if (!hasEvents) {
     await seedTraffic(siteId, now);
     console.log("✔ Trafic de démonstration créé (60 jours)");
+  }
+
+  // ── Pipeline commercial (onglet Leads) ──────────────────────────────────────
+  if (!(await db.query.leads.findFirst())) {
+    await db.insert(leads).values([
+      {
+        name: "Claire Dupont",
+        source: "demo",
+        status: "demo_sent",
+        prospectId: site.prospectId,
+        notes: "Très intéressée, rappel prévu la semaine prochaine",
+      },
+      {
+        name: "Sophie Bernard",
+        email: "sophie.bernard@exemple.fr",
+        source: "landing",
+        status: "new",
+        notes: "Naturopathe à Montpellier, formulaire de contact",
+      },
+      {
+        name: "Marc Lefèvre",
+        email: "marc.lefevre@exemple.fr",
+        phone: "06 12 34 56 78",
+        source: "referral",
+        status: "lost",
+        notes: "Parrainé par Claire — a choisi de refaire son site lui-même",
+      },
+    ]);
+    console.log("✔ Leads de démonstration créés");
   }
 
   // ── Ticks réels : calendrier à venir, rédaction J-7, publication, sync GSC ──

@@ -1,19 +1,35 @@
-import { Card } from "@theralys/ui";
+import { desc, eq } from "drizzle-orm";
+import { getDb, leads, prospects } from "@theralys/db";
+import { requireAdmin } from "@/lib/auth";
+import { LeadsClient } from "./leads-client";
 
 export const metadata = { title: "Leads" };
+export const dynamic = "force-dynamic";
 
-/** Placeholder — le suivi des leads arrive en Phase 4. */
-export default function LeadsPage() {
+/** Pipeline commercial : prospects issus des démos, de la landing et du parrainage. */
+export default async function LeadsPage() {
+  await requireAdmin();
+  const db = getDb();
+
+  const rows = await db
+    .select({ lead: leads, prospect: prospects })
+    .from(leads)
+    .leftJoin(prospects, eq(leads.prospectId, prospects.id))
+    .orderBy(desc(leads.createdAt));
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Leads</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Bientôt disponible</p>
-        <p className="mt-1 text-sm">
-          Le suivi des prospects (démos envoyées, pipeline de vente) arrive dans une prochaine
-          phase.
-        </p>
-      </Card>
-    </div>
+    <LeadsClient
+      rows={rows.map(({ lead, prospect }) => ({
+        id: lead.id,
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        source: lead.source,
+        status: lead.status,
+        notes: lead.notes,
+        createdAt: lead.createdAt.toISOString(),
+        context: prospect ? `${prospect.profession} · ${prospect.city}` : null,
+      }))}
+    />
   );
 }

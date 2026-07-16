@@ -14,12 +14,12 @@ async function loginAction(_prev: { error?: string }, formData: FormData) {
   if (!user) return { error: "Identifiants incorrects." };
 
   await createSession(user);
-  redirect("/demos");
+  redirect("/");
 }
 
 export default async function LoginPage() {
   const user = await getSessionUser();
-  if (user) redirect("/demos");
+  if (user) redirect("/");
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">

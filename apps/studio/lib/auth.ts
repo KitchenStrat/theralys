@@ -30,12 +30,22 @@ export async function authenticateClient(email: string, password: string): Promi
   return user;
 }
 
-export async function createSession(user: User): Promise<void> {
-  const token = await new SignJWT({ role: user.role, name: user.name, siteId: user.siteId })
+export async function createSession(
+  user: User,
+  opts: { impersonated?: boolean } = {},
+): Promise<void> {
+  // Une session support (impersonation admin) est volontairement courte
+  const duration = opts.impersonated ? 60 * 60 : SESSION_DURATION_S;
+  const token = await new SignJWT({
+    role: user.role,
+    name: user.name,
+    siteId: user.siteId,
+    ...(opts.impersonated ? { impersonated: true } : {}),
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + SESSION_DURATION_S)
+    .setExpirationTime(Math.floor(Date.now() / 1000) + duration)
     .sign(secretKey());
 
   const store = await cookies();
@@ -43,7 +53,7 @@ export async function createSession(user: User): Promise<void> {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: SESSION_DURATION_S,
+    maxAge: duration,
     path: "/",
   });
 }
@@ -52,7 +62,13 @@ export async function destroySession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-export type StudioSession = { userId: string; siteId: string; name: string };
+export type StudioSession = {
+  userId: string;
+  siteId: string;
+  name: string;
+  /** Session ouverte par l'agence via impersonation (mode support) */
+  impersonated: boolean;
+};
 
 export async function getSession(): Promise<StudioSession | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -64,6 +80,7 @@ export async function getSession(): Promise<StudioSession | null> {
       userId: String(payload.sub),
       siteId: payload.siteId,
       name: String(payload.name ?? ""),
+      impersonated: payload.impersonated === true,
     };
   } catch {
     return null;

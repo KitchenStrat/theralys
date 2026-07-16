@@ -10,6 +10,7 @@ import {
   blogSettings,
   getDb,
   googleReviews,
+  leads,
   pages,
   prospects,
   sites,
@@ -93,6 +94,14 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
       demoExpiresAt: new Date(Date.now() + data.validityDays * 86_400_000),
     })
     .returning();
+
+  // Chaque démo alimente le pipeline commercial (onglet Leads)
+  await db.insert(leads).values({
+    name: `${data.firstName} ${data.lastName}`,
+    source: "demo",
+    status: "demo_sent",
+    prospectId: prospect!.id,
+  });
 
   // Job asynchrone : la réponse part tout de suite, la liste affiche
   // « En préparation » puis « Prête à vérifier ».

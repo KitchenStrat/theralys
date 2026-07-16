@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       <header className="sticky top-0 z-40 border-b border-cream-300 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
           <div className="flex items-center gap-8">
-            <Link href="/demos" className="text-xl font-bold text-primary-500">
+            <Link href="/" className="text-xl font-bold text-primary-500">
               Theralys
             </Link>
             <NavTabs />

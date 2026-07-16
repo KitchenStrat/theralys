@@ -17,6 +17,18 @@ export default async function StudioLayout({ children }: { children: ReactNode }
 
   return (
     <div className="min-h-screen">
+      {session.impersonated ? (
+        <div className="flex items-center justify-center gap-3 bg-warning-100 px-4 py-1.5 text-sm text-ink-900">
+          <span>
+            🛟 Mode support — connecté en tant que <strong>{session.name}</strong>
+          </span>
+          <form action={logoutAction}>
+            <button type="submit" className="font-medium underline underline-offset-2">
+              Quitter
+            </button>
+          </form>
+        </div>
+      ) : null}
       <header className="sticky top-0 z-40 border-b border-cream-300 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
           <div className="flex items-center gap-8">
