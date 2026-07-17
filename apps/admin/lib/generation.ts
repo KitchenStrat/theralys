@@ -1,5 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import { createSiteGenerator, type GenerationInput, type SiteGenerator } from "@theralys/ai";
+import {
+  createImageProvider,
+  createSiteGenerator,
+  type GenerationInput,
+  type ImageProvider,
+  type SiteGenerator,
+} from "@theralys/ai";
+import type { PageSections, ThemePreset } from "@theralys/shared";
 import {
   blogArticles,
   blogSettings,
@@ -62,6 +69,29 @@ async function generate(site: Site): Promise<void> {
 
   // ── 1. Accueil ──────────────────────────────────────────────────────────────
   const home = await generator.generateHome(input);
+
+  // Illustrations d'ambiance (fal.ai, ou SVG mock sans clé) : hero + à-propos.
+  // Jamais de visage reconnaissable — remplaçables par de vraies photos dans
+  // le studio. Un échec d'image ne bloque pas la démo.
+  const imageProvider = createImageProvider();
+  const themeColor = PRESET_COLORS[home.theme.preset];
+  const [heroImage, aboutImage] = await Promise.all([
+    tryGenerateImage(imageProvider, {
+      subject: `cabinet de ${input.profession} à ${input.city}, espace d'accueil apaisant`,
+      themeColor,
+      width: 960,
+      height: 1152,
+    }),
+    tryGenerateImage(imageProvider, {
+      subject: `séance de ${input.profession}, gestes de soin, cadre chaleureux`,
+      themeColor,
+      width: 896,
+      height: 1120,
+    }),
+  ]);
+  let homeSections = withSectionImage(home.sections, "hero", heroImage);
+  homeSections = withSectionImage(homeSections, "about", aboutImage);
+
   await db.delete(pages).where(eq(pages.siteId, site.id));
   await db.insert(pages).values({
     siteId: site.id,
@@ -70,7 +100,7 @@ async function generate(site: Site): Promise<void> {
     title: "Accueil",
     metaTitle: home.metaTitle,
     metaDescription: home.metaDescription,
-    sections: home.sections,
+    sections: homeSections,
     position: 0,
   });
   await db
@@ -84,7 +114,7 @@ async function generate(site: Site): Promise<void> {
   // ~10 appels Claude dépassent la durée maximale d'une fonction Vercel
   // (300 s) avec les modèles les plus lents — en parallèle, on tient large.
   const results = await Promise.allSettled([
-    generateMotifPagesStep(site, generator, input, home.motifsPlan),
+    generateMotifPagesStep(site, generator, input, home.motifsPlan, imageProvider, themeColor),
     generateReviewsStep(site, generator, input),
     generateArticlesStep(site, generator, input, home.motifsPlan),
   ]);
@@ -113,10 +143,21 @@ async function generateMotifPagesStep(
   generator: SiteGenerator,
   input: GenerationInput,
   motifsPlan: Awaited<ReturnType<SiteGenerator["generateHome"]>>["motifsPlan"],
+  imageProvider: ImageProvider,
+  themeColor: string | undefined,
 ): Promise<void> {
   const db = getDb();
   // 2 générations de front : bon compromis vitesse / limites de débit API
-  const generated = await mapPool(motifsPlan, 2, (motif) => generator.generateMotifPage(input, motif));
+  const generated = await mapPool(motifsPlan, 2, async (motif) => {
+    const page = await generator.generateMotifPage(input, motif);
+    const image = await tryGenerateImage(imageProvider, {
+      subject: `${motif.title} — séance de ${input.profession}, ambiance apaisante`,
+      themeColor,
+      width: 960,
+      height: 1152,
+    });
+    return { ...page, sections: withSectionImage(page.sections, "hero", image) };
+  });
   for (const [i, page] of generated.entries()) {
     await db.insert(pages).values({
       siteId: site.id,
@@ -177,6 +218,41 @@ async function generateArticlesStep(
     })),
   );
   await setProgress(site.id, { articles: true });
+}
+
+/** Couleur d'accent par preset — sert au SVG mock pour rester accordé au thème. */
+const PRESET_COLORS: Record<ThemePreset, string> = {
+  terracotta: "#b05038",
+  sauge: "#587c5e",
+  ocean: "#33658a",
+  lavande: "#6f5b9c",
+  ambre: "#a8762b",
+};
+
+/** Génère une image d'ambiance ; en cas d'échec la démo continue sans image. */
+async function tryGenerateImage(
+  provider: ImageProvider,
+  request: { subject: string; themeColor?: string; width: number; height: number },
+): Promise<string | undefined> {
+  try {
+    const image = await provider.generate(request);
+    return image.url;
+  } catch (err) {
+    console.error(`Image non générée (« ${request.subject} »):`, err);
+    return undefined;
+  }
+}
+
+/** Renseigne imageUrl sur les sections du type donné (sans écraser l'existant). */
+function withSectionImage(
+  sections: PageSections,
+  type: "hero" | "about",
+  url: string | undefined,
+): PageSections {
+  if (!url) return sections;
+  return sections.map((section) =>
+    section.type === type && !section.imageUrl ? { ...section, imageUrl: url } : section,
+  );
 }
 
 /** Exécute `fn` sur chaque élément avec au plus `limit` promesses en vol. */
