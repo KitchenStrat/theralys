@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { createSiteGenerator, type GenerationInput } from "@theralys/ai";
+import { eq, sql } from "drizzle-orm";
+import { createSiteGenerator, type GenerationInput, type SiteGenerator } from "@theralys/ai";
 import {
   blogArticles,
   blogSettings,
@@ -79,9 +79,45 @@ async function generate(site: Site): Promise<void> {
     .where(eq(sites.id, site.id));
   await setProgress(site.id, { home: true });
 
-  // ── 2. Pages de motifs (gating par formule) ────────────────────────────────
-  for (const [i, motif] of home.motifsPlan.entries()) {
-    const page = await generator.generateMotifPage(input, motif);
+  // ── 2-4. Motifs, avis et articles en parallèle ─────────────────────────────
+  // Les trois étapes ne dépendent que de l'accueil (motifsPlan). En série,
+  // ~10 appels Claude dépassent la durée maximale d'une fonction Vercel
+  // (300 s) avec les modèles les plus lents — en parallèle, on tient large.
+  const results = await Promise.allSettled([
+    generateMotifPagesStep(site, generator, input, home.motifsPlan),
+    generateReviewsStep(site, generator, input),
+    generateArticlesStep(site, generator, input, home.motifsPlan),
+  ]);
+  const failure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failure) throw failure.reason instanceof Error ? failure.reason : new Error(String(failure.reason));
+
+  // Réglages de blog par défaut (voix accordée au genre du prospect)
+  const existingSettings = await db.query.blogSettings.findFirst({
+    where: eq(blogSettings.siteId, site.id),
+  });
+  if (!existingSettings) {
+    await db.insert(blogSettings).values({
+      siteId: site.id,
+      voiceAccord: prospect.gender,
+    });
+  }
+
+  await db
+    .update(sites)
+    .set({ status: "ready", updatedAt: new Date() })
+    .where(eq(sites.id, site.id));
+}
+
+async function generateMotifPagesStep(
+  site: Site,
+  generator: SiteGenerator,
+  input: GenerationInput,
+  motifsPlan: Awaited<ReturnType<SiteGenerator["generateHome"]>>["motifsPlan"],
+): Promise<void> {
+  const db = getDb();
+  // 2 générations de front : bon compromis vitesse / limites de débit API
+  const generated = await mapPool(motifsPlan, 2, (motif) => generator.generateMotifPage(input, motif));
+  for (const [i, page] of generated.entries()) {
     await db.insert(pages).values({
       siteId: site.id,
       type: "motif",
@@ -94,8 +130,14 @@ async function generate(site: Site): Promise<void> {
     });
   }
   await setProgress(site.id, { motifs: true });
+}
 
-  // ── 3. Avis ─────────────────────────────────────────────────────────────────
+async function generateReviewsStep(
+  site: Site,
+  generator: SiteGenerator,
+  input: GenerationInput,
+): Promise<void> {
+  const db = getDb();
   const reviews = await generator.generateReviews(input);
   await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
   await db.insert(googleReviews).values(
@@ -107,9 +149,16 @@ async function generate(site: Site): Promise<void> {
     })),
   );
   await setProgress(site.id, { reviews: true });
+}
 
-  // ── 4. Exemples d'articles ──────────────────────────────────────────────────
-  const articles = await generator.generateArticles(input, home.motifsPlan);
+async function generateArticlesStep(
+  site: Site,
+  generator: SiteGenerator,
+  input: GenerationInput,
+  motifsPlan: Awaited<ReturnType<SiteGenerator["generateHome"]>>["motifsPlan"],
+): Promise<void> {
+  const db = getDb();
+  const articles = await generator.generateArticles(input, motifsPlan);
   await db.delete(blogArticles).where(eq(blogArticles.siteId, site.id));
   const now = Date.now();
   await db.insert(blogArticles).values(
@@ -128,22 +177,24 @@ async function generate(site: Site): Promise<void> {
     })),
   );
   await setProgress(site.id, { articles: true });
+}
 
-  // Réglages de blog par défaut (voix accordée au genre du prospect)
-  const existingSettings = await db.query.blogSettings.findFirst({
-    where: eq(blogSettings.siteId, site.id),
+/** Exécute `fn` sur chaque élément avec au plus `limit` promesses en vol. */
+async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]!, i);
+    }
   });
-  if (!existingSettings) {
-    await db.insert(blogSettings).values({
-      siteId: site.id,
-      voiceAccord: prospect.gender,
-    });
-  }
-
-  await db
-    .update(sites)
-    .set({ status: "ready", updatedAt: new Date() })
-    .where(eq(sites.id, site.id));
+  await Promise.all(workers);
+  return results;
 }
 
 function buildGenerationInput(site: Site, prospect: Prospect): GenerationInput {
@@ -168,10 +219,13 @@ function buildGenerationInput(site: Site, prospect: Prospect): GenerationInput {
 
 async function setProgress(siteId: string, patch: Partial<GenerationProgress>): Promise<void> {
   const db = getDb();
-  const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
-  if (!site) return;
+  // Fusion jsonb côté SQL : atomique même quand plusieurs étapes parallèles
+  // terminent en même temps (un read-modify-write perdrait des pastilles).
   await db
     .update(sites)
-    .set({ generationProgress: { ...site.generationProgress, ...patch }, updatedAt: new Date() })
+    .set({
+      generationProgress: sql`${sites.generationProgress} || ${JSON.stringify(patch)}::jsonb`,
+      updatedAt: new Date(),
+    })
     .where(eq(sites.id, siteId));
 }

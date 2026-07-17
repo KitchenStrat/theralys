@@ -1,7 +1,33 @@
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, lt, or, sql } from "drizzle-orm";
 import { getDb, prospects, sites, type Prospect, type Site } from "@theralys/db";
 
 export const DEMOS_PER_PAGE = 25;
+
+/**
+ * Filet de sécurité : sur Vercel, une fonction tuée en pleine génération
+ * (durée maximale d'exécution dépassée) laisse la démo bloquée « En
+ * préparation » sans erreur. Chaque étape de génération met à jour
+ * updated_at — sans nouvelle depuis 10 min, la génération est morte.
+ */
+const STALE_GENERATION_MS = 10 * 60 * 1000;
+
+async function failStaleGenerations(): Promise<void> {
+  const db = getDb();
+  await db
+    .update(sites)
+    .set({
+      status: "error",
+      generationError:
+        "Génération interrompue — durée maximale d'exécution dépassée. Cliquez sur « Régénérer le contenu » pour réessayer.",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(sites.status, "generating"),
+        lt(sites.updatedAt, new Date(Date.now() - STALE_GENERATION_MS)),
+      ),
+    );
+}
 
 export type DemoRow = { site: Site; prospect: Prospect | null };
 
@@ -11,6 +37,7 @@ export async function listDemos(opts: {
   page?: number;
 }): Promise<{ rows: DemoRow[]; total: number; page: number; pageCount: number }> {
   const db = getDb();
+  await failStaleGenerations();
   const page = Math.max(1, opts.page ?? 1);
   const q = opts.query?.trim();
 
@@ -48,6 +75,7 @@ export async function listDemos(opts: {
 
 export async function getDemo(siteId: string): Promise<DemoRow | null> {
   const db = getDb();
+  await failStaleGenerations();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site || site.type !== "demo") return null;
   const prospect = site.prospectId
