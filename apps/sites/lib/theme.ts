@@ -7,6 +7,10 @@ type Palette = {
   surface: string;
   text: string;
   soft: string;
+  /** Fond des sections sombres (spécialités, contact, footer) */
+  deep: string;
+  /** Texte crème posé sur `deep` */
+  onDeep: string;
 };
 
 const PALETTES: Record<ThemePreset, Palette> = {
@@ -17,6 +21,8 @@ const PALETTES: Record<ThemePreset, Palette> = {
     surface: "#ffffff",
     text: "#3d2c24",
     soft: "#f6e8de",
+    deep: "#33201a",
+    onDeep: "#f8ede4",
   },
   sauge: {
     primary: "#587c5e",
@@ -25,6 +31,8 @@ const PALETTES: Record<ThemePreset, Palette> = {
     surface: "#ffffff",
     text: "#26332a",
     soft: "#e6efe4",
+    deep: "#1f2b21",
+    onDeep: "#eef4ea",
   },
   ocean: {
     primary: "#33658a",
@@ -33,6 +41,8 @@ const PALETTES: Record<ThemePreset, Palette> = {
     surface: "#ffffff",
     text: "#1e3440",
     soft: "#dfecf2",
+    deep: "#152b37",
+    onDeep: "#e9f2f6",
   },
   lavande: {
     primary: "#6f5b9c",
@@ -41,6 +51,8 @@ const PALETTES: Record<ThemePreset, Palette> = {
     surface: "#ffffff",
     text: "#322b45",
     soft: "#eae4f4",
+    deep: "#292138",
+    onDeep: "#f0ecf8",
   },
   ambre: {
     primary: "#a8762b",
@@ -49,21 +61,27 @@ const PALETTES: Record<ThemePreset, Palette> = {
     surface: "#ffffff",
     text: "#3f3222",
     soft: "#f5ead2",
+    deep: "#2f2312",
+    onDeep: "#f8f0de",
   },
 };
 
+/**
+ * Polices chargées via Google Fonts dans app/layout.tsx — toujours avec un
+ * repli système pour que le rendu reste correct sans réseau.
+ */
 const FONTS: Record<FontPreset, { heading: string; body: string }> = {
   classique: {
-    heading: "Georgia, 'Times New Roman', serif",
-    body: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+    heading: "'Fraunces', Georgia, 'Times New Roman', serif",
+    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
   moderne: {
-    heading: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-    body: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+    heading: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
   elegant: {
-    heading: "'Palatino Linotype', Palatino, 'Book Antiqua', serif",
-    body: "Georgia, 'Times New Roman', serif",
+    heading: "'Cormorant Garamond', 'Palatino Linotype', Palatino, serif",
+    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
 };
 
@@ -78,6 +96,8 @@ export function themeCssVars(theme: SiteTheme): Record<string, string> {
     "--site-surface": palette.surface,
     "--site-text": palette.text,
     "--site-soft": palette.soft,
+    "--site-deep": palette.deep,
+    "--site-on-deep": palette.onDeep,
     "--site-font-heading": fonts.heading,
     "--site-font-body": fonts.body,
   };

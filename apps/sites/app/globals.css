@@ -12,8 +12,10 @@
   --site-surface: #ffffff;
   --site-text: #3d2c24;
   --site-soft: #f6e8de;
-  --site-font-heading: Georgia, "Times New Roman", serif;
-  --site-font-body: ui-sans-serif, system-ui, sans-serif;
+  --site-deep: #33201a;
+  --site-on-deep: #f8ede4;
+  --site-font-heading: "Fraunces", Georgia, "Times New Roman", serif;
+  --site-font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
@@ -32,6 +34,25 @@ h4 {
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Accordéons : pas de marqueur natif */
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/*
+ * Texture « courbes de niveau » des sections de transition (cf. références).
+ * Deux variantes : encre diluée sur fond clair, craie sur fond sombre.
+ */
+.wave-bg {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='600' viewBox='0 0 900 600'%3E%3Cg fill='none' stroke='%23000000' stroke-opacity='0.05' stroke-width='1.5'%3E%3Cpath d='M-50 120 Q 200 40, 450 120 T 950 120'/%3E%3Cpath d='M-50 180 Q 200 100, 450 180 T 950 180'/%3E%3Cpath d='M-50 240 Q 200 160, 450 240 T 950 240'/%3E%3Cpath d='M-50 420 Q 250 340, 500 420 T 1000 420'/%3E%3Cpath d='M-50 480 Q 250 400, 500 480 T 1000 480'/%3E%3Cpath d='M-50 540 Q 250 460, 500 540 T 1000 540'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 900px 600px;
+}
+
+.wave-bg-light {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='600' viewBox='0 0 900 600'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.06' stroke-width='1.5'%3E%3Cpath d='M-50 120 Q 200 40, 450 120 T 950 120'/%3E%3Cpath d='M-50 180 Q 200 100, 450 180 T 950 180'/%3E%3Cpath d='M-50 240 Q 200 160, 450 240 T 950 240'/%3E%3Cpath d='M-50 420 Q 250 340, 500 420 T 1000 420'/%3E%3Cpath d='M-50 480 Q 250 400, 500 480 T 1000 480'/%3E%3Cpath d='M-50 540 Q 250 460, 500 540 T 1000 540'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 900px 600px;
 }
 
 /* Prose minimaliste pour le markdown (articles + pages de motifs) */
