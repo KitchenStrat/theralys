@@ -74,6 +74,10 @@ async function generate(site: Site): Promise<void> {
   // Jamais de visage reconnaissable — remplaçables par de vraies photos dans
   // le studio. Un échec d'image ne bloque pas la démo.
   const imageProvider = createImageProvider();
+  console.log(
+    `[images] provider=${process.env.IMAGE_PROVIDER === "mock" || !process.env.FAL_API_KEY ? "mock" : "fal"}` +
+      ` (FAL_API_KEY ${process.env.FAL_API_KEY ? "présente" : "absente"})`,
+  );
   const themeColor = PRESET_COLORS[home.theme.preset];
   const [heroImage, aboutImage] = await Promise.all([
     tryGenerateImage(imageProvider, {
@@ -243,15 +247,20 @@ async function tryGenerateImage(
   }
 }
 
-/** Renseigne imageUrl sur les sections du type donné (sans écraser l'existant). */
+/**
+ * Renseigne imageUrl sur les sections du type donné. Écrase toujours la
+ * valeur issue de la génération de texte : le modèle invente parfois une
+ * URL factice, qui afficherait une image cassée. (Les photos posées par le
+ * praticien ne sont pas concernées : une régénération complète repart de
+ * toute façon d'un contenu neuf.)
+ */
 function withSectionImage(
   sections: PageSections,
   type: "hero" | "about",
   url: string | undefined,
 ): PageSections {
-  if (!url) return sections;
   return sections.map((section) =>
-    section.type === type && !section.imageUrl ? { ...section, imageUrl: url } : section,
+    section.type === type ? { ...section, imageUrl: url } : section,
   );
 }
 
