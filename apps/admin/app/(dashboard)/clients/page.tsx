@@ -14,7 +14,7 @@ import {
 import { relativeTimeFr } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
 import { blogHealth } from "@/lib/metrics";
-import { OpenStudioButton } from "./open-studio-button";
+import { ClientRowActions } from "./row-actions";
 
 export const metadata = { title: "Clients" };
 export const dynamic = "force-dynamic";
@@ -152,7 +152,10 @@ export default async function ClientsPage() {
                         >
                           Site ↗
                         </Link>
-                        <OpenStudioButton siteId={site.id} />
+                        <ClientRowActions
+                          siteId={site.id}
+                          invitePending={Boolean(user?.passwordHash.startsWith("invite:"))}
+                        />
                       </div>
                     </td>
                   </tr>

@@ -25,6 +25,7 @@ export function ConvertModal({
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,19 +57,41 @@ export function ConvertModal({
       {success ? (
         <div>
           <Badge tone="success">Site client activé</Badge>
-          <p className="mt-3 text-sm text-ink-700">
-            Transmettez ces identifiants au client — le mot de passe ne sera plus affiché.
-          </p>
-          <div className="mt-4 space-y-2 rounded-2xl bg-cream-100 p-4 font-mono text-sm">
-            <p>
-              <span className="text-ink-500">Studio :</span> http://localhost:3002
+          {success.emailSent ? (
+            <p className="mt-3 text-sm text-ink-700">
+              ✉️ Un e-mail d&apos;invitation a été envoyé à <strong>{success.email}</strong> : le
+              client choisit son mot de passe via le lien (valable 7 jours).
             </p>
-            <p>
-              <span className="text-ink-500">Email :</span> {success.email}
+          ) : (
+            <p className="mt-3 text-sm text-ink-700">
+              Envoyez ce lien d&apos;invitation à <strong>{success.email}</strong> : il lui permet
+              de choisir son mot de passe et d&apos;entrer dans son espace (valable 7 jours).
             </p>
-            <p>
-              <span className="text-ink-500">Mot de passe :</span> {success.password}
-            </p>
+          )}
+          <div className="mt-4 rounded-2xl bg-cream-100 p-4">
+            <p className="break-all font-mono text-xs text-ink-700">{success.setupUrl}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard.writeText(success.setupUrl).then(() => {
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2000);
+                  });
+                }}
+              >
+                {linkCopied ? "Copié !" : "Copier le lien"}
+              </Button>
+              {!success.emailSent ? (
+                <a
+                  href={`mailto:${success.email}?subject=${encodeURIComponent("Votre espace praticien Harmony")}&body=${encodeURIComponent(`Bonjour,\n\nVotre site est activé ! Choisissez votre mot de passe pour accéder à votre espace praticien (lien valable 7 jours) :\n\n${success.setupUrl}\n\nVotre identifiant : ${success.email}\n\nÀ très vite,\nHarmony`)}`}
+                  className="inline-flex items-center rounded-full border border-ink-300 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-200"
+                >
+                  ✉️ Ouvrir un e-mail pré-rempli
+                </a>
+              ) : null}
+            </div>
           </div>
           {success.billingMode === "stripe" && success.checkoutUrl ? (
             <p className="mt-3 text-sm">

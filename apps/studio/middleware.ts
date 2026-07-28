@@ -6,7 +6,13 @@ const SESSION_COOKIE = "tl_studio_session";
 /** Tout le studio est réservé aux clients connectés, sauf /login et l'entrée d'impersonation. */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/login" || pathname === "/impersonate") return NextResponse.next();
+  if (
+    pathname === "/login" ||
+    pathname === "/impersonate" ||
+    pathname === "/creer-mot-de-passe"
+  ) {
+    return NextResponse.next();
+  }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (token && process.env.AUTH_SECRET) {

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   const secret = process.env.AUTH_SECRET;
   if (!token || !secret) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL("/login?error=lien", request.url));
   }
 
   // Destination après connexion (l'admin arrive souvent droit sur l'éditeur)
@@ -42,6 +42,6 @@ export async function GET(request: NextRequest) {
     await createSession(user, { impersonated: true });
     return NextResponse.redirect(new URL(destination, request.url));
   } catch {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL("/login?error=lien", request.url));
   }
 }

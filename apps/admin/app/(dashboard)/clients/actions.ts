@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { getDb, users } from "@theralys/db";
 import { requireAdmin } from "@/lib/auth";
+import { createClientInvitation } from "@/lib/invitations";
 
 /**
  * Impersonation : URL signée courte durée (2 min) ouvrant le studio dans la
@@ -37,4 +38,28 @@ export async function getImpersonationUrl(
 
   const base = (process.env.STUDIO_BASE_URL ?? "http://localhost:3002").replace(/\/$/, "");
   return { url: `${base}/impersonate?token=${encodeURIComponent(token)}` };
+}
+
+/**
+ * Renvoie une invitation « créer votre mot de passe » (7 jours) — uniquement
+ * tant que le client n'a pas encore activé son compte.
+ */
+export async function resendClientInvitation(
+  siteId: string,
+): Promise<{ setupUrl: string; emailSent: boolean } | { error: string }> {
+  await requireAdmin();
+  const db = getDb();
+  const clientUser = await db.query.users.findFirst({
+    where: and(eq(users.siteId, siteId), eq(users.role, "client")),
+  });
+  if (!clientUser) return { error: "Aucun compte client pour ce site" };
+  if (!clientUser.passwordHash.startsWith("invite:")) {
+    return { error: "Compte déjà activé — le client a déjà son mot de passe" };
+  }
+  const invitation = await createClientInvitation({
+    userId: clientUser.id,
+    email: clientUser.email,
+    name: clientUser.name,
+  });
+  return { setupUrl: invitation.setupUrl, emailSent: invitation.emailSent };
 }

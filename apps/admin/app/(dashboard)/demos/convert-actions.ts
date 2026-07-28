@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, leads, prospects, sites, subscriptions, users } from "@theralys/db";
 import { createBillingProvider } from "@theralys/providers/billing";
-import { hashPassword, requireAdmin } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
+import { createClientInvitation } from "@/lib/invitations";
 
 const convertSchema = z.object({
   siteId: z.string().uuid(),
@@ -18,8 +19,10 @@ export type ConversionResult =
   | { error: string }
   | {
       email: string;
-      /** Mot de passe généré, affiché une seule fois à l'admin */
-      password: string;
+      /** Lien de création du mot de passe (7 jours) */
+      setupUrl: string;
+      /** true si l'e-mail d'invitation est parti (Resend configuré) */
+      emailSent: boolean;
       /** Lien de paiement Stripe à transmettre (null en mode mock : actif direct) */
       checkoutUrl: string | null;
       billingMode: "stripe" | "mock";
@@ -46,9 +49,6 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
     ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
     : null;
 
-  // Mot de passe initial lisible (le client pourra le changer — Phase 4)
-  const password = randomBytes(9).toString("base64url");
-
   const billing = createBillingProvider();
   const subscription = await billing.startSubscription({
     siteId,
@@ -58,13 +58,18 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
     customerName: prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name,
   });
 
-  await db.insert(users).values({
-    email: clientEmail,
-    passwordHash: hashPassword(password),
-    role: "client",
-    name: prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name,
-    siteId,
-  });
+  // Compte créé SANS mot de passe utilisable : le client choisit le sien via
+  // le lien d'invitation (sentinelle « invite: » — verifyPassword échoue toujours).
+  const [clientUser] = await db
+    .insert(users)
+    .values({
+      email: clientEmail,
+      passwordHash: `invite:${randomBytes(16).toString("hex")}`,
+      role: "client",
+      name: prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name,
+      siteId,
+    })
+    .returning();
 
   await db
     .insert(subscriptions)
@@ -105,12 +110,19 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
     await db.update(leads).set({ status: "won" }).where(eq(leads.prospectId, site.prospectId));
   }
 
+  const invitation = await createClientInvitation({
+    userId: clientUser!.id,
+    email: clientEmail,
+    name: clientUser!.name,
+  });
+
   // Pas de revalidatePath ici : la page d'édition de la démo n'existe plus
-  // après conversion (elle deviendrait un 404 sous la modale d'identifiants).
+  // après conversion (elle deviendrait un 404 sous la modale d'invitation).
   // /demos et /clients sont rendues dynamiquement à chaque visite.
   return {
     email: clientEmail,
-    password,
+    setupUrl: invitation.setupUrl,
+    emailSent: invitation.emailSent,
     checkoutUrl: subscription.checkoutUrl,
     billingMode: billing.mode,
   };
