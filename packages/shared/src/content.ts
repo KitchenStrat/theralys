@@ -95,7 +95,18 @@ export type PageSections = Section[];
 
 // ─── Thème par site (palette, polices) ───────────────────────────────────────
 
-export const THEME_PRESETS = ["terracotta", "sauge", "ocean", "lavande", "ambre"] as const;
+export const THEME_PRESETS = [
+  "terracotta",
+  "sauge",
+  "ocean",
+  "lavande",
+  "ambre",
+  "rose",
+  "prune",
+  "caramel",
+  "marine",
+  "olive",
+] as const;
 export type ThemePreset = (typeof THEME_PRESETS)[number];
 
 export const FONT_PRESETS = ["classique", "moderne", "elegant"] as const;

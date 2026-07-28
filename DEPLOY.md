@@ -162,6 +162,7 @@ répondre `{"ok":true,…}`.
 | Intégration | Variables à ajouter | Où |
 |---|---|---|
 | Images fal.ai | `FAL_API_KEY` ([fal.ai/dashboard](https://fal.ai/dashboard)) | admin + studio |
+| Photos téléversées (éditeur) | `BLOB_READ_WRITE_TOKEN` — projet **harmony-studio** → onglet Storage → Create Database → **Blob** (la variable est créée automatiquement) | studio |
 | Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
 | Google (GSC + fiche) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` | studio + admin |
 | Domaines clients OVH | `OVH_APP_KEY`, `OVH_APP_SECRET`, `OVH_CONSUMER_KEY` + `VERCEL_TOKEN`, `VERCEL_SITES_PROJECT_ID` (rattachement auto des domaines clients au projet sites) | studio |

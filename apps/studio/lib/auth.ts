@@ -58,6 +58,35 @@ export async function createSession(
   });
 }
 
+/**
+ * Session « agence » : ouverte par l'admin Harmony sur un site donné (démo ou
+ * client, avec ou sans compte utilisateur). Même durée courte que le mode
+ * support, bannière impersonation affichée.
+ */
+export async function createAgencySession(siteId: string): Promise<void> {
+  const duration = 60 * 60;
+  const token = await new SignJWT({
+    role: "agency",
+    name: "Harmony (agence)",
+    siteId,
+    impersonated: true,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject("agency")
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + duration)
+    .sign(secretKey());
+
+  const store = await cookies();
+  store.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: duration,
+    path: "/",
+  });
+}
+
 export async function destroySession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
@@ -75,7 +104,12 @@ export async function getSession(): Promise<StudioSession | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secretKey());
-    if (payload.role !== "client" || typeof payload.siteId !== "string") return null;
+    if (
+      (payload.role !== "client" && payload.role !== "agency") ||
+      typeof payload.siteId !== "string"
+    ) {
+      return null;
+    }
     return {
       userId: String(payload.sub),
       siteId: payload.siteId,

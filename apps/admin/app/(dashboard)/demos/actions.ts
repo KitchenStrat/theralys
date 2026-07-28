@@ -15,7 +15,8 @@ import {
   prospects,
   sites,
 } from "@theralys/db";
-import { DEFAULT_THEME, slugify, uniqueSlug } from "@theralys/shared";
+import { SignJWT } from "jose";
+import { DEFAULT_THEME, THEME_PRESETS, slugify, uniqueSlug } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
 import { runGenerationJob } from "@/lib/generation";
 import { getPlacesProvider, type PlaceResult } from "@/lib/places";
@@ -192,7 +193,7 @@ export async function duplicateDemo(siteId: string): Promise<void> {
 
 const updateDemoSchema = demoFormSchema.omit({ googlePlace: true }).extend({
   siteId: z.string().uuid(),
-  themePreset: z.enum(["terracotta", "sauge", "ocean", "lavande", "ambre"]),
+  themePreset: z.enum(THEME_PRESETS),
 });
 
 /** Édition d'une démo existante (fiche prospect + réglages du site). */
@@ -271,4 +272,34 @@ async function availableSlug(base: string): Promise<string> {
   const existing = await db.select({ slug: sites.slug }).from(sites);
   const taken = new Set(existing.map((r) => r.slug));
   return uniqueSlug(slugify(base), (candidate) => taken.has(candidate));
+}
+
+/**
+ * Éditeur visuel d'un site (démo ou client) : URL signée courte durée ouvrant
+ * l'éditeur du studio en session « agence » — fonctionne même sans compte
+ * client (démos).
+ */
+export async function getSiteEditorUrl(
+  siteId: string,
+): Promise<{ url: string } | { error: string }> {
+  await requireAdmin();
+  const db = getDb();
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
+  if (!site) return { error: "Site introuvable" };
+
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) return { error: "AUTH_SECRET manquante" };
+
+  const token = await new SignJWT({
+    purpose: "studio-impersonation",
+    agency: true,
+    siteId: site.id,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + 120)
+    .sign(new TextEncoder().encode(secret));
+
+  const base = (process.env.STUDIO_BASE_URL ?? "http://localhost:3002").replace(/\/$/, "");
+  return { url: `${base}/impersonate?token=${encodeURIComponent(token)}&next=/editor` };
 }

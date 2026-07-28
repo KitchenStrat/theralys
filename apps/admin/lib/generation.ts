@@ -244,6 +244,11 @@ const PRESET_COLORS: Record<ThemePreset, string> = {
   ocean: "#33658a",
   lavande: "#6f5b9c",
   ambre: "#a8762b",
+  rose: "#c26a7d",
+  prune: "#8a5273",
+  caramel: "#9a6b3f",
+  marine: "#3f5873",
+  olive: "#75793f",
 };
 
 /** Génère une image d'ambiance ; en cas d'échec la démo continue sans image. */

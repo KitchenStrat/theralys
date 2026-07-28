@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Button, Select, Spinner } from "@theralys/ui";
-import type { Section } from "@theralys/shared";
+import { THEME_PRESETS, type Section, type ThemePreset, type FontPreset } from "@theralys/shared";
 import { savePageSections, saveSiteSettings, saveSiteStyle } from "../../(app)/actions";
-import { SectionFields } from "./section-fields";
+import { SECTION_LABELS, SectionFields } from "./section-fields";
 
 type PageRef = { id: string; type: string; slug: string; title: string };
 
@@ -16,8 +16,8 @@ type Props = {
     id: string;
     name: string;
     bookingUrl: string;
-    themePreset: "terracotta" | "sauge" | "ocean" | "lavande" | "ambre";
-    fontPreset: "classique" | "moderne" | "elegant";
+    themePreset: ThemePreset;
+    fontPreset: FontPreset;
     url: string;
     updatedAt: string;
   };
@@ -28,22 +28,32 @@ type Props = {
 
 type Panel = "contenu" | "style" | "parametres";
 
-const THEME_SWATCHES: Record<Props["site"]["themePreset"], string> = {
+const THEME_SWATCHES: Record<ThemePreset, string> = {
   terracotta: "#b05038",
-  sauge: "#587c5e",
-  ocean: "#33658a",
-  lavande: "#6f5b9c",
+  caramel: "#9a6b3f",
   ambre: "#a8762b",
+  rose: "#c26a7d",
+  prune: "#8a5273",
+  sauge: "#587c5e",
+  olive: "#75793f",
+  ocean: "#33658a",
+  marine: "#3f5873",
+  lavande: "#6f5b9c",
 };
 
 export function SiteEditor({ site, city, pages, selectedPage }: Props) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("contenu");
   const [sections, setSections] = useState<Section[]>(selectedPage?.sections ?? []);
+  const [active, setActive] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const siteOrigin = useMemo(() => new URL(site.url).origin, [site.url]);
 
   // Style & paramètres
   const [themePreset, setThemePreset] = useState(site.themePreset);
@@ -57,6 +67,38 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
     if (selectedPage.type === "motif") return `/motifs/${selectedPage.slug}`;
     return "";
   }, [selectedPage]);
+
+  // ── Pont avec l'aperçu (EditorBridge côté site public) ────────────────────
+  function announceEditor() {
+    // Plusieurs annonces : l'hydratation du site peut suivre l'événement load
+    const send = () =>
+      iframeRef.current?.contentWindow?.postMessage({ type: "hy:hello" }, siteOrigin);
+    send();
+    let tries = 0;
+    const interval = setInterval(() => {
+      send();
+      if (++tries >= 5) clearInterval(interval);
+    }, 600);
+  }
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== siteOrigin) return;
+      const data = event.data as { type?: string; index?: number } | null;
+      if (data?.type === "hy:select" && typeof data.index === "number") {
+        setPanel("contenu");
+        setActive(data.index);
+        cardRefs.current[data.index]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [siteOrigin]);
+
+  function selectSection(index: number) {
+    setActive(index);
+    iframeRef.current?.contentWindow?.postMessage({ type: "hy:focus", index }, siteOrigin);
+  }
 
   function updateSection(index: number, patch: Partial<Section>) {
     setSections((prev) => prev.map((s, i) => (i === index ? ({ ...s, ...patch } as Section) : s)));
@@ -104,19 +146,13 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
           >
             {pages.map((page) => (
               <option key={page.id} value={page.id}>
-                {page.title}
+                {page.type === "home" ? "Page d'accueil" : page.title}
               </option>
             ))}
           </Select>
         </div>
 
         <div className="flex items-center gap-2">
-          <span
-            title="Vidéo tutoriel (2 min) — bientôt disponible"
-            className="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-ink-500 sm:inline-flex"
-          >
-            ▶ Tutoriel
-          </span>
           <PanelTab label="Contenu" active={panel === "contenu"} onClick={() => setPanel("contenu")} />
           <PanelTab label="🎨 Style" active={panel === "style"} onClick={() => setPanel("style")} />
           <PanelTab label="⚙ Paramètres" active={panel === "parametres"} onClick={() => setPanel("parametres")} />
@@ -137,13 +173,38 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {panel === "contenu" ? (
               sections.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-2">
+                  <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+                    💡 Cliquez sur une section de l&apos;aperçu à droite pour l&apos;ouvrir ici,
+                    puis modifiez textes et photos.
+                  </p>
                   {sections.map((section, i) => (
-                    <SectionFields
+                    <div
                       key={`${section.type}-${i}`}
-                      section={section}
-                      onChange={(patch) => updateSection(i, patch)}
-                    />
+                      ref={(el) => {
+                        cardRefs.current[i] = el;
+                      }}
+                      className={clsx(
+                        "rounded-2xl border transition-colors",
+                        active === i ? "border-primary-400 shadow-sm" : "border-cream-300",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => selectSection(i)}
+                        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-semibold"
+                      >
+                        {SECTION_LABELS[section.type]}
+                        <span aria-hidden className="text-ink-500">
+                          {active === i ? "−" : "+"}
+                        </span>
+                      </button>
+                      {active === i ? (
+                        <div className="border-t border-cream-200 p-4">
+                          <SectionFields section={section} onChange={(patch) => updateSection(i, patch)} />
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -154,9 +215,9 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
             {panel === "style" ? (
               <div className="space-y-5">
                 <div>
-                  <p className="text-sm font-semibold">Palette du site</p>
-                  <div className="mt-2 flex gap-2">
-                    {(Object.keys(THEME_SWATCHES) as (keyof typeof THEME_SWATCHES)[]).map((preset) => (
+                  <p className="text-sm font-semibold">Couleur du site</p>
+                  <div className="mt-2 grid grid-cols-5 gap-2">
+                    {THEME_PRESETS.map((preset) => (
                       <button
                         key={preset}
                         type="button"
@@ -167,14 +228,14 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
                           setDirty(true);
                         }}
                         className={clsx(
-                          "h-9 w-9 rounded-full border-2 transition-transform",
+                          "h-10 w-10 rounded-xl border-2 transition-transform",
                           themePreset === preset ? "scale-110 border-ink-900" : "border-transparent",
                         )}
                         style={{ background: THEME_SWATCHES[preset] }}
                       />
                     ))}
                   </div>
-                  <p className="mt-1 text-xs capitalize text-ink-500">{themePreset}</p>
+                  <p className="mt-2 text-xs capitalize text-ink-500">{themePreset}</p>
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Polices</p>
@@ -207,14 +268,14 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
                 </FieldBlock>
-                <FieldBlock label="Lien de prise de rendez-vous" hint="Calendly, Crenolib, tel:…">
+                <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
                   <input
                     value={bookingUrl}
                     onChange={(e) => {
                       setBookingUrl(e.target.value);
                       setDirty(true);
                     }}
-                    placeholder="https://calendly.com/…"
+                    placeholder="https://www.doctolib.fr/…"
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
                 </FieldBlock>
@@ -228,6 +289,10 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
                 </FieldBlock>
+                <p className="text-xs text-ink-500">
+                  Téléphone, adresse et horaires se modifient dans la section « Contact » de la
+                  page d&apos;accueil (onglet Contenu).
+                </p>
               </div>
             ) : null}
           </div>
@@ -248,8 +313,10 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
         <div className="min-w-0 flex-1 bg-cream-200 p-4">
           <iframe
             key={previewKey}
+            ref={iframeRef}
             src={`${site.url}${previewPath}`}
             title="Prévisualisation de votre site"
+            onLoad={announceEditor}
             className="h-full w-full rounded-2xl border border-cream-300 bg-white shadow-card"
           />
         </div>

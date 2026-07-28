@@ -28,7 +28,10 @@ export function Sections({ sections, ctx }: { sections: Section[]; ctx: SectionC
   return (
     <>
       {sections.map((section, i) => (
-        <SectionRenderer key={`${section.type}-${i}`} section={section} ctx={enriched} />
+        // data-hy-section : repère utilisé par l'éditeur du studio (EditorBridge)
+        <div key={`${section.type}-${i}`} data-hy-section={i}>
+          <SectionRenderer section={section} ctx={enriched} />
+        </div>
       ))}
     </>
   );

@@ -1,7 +1,20 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { Section } from "@theralys/shared";
+
+/** Libellés des sections, partagés avec l'accordéon de l'éditeur. */
+export const SECTION_LABELS: Record<Section["type"], string> = {
+  hero: "En-tête (hero)",
+  specialties: "Spécialités",
+  about: "À propos",
+  reviews: "Avis Google",
+  process: "Déroulement d'une séance",
+  faq: "Questions fréquentes",
+  contact: "Contact",
+  richText: "Contenu de la page",
+  cta: "Bandeau d'appel à l'action",
+};
 
 /**
  * Édition structurée d'une section : champs prédéfinis par type de section
@@ -25,13 +38,11 @@ export function SectionFields({
             <TextArea value={section.title} rows={2} onChange={(title) => onChange({ title })} />
           </Field>
           <ParagraphsField paragraphs={section.paragraphs} onChange={(paragraphs) => onChange({ paragraphs })} />
-          <Field label="Photo (URL)">
-            <TextInput
-              value={section.imageUrl ?? ""}
-              placeholder="https://…"
-              onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
-            />
-          </Field>
+          <ImageField
+            label="Photo"
+            value={section.imageUrl ?? ""}
+            onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
+          />
           <Field label="Texte du bouton">
             <TextInput value={section.ctaLabel ?? ""} onChange={(ctaLabel) => onChange({ ctaLabel })} />
           </Field>
@@ -70,13 +81,11 @@ export function SectionFields({
             <TextInput value={section.title} onChange={(title) => onChange({ title })} />
           </Field>
           <ParagraphsField paragraphs={section.paragraphs} onChange={(paragraphs) => onChange({ paragraphs })} />
-          <Field label="Photo (URL)">
-            <TextInput
-              value={section.imageUrl ?? ""}
-              placeholder="https://…"
-              onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
-            />
-          </Field>
+          <ImageField
+            label="Photo (votre portrait, votre cabinet…)"
+            value={section.imageUrl ?? ""}
+            onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
+          />
         </SectionBox>
       );
 
@@ -208,14 +217,89 @@ export function SectionFields({
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
-function SectionBox({ title, children }: { title: string; children: ReactNode }) {
+/** Le titre est porté par l'accordéon de l'éditeur (SiteEditor). */
+function SectionBox({ children }: { title?: string; children: ReactNode }) {
+  return <div className="space-y-3">{children}</div>;
+}
+
+/** Photo d'une section : téléversement de fichier ou URL, avec aperçu. */
+function ImageField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onFile(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setError(data.error ?? "Téléversement impossible");
+        return;
+      }
+      onChange(data.url);
+    } catch {
+      setError("Téléversement impossible — réessayez.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
   return (
-    <details open className="rounded-2xl border border-cream-300">
-      <summary className="cursor-pointer list-none rounded-2xl px-4 py-3 text-sm font-semibold hover:bg-cream-100">
-        {title}
-      </summary>
-      <div className="space-y-3 border-t border-cream-200 p-4">{children}</div>
-    </details>
+    <Field label={label}>
+      {value ? (
+        <img
+          src={value}
+          alt=""
+          className="mb-2 h-28 w-full rounded-xl border border-cream-300 object-cover"
+        />
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
+        >
+          {uploading ? "Envoi en cours…" : "📷 Téléverser une photo"}
+        </button>
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
+          >
+            Retirer
+          </button>
+        ) : null}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/avif"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void onFile(file);
+        }}
+      />
+      <div className="mt-2">
+        <TextInput value={value} placeholder="ou collez une URL https://…" onChange={onChange} />
+      </div>
+      {error ? <p className="mt-1 text-xs text-danger-500">{error}</p> : null}
+    </Field>
   );
 }
 

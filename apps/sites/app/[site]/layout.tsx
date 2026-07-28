@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ConsentBanner } from "@/components/consent-banner";
+import { EditorBridge } from "@/components/editor-bridge";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Tracker } from "@/components/tracker";
@@ -65,6 +66,7 @@ export default async function SiteLayout({ children, params }: Props) {
       <SiteFooter site={site} />
       <ConsentBanner />
       <Tracker siteId={site.id} />
+      <EditorBridge />
     </div>
   );
 }

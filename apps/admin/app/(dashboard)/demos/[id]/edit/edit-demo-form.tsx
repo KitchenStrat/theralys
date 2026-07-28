@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, ProgressDots, Select, Spinner } from "@theralys/ui";
-import { regenerateDemo, updateDemo } from "../../actions";
+import { getSiteEditorUrl, regenerateDemo, updateDemo } from "../../actions";
 import { ConvertModal } from "./convert-modal";
 
 type DemoData = {
@@ -17,7 +17,7 @@ type DemoData = {
   linkActive: boolean;
   demoExpiresAt: string | null;
   plan: string;
-  themePreset: "terracotta" | "sauge" | "ocean" | "lavande" | "ambre";
+  themePreset: keyof typeof THEME_LABELS;
   bookingUrl: string;
   highlightedMotifs: string[];
   firstName: string;
@@ -34,6 +34,11 @@ const THEME_LABELS = {
   ocean: "Océan",
   lavande: "Lavande",
   ambre: "Ambre",
+  rose: "Rose",
+  prune: "Prune",
+  caramel: "Caramel",
+  marine: "Marine",
+  olive: "Olive",
 } as const;
 
 export function EditDemoForm({ demo }: { demo: DemoData }) {
@@ -43,6 +48,18 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [openingEditor, setOpeningEditor] = useState(false);
+
+  function openEditor() {
+    // Fenêtre ouverte de façon synchrone (bloqueur de popups)
+    const popup = window.open("about:blank", "_blank");
+    setOpeningEditor(true);
+    void getSiteEditorUrl(demo.siteId).then((result) => {
+      setOpeningEditor(false);
+      if ("url" in result && popup) popup.location.href = result.url;
+      else popup?.close();
+    });
+  }
   const [motifs, setMotifs] = useState(demo.highlightedMotifs);
   const [motifInput, setMotifInput] = useState("");
   const [convertOpen, setConvertOpen] = useState(false);
@@ -167,21 +184,32 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
             />
             {generating ? <Spinner /> : null}
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={generating || regenerating}
-            onClick={() => {
-              setRegenerating(true);
-              void regenerateDemo(demo.siteId).finally(() => {
-                setRegenerating(false);
-                router.refresh();
-              });
-            }}
-          >
-            {generating || regenerating ? "Génération en cours…" : "Régénérer le contenu"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={generating || openingEditor}
+              onClick={openEditor}
+              title="Modifier chaque texte et chaque photo dans l'éditeur visuel"
+            >
+              {openingEditor ? "Ouverture…" : "🎨 Éditer le site"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={generating || regenerating}
+              onClick={() => {
+                setRegenerating(true);
+                void regenerateDemo(demo.siteId).finally(() => {
+                  setRegenerating(false);
+                  router.refresh();
+                });
+              }}
+            >
+              {generating || regenerating ? "Génération en cours…" : "Régénérer le contenu"}
+            </Button>
+          </div>
         </div>
         {demo.status === "error" && demo.generationError ? (
           <p className="mt-3 rounded-xl bg-danger-100 px-4 py-2 text-sm text-danger-500">

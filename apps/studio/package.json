@@ -17,6 +17,7 @@
     "@theralys/providers": "workspace:*",
     "@theralys/shared": "workspace:*",
     "@theralys/ui": "workspace:*",
+    "@vercel/blob": "^2.6.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.44.0",
     "jose": "^5.9.6",

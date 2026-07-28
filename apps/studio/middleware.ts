@@ -12,7 +12,10 @@ export async function middleware(request: NextRequest) {
   if (token && process.env.AUTH_SECRET) {
     try {
       const { payload } = await jwtVerify(token, new TextEncoder().encode(process.env.AUTH_SECRET));
-      if (payload.role === "client" && typeof payload.siteId === "string") {
+      if (
+        (payload.role === "client" || payload.role === "agency") &&
+        typeof payload.siteId === "string"
+      ) {
         return NextResponse.next();
       }
     } catch {
