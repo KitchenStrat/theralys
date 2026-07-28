@@ -120,7 +120,7 @@ async function generate(site: Site): Promise<void> {
   const results = await Promise.allSettled([
     generateMotifPagesStep(site, generator, input, home.motifsPlan, imageProvider, themeColor),
     generateReviewsStep(site, generator, input),
-    generateArticlesStep(site, generator, input, home.motifsPlan),
+    generateArticlesStep(site, generator, input, home.motifsPlan, imageProvider, themeColor),
   ]);
   const failure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
   if (failure) throw failure.reason instanceof Error ? failure.reason : new Error(String(failure.reason));
@@ -201,9 +201,20 @@ async function generateArticlesStep(
   generator: SiteGenerator,
   input: GenerationInput,
   motifsPlan: Awaited<ReturnType<SiteGenerator["generateHome"]>>["motifsPlan"],
+  imageProvider: ImageProvider,
+  themeColor: string | undefined,
 ): Promise<void> {
   const db = getDb();
   const articles = await generator.generateArticles(input, motifsPlan);
+  // Une illustration par article — comme celles du robot éditorial (J-7)
+  const images = await mapPool(articles, 2, (a) =>
+    tryGenerateImage(imageProvider, {
+      subject: a.title,
+      themeColor,
+      width: 1024,
+      height: 576,
+    }),
+  );
   await db.delete(blogArticles).where(eq(blogArticles.siteId, site.id));
   const now = Date.now();
   await db.insert(blogArticles).values(
@@ -213,6 +224,8 @@ async function generateArticlesStep(
       slug: a.slug || slugify(a.title),
       excerpt: a.excerpt,
       content: a.content,
+      imageUrl: images[i] ?? null,
+      imageAiGenerated: Boolean(images[i]),
       status: (i < articles.length - 1 ? "published" : "draft") as "published" | "draft",
       aiGenerated: true,
       motifSlug: a.motifSlug,

@@ -70,6 +70,14 @@ export default async function ArticlePage({ params, searchParams }: Props) {
       </p>
       <h1 className="mt-3 text-4xl font-bold leading-tight">{article.title}</h1>
 
+      {article.imageUrl ? (
+        <img
+          src={article.imageUrl}
+          alt=""
+          className="mt-8 aspect-[16/9] w-full rounded-[2rem] object-cover"
+        />
+      ) : null}
+
       <article className="mt-8">
         <Markdown content={article.content} />
       </article>

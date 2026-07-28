@@ -36,17 +36,26 @@ export default async function BlogIndexPage({ params }: Props) {
             <Link
               key={article.id}
               href={`/${siteKey}/blog/${article.slug}`}
-              className="block rounded-3xl border border-black/5 bg-[var(--site-surface)] p-6 shadow-sm transition-shadow hover:shadow-md"
+              className="flex gap-5 rounded-3xl border border-black/5 bg-[var(--site-surface)] p-5 shadow-sm transition-shadow hover:shadow-md"
             >
-              <p className="text-sm opacity-60">
-                {article.publishedAt ? formatDateFr(article.publishedAt) : null}
-                {" · "}
-                {article.readingTimeMin} min de lecture
-              </p>
-              <h2 className="mt-2 text-xl font-semibold hover:text-[var(--site-primary)]">
-                {article.title}
-              </h2>
-              {article.excerpt ? <p className="mt-2 text-sm opacity-75">{article.excerpt}</p> : null}
+              {article.imageUrl ? (
+                <img
+                  src={article.imageUrl}
+                  alt=""
+                  className="hidden h-32 w-44 shrink-0 rounded-2xl object-cover sm:block"
+                />
+              ) : null}
+              <span className="min-w-0">
+                <p className="text-sm opacity-60">
+                  {article.publishedAt ? formatDateFr(article.publishedAt) : null}
+                  {" · "}
+                  {article.readingTimeMin} min de lecture
+                </p>
+                <h2 className="mt-2 text-xl font-semibold hover:text-[var(--site-primary)]">
+                  {article.title}
+                </h2>
+                {article.excerpt ? <p className="mt-2 text-sm opacity-75">{article.excerpt}</p> : null}
+              </span>
             </Link>
           ))}
         </div>
