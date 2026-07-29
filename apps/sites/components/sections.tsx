@@ -166,46 +166,80 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
 function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; ctx: SectionContext }) {
   const showRating =
     section.showGoogleRating && ctx.googleRating !== null && ctx.googleRating > 0;
+
+  const content = (
+    <>
+      {section.badge ? <Pill>{section.badge}</Pill> : null}
+      <h1 className="mt-6 text-4xl font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[3.8rem]">
+        {section.title}
+      </h1>
+      <div className="mt-6 max-w-xl space-y-4 opacity-85">
+        {section.paragraphs.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+      </div>
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
+        {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
+      </div>
+      <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-4 py-3 shadow-sm">
+        <AvatarInitial name={ctx.site.name} />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold">{ctx.site.name}</span>
+          {ctx.address ? (
+            <span className="block max-w-56 truncate text-xs opacity-70">{ctx.address}</span>
+          ) : null}
+          {showRating ? (
+            <span className="flex items-center gap-1.5 text-xs">
+              <Stars rating={ctx.googleRating!} />
+              <span className="opacity-70">
+                {ctx.googleReviewCount ? `${ctx.googleReviewCount} avis Google` : "Avis Google"}
+              </span>
+            </span>
+          ) : null}
+        </span>
+      </div>
+    </>
+  );
+
+  // Sans photo : mise en page d'origine avec panneau dégradé
+  if (!section.imageUrl) {
+    return (
+      <section className="relative overflow-hidden">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-16">
+          <div className="hy-rise">{content}</div>
+          <ArchImage url={undefined} alt="" className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]" />
+        </div>
+        <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
+      </section>
+    );
+  }
+
+  // Avec photo : hero cinématique — image pleine hauteur fondue dans le fond
   return (
     <section className="relative overflow-hidden">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-16">
-        <div>
-          {section.badge ? <Pill>{section.badge}</Pill> : null}
-          <h1 className="mt-6 text-4xl font-semibold leading-[1.08] text-[var(--site-primary-dark)] sm:text-[3.4rem]">
-            {section.title}
-          </h1>
-          <div className="mt-6 max-w-xl space-y-4 opacity-85">
-            {section.paragraphs.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
-            {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
-          </div>
-          <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-4 py-3 shadow-sm">
-            <AvatarInitial name={ctx.site.name} />
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold">{ctx.site.name}</span>
-              {ctx.address ? (
-                <span className="block max-w-56 truncate text-xs opacity-70">{ctx.address}</span>
-              ) : null}
-              {showRating ? (
-                <span className="flex items-center gap-1.5 text-xs">
-                  <Stars rating={ctx.googleRating!} />
-                  <span className="opacity-70">
-                    {ctx.googleReviewCount ? `${ctx.googleReviewCount} avis Google` : "Avis Google"}
-                  </span>
-                </span>
-              ) : null}
-            </span>
-          </div>
-        </div>
-        <ArchImage
-          url={section.imageUrl}
+      <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[47%] lg:block">
+        <img
+          src={section.imageUrl}
           alt=""
-          className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]"
+          className="h-full w-full object-cover"
+          style={{
+            maskImage: "linear-gradient(to right, black 55%, transparent 97%)",
+            WebkitMaskImage: "linear-gradient(to right, black 55%, transparent 97%)",
+          }}
         />
+      </div>
+      <img
+        src={section.imageUrl}
+        alt=""
+        className="max-h-[44vh] w-full object-cover object-top lg:hidden"
+        style={{
+          maskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+          WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+        }}
+      />
+      <div className="relative mx-auto flex max-w-6xl px-4 pb-14 pt-2 lg:min-h-[36rem] lg:items-center lg:justify-end lg:py-20">
+        <div className="hy-rise lg:w-[57%] lg:pl-8">{content}</div>
       </div>
       <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
     </section>

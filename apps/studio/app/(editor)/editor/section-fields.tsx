@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import type { Section } from "@theralys/shared";
+import { CropModal } from "./crop-modal";
 
 /** Libellés des sections, partagés avec l'accordéon de l'éditeur. */
 export const SECTION_LABELS: Record<Section["type"], string> = {
@@ -222,26 +223,33 @@ function SectionBox({ children }: { title?: string; children: ReactNode }) {
   return <div className="space-y-3">{children}</div>;
 }
 
-/** Photo d'une section : téléversement de fichier ou URL, avec aperçu. */
+/**
+ * Photo d'une section : téléversement (avec recadrage au format) ou URL,
+ * avec aperçu.
+ */
 function ImageField({
   label,
   value,
   onChange,
+  aspect = 4 / 5,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** Rapport largeur/hauteur du cadrage (défaut : portrait 4:5) */
+  aspect?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toCrop, setToCrop] = useState<File | null>(null);
 
-  async function onFile(file: File) {
+  async function upload(file: File | Blob, name: string, type: string) {
     setUploading(true);
     setError(null);
     try {
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", new File([file], name, { type }));
       const response = await fetch("/api/upload", { method: "POST", body: form });
       const data = (await response.json()) as { url?: string; error?: string };
       if (!response.ok || !data.url) {
@@ -292,9 +300,23 @@ function ImageField({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void onFile(file);
+          if (file) setToCrop(file);
         }}
       />
+      {toCrop ? (
+        <CropModal
+          file={toCrop}
+          aspect={aspect}
+          onCancel={() => {
+            setToCrop(null);
+            if (inputRef.current) inputRef.current.value = "";
+          }}
+          onConfirm={(blob) => {
+            setToCrop(null);
+            void upload(blob, "photo.jpg", "image/jpeg");
+          }}
+        />
+      ) : null}
       <div className="mt-2">
         <TextInput value={value} placeholder="ou collez une URL https://…" onChange={onChange} />
       </div>
