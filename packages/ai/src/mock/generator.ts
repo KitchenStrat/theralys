@@ -118,7 +118,12 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
         {
           title: "Le retour au calme",
           description:
-            "La séance se termine en douceur. Nous échangeons sur votre ressenti et je vous partage des repères simples pour prolonger les bienfaits chez vous.",
+            "La séance se termine en douceur. Nous prenons un moment pour échanger sur votre ressenti, sans jamais rien forcer.",
+        },
+        {
+          title: "Des repères pour la suite",
+          description:
+            "Vous repartez avec des repères simples à refaire chez vous. Si vous le souhaitez, nous définissons ensemble le rythme qui vous convient.",
         },
       ],
     },
@@ -128,9 +133,24 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       items: [
         ...COMMON_FAQ(seed.practiceName),
         {
+          question: "Combien de temps dure une séance ?",
+          answer:
+            "Comptez environ une heure : un temps d'échange, la séance elle-même, puis un moment pour votre ressenti. La première séance est souvent un peu plus longue.",
+        },
+        {
           question: "Combien de séances sont nécessaires ?",
           answer:
             "Tout dépend de vous et de vos objectifs. Certaines personnes viennent ponctuellement pour un moment de détente, d'autres préfèrent un accompagnement régulier. Nous en parlons ensemble, sans engagement.",
+        },
+        {
+          question: "À qui s'adressent les séances ?",
+          answer:
+            "À toute personne qui souhaite s'accorder un moment pour elle : enfants, adolescents, adultes et seniors. Le déroulé et la durée s'ajustent à l'âge et aux besoins de chacun.",
+        },
+        {
+          question: "Comment se passe le règlement ?",
+          answer:
+            "Le règlement se fait à la fin de la séance, en espèces ou par carte selon votre préférence. Certaines mutuelles proposent un forfait bien-être : renseignez-vous auprès de la vôtre.",
         },
       ],
     },

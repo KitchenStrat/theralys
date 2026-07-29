@@ -109,7 +109,7 @@ export function SectionFields({
             <TextInput value={section.title} onChange={(title) => onChange({ title })} />
           </Field>
           {section.steps.map((step, i) => (
-            <div key={i} className="rounded-xl bg-cream-100 p-3">
+            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
               <Field label={`Étape ${i + 1} — titre`}>
                 <TextInput
                   value={step.title}
@@ -129,8 +129,18 @@ export function SectionFields({
                   }
                 />
               </Field>
+              {section.steps.length > 1 ? (
+                <RemoveButton
+                  label="Supprimer cette étape"
+                  onClick={() => onChange({ steps: section.steps.filter((_, j) => j !== i) })}
+                />
+              ) : null}
             </div>
           ))}
+          <AddButton
+            label="+ Ajouter une étape"
+            onClick={() => onChange({ steps: [...section.steps, { title: "", description: "" }] })}
+          />
         </SectionBox>
       );
 
@@ -141,7 +151,7 @@ export function SectionFields({
             <TextInput value={section.title} onChange={(title) => onChange({ title })} />
           </Field>
           {section.items.map((item, i) => (
-            <div key={i} className="rounded-xl bg-cream-100 p-3">
+            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
               <Field label={`Question ${i + 1}`}>
                 <TextInput
                   value={item.question}
@@ -159,8 +169,18 @@ export function SectionFields({
                   }
                 />
               </Field>
+              {section.items.length > 1 ? (
+                <RemoveButton
+                  label="Supprimer cette question"
+                  onClick={() => onChange({ items: section.items.filter((_, j) => j !== i) })}
+                />
+              ) : null}
             </div>
           ))}
+          <AddButton
+            label="+ Ajouter une question"
+            onClick={() => onChange({ items: [...section.items, { question: "", answer: "" }] })}
+          />
         </SectionBox>
       );
 
@@ -325,6 +345,30 @@ function ImageField({
   );
 }
 
+/** Lien discret de suppression d'un élément de liste (étape, question, paragraphe). */
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <div className="text-right">
+      <button type="button" onClick={onClick} className="text-xs text-danger-500 hover:underline">
+        {label}
+      </button>
+    </div>
+  );
+}
+
+/** Bouton pointillé d'ajout d'un élément de liste. */
+function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
+    >
+      {label}
+    </button>
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
@@ -391,25 +435,16 @@ function ParagraphsField({
             onChange={(text) => onChange(paragraphs.map((p, j) => (j === i ? text : p)))}
           />
           {paragraphs.length > 1 ? (
-            <div className="mt-1 text-right">
-              <button
-                type="button"
+            <div className="mt-1">
+              <RemoveButton
+                label="Supprimer ce paragraphe"
                 onClick={() => onChange(paragraphs.filter((_, j) => j !== i))}
-                className="text-xs text-danger-500 hover:underline"
-              >
-                Supprimer ce paragraphe
-              </button>
+              />
             </div>
           ) : null}
         </Field>
       ))}
-      <button
-        type="button"
-        onClick={() => onChange([...paragraphs, ""])}
-        className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
-      >
-        + Ajouter un paragraphe
-      </button>
+      <AddButton label="+ Ajouter un paragraphe" onClick={() => onChange([...paragraphs, ""])} />
       <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
         💡 <strong>**texte**</strong> = passage en gras · commencez des lignes par
         <strong> ✅ </strong>pour une liste à coches (une par ligne, touche Entrée)
