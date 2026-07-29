@@ -4,9 +4,9 @@ import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-const MAX_SIZE = 4 * 1024 * 1024; // 4 Mo
+const MAX_SIZE = 8 * 1024 * 1024; // 8 Mo (le recadrage compresse déjà côté client)
 /** Sans Vercel Blob, l'image est stockée en data-URI (petits fichiers only). */
-const MAX_INLINE_SIZE = 1_500_000;
+const MAX_INLINE_SIZE = 2_500_000;
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -41,12 +41,18 @@ export async function POST(request: NextRequest) {
   }
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const { put } = await import("@vercel/blob");
-    const blob = await put(`sites/${session.siteId}/${randomUUID()}.${ext}`, file, {
-      access: "public",
-      contentType: file.type,
-    });
-    return NextResponse.json({ url: blob.url });
+    try {
+      const { put } = await import("@vercel/blob");
+      const blob = await put(`sites/${session.siteId}/${randomUUID()}.${ext}`, file, {
+        access: "public",
+        contentType: file.type,
+      });
+      return NextResponse.json({ url: blob.url });
+    } catch (err) {
+      // Blob mal configuré (jeton invalide, store non relié) : on bascule sur
+      // le stockage de secours plutôt que d'échouer.
+      console.error("[upload] Vercel Blob indisponible, repli data-URI:", err);
+    }
   }
 
   if (file.size > MAX_INLINE_SIZE) {

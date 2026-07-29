@@ -23,6 +23,7 @@ export function CropModal({
   const frameH = Math.round(FRAME_W / aspect);
 
   const [url, setUrl] = useState<string | null>(null);
+  const [decodeError, setDecodeError] = useState(false);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1); // multiplicateur au-dessus du « cover »
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -33,8 +34,11 @@ export function CropModal({
   useEffect(() => {
     const objectUrl = URL.createObjectURL(file);
     setUrl(objectUrl);
+    setDecodeError(false);
     const img = new Image();
     img.onload = () => setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    // Format illisible par le navigateur (HEIC d'iPhone…) : message clair
+    img.onerror = () => setDecodeError(true);
     img.src = objectUrl;
     return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
@@ -110,6 +114,13 @@ export function CropModal({
         <p className="mt-0.5 text-xs text-ink-500">
           Faites glisser pour positionner, ajustez le zoom si besoin.
         </p>
+        {decodeError ? (
+          <p className="mt-3 rounded-xl bg-danger-100 px-3 py-2 text-xs text-danger-500">
+            Ce format d&apos;image n&apos;est pas lisible par votre navigateur (souvent le cas des
+            photos iPhone en HEIC). Convertissez la photo en JPEG ou PNG, ou envoyez-la-vous par
+            e-mail/WhatsApp qui la convertit automatiquement, puis réessayez.
+          </p>
+        ) : null}
         <div
           className="relative mx-auto mt-4 cursor-grab touch-none overflow-hidden rounded-2xl bg-cream-100 active:cursor-grabbing"
           style={{ width: FRAME_W, height: frameH }}

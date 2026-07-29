@@ -10,6 +10,13 @@ const nextConfig: NextConfig = {
     "@theralys/jobs",
   ],
   serverExternalPackages: ["pg"],
+  experimental: {
+    serverActions: {
+      // « Enregistrer et publier » peut porter une photo en data-URI quand le
+      // stockage Blob n'est pas configuré (défaut Next.js : 1 Mo, trop juste)
+      bodySizeLimit: "4mb",
+    },
+  },
 };
 
 export default nextConfig;
