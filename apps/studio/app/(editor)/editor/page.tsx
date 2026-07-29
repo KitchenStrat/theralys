@@ -26,6 +26,7 @@ export default async function EditorPage({ searchParams }: Props) {
         intensity: site.theme.intensity ?? "naturel",
         corners: site.theme.corners ?? "rond",
         ambiance: site.theme.ambiance ?? "naturel",
+        logoUrl: site.theme.logoUrl ?? "",
         url: siteUrl(site),
         updatedAt: site.updatedAt.toISOString(),
       }}

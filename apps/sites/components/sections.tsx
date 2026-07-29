@@ -93,18 +93,6 @@ function DotsRow({ className = "" }: { className?: string }) {
   );
 }
 
-/** Avatar rond avec l'initiale (preuve sociale, avis). */
-function AvatarInitial({ name, className = "h-10 w-10 text-base" }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`flex shrink-0 items-center justify-center rounded-full bg-[var(--site-soft)] font-semibold text-[var(--site-primary)] ${className}`}
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
-
 function Stars({ rating, className = "" }: { rating: number; className?: string }) {
   const full = Math.round(rating);
   return (
@@ -326,8 +314,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
         <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
         {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
       </div>
-      <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-4 py-3 shadow-sm">
-        <AvatarInitial name={ctx.site.name} />
+      <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
         <span className="min-w-0">
           <span className="block text-sm font-semibold">{ctx.site.name}</span>
           {ctx.address ? (
@@ -789,8 +776,7 @@ function Reviews({
       <div className="relative mx-auto max-w-7xl px-4">
         <div className="grid items-start gap-6 lg:grid-cols-[19rem_1fr]">
           <div className="reveal rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm">
-            <AvatarInitial name={ctx.site.name} className="h-14 w-14 text-xl" />
-            <p className="mt-3 text-lg font-semibold">{ctx.site.name}</p>
+            <p className="text-lg font-semibold">{ctx.site.name}</p>
             {ctx.googleRating ? (
               <>
                 <p className="mt-1 flex items-center gap-2">
@@ -813,13 +799,10 @@ function Reviews({
                 style={{ transitionDelay: `${Math.min(index, 4) * 80}ms` }}
                 className="reveal w-[24rem] shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm"
               >
-                <div className="flex items-center gap-3">
-                  <AvatarInitial name={review.authorName} className="h-11 w-11 text-base" />
-                  <figcaption className="min-w-0">
-                    <span className="block truncate font-semibold">{review.authorName}</span>
-                    <span className="block text-xs opacity-60">Avis Google</span>
-                  </figcaption>
-                </div>
+                <figcaption className="min-w-0">
+                  <span className="block truncate font-semibold">{review.authorName}</span>
+                  <span className="block text-xs opacity-60">Avis Google</span>
+                </figcaption>
                 <Stars rating={review.rating} className="mt-3 block" />
                 <blockquote className="mt-3 line-clamp-6 text-[1.05rem] leading-relaxed opacity-85">
                   {review.text}
@@ -935,10 +918,7 @@ function Contact({
           </div>
         </div>
         <div className="reveal rounded-[var(--r-lg)] bg-white/5 p-9" style={{ transitionDelay: "120ms" }}>
-          <div className="flex items-center gap-3">
-            <AvatarInitial name={ctx.site.name} className="h-12 w-12 text-lg" />
-            <span className="text-lg font-semibold">{ctx.site.name}</span>
-          </div>
+          <span className="text-lg font-semibold">{ctx.site.name}</span>
           <div className="mt-5 space-y-2 text-[1.05rem] opacity-85">
             {section.address ? <p>{section.address}</p> : null}
             {section.email ? (

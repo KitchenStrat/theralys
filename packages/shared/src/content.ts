@@ -195,6 +195,8 @@ export const THEME_AMBIANCES = ["naturel", "structure"] as const;
 export type ThemeAmbiance = (typeof THEME_AMBIANCES)[number];
 
 export type SiteTheme = {
+  /** Logo du praticien (remplace le nom dans l'en-tête du site) */
+  logoUrl?: string;
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */

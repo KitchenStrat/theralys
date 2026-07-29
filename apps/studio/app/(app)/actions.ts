@@ -308,6 +308,7 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .trim()
         .refine((v) => v === "" || /^(https?:\/\/|tel:)/.test(v), "Lien invalide"),
       city: z.string().trim().min(1),
+      logoUrl: z.string().trim().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Réglages invalides" };
@@ -317,7 +318,12 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
   if (!site) return { error: "Site introuvable" };
   await db
     .update(sites)
-    .set({ name: parsed.data.name, bookingUrl: parsed.data.bookingUrl || null, updatedAt: new Date() })
+    .set({
+      name: parsed.data.name,
+      bookingUrl: parsed.data.bookingUrl || null,
+      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined },
+      updatedAt: new Date(),
+    })
     .where(eq(sites.id, session.siteId));
   if (site.prospectId) {
     await db

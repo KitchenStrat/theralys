@@ -29,6 +29,7 @@ type Props = {
     intensity: ThemeIntensity;
     corners: ThemeCorners;
     ambiance: ThemeAmbiance;
+    logoUrl: string;
     url: string;
     updatedAt: string;
   };
@@ -103,6 +104,32 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
   const [siteName, setSiteName] = useState(site.name);
   const [bookingUrl, setBookingUrl] = useState(site.bookingUrl);
   const [cityValue, setCityValue] = useState(city);
+  const [logoUrl, setLogoUrl] = useState(site.logoUrl);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadLogo(file: File) {
+    setLogoUploading(true);
+    setLogoError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setLogoError(data.error ?? "Téléversement impossible");
+        return;
+      }
+      setLogoUrl(data.url);
+      setDirty(true);
+    } catch {
+      setLogoError("Téléversement impossible — réessayez.");
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  }
 
   const previewPath = useMemo(() => {
     if (!selectedPage || selectedPage.type === "home") return "";
@@ -156,7 +183,7 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
     } else if (panel === "style") {
       result = await saveSiteStyle({ preset: themePreset, fontPreset, intensity, corners, ambiance });
     } else {
-      result = await saveSiteSettings({ name: siteName, bookingUrl, city: cityValue });
+      result = await saveSiteSettings({ name: siteName, bookingUrl, city: cityValue, logoUrl });
     }
     setSaving(false);
     if (result.error) {
@@ -439,6 +466,51 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
                     }}
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
+                </FieldBlock>
+                <FieldBlock
+                  label="Logo"
+                  hint="Remplace le nom du site dans l'en-tête. PNG avec fond transparent recommandé."
+                >
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt="Logo"
+                      className="mb-2 h-14 w-auto max-w-full rounded-lg border border-cream-300 bg-white object-contain p-1"
+                    />
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={logoUploading}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
+                    >
+                      {logoUploading ? "Envoi en cours…" : "🖼 Téléverser un logo"}
+                    </button>
+                    {logoUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLogoUrl("");
+                          setDirty(true);
+                        }}
+                        className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
+                      >
+                        Retirer (afficher le nom)
+                      </button>
+                    ) : null}
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void uploadLogo(file);
+                    }}
+                  />
+                  {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
                 </FieldBlock>
                 <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
                   <input

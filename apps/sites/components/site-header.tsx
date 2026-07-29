@@ -19,21 +19,23 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-        <Link href={home} className="flex min-w-0 items-center gap-2">
-          <span
-            aria-hidden
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--site-soft)] font-semibold text-[var(--site-primary)]"
-          >
-            {site.name.charAt(0).toUpperCase()}
-          </span>
-          <span className="truncate text-xl font-bold" style={{ fontFamily: "var(--site-font-heading)" }}>
-            {site.name}
-          </span>
+        <Link href={home} className="flex min-w-0 items-center">
+          {site.theme.logoUrl ? (
+            <img
+              src={site.theme.logoUrl}
+              alt={site.name}
+              className="h-10 w-auto max-w-60 object-contain"
+            />
+          ) : (
+            <span className="truncate text-lg font-bold" style={{ fontFamily: "var(--site-font-heading)" }}>
+              {site.name}
+            </span>
+          )}
         </Link>
 
         <nav
           aria-label="Navigation principale"
-          className="hidden items-center gap-6 whitespace-nowrap text-[0.95rem] lg:flex"
+          className="hidden items-center gap-5 whitespace-nowrap text-[0.9rem] lg:flex"
         >
           {motifPages.length > 0 ? (
             <div className="group relative">
@@ -67,7 +69,7 @@ export function SiteHeader({
         <RdvButton
           siteId={site.id}
           bookingUrl={site.bookingUrl}
-          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-6 py-3 text-[0.95rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
+          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-3 text-[0.9rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
         />
       </div>
     </header>
