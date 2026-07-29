@@ -68,8 +68,8 @@ function Pill({ children, onDark = false }: { children: React.ReactNode; onDark?
     <span
       className={
         onDark
-          ? "inline-block rounded-[var(--r-pill)] border border-current/30 px-4 py-1.5 text-[0.8rem] font-medium uppercase tracking-wider opacity-90"
-          : "inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-4 py-1.5 text-[0.8rem] font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
+          ? "inline-block rounded-[var(--r-pill)] border border-current/30 px-5 py-2 text-[0.85rem] font-medium uppercase tracking-wider opacity-90"
+          : "inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-5 py-2 text-[0.85rem] font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
       }
     >
       {children}
@@ -188,10 +188,10 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
   const content = (
     <>
       {section.badge ? <Pill>{section.badge}</Pill> : null}
-      <h1 className="mt-6 text-4xl font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[3.8rem]">
+      <h1 className="mt-6 text-[2.75rem] font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[4.3rem]">
         {section.title}
       </h1>
-      <div className="mt-6 max-w-xl space-y-4 text-lg opacity-85">
+      <div className="mt-7 max-w-xl space-y-4 text-xl opacity-85">
         {section.paragraphs.map((p, i) => (
           <p key={i} className="whitespace-pre-line">
             <Rich text={p} />
@@ -226,7 +226,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
   if (!section.imageUrl) {
     return (
       <section className="relative overflow-hidden">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-16">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-20">
           <div className="hy-rise">{content}</div>
           <ArchImage url={undefined} alt="" className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]" />
         </div>
@@ -267,7 +267,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
         }}
       />
-      <div className="relative mx-auto flex max-w-6xl px-4 pb-14 pt-2 lg:min-h-[36rem] lg:items-center lg:justify-end lg:py-20">
+      <div className="relative mx-auto flex max-w-7xl px-4 pb-14 pt-2 lg:min-h-[40rem] lg:items-center lg:justify-end lg:py-24">
         <div className="hy-rise lg:w-[57%] lg:pl-8">{content}</div>
       </div>
       <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
@@ -289,33 +289,33 @@ function Specialties({
   return (
     <section
       id="specialites"
-      className="fade-deep-both relative scroll-mt-20 py-16 text-[var(--site-on-deep)] lg:py-20"
+      className="fade-deep-both relative scroll-mt-20 py-20 text-[var(--site-on-deep)] lg:py-24"
     >
       <div aria-hidden className="wave-bg-light stage-light absolute inset-0" />
-      <div className="relative mx-auto max-w-6xl px-4">
+      <div className="relative mx-auto max-w-7xl px-4">
         <div className="reveal text-center">
           <Pill onDark>Motifs de consultation</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">
+          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
             {section.title}
           </h2>
           <DotsRow className="mt-6" />
           {section.intro ? (
-            <p className="mx-auto mt-5 max-w-2xl text-lg opacity-80">{section.intro}</p>
+            <p className="mx-auto mt-5 max-w-2xl text-xl opacity-80">{section.intro}</p>
           ) : null}
         </div>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item, index) => (
             <Link
               key={item.slug}
               href={`${ctx.prefix}/motifs/${item.slug}`}
               style={{ transitionDelay: `${Math.min(index, 5) * 70}ms` }}
-              className="reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-8 text-[var(--site-text)] shadow-lg shadow-black/10 transition-transform hover:-translate-y-1"
+              className="reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-10 text-[var(--site-text)] shadow-lg shadow-black/10 transition-transform hover:-translate-y-1"
             >
               <span
                 aria-hidden
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
               >
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M12 21c-4-2.5-6.5-5.5-6.5-9A6.5 6.5 0 0 1 12 5.5 6.5 6.5 0 0 1 18.5 12c0 3.5-2.5 6.5-6.5 9z"
                     stroke="currentColor"
@@ -325,13 +325,13 @@ function Specialties({
                   <path d="M12 5.5V3M8.5 6.5 7 4.5M15.5 6.5 17 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
               </span>
-              <h3 className="mt-5 text-xl font-semibold group-hover:text-[var(--site-primary)]">
+              <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
                 {item.title}
               </h3>
-              <p className="mt-2.5 leading-relaxed opacity-75">
+              <p className="mt-3 text-[1.05rem] leading-relaxed opacity-75">
                 <Rich text={item.excerpt} />
               </p>
-              <span className="mt-5 inline-block font-medium text-[var(--site-primary)]">
+              <span className="mt-6 inline-block text-[1.05rem] font-medium text-[var(--site-primary)]">
                 En savoir plus →
               </span>
             </Link>
@@ -347,7 +347,7 @@ function Specialties({
 
 function About({ section, ctx }: { section: Extract<Section, { type: "about" }>; ctx: SectionContext }) {
   return (
-    <section id="a-propos" className="wave-bg relative scroll-mt-20 overflow-hidden py-16 lg:py-20">
+    <section id="a-propos" className="wave-bg relative scroll-mt-20 overflow-hidden py-20 lg:py-24">
       <div
         aria-hidden
         className="glow h-96 w-96 opacity-50"
@@ -357,11 +357,11 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
           background: "radial-gradient(circle, color-mix(in srgb, var(--site-primary) 22%, transparent), transparent 70%)",
         }}
       />
-      <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
           <Pill>Votre praticien·ne</Pill>
-          <h2 className="mt-5 text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
-          <div className="mt-6 space-y-4 text-lg opacity-85">
+          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <div className="mt-7 space-y-4 text-xl opacity-85">
             {section.paragraphs.map((p, i) => (
               <p key={i} className="whitespace-pre-line leading-relaxed">
                 <Rich text={p} />
@@ -374,7 +374,7 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
           </div>
         </div>
         <div className="reveal" style={{ transitionDelay: "120ms" }}>
-          <ArchImage url={section.imageUrl} alt="" arch="top" className="mx-auto aspect-[4/5] w-full max-w-96" />
+          <ArchImage url={section.imageUrl} alt="" arch="top" className="mx-auto aspect-[4/5] w-full max-w-[28rem]" />
         </div>
       </div>
     </section>
@@ -390,7 +390,7 @@ function Reviews({
 }) {
   if (ctx.reviews.length === 0) return null;
   return (
-    <section id="avis" className="relative scroll-mt-20 overflow-hidden py-16">
+    <section id="avis" className="relative scroll-mt-20 overflow-hidden py-20">
       <div
         aria-hidden
         className="glow h-80 w-[36rem] opacity-40"
@@ -400,15 +400,15 @@ function Reviews({
           background: "radial-gradient(circle, color-mix(in srgb, var(--site-primary) 18%, transparent), transparent 70%)",
         }}
       />
-      <div className="relative mx-auto max-w-6xl px-4">
-        <div className="grid items-start gap-6 lg:grid-cols-[17rem_1fr]">
-          <div className="reveal rounded-[var(--r-lg)] bg-[var(--site-surface)] p-6 shadow-sm">
-            <AvatarInitial name={ctx.site.name} className="h-12 w-12 text-lg" />
-            <p className="mt-3 font-semibold">{ctx.site.name}</p>
+      <div className="relative mx-auto max-w-7xl px-4">
+        <div className="grid items-start gap-6 lg:grid-cols-[19rem_1fr]">
+          <div className="reveal rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm">
+            <AvatarInitial name={ctx.site.name} className="h-14 w-14 text-xl" />
+            <p className="mt-3 text-lg font-semibold">{ctx.site.name}</p>
             {ctx.googleRating ? (
               <>
                 <p className="mt-1 flex items-center gap-2">
-                  <span className="text-3xl font-bold">{ctx.googleRating}</span>
+                  <span className="text-4xl font-bold">{ctx.googleRating}</span>
                   <Stars rating={ctx.googleRating} />
                 </p>
                 <p className="mt-1 text-sm opacity-70">
@@ -425,17 +425,17 @@ function Reviews({
               <figure
                 key={review.id}
                 style={{ transitionDelay: `${Math.min(index, 4) * 80}ms` }}
-                className="reveal w-80 shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 shadow-sm"
+                className="reveal w-[24rem] shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm"
               >
                 <div className="flex items-center gap-3">
-                  <AvatarInitial name={review.authorName} />
+                  <AvatarInitial name={review.authorName} className="h-11 w-11 text-base" />
                   <figcaption className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">{review.authorName}</span>
+                    <span className="block truncate font-semibold">{review.authorName}</span>
                     <span className="block text-xs opacity-60">Avis Google</span>
                   </figcaption>
                 </div>
-                <Stars rating={review.rating} className="mt-3 block text-sm" />
-                <blockquote className="mt-3 line-clamp-6 leading-relaxed opacity-85">
+                <Stars rating={review.rating} className="mt-3 block" />
+                <blockquote className="mt-3 line-clamp-6 text-[1.05rem] leading-relaxed opacity-85">
                   {review.text}
                 </blockquote>
               </figure>
@@ -449,15 +449,15 @@ function Reviews({
 
 function Process({ section, ctx }: { section: Extract<Section, { type: "process" }>; ctx: SectionContext }) {
   return (
-    <section id="deroulement" className="fade-soft relative scroll-mt-20 py-16 lg:py-20">
+    <section id="deroulement" className="fade-soft relative scroll-mt-20 py-20 lg:py-24">
       <div aria-hidden className="wave-bg absolute inset-0" />
-      <div className="relative mx-auto max-w-5xl px-4">
+      <div className="relative mx-auto max-w-6xl px-4">
         <div className="reveal text-center">
           <Pill>À quoi s&apos;attendre ?</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
+          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
           <DotsRow className="mt-6 text-[var(--site-primary)]" />
         </div>
-        <ol className="mt-12 grid gap-6 sm:grid-cols-2">
+        <ol className="mt-14 grid gap-7 sm:grid-cols-2">
           {section.steps.map((step, i) => (
             <li
               key={i}
@@ -466,21 +466,21 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
             >
               <span
                 aria-hidden
-                className="flex w-24 shrink-0 items-center justify-center border-r border-[var(--site-primary)]/30 text-7xl font-semibold text-[var(--site-primary)]"
+                className="flex w-28 shrink-0 items-center justify-center border-r border-[var(--site-primary)]/30 text-8xl font-semibold text-[var(--site-primary)]"
                 style={{ fontFamily: "var(--site-font-heading)" }}
               >
                 {i + 1}
               </span>
-              <span className="p-6">
-                <h3 className="text-xl font-semibold">{step.title}</h3>
-                <p className="mt-2.5 whitespace-pre-line leading-relaxed opacity-80">
+              <span className="p-8">
+                <h3 className="text-2xl font-semibold">{step.title}</h3>
+                <p className="mt-3 whitespace-pre-line text-[1.05rem] leading-relaxed opacity-80">
                   <Rich text={step.description} />
                 </p>
               </span>
             </li>
           ))}
         </ol>
-        <div className="mt-12 text-center">
+        <div className="mt-14 text-center">
           <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
         </div>
       </div>
@@ -490,12 +490,12 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
 
 function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx: SectionContext }) {
   return (
-    <section id="questions" className="scroll-mt-20 py-16 lg:py-20">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 lg:grid-cols-[0.75fr_1.25fr]">
+    <section id="questions" className="scroll-mt-20 py-20 lg:py-24">
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 lg:grid-cols-[0.75fr_1.25fr]">
         <div className="reveal">
           <Pill>Vos questions</Pill>
-          <h2 className="mt-5 text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
-          <p className="mt-4 text-sm opacity-75">
+          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <p className="mt-4 opacity-75">
             Une autre question ? Le plus simple est d&apos;en parler directement.
           </p>
           <div className="mt-6">
@@ -509,13 +509,13 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
               style={{ transitionDelay: `${Math.min(i, 5) * 60}ms` }}
               className="reveal group overflow-hidden rounded-[var(--r-md)] open:bg-[var(--site-surface)] open:shadow-sm"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-6 py-5 text-[1.05rem] font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-7 py-6 text-lg font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
                 {item.question}
                 <span aria-hidden className="shrink-0 transition-transform group-open:rotate-45">
                   +
                 </span>
               </summary>
-              <p className="whitespace-pre-line px-6 py-5 leading-relaxed opacity-80">
+              <p className="whitespace-pre-line px-7 py-6 text-[1.05rem] leading-relaxed opacity-80">
                 <Rich text={item.answer} />
               </p>
             </details>
@@ -536,24 +536,24 @@ function Contact({
   return (
     <section
       id="contact"
-      className="fade-deep-top relative scroll-mt-20 py-16 text-[var(--site-on-deep)] lg:py-20"
+      className="fade-deep-top relative scroll-mt-20 py-20 text-[var(--site-on-deep)] lg:py-24"
     >
       <div aria-hidden className="wave-bg-light stage-light absolute inset-0" />
-      <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
-          <h2 className="text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
-          <p className="mt-4 text-lg opacity-80">Prenez rendez-vous en ligne ou par téléphone.</p>
+          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <p className="mt-5 text-xl opacity-80">Prenez rendez-vous en ligne ou par téléphone.</p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
             {section.phone ? <PhoneButton phone={section.phone} onDark /> : null}
           </div>
         </div>
-        <div className="reveal rounded-[var(--r-lg)] bg-white/5 p-7" style={{ transitionDelay: "120ms" }}>
+        <div className="reveal rounded-[var(--r-lg)] bg-white/5 p-9" style={{ transitionDelay: "120ms" }}>
           <div className="flex items-center gap-3">
-            <AvatarInitial name={ctx.site.name} />
-            <span className="font-semibold">{ctx.site.name}</span>
+            <AvatarInitial name={ctx.site.name} className="h-12 w-12 text-lg" />
+            <span className="text-lg font-semibold">{ctx.site.name}</span>
           </div>
-          <div className="mt-4 space-y-2 opacity-85">
+          <div className="mt-5 space-y-2 text-[1.05rem] opacity-85">
             {section.address ? <p>{section.address}</p> : null}
             {section.email ? (
               <p>
@@ -586,20 +586,20 @@ function RichText({ section }: { section: Extract<Section, { type: "richText" }>
 
 function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx: SectionContext }) {
   return (
-    <section className="mx-auto max-w-4xl px-4 py-12">
-      <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-12 text-center text-white shadow-xl shadow-black/10">
-        <h2 className="mx-auto max-w-xl text-3xl font-semibold">{section.title}</h2>
+    <section className="mx-auto max-w-5xl px-4 py-14">
+      <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-16 text-center text-white shadow-xl shadow-black/10">
+        <h2 className="mx-auto max-w-2xl text-[2.2rem] font-semibold leading-[1.15] sm:text-[2.6rem]">{section.title}</h2>
         {section.body ? (
-          <p className="mx-auto mt-4 max-w-xl whitespace-pre-line text-lg opacity-90">
+          <p className="mx-auto mt-5 max-w-2xl whitespace-pre-line text-xl opacity-90">
             <Rich text={section.body} />
           </p>
         ) : null}
-        <div className="mt-8">
+        <div className="mt-9">
           <RdvButton
             siteId={ctx.site.id}
             bookingUrl={ctx.site.bookingUrl}
             label={section.buttonLabel}
-            className="inline-flex items-center justify-center rounded-[var(--r-pill)] bg-white px-7 py-3 font-medium text-[var(--site-primary)] transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center rounded-[var(--r-pill)] bg-white px-8 py-3.5 text-[1.05rem] font-medium text-[var(--site-primary)] transition-opacity hover:opacity-90"
           />
         </div>
       </div>

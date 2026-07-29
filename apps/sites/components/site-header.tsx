@@ -18,7 +18,7 @@ export function SiteHeader({
   const home = `${prefix}`;
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
         <Link href={home} className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden

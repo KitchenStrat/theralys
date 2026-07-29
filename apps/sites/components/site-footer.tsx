@@ -3,7 +3,7 @@ import type { Site } from "@theralys/db";
 export function SiteFooter({ site }: { site: Site }) {
   return (
     <footer className="border-t border-white/10 bg-[var(--site-deep)] py-10 text-[var(--site-on-deep)]">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-4 text-center">
+      <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 text-center">
         <p className="text-xl font-semibold" style={{ fontFamily: "var(--site-font-heading)" }}>
           {site.name}
         </p>
