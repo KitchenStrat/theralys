@@ -28,7 +28,9 @@ export async function completeStructured<T>(
   for (let attempt = 0; attempt < 2; attempt++) {
     const response = await client.messages.create({
       model,
-      max_tokens: 8192,
+      // Opus 5+ réfléchit par défaut et cette réflexion compte dans max_tokens :
+      // on garde une marge pour ne jamais tronquer le JSON généré.
+      max_tokens: 16000,
       system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
       messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
     });
