@@ -30,7 +30,59 @@
   background-image: none;
 }
 
-/* Entrée en douceur du hero */
+/* ── Mise en scène : dégradés inter-sections, révélations, lumières ────────── */
+
+/* Bande sombre fondue dans le fond crème (haut + bas, ou haut seul) */
+.fade-deep-both {
+  background: linear-gradient(
+    to bottom,
+    var(--site-bg),
+    var(--site-deep) 7rem,
+    var(--site-deep) calc(100% - 7rem),
+    var(--site-bg)
+  );
+}
+.fade-deep-top {
+  background: linear-gradient(to bottom, var(--site-bg), var(--site-deep) 7rem);
+}
+/* Section teintée fondue (déroulement) */
+.fade-soft {
+  background: linear-gradient(
+    to bottom,
+    var(--site-bg),
+    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 25%,
+    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 75%,
+    var(--site-bg)
+  );
+}
+
+/* « Lumière de scène » en haut des bandes sombres */
+.stage-light {
+  background-image: radial-gradient(
+    60% 24rem at 50% 0%,
+    color-mix(in srgb, var(--site-on-deep) 14%, transparent),
+    transparent 70%
+  );
+}
+
+/* Halos lumineux flottants (décoratifs) */
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  animation: hy-float 9s ease-in-out infinite alternate;
+}
+@keyframes hy-float {
+  from {
+    transform: translateY(-14px);
+  }
+  to {
+    transform: translateY(14px);
+  }
+}
+
+/* Entrée en douceur du hero (au chargement) */
 @keyframes hy-rise {
   from {
     opacity: 0;
@@ -44,9 +96,67 @@
 .hy-rise {
   animation: hy-rise 0.7s ease-out both;
 }
+
+/* Lent zoom cinéma sur la photo du hero */
+@keyframes hy-kb {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.hy-kenburns {
+  animation: hy-kb 12s ease-out both;
+}
+
+/* Révélation au défilement (activée seulement si le JS est là : .hy-js) */
+.hy-js .reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease-out,
+    transform 0.7s ease-out;
+}
+.hy-js .reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Boutons : ombre colorée + léger décollement au survol */
+.btn-glow {
+  box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--site-primary) 60%, transparent);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+.btn-glow:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 32px -14px color-mix(in srgb, var(--site-primary) 70%, transparent);
+}
+
+@media print {
+  .hy-js .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .hy-rise {
+  .hy-rise,
+  .hy-kenburns,
+  .glow {
     animation: none;
+  }
+  .hy-js .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .btn-glow,
+  .btn-glow:hover {
+    transform: none;
+    transition: none;
   }
 }
 

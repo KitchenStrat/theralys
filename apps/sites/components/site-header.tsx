@@ -64,7 +64,7 @@ export function SiteHeader({
         <RdvButton
           siteId={site.id}
           bookingUrl={site.bookingUrl}
-          className="hidden shrink-0 items-center justify-center rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
+          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
         />
       </div>
     </header>

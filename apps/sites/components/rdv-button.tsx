@@ -39,7 +39,7 @@ export function RdvButton({
       rel={external ? "noopener noreferrer" : undefined}
       className={
         className ??
-        "inline-flex items-center justify-center rounded-[var(--r-pill)] bg-[var(--site-primary)] px-6 py-3 font-medium text-white transition-colors hover:bg-[var(--site-primary-dark)]"
+        "btn-glow inline-flex items-center justify-center rounded-[var(--r-pill)] bg-[var(--site-primary)] px-6 py-3 font-medium text-white transition-colors hover:bg-[var(--site-primary-dark)]"
       }
     >
       {label}
