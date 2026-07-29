@@ -68,6 +68,7 @@ describe("pipeline mock", () => {
     expect(home.motifsPlan).toHaveLength(input.motifPageCount);
     expect(home.sections.map((s) => s.type)).toEqual([
       "hero",
+      "highlights",
       "specialties",
       "about",
       "reviews",
@@ -75,6 +76,14 @@ describe("pipeline mock", () => {
       "faq",
       "contact",
     ]);
+
+    // Les nouveaux encarts sont générés par défaut
+    const hero = home.sections.find((s) => s.type === "hero");
+    expect(hero && hero.type === "hero" && hero.stats).toHaveLength(2);
+    const highlights = home.sections.find((s) => s.type === "highlights");
+    expect(highlights && highlights.type === "highlights" && highlights.items).toHaveLength(4);
+    const about = home.sections.find((s) => s.type === "about");
+    expect(about && about.type === "about" && about.infoCards).toHaveLength(3);
 
     // Le gating de formule est respecté par le plan de motifs
     const specialties = home.sections.find((s) => s.type === "specialties");

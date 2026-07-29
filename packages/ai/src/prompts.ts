@@ -41,16 +41,19 @@ Produis un JSON avec cette forme exacte :
   "metaTitle": "…",             // ≤ 60 caractères, métier + ville
   "metaDescription": "…",       // ≤ 155 caractères
   "sections": [
-    { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts, avec des passages **gras**"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous" },
+    { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts, avec des passages **gras**"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous", "stats": [ { "icon": "…", "value": "…", "label": "…" } ] },  // exactement 2 badges chiffrés courts et PRUDENTS (ex. « 100 % / Séances personnalisées », « 7j/7 / Réponse sous 24 h ») — jamais de chiffre inventé sur les patients ou les années si l'information n'est pas fournie
+    { "type": "highlights", "items": [ { "icon": "…", "title": "2 à 4 mots", "text": "1 phrase courte" } ] },  // exactement 4 points forts concrets (approche, personnalisation, cadre, accès/praticité)
     { "type": "specialties", "title": "…", "intro": "…", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "1 phrase" } ] },  // exactement ${input.motifPageCount} items
-    { "type": "about", "title": "…", "paragraphs": ["3 à 4 paragraphes courts avec **gras** ; le dernier est une liste de lignes ✅ (parcours, formations, points forts) séparées par des retours à la ligne"] },
+    { "type": "about", "title": "…", "paragraphs": ["3 à 4 paragraphes courts avec **gras** ; le dernier est une liste de lignes ✅ (parcours, formations, points forts) séparées par des retours à la ligne"], "infoCards": [ { "icon": "…", "title": "…", "text": "avec **gras**" } ] },  // exactement 3 cartes infos pratiques : durée de la séance, tarification indicative, règlement/mutuelles (prudent : « certaines mutuelles proposent un forfait bien-être »)
     { "type": "reviews", "title": "…" },
     { "type": "process", "title": "Le déroulement d'une séance", "steps": [ { "title": "…", "description": "…" } ] },  // exactement 4 étapes (ex. : échange, séance, retour au calme, suivi)
     { "type": "faq", "title": "Questions fréquentes", "items": [ { "question": "…", "answer": "…" } ] },  // exactement 7 questions (déroulement, préparation, durée, tarif/règlement, nombre de séances, public concerné, complémentarité avec un suivi médical)
     { "type": "contact", "title": "…", "address": "…", "note": "…" }
   ],
   "motifsPlan": [ { "slug": "…", "title": "…", "excerpt": "…" } ]  // les mêmes ${input.motifPageCount} spécialités que la section specialties
-}`;
+}
+
+Icônes autorisées pour "icon" (choisis la plus pertinente) : medaille, diplome, coeur, mains, fleur, feuille, soleil, etoile, carte, maison, calendrier, horloge, euro, document, bouclier, personnes.`;
 }
 
 export const MOTIF_SYSTEM = `Tu rédiges une page de spécialité (« motif ») d'un site de praticien

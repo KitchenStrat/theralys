@@ -9,6 +9,16 @@ export const heroSectionSchema = z.object({
   paragraphs: z.array(z.string()),
   showGoogleRating: z.boolean().optional(),
   ctaLabel: z.string().optional(),
+  stats: z
+    .array(z.object({ icon: z.string().optional(), value: z.string(), label: z.string() }))
+    .optional(),
+});
+
+export const highlightsSectionSchema = z.object({
+  type: z.literal("highlights"),
+  items: z
+    .array(z.object({ icon: z.string().optional(), title: z.string(), text: z.string().optional() }))
+    .min(2),
 });
 
 export const specialtiesSectionSchema = z.object({
@@ -24,6 +34,9 @@ export const aboutSectionSchema = z.object({
   type: z.literal("about"),
   title: z.string(),
   paragraphs: z.array(z.string()).min(1),
+  infoCards: z
+    .array(z.object({ icon: z.string().optional(), title: z.string(), text: z.string() }))
+    .optional(),
 });
 
 export const reviewsSectionSchema = z.object({
@@ -68,6 +81,7 @@ export const ctaSectionSchema = z.object({
 
 export const sectionSchema = z.discriminatedUnion("type", [
   heroSectionSchema,
+  highlightsSectionSchema,
   specialtiesSectionSchema,
   aboutSectionSchema,
   reviewsSectionSchema,

@@ -3,6 +3,49 @@
  * Permet l'édition structurée (Phase 2) et la régénération partielle par IA.
  */
 
+/**
+ * Icônes disponibles pour les encarts (points forts, infos pratiques,
+ * badges du hero). Dessinées côté sites — l'IA et l'éditeur choisissent un nom.
+ */
+export const SECTION_ICONS = [
+  "medaille",
+  "diplome",
+  "coeur",
+  "mains",
+  "fleur",
+  "feuille",
+  "soleil",
+  "etoile",
+  "carte",
+  "maison",
+  "calendrier",
+  "horloge",
+  "euro",
+  "document",
+  "bouclier",
+  "personnes",
+] as const;
+export type SectionIconName = (typeof SECTION_ICONS)[number];
+
+export const SECTION_ICON_LABELS: Record<SectionIconName, string> = {
+  medaille: "Médaille",
+  diplome: "Diplôme",
+  coeur: "Cœur",
+  mains: "Mains",
+  fleur: "Fleur",
+  feuille: "Feuille",
+  soleil: "Soleil",
+  etoile: "Étoile",
+  carte: "Carte / plan",
+  maison: "Maison",
+  calendrier: "Calendrier",
+  horloge: "Horloge",
+  euro: "Euro",
+  document: "Document",
+  bouclier: "Bouclier",
+  personnes: "Personnes",
+};
+
 export type HeroSection = {
   type: "hero";
   /** Badge local, ex. « Massages Bien-être à Clapiers (34) » */
@@ -14,6 +57,14 @@ export type HeroSection = {
   /** Affiche le badge note Google (« 5/5 avis google ») */
   showGoogleRating?: boolean;
   ctaLabel?: string;
+  /** Badges chiffrés flottant sur la photo, ex. « +300 / Patients accompagnés » */
+  stats?: { icon?: string; value: string; label: string }[];
+};
+
+/** Bandeau de points forts entre le hero et les spécialités. */
+export type HighlightsSection = {
+  type: "highlights";
+  items: { icon?: string; title: string; text?: string }[];
 };
 
 export type SpecialtiesSection = {
@@ -34,6 +85,8 @@ export type AboutSection = {
   title: string;
   paragraphs: string[];
   imageUrl?: string;
+  /** Cartes infos pratiques (durée de séance, tarifs, remboursement…) */
+  infoCards?: { icon?: string; title: string; text: string }[];
 };
 
 /** Les avis eux-mêmes viennent de la table google_reviews (synchronisés). */
@@ -81,6 +134,7 @@ export type CtaSection = {
 
 export type Section =
   | HeroSection
+  | HighlightsSection
   | SpecialtiesSection
   | AboutSection
   | ReviewsSection

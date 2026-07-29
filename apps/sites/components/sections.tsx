@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
 import type { Section } from "@theralys/shared";
 import { Markdown } from "./markdown";
@@ -41,6 +42,8 @@ function SectionRenderer({ section, ctx }: { section: Section; ctx: SectionConte
   switch (section.type) {
     case "hero":
       return <Hero section={section} ctx={ctx} />;
+    case "highlights":
+      return <Highlights section={section} />;
     case "specialties":
       return <Specialties section={section} ctx={ctx} />;
     case "about":
@@ -161,6 +164,110 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
   );
 }
 
+/**
+ * Bibliothèque d'icônes des encarts (points forts, infos pratiques, badges).
+ * Les noms viennent de SECTION_ICONS (packages/shared) ; repli : cœur.
+ */
+const ICON_PATHS: Record<string, ReactNode> = {
+  medaille: (
+    <>
+      <circle cx="12" cy="9" r="5.5" />
+      <path d="M9.5 13.5 8 21l4-2 4 2-1.5-7.5" strokeLinejoin="round" />
+      <path d="m12 6.6.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 8.7l2-.3z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  diplome: (
+    <>
+      <path d="M2.5 9.5 12 4.5l9.5 5L12 14.5z" strokeLinejoin="round" />
+      <path d="M6.5 12v4.5c0 1 2.5 2.5 5.5 2.5s5.5-1.5 5.5-2.5V12M21.5 9.5V15" strokeLinecap="round" />
+    </>
+  ),
+  coeur: (
+    <path d="M12 20.5C6.5 16.5 3.5 13 3.5 9.5 3.5 7 5.5 5 8 5c1.6 0 3.1.9 4 2.2C12.9 5.9 14.4 5 16 5c2.5 0 4.5 2 4.5 4.5 0 3.5-3 7-8.5 11z" strokeLinejoin="round" />
+  ),
+  mains: (
+    <>
+      <path d="M12 12.5c-3-2.5-4.8-4.4-4.8-6.3C7.2 4.9 8.3 4 9.5 4c1 0 1.9.5 2.5 1.3C12.6 4.5 13.5 4 14.5 4c1.2 0 2.3.9 2.3 2.2 0 1.9-1.8 3.8-4.8 6.3z" strokeLinejoin="round" />
+      <path d="M4 15.5c2-1.5 4-1.5 5.5-.5l2.5 1.5c.8.5.8 1.7-.3 2l-3.2.8M20 15.5c-2-1.5-4-1.5-5.5-.5l-.8.5" strokeLinecap="round" />
+      <path d="M2.5 14.5 6 19.5M21.5 14.5 18 19.5" strokeLinecap="round" />
+    </>
+  ),
+  fleur: (
+    <>
+      <path d="M12 20c0-4 0-6.5 0-6.5M12 13.5c-2.8 0-5-2.2-5-5V6c2.8 0 5 2.2 5 5m0 2.5c2.8 0 5-2.2 5-5V6c-2.8 0-5 2.2-5 5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 11V4.5" strokeLinecap="round" />
+    </>
+  ),
+  feuille: (
+    <path d="M6 18C6 10 11 5 19 5c0 8-5 13-13 13zm0 0c0-4 2-7 5-9" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+  soleil: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" strokeLinecap="round" />
+    </>
+  ),
+  etoile: (
+    <path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.3l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z" strokeLinejoin="round" />
+  ),
+  carte: (
+    <>
+      <path d="M3.5 6.5 9 4.5l6 2 5.5-2v13l-5.5 2-6-2-5.5 2z" strokeLinejoin="round" />
+      <path d="M9 4.5v13M15 6.5v13" />
+    </>
+  ),
+  maison: (
+    <path d="M4 11.5 12 4l8 7.5M6 10v9.5h12V10M10 19.5v-5h4v5" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+  calendrier: (
+    <>
+      <rect x="4" y="5.5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" strokeLinecap="round" />
+      <path d="M8 14h2M14 14h2M8 17h2" strokeLinecap="round" />
+    </>
+  ),
+  horloge: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5l3.5 2" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  euro: (
+    <>
+      <path d="M17.5 6.5A7 7 0 0 0 12 4.5c-3.6 0-6.5 3.4-6.5 7.5s2.9 7.5 6.5 7.5a7 7 0 0 0 5.5-2" strokeLinecap="round" />
+      <path d="M3.5 10.5h9M3.5 13.5h8" strokeLinecap="round" />
+    </>
+  ),
+  document: (
+    <>
+      <path d="M6 3.5h9l3 3v14l-2-1-2 1-2-1-2 1-2-1-2 1z" strokeLinejoin="round" />
+      <path d="M9 9h6M9 12.5h6M9 16h3.5" strokeLinecap="round" />
+    </>
+  ),
+  bouclier: (
+    <>
+      <path d="M12 3.5 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z" strokeLinejoin="round" />
+      <path d="m8.8 11.8 2.2 2.2 4.2-4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  personnes: (
+    <>
+      <circle cx="9" cy="8.5" r="3.5" />
+      <path d="M3.5 20c.5-3.5 2.7-5.5 5.5-5.5s5 2 5.5 5.5" strokeLinecap="round" />
+      <path d="M15.5 5.5a3.5 3.5 0 0 1 0 6M17.5 14.8c1.7.8 2.7 2.6 3 5.2" strokeLinecap="round" />
+    </>
+  ),
+};
+
+/** Icône d'encart par nom (repli : cœur si le nom est inconnu). */
+function SectionIcon({ name, size = 28 }: { name?: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      {ICON_PATHS[name ?? ""] ?? ICON_PATHS.coeur}
+    </svg>
+  );
+}
+
 /** Rendu inline léger des textes générés : **gras** (jamais de HTML libre). */
 function Rich({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
@@ -176,6 +283,21 @@ function Rich({ text }: { text: string }) {
         ),
       )}
     </>
+  );
+}
+
+/** Badge chiffré flottant sur la photo du hero (« +300 / Patients accompagnés »). */
+function StatBadge({ stat }: { stat: { icon?: string; value: string; label: string } }) {
+  return (
+    <span className="flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-deep)]/90 px-5 py-3 text-[var(--site-on-deep)] shadow-xl shadow-black/25 backdrop-blur-sm">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--site-on-deep)] text-[var(--site-deep)]">
+        <SectionIcon name={stat.icon} size={24} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xl font-bold leading-tight">{stat.value}</span>
+        <span className="block text-xs opacity-85">{stat.label}</span>
+      </span>
+    </span>
   );
 }
 
@@ -222,13 +344,27 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
     </>
   );
 
+  const stats = section.stats ?? [];
+
   // Sans photo : mise en page d'origine avec panneau dégradé
   if (!section.imageUrl) {
     return (
       <section className="relative overflow-hidden">
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-20">
           <div className="hy-rise">{content}</div>
-          <ArchImage url={undefined} alt="" className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]" />
+          <div className="relative">
+            <ArchImage url={undefined} alt="" className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]" />
+            {stats[0] ? (
+              <div className="hy-rise absolute left-4 top-6">
+                <StatBadge stat={stats[0]} />
+              </div>
+            ) : null}
+            {stats[1] ? (
+              <div className="hy-rise absolute bottom-6 right-4" style={{ animationDelay: "0.25s" }}>
+                <StatBadge stat={stats[1]} />
+              </div>
+            ) : null}
+          </div>
         </div>
         <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
       </section>
@@ -258,19 +394,80 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           }}
         />
       </div>
-      <img
-        src={section.imageUrl}
-        alt=""
-        className="max-h-[44vh] w-full object-cover object-top lg:hidden"
-        style={{
-          maskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
-        }}
-      />
+      <div className="relative lg:hidden">
+        <img
+          src={section.imageUrl}
+          alt=""
+          className="max-h-[44vh] w-full object-cover object-top"
+          style={{
+            maskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+          }}
+        />
+        {stats[0] ? (
+          <div className="hy-rise absolute left-4 top-4">
+            <StatBadge stat={stats[0]} />
+          </div>
+        ) : null}
+      </div>
+      {stats.length > 0 ? (
+        <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[47%] lg:block">
+          {stats[0] ? (
+            <div className="hy-rise absolute left-10 top-12">
+              <StatBadge stat={stats[0]} />
+            </div>
+          ) : null}
+          {stats[1] ? (
+            <div className="hy-rise absolute bottom-14 right-6" style={{ animationDelay: "0.25s" }}>
+              <StatBadge stat={stats[1]} />
+            </div>
+          ) : null}
+          {stats[2] ? (
+            <div className="hy-rise absolute bottom-14 left-10" style={{ animationDelay: "0.4s" }}>
+              <StatBadge stat={stats[2]} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="relative mx-auto flex max-w-7xl px-4 pb-14 pt-2 lg:min-h-[40rem] lg:items-center lg:justify-end lg:py-24">
         <div className="hy-rise lg:w-[57%] lg:pl-8">{content}</div>
       </div>
       <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
+    </section>
+  );
+}
+
+/** Bandeau de points forts sur fond coloré, entre le hero et les spécialités. */
+function Highlights({ section }: { section: Extract<Section, { type: "highlights" }> }) {
+  if (section.items.length === 0) return null;
+  const cols =
+    section.items.length >= 4
+      ? "lg:grid-cols-4"
+      : section.items.length === 3
+        ? "lg:grid-cols-3"
+        : "lg:grid-cols-2";
+  return (
+    <section className="relative overflow-hidden bg-[var(--site-primary)] py-14 lg:py-16">
+      <div aria-hidden className="wave-bg-light absolute inset-0" />
+      <div className={`relative mx-auto grid max-w-7xl gap-6 px-4 sm:grid-cols-2 ${cols}`}>
+        {section.items.map((item, i) => (
+          <div
+            key={i}
+            style={{ transitionDelay: `${Math.min(i, 5) * 80}ms` }}
+            className="reveal rounded-[var(--r-md)] bg-[var(--site-bg)] p-8 text-center text-[var(--site-text)] shadow-lg shadow-black/15"
+          >
+            <span className="mx-auto flex h-12 w-12 items-center justify-center text-[var(--site-primary)]">
+              <SectionIcon name={item.icon} size={34} />
+            </span>
+            <h3 className="mt-3 text-xl font-bold">{item.title}</h3>
+            {item.text ? (
+              <p className="mt-2 text-[0.95rem] leading-relaxed opacity-75">
+                <Rich text={item.text} />
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -368,7 +565,26 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
               </p>
             ))}
           </div>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          {section.infoCards && section.infoCards.length > 0 ? (
+            <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {section.infoCards.map((card, i) => (
+                <div
+                  key={i}
+                  style={{ transitionDelay: `${Math.min(i, 4) * 80}ms` }}
+                  className="reveal rounded-[var(--r-md)] bg-[var(--site-soft)]/60 p-6 text-center"
+                >
+                  <span className="mx-auto flex h-11 w-11 items-center justify-center text-[var(--site-primary)]">
+                    <SectionIcon name={card.icon} size={30} />
+                  </span>
+                  <h3 className="mt-2.5 text-lg font-bold">{card.title}</h3>
+                  <p className="mt-1.5 whitespace-pre-line text-[0.95rem] leading-relaxed opacity-80">
+                    <Rich text={card.text} />
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="mt-9 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
             {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
           </div>

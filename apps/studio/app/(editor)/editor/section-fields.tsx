@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import type { Section } from "@theralys/shared";
+import { SECTION_ICONS, SECTION_ICON_LABELS, type Section } from "@theralys/shared";
 import { CropModal } from "./crop-modal";
 
 /** Libellés des sections, partagés avec l'accordéon de l'éditeur. */
 export const SECTION_LABELS: Record<Section["type"], string> = {
   hero: "En-tête (hero)",
+  highlights: "Points forts",
   specialties: "Spécialités",
   about: "À propos",
   reviews: "Avis Google",
@@ -47,6 +48,90 @@ export function SectionFields({
           <Field label="Texte du bouton">
             <TextInput value={section.ctaLabel ?? ""} onChange={(ctaLabel) => onChange({ ctaLabel })} />
           </Field>
+          <p className="text-xs font-medium text-ink-700">Badges chiffrés sur la photo</p>
+          {(section.stats ?? []).map((stat, i) => {
+            const stats = section.stats ?? [];
+            return (
+              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+                <IconField
+                  value={stat.icon}
+                  onChange={(icon) =>
+                    onChange({ stats: stats.map((s, j) => (j === i ? { ...s, icon } : s)) })
+                  }
+                />
+                <Field label="Chiffre / valeur (ex. « +300 », « 7j/7 »)">
+                  <TextInput
+                    value={stat.value}
+                    onChange={(value) =>
+                      onChange({ stats: stats.map((s, j) => (j === i ? { ...s, value } : s)) })
+                    }
+                  />
+                </Field>
+                <Field label="Légende (ex. « Patients accompagnés »)">
+                  <TextInput
+                    value={stat.label}
+                    onChange={(label) =>
+                      onChange({ stats: stats.map((s, j) => (j === i ? { ...s, label } : s)) })
+                    }
+                  />
+                </Field>
+                <RemoveButton
+                  label="Supprimer ce badge"
+                  onClick={() => onChange({ stats: stats.filter((_, j) => j !== i) })}
+                />
+              </div>
+            );
+          })}
+          <AddButton
+            label="+ Ajouter un badge chiffré"
+            onClick={() =>
+              onChange({ stats: [...(section.stats ?? []), { icon: "etoile", value: "", label: "" }] })
+            }
+          />
+        </SectionBox>
+      );
+
+    case "highlights":
+      return (
+        <SectionBox title="Points forts">
+          {section.items.map((item, i) => (
+            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+              <IconField
+                value={item.icon}
+                onChange={(icon) =>
+                  onChange({ items: section.items.map((it, j) => (j === i ? { ...it, icon } : it)) })
+                }
+              />
+              <Field label={`Point fort ${i + 1} — titre`}>
+                <TextInput
+                  value={item.title}
+                  onChange={(title) =>
+                    onChange({ items: section.items.map((it, j) => (j === i ? { ...it, title } : it)) })
+                  }
+                />
+              </Field>
+              <Field label="Texte (1 phrase courte)">
+                <TextInput
+                  value={item.text ?? ""}
+                  onChange={(text) =>
+                    onChange({ items: section.items.map((it, j) => (j === i ? { ...it, text } : it)) })
+                  }
+                />
+              </Field>
+              {section.items.length > 1 ? (
+                <RemoveButton
+                  label="Supprimer ce point fort"
+                  onClick={() => onChange({ items: section.items.filter((_, j) => j !== i) })}
+                />
+              ) : null}
+            </div>
+          ))}
+          <AddButton
+            label="+ Ajouter un point fort"
+            onClick={() =>
+              onChange({ items: [...section.items, { icon: "etoile", title: "", text: "" }] })
+            }
+          />
         </SectionBox>
       );
 
@@ -86,6 +171,49 @@ export function SectionFields({
             label="Photo (votre portrait, votre cabinet…)"
             value={section.imageUrl ?? ""}
             onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
+          />
+          <p className="text-xs font-medium text-ink-700">Cartes infos pratiques (durée, tarifs…)</p>
+          {(section.infoCards ?? []).map((card, i) => {
+            const cards = section.infoCards ?? [];
+            return (
+              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+                <IconField
+                  value={card.icon}
+                  onChange={(icon) =>
+                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })
+                  }
+                />
+                <Field label={`Carte ${i + 1} — titre`}>
+                  <TextInput
+                    value={card.title}
+                    onChange={(title) =>
+                      onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
+                    }
+                  />
+                </Field>
+                <Field label="Texte">
+                  <TextArea
+                    value={card.text}
+                    rows={2}
+                    onChange={(text) =>
+                      onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
+                    }
+                  />
+                </Field>
+                <RemoveButton
+                  label="Supprimer cette carte"
+                  onClick={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
+                />
+              </div>
+            );
+          })}
+          <AddButton
+            label="+ Ajouter une carte info"
+            onClick={() =>
+              onChange({
+                infoCards: [...(section.infoCards ?? []), { icon: "horloge", title: "", text: "" }],
+              })
+            }
           />
         </SectionBox>
       );
@@ -341,6 +469,31 @@ function ImageField({
         <TextInput value={value} placeholder="ou collez une URL https://…" onChange={onChange} />
       </div>
       {error ? <p className="mt-1 text-xs text-danger-500">{error}</p> : null}
+    </Field>
+  );
+}
+
+/** Choix d'une icône d'encart parmi la bibliothèque partagée. */
+function IconField({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label="Icône">
+      <select
+        value={value && (SECTION_ICONS as readonly string[]).includes(value) ? value : "coeur"}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      >
+        {SECTION_ICONS.map((name) => (
+          <option key={name} value={name}>
+            {SECTION_ICON_LABELS[name]}
+          </option>
+        ))}
+      </select>
     </Field>
   );
 }

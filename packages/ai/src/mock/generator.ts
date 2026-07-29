@@ -78,6 +78,35 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       ],
       showGoogleRating: hasGoogle,
       ctaLabel: "Prendre Rendez-Vous",
+      stats: [
+        { icon: "personnes", value: "100 %", label: "Séances personnalisées" },
+        { icon: "horloge", value: "24 h", label: "Réponse à vos messages" },
+      ],
+    },
+    {
+      type: "highlights",
+      items: [
+        {
+          icon: "medaille",
+          title: acc(input, "Praticien diplômé", "Praticienne diplômée"),
+          text: `${acc(input, "Formé", "Formée")} et ${acc(input, "certifié", "certifiée")} en ${seed.practiceName}`,
+        },
+        {
+          icon: "mains",
+          title: "Séance personnalisée",
+          text: "Chaque séance adaptée à vos besoins",
+        },
+        {
+          icon: "fleur",
+          title: "Cadre apaisant",
+          text: "Un espace calme, propice au lâcher-prise",
+        },
+        {
+          icon: "carte",
+          title: "Cabinet facile d'accès",
+          text: `Au cœur de ${input.city}, parking à proximité`,
+        },
+      ],
     },
     {
       type: "specialties",
@@ -93,6 +122,23 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
         `Mon approche : ${seed.heroTagline.toLowerCase()}. Chaque personne est unique — c'est pourquoi je prends le temps, à chaque séance, de comprendre où vous en êtes et ce dont vous avez besoin.`,
         `Vous recevoir à ${input.city}, c'est vous offrir une parenthèse : **un lieu calme, une écoute attentive** et des pratiques choisies pour vous.`,
         `✅ ${acc(input, "Formé", "Formée")} et ${acc(input, "certifié", "certifiée")} en ${seed.practiceName}\n✅ Accompagnement personnalisé, à votre rythme\n✅ Cadre bienveillant et confidentiel à ${input.city}`,
+      ],
+      infoCards: [
+        {
+          icon: "horloge",
+          title: "Durée de la séance",
+          text: "**45 à 60 minutes** en moyenne",
+        },
+        {
+          icon: "euro",
+          title: "Tarification",
+          text: "Séance : **60 €**\nCB, chèque ou espèces",
+        },
+        {
+          icon: "document",
+          title: "Mutuelles",
+          text: "Certaines mutuelles proposent un **forfait bien-être**",
+        },
       ],
     },
     {
