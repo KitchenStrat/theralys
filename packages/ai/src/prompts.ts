@@ -2,7 +2,14 @@ import type { GenerationInput, MotifPlan } from "./types";
 
 const VOICE = `Tu écris en français, à la première personne (« je »), au nom du praticien.
 Ton professionnel, chaleureux et sobre. Public visé : particuliers stressés ou fatigués
-cherchant un accompagnement bien-être près de chez eux. Vouvoiement systématique.`;
+cherchant un accompagnement bien-être près de chez eux. Vouvoiement systématique.
+
+MISE EN FORME (impact) :
+- Mets en **gras** (double astérisque) les 2 à 4 passages clés de chaque bloc de texte :
+  bénéfices concrets, mots forts, éléments différenciants.
+- Paragraphes courts : 1 à 3 phrases maximum, jamais de pavé.
+- Pour énumérer des points forts, formations ou bénéfices : des lignes commençant par
+  « ✅ » (une par point, séparées par des retours à la ligne).`;
 
 export function buildContext(input: GenerationInput): string {
   const gender = input.gender === "feminin" ? "femme (accords au féminin)" : "homme (accords au masculin)";
@@ -34,9 +41,9 @@ Produis un JSON avec cette forme exacte :
   "metaTitle": "…",             // ≤ 60 caractères, métier + ville
   "metaDescription": "…",       // ≤ 155 caractères
   "sections": [
-    { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous" },
+    { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts, avec des passages **gras**"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous" },
     { "type": "specialties", "title": "…", "intro": "…", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "1 phrase" } ] },  // exactement ${input.motifPageCount} items
-    { "type": "about", "title": "…", "paragraphs": ["3 paragraphes"] },
+    { "type": "about", "title": "…", "paragraphs": ["3 à 4 paragraphes courts avec **gras** ; le dernier est une liste de lignes ✅ (parcours, formations, points forts) séparées par des retours à la ligne"] },
     { "type": "reviews", "title": "…" },
     { "type": "process", "title": "Le déroulement d'une séance", "steps": [ { "title": "…", "description": "…" } ] },  // 3 étapes
     { "type": "faq", "title": "Questions fréquentes", "items": [ { "question": "…", "answer": "…" } ] },  // 4 questions

@@ -72,8 +72,8 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       badge: `${input.profession} à ${input.city}`,
       title: `Un espace pour relâcher le corps et apaiser le mental à ${input.city}.`,
       paragraphs: [
-        `Je vous accompagne pour sortir du stress et des tensions du quotidien, et retrouver un corps détendu et un mental apaisé.`,
-        `Un rythme trop soutenu, des tensions qui s'accumulent ? Grâce à ${seed.practiceName}, je vous aide à dénouer ce qui pèse et à retrouver une profonde sérénité.`,
+        `Je vous accompagne pour **sortir du stress et des tensions du quotidien**, et retrouver un corps détendu et un mental apaisé.`,
+        `Un rythme trop soutenu, des tensions qui s'accumulent ? Grâce à ${seed.practiceName}, je vous aide à **dénouer ce qui pèse** et à retrouver une profonde sérénité.`,
         `Je vous accueille sur rendez-vous à ${input.city}, dans un cadre calme et propice au lâcher-prise.`,
       ],
       showGoogleRating: hasGoogle,
@@ -91,7 +91,8 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       paragraphs: [
         `${acc(input, "Praticien", "Praticienne")} ${acc(input, "passionné", "passionnée")} et ${acc(input, "formé", "formée")} aux différentes approches de ${seed.practiceName}, j'ai à cœur d'offrir à chacun un accompagnement respectueux, à l'écoute et sans jugement.`,
         `Mon approche : ${seed.heroTagline.toLowerCase()}. Chaque personne est unique — c'est pourquoi je prends le temps, à chaque séance, de comprendre où vous en êtes et ce dont vous avez besoin.`,
-        `Vous recevoir à ${input.city}, c'est vous offrir une parenthèse : un lieu calme, une écoute attentive et des pratiques choisies pour vous.`,
+        `Vous recevoir à ${input.city}, c'est vous offrir une parenthèse : **un lieu calme, une écoute attentive** et des pratiques choisies pour vous.`,
+        `✅ ${acc(input, "Formé", "Formée")} et ${acc(input, "certifié", "certifiée")} en ${seed.practiceName}\n✅ Accompagnement personnalisé, à votre rythme\n✅ Cadre bienveillant et confidentiel à ${input.city}`,
       ],
     },
     {

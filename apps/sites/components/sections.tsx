@@ -68,8 +68,8 @@ function Pill({ children, onDark = false }: { children: React.ReactNode; onDark?
     <span
       className={
         onDark
-          ? "inline-block rounded-[var(--r-pill)] border border-current/30 px-4 py-1.5 text-xs font-medium uppercase tracking-wider opacity-90"
-          : "inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
+          ? "inline-block rounded-[var(--r-pill)] border border-current/30 px-4 py-1.5 text-[0.8rem] font-medium uppercase tracking-wider opacity-90"
+          : "inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-4 py-1.5 text-[0.8rem] font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
       }
     >
       {children}
@@ -82,7 +82,7 @@ function DotsRow({ className = "" }: { className?: string }) {
   return (
     <span aria-hidden className={`flex items-center justify-center gap-2.5 ${className}`}>
       {Array.from({ length: 17 }).map((_, i) => (
-        <span key={i} className="h-1 w-1 rotate-45 bg-current opacity-30" />
+        <span key={i} className="h-1.5 w-1.5 rotate-45 bg-current opacity-30" />
       ))}
     </span>
   );
@@ -144,8 +144,8 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
       href={`tel:${phone.replace(/\s/g, "")}`}
       className={
         onDark
-          ? "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-current/40 px-6 py-3 font-medium transition-opacity hover:opacity-80"
-          : "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-[var(--site-primary)]/50 px-6 py-3 font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)]"
+          ? "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-current/40 px-7 py-3.5 text-[1.05rem] font-medium transition-opacity hover:opacity-80"
+          : "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-[var(--site-primary)]/50 px-7 py-3.5 text-[1.05rem] font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)]"
       }
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -161,6 +161,24 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
   );
 }
 
+/** Rendu inline léger des textes générés : **gras** (jamais de HTML libre). */
+function Rich({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={i} className="font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 // ─── Sections ────────────────────────────────────────────────────────────────
 
 function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; ctx: SectionContext }) {
@@ -173,9 +191,11 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
       <h1 className="mt-6 text-4xl font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[3.8rem]">
         {section.title}
       </h1>
-      <div className="mt-6 max-w-xl space-y-4 opacity-85">
+      <div className="mt-6 max-w-xl space-y-4 text-lg opacity-85">
         {section.paragraphs.map((p, i) => (
-          <p key={i}>{p}</p>
+          <p key={i} className="whitespace-pre-line">
+            <Rich text={p} />
+          </p>
         ))}
       </div>
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -275,12 +295,12 @@ function Specialties({
       <div className="relative mx-auto max-w-6xl px-4">
         <div className="reveal text-center">
           <Pill onDark>Motifs de consultation</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold sm:text-4xl">
+          <h2 className="mx-auto mt-5 max-w-2xl text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">
             {section.title}
           </h2>
           <DotsRow className="mt-6" />
           {section.intro ? (
-            <p className="mx-auto mt-5 max-w-2xl opacity-80">{section.intro}</p>
+            <p className="mx-auto mt-5 max-w-2xl text-lg opacity-80">{section.intro}</p>
           ) : null}
         </div>
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -289,13 +309,13 @@ function Specialties({
               key={item.slug}
               href={`${ctx.prefix}/motifs/${item.slug}`}
               style={{ transitionDelay: `${Math.min(index, 5) * 70}ms` }}
-              className="reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-7 text-[var(--site-text)] shadow-lg shadow-black/10 transition-transform hover:-translate-y-1"
+              className="reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-8 text-[var(--site-text)] shadow-lg shadow-black/10 transition-transform hover:-translate-y-1"
             >
               <span
                 aria-hidden
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                   <path
                     d="M12 21c-4-2.5-6.5-5.5-6.5-9A6.5 6.5 0 0 1 12 5.5 6.5 6.5 0 0 1 18.5 12c0 3.5-2.5 6.5-6.5 9z"
                     stroke="currentColor"
@@ -305,11 +325,13 @@ function Specialties({
                   <path d="M12 5.5V3M8.5 6.5 7 4.5M15.5 6.5 17 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                 </svg>
               </span>
-              <h3 className="mt-4 text-lg font-semibold group-hover:text-[var(--site-primary)]">
+              <h3 className="mt-5 text-xl font-semibold group-hover:text-[var(--site-primary)]">
                 {item.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed opacity-75">{item.excerpt}</p>
-              <span className="mt-4 inline-block text-sm font-medium text-[var(--site-primary)]">
+              <p className="mt-2.5 leading-relaxed opacity-75">
+                <Rich text={item.excerpt} />
+              </p>
+              <span className="mt-5 inline-block font-medium text-[var(--site-primary)]">
                 En savoir plus →
               </span>
             </Link>
@@ -338,10 +360,12 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
           <Pill>Votre praticien·ne</Pill>
-          <h2 className="mt-5 text-3xl font-semibold sm:text-4xl">{section.title}</h2>
-          <div className="mt-6 space-y-4 opacity-85">
+          <h2 className="mt-5 text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
+          <div className="mt-6 space-y-4 text-lg opacity-85">
             {section.paragraphs.map((p, i) => (
-              <p key={i}>{p}</p>
+              <p key={i} className="whitespace-pre-line leading-relaxed">
+                <Rich text={p} />
+              </p>
             ))}
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -384,7 +408,7 @@ function Reviews({
             {ctx.googleRating ? (
               <>
                 <p className="mt-1 flex items-center gap-2">
-                  <span className="text-2xl font-bold">{ctx.googleRating}</span>
+                  <span className="text-3xl font-bold">{ctx.googleRating}</span>
                   <Stars rating={ctx.googleRating} />
                 </p>
                 <p className="mt-1 text-sm opacity-70">
@@ -401,7 +425,7 @@ function Reviews({
               <figure
                 key={review.id}
                 style={{ transitionDelay: `${Math.min(index, 4) * 80}ms` }}
-                className="reveal w-72 shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-6 shadow-sm"
+                className="reveal w-80 shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   <AvatarInitial name={review.authorName} />
@@ -411,7 +435,7 @@ function Reviews({
                   </figcaption>
                 </div>
                 <Stars rating={review.rating} className="mt-3 block text-sm" />
-                <blockquote className="mt-2 line-clamp-6 text-sm leading-relaxed opacity-85">
+                <blockquote className="mt-3 line-clamp-6 leading-relaxed opacity-85">
                   {review.text}
                 </blockquote>
               </figure>
@@ -430,22 +454,28 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
       <div className="relative mx-auto max-w-5xl px-4">
         <div className="reveal text-center">
           <Pill>À quoi s&apos;attendre ?</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-3xl font-semibold sm:text-4xl">{section.title}</h2>
+          <h2 className="mx-auto mt-5 max-w-2xl text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
           <DotsRow className="mt-6 text-[var(--site-primary)]" />
         </div>
-        <ol className="mt-12 grid gap-x-12 gap-y-10 sm:grid-cols-2">
+        <ol className="mt-12 grid gap-6 sm:grid-cols-2">
           {section.steps.map((step, i) => (
-            <li key={i} className="reveal flex gap-5" style={{ transitionDelay: `${Math.min(i, 3) * 90}ms` }}>
+            <li
+              key={i}
+              className="reveal flex overflow-hidden rounded-[var(--r-lg)] border border-[var(--site-primary)]/30 bg-[var(--site-surface)]/70"
+              style={{ transitionDelay: `${Math.min(i, 3) * 90}ms` }}
+            >
               <span
                 aria-hidden
-                className="text-6xl font-semibold leading-none text-[var(--site-primary)]"
+                className="flex w-24 shrink-0 items-center justify-center border-r border-[var(--site-primary)]/30 text-7xl font-semibold text-[var(--site-primary)]"
                 style={{ fontFamily: "var(--site-font-heading)" }}
               >
                 {i + 1}
               </span>
-              <span>
-                <h3 className="pt-1 text-lg font-semibold">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed opacity-75">{step.description}</p>
+              <span className="p-6">
+                <h3 className="text-xl font-semibold">{step.title}</h3>
+                <p className="mt-2.5 whitespace-pre-line leading-relaxed opacity-80">
+                  <Rich text={step.description} />
+                </p>
               </span>
             </li>
           ))}
@@ -464,7 +494,7 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
       <div className="mx-auto grid max-w-6xl gap-10 px-4 lg:grid-cols-[0.75fr_1.25fr]">
         <div className="reveal">
           <Pill>Vos questions</Pill>
-          <h2 className="mt-5 text-3xl font-semibold sm:text-4xl">{section.title}</h2>
+          <h2 className="mt-5 text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
           <p className="mt-4 text-sm opacity-75">
             Une autre question ? Le plus simple est d&apos;en parler directement.
           </p>
@@ -479,13 +509,15 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
               style={{ transitionDelay: `${Math.min(i, 5) * 60}ms` }}
               className="reveal group overflow-hidden rounded-[var(--r-md)] open:bg-[var(--site-surface)] open:shadow-sm"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-5 py-4 font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-6 py-5 text-[1.05rem] font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
                 {item.question}
                 <span aria-hidden className="shrink-0 transition-transform group-open:rotate-45">
                   +
                 </span>
               </summary>
-              <p className="px-5 py-4 text-sm leading-relaxed opacity-80">{item.answer}</p>
+              <p className="whitespace-pre-line px-6 py-5 leading-relaxed opacity-80">
+                <Rich text={item.answer} />
+              </p>
             </details>
           ))}
         </div>
@@ -509,8 +541,8 @@ function Contact({
       <div aria-hidden className="wave-bg-light stage-light absolute inset-0" />
       <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
-          <h2 className="text-3xl font-semibold sm:text-4xl">{section.title}</h2>
-          <p className="mt-4 opacity-80">Prenez rendez-vous en ligne ou par téléphone.</p>
+          <h2 className="text-[2.1rem] font-semibold leading-tight sm:text-[2.75rem]">{section.title}</h2>
+          <p className="mt-4 text-lg opacity-80">Prenez rendez-vous en ligne ou par téléphone.</p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
             {section.phone ? <PhoneButton phone={section.phone} onDark /> : null}
@@ -521,7 +553,7 @@ function Contact({
             <AvatarInitial name={ctx.site.name} />
             <span className="font-semibold">{ctx.site.name}</span>
           </div>
-          <div className="mt-4 space-y-1.5 text-sm opacity-85">
+          <div className="mt-4 space-y-2 opacity-85">
             {section.address ? <p>{section.address}</p> : null}
             {section.email ? (
               <p>
@@ -557,7 +589,11 @@ function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx
     <section className="mx-auto max-w-4xl px-4 py-12">
       <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-12 text-center text-white shadow-xl shadow-black/10">
         <h2 className="mx-auto max-w-xl text-3xl font-semibold">{section.title}</h2>
-        {section.body ? <p className="mx-auto mt-4 max-w-xl opacity-90">{section.body}</p> : null}
+        {section.body ? (
+          <p className="mx-auto mt-4 max-w-xl whitespace-pre-line text-lg opacity-90">
+            <Rich text={section.body} />
+          </p>
+        ) : null}
         <div className="mt-8">
           <RdvButton
             siteId={ctx.site.id}

@@ -390,8 +390,30 @@ function ParagraphsField({
             rows={3}
             onChange={(text) => onChange(paragraphs.map((p, j) => (j === i ? text : p)))}
           />
+          {paragraphs.length > 1 ? (
+            <div className="mt-1 text-right">
+              <button
+                type="button"
+                onClick={() => onChange(paragraphs.filter((_, j) => j !== i))}
+                className="text-xs text-danger-500 hover:underline"
+              >
+                Supprimer ce paragraphe
+              </button>
+            </div>
+          ) : null}
         </Field>
       ))}
+      <button
+        type="button"
+        onClick={() => onChange([...paragraphs, ""])}
+        className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
+      >
+        + Ajouter un paragraphe
+      </button>
+      <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+        💡 <strong>**texte**</strong> = passage en gras · commencez des lignes par
+        <strong> ✅ </strong>pour une liste à coches (une par ligne, touche Entrée)
+      </p>
     </>
   );
 }

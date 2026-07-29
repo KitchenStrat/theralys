@@ -18,7 +18,7 @@ export function SiteHeader({
   const home = `${prefix}`;
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5">
         <Link href={home} className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
@@ -26,12 +26,12 @@ export function SiteHeader({
           >
             {site.name.charAt(0).toUpperCase()}
           </span>
-          <span className="truncate text-lg font-bold" style={{ fontFamily: "var(--site-font-heading)" }}>
+          <span className="truncate text-xl font-bold" style={{ fontFamily: "var(--site-font-heading)" }}>
             {site.name}
           </span>
         </Link>
 
-        <nav aria-label="Navigation principale" className="hidden items-center gap-5 text-sm lg:flex">
+        <nav aria-label="Navigation principale" className="hidden items-center gap-6 text-[0.95rem] lg:flex">
           {motifPages.length > 0 ? (
             <div className="group relative">
               <button type="button" className="flex items-center gap-1 hover:text-[var(--site-primary)]">
@@ -64,7 +64,7 @@ export function SiteHeader({
         <RdvButton
           siteId={site.id}
           bookingUrl={site.bookingUrl}
-          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
+          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-6 py-3 text-[0.95rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
         />
       </div>
     </header>
