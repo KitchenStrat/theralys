@@ -11,14 +11,19 @@
  */
 
 export type ImageRequest = {
-  /** Sujet de l'illustration, ex. le titre de l'article */
+  /** Sujet de l'illustration (en anglais pour FLUX), ex. le titre de l'article */
   subject: string;
-  /** Ambiance visuelle, ex. « massage bien-être, huiles, lumière douce » */
+  /** Ambiance visuelle (en anglais), ex. « warm light, cozy practice room » */
   mood?: string;
   /** Couleur dominante du thème du site (hex), utilisée par le mock */
   themeColor?: string;
   width?: number;
   height?: number;
+  /**
+   * « high » → FLUX dev : rendu photoréaliste (visages crédibles), ~8× le prix
+   * de schnell (~0,025 $/MP) — réservé aux photos principales du site.
+   */
+  quality?: "standard" | "high";
 };
 
 export type GeneratedImage = {
@@ -31,14 +36,18 @@ export interface ImageProvider {
   generate(request: ImageRequest): Promise<GeneratedImage>;
 }
 
-const FAL_MODEL = "fal-ai/flux/schnell";
+const FAL_MODELS = {
+  standard: "fal-ai/flux/schnell",
+  high: "fal-ai/flux/dev",
+} as const;
 
 export class FalImageProvider implements ImageProvider {
   constructor(private readonly apiKey: string) {}
 
   async generate(request: ImageRequest): Promise<GeneratedImage> {
     const prompt = buildImagePrompt(request);
-    const response = await fetch(`https://fal.run/${FAL_MODEL}`, {
+    const model = FAL_MODELS[request.quality ?? "standard"];
+    const response = await fetch(`https://fal.run/${model}`, {
       method: "POST",
       headers: {
         Authorization: `Key ${this.apiKey}`,
@@ -62,15 +71,16 @@ export class FalImageProvider implements ImageProvider {
 }
 
 /**
- * Prompt d'image : photographie douce. Sans `mood` explicite (articles),
- * on évite les visages ; les portraits du site passent leur propre `mood`.
+ * Prompt d'image en anglais (FLUX y répond nettement mieux qu'en français).
+ * Sans `mood` explicite (articles), on évite les visages ; les portraits du
+ * site passent leur propre `mood`.
  */
 export function buildImagePrompt(request: ImageRequest): string {
   return [
-    `Photographie éditoriale apaisante pour un site de bien-être : ${request.subject}.`,
+    `Editorial photograph for a wellness practitioner website: ${request.subject}.`,
     request.mood ??
-      "Ambiance chaleureuse, lumière naturelle douce, tons neutres, pas de visage reconnaissable en gros plan.",
-    "Pas de texte, pas de logo.",
+      "Warm soothing atmosphere, soft natural light, neutral tones, no recognizable face in close-up.",
+    "Photorealistic, authentic, professional photography, high detail. No text, no logo, no watermark, no illustration, no 3D render.",
   ].join(" ");
 }
 

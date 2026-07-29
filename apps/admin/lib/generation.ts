@@ -80,29 +80,37 @@ async function generate(site: Site): Promise<void> {
       ` (FAL_API_KEY ${process.env.FAL_API_KEY ? "présente" : "absente"})`,
   );
   const themeColor = PRESET_COLORS[home.theme.preset];
-  const feminin = input.gender === "feminin";
-  const praticien = feminin ? "une praticienne" : "un praticien";
+  // Prompts en anglais (FLUX y répond bien mieux) ; qualité « high » (FLUX dev)
+  // pour les trois photos principales — indispensable pour des visages crédibles.
+  const practitioner =
+    input.gender === "feminin"
+      ? "a French woman in her thirties, a wellness practitioner"
+      : "a French man in his thirties, a wellness practitioner";
   const [heroImage, aboutImage, futureImage] = await Promise.all([
     tryGenerateImage(imageProvider, {
-      subject: `intérieur d'un cabinet de ${input.profession}, salle de consultation soignée et apaisante`,
-      mood: "lumière chaude et dorée de fin de journée, ambiance chaleureuse et accueillante, sans personne, photographie réaliste",
+      subject:
+        "interior of an elegant wellness practitioner's consultation room in France, empty room, massage table or armchairs, plants and soft textiles",
+      mood: "golden hour, warm sunlight streaming through a window, cozy and inviting, high-end interior photography, sharp focus",
       themeColor,
       width: 960,
       height: 1152,
+      quality: "high",
     }),
     tryGenerateImage(imageProvider, {
-      subject: `portrait professionnel d'${praticien} (${input.profession}), ${feminin ? "souriante et confiante" : "souriant et confiant"}, dans son cabinet`,
-      mood: "lumière naturelle douce, arrière-plan sobre du cabinet, photographie réaliste de qualité éditoriale",
+      subject: `natural professional portrait of ${practitioner}, smiling warmly at the camera, standing in a bright consultation room`,
+      mood: "soft window light, shallow depth of field, 85mm lens, candid editorial portrait, natural authentic skin texture, realistic proportions",
       themeColor,
       width: 896,
       height: 1120,
+      quality: "high",
     }),
     tryGenerateImage(imageProvider, {
-      subject: `${praticien} (${input.profession}) en séance avec un patient ou une patiente, gestes de soin attentifs et bienveillants`,
-      mood: "cadre chaleureux du cabinet, lumière naturelle douce, photographie réaliste de qualité éditoriale",
+      subject: `${practitioner} during a one-on-one session with a relaxed client, caring attentive gesture, in a cozy consultation room`,
+      mood: "warm natural light, calm trusting atmosphere, shallow depth of field, documentary editorial photography, natural authentic skin texture",
       themeColor,
       width: 896,
       height: 1120,
+      quality: "high",
     }),
   ]);
   let homeSections = withSectionImage(home.sections, "hero", heroImage);
@@ -168,7 +176,7 @@ async function generateMotifPagesStep(
   const generated = await mapPool(motifsPlan, 2, async (motif) => {
     const page = await generator.generateMotifPage(input, motif);
     const image = await tryGenerateImage(imageProvider, {
-      subject: `${motif.title} — séance de ${input.profession}, ambiance apaisante`,
+      subject: `wellness treatment scene evoking « ${motif.title} », soothing hands-on care details, cozy practice room`,
       themeColor,
       width: 960,
       height: 1152,
@@ -267,7 +275,14 @@ const PRESET_COLORS: Record<ThemePreset, string> = {
 /** Génère une image d'ambiance ; en cas d'échec la démo continue sans image. */
 async function tryGenerateImage(
   provider: ImageProvider,
-  request: { subject: string; mood?: string; themeColor?: string; width: number; height: number },
+  request: {
+    subject: string;
+    mood?: string;
+    themeColor?: string;
+    width: number;
+    height: number;
+    quality?: "standard" | "high";
+  },
 ): Promise<string | undefined> {
   try {
     const image = await provider.generate(request);

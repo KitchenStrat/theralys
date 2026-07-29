@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkEthicalComplianceDeep } from "./guardrails";
-import { createSiteGenerator, resolveAiMode } from "./generate-site";
+import { createSiteGenerator, ensureHomeSections, resolveAiMode } from "./generate-site";
+import { mockGenerateHome } from "./mock/generator";
 import type { GenerationInput } from "./types";
 
 const INPUTS: GenerationInput[] = [
@@ -129,5 +130,42 @@ describe("pipeline mock", () => {
     const a = await generator.generateHome(INPUTS[0]!);
     const b = await generator.generateHome(INPUTS[0]!);
     expect(a).toEqual(b);
+  });
+});
+
+describe("ensureHomeSections (filet de sécurité)", () => {
+  const input = INPUTS[0]!;
+
+  it("insère les encarts manquants quand le modèle les omet", () => {
+    const home = {
+      siteName: "Test",
+      metaTitle: "t",
+      metaDescription: "d",
+      sections: [
+        { type: "hero" as const, title: "Un espace pour souffler", paragraphs: ["p"] },
+        { type: "specialties" as const, title: "Spécialités", items: [] },
+        { type: "about" as const, title: "À propos", paragraphs: ["p"] },
+      ],
+      motifsPlan: [],
+    };
+    const fixed = ensureHomeSections(home, input);
+    expect(fixed.sections.map((s) => s.type)).toEqual([
+      "hero",
+      "highlights",
+      "specialties",
+      "future",
+      "about",
+    ]);
+    const hero = fixed.sections.find((s) => s.type === "hero");
+    expect(hero && hero.type === "hero" && hero.stats).toHaveLength(2);
+    const about = fixed.sections.find((s) => s.type === "about");
+    expect(about && about.type === "about" && about.infoCards).toHaveLength(3);
+    expect(checkEthicalComplianceDeep(fixed).ok).toBe(true);
+  });
+
+  it("ne modifie rien quand tout est déjà présent", () => {
+    const complete = mockGenerateHome(input);
+    const fixed = ensureHomeSections(complete, input);
+    expect(fixed.sections).toEqual(complete.sections);
   });
 });

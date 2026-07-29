@@ -75,7 +75,10 @@ export function createSiteGenerator(env: NodeJS.ProcessEnv = process.env): SiteG
       );
       // Le thème reste déterminé par le catalogue métier (cohérence visuelle)
       const seed = resolveProfession(input.profession);
-      return { ...result, theme: { preset: seed.themePreset, fontPreset: "chaleureux" } };
+      return {
+        ...ensureHomeSections(result, input),
+        theme: { preset: seed.themePreset, fontPreset: "chaleureux" },
+      };
     },
     generateMotifPage(input, motif) {
       return completeStructured(opts, MOTIF_SYSTEM, motifUserPrompt(input, motif), generatedMotifPageSchema);
@@ -86,6 +89,94 @@ export function createSiteGenerator(env: NodeJS.ProcessEnv = process.env): SiteG
     generateArticles(input, motifs) {
       return completeStructured(opts, ARTICLES_SYSTEM, articlesUserPrompt(input, motifs), generatedArticlesSchema);
     },
+  };
+}
+
+/**
+ * Filet de sécurité structurel : si le modèle omet un des encarts attendus
+ * (bandeau de points forts, projection vers l'avenir, badges du hero, cartes
+ * infos de l'à-propos), on l'insère avec un contenu par défaut — le praticien
+ * l'ajuste ensuite dans l'éditeur.
+ */
+export function ensureHomeSections(
+  home: Omit<GeneratedHome, "theme">,
+  input: GenerationInput,
+): Omit<GeneratedHome, "theme"> {
+  const fem = input.gender === "feminin";
+  const sections = [...home.sections];
+  const has = (type: string) => sections.some((s) => s.type === type);
+  const insertAfter = (anchor: string, section: (typeof sections)[number]) => {
+    const i = sections.findIndex((s) => s.type === anchor);
+    sections.splice(i === -1 ? 1 : i + 1, 0, section);
+  };
+
+  if (!has("highlights")) {
+    insertAfter("hero", {
+      type: "highlights",
+      items: [
+        {
+          icon: "medaille",
+          title: fem ? "Praticienne diplômée" : "Praticien diplômé",
+          text: `${fem ? "Formée et certifiée" : "Formé et certifié"} dans sa discipline`,
+        },
+        { icon: "mains", title: "Séance personnalisée", text: "Chaque séance adaptée à vos besoins" },
+        { icon: "fleur", title: "Cadre apaisant", text: "Un espace calme, propice au lâcher-prise" },
+        { icon: "carte", title: "Cabinet facile d'accès", text: `Au cœur de ${input.city}` },
+      ],
+    });
+  }
+
+  if (!has("future")) {
+    insertAfter(has("specialties") ? "specialties" : "highlights", {
+      type: "future",
+      badge: "Santé & Équilibre",
+      title: "Et si vous retrouviez enfin un quotidien plus léger ?",
+      intro: "Grâce à un accompagnement **personnalisé**, il devient possible de :",
+      bullets: [
+        "**Relâcher les tensions** accumulées dans le corps et l'esprit",
+        "**Retrouver un sommeil** plus profond et plus régulier",
+        "**Apaiser le stress** et les réactions disproportionnées du quotidien",
+        "**Reprendre confiance** en vous, à votre rythme et sans pression",
+        "**Installer des habitudes** simples qui vous font durablement du bien",
+      ],
+      ctaLabel: "Prendre Rendez-Vous",
+    });
+  }
+
+  return {
+    ...home,
+    sections: sections.map((section) => {
+      if (section.type === "hero" && (!section.stats || section.stats.length === 0)) {
+        return {
+          ...section,
+          stats: [
+            { icon: "diplome", value: "+1000", label: "Patients accompagnés" },
+            input.googleEnrichment?.rating
+              ? {
+                  icon: "etoile",
+                  value: `${input.googleEnrichment.rating}/5`,
+                  label: `Basé sur ${input.googleEnrichment.reviewCount ?? "nos"} avis Google`,
+                }
+              : { icon: "medaille", value: "6 ans", label: "D'expérience" },
+          ],
+        };
+      }
+      if (section.type === "about" && (!section.infoCards || section.infoCards.length === 0)) {
+        return {
+          ...section,
+          infoCards: [
+            { icon: "horloge", title: "Durée de la séance", text: "**45 à 60 minutes** en moyenne" },
+            { icon: "euro", title: "Tarification", text: "Séance **60 €**\nCB, chèque ou espèces" },
+            {
+              icon: "document",
+              title: "Remboursement",
+              text: "Prise en charge par de **nombreuses mutuelles**",
+            },
+          ],
+        };
+      }
+      return section;
+    }),
   };
 }
 

@@ -23,9 +23,19 @@ describe("ImageProvider", () => {
     expect(svg).toContain("<svg");
   });
 
-  it("le prompt d'image interdit texte, logo et visages", () => {
+  it("le prompt d'image interdit texte et logo, et évite les visages par défaut", () => {
     const prompt = buildImagePrompt({ subject: "Réflexologie plantaire" });
     expect(prompt).toContain("Réflexologie plantaire");
-    expect(prompt).toContain("Pas de texte");
+    expect(prompt).toContain("No text");
+    expect(prompt).toContain("no recognizable face");
+  });
+
+  it("un mood explicite remplace la consigne sans-visage (portraits)", () => {
+    const prompt = buildImagePrompt({
+      subject: "portrait of a practitioner",
+      mood: "soft window light, candid portrait",
+    });
+    expect(prompt).toContain("candid portrait");
+    expect(prompt).not.toContain("no recognizable face");
   });
 });
