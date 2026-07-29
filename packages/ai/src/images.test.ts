@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildImagePrompt, createImageProvider, MockImageProvider } from "./images";
+import { buildImagePrompt, closestAspectRatio, createImageProvider, MockImageProvider } from "./images";
 
 describe("ImageProvider", () => {
   it("mock par défaut sans FAL_API_KEY", () => {
@@ -28,6 +28,13 @@ describe("ImageProvider", () => {
     expect(prompt).toContain("Réflexologie plantaire");
     expect(prompt).toContain("No text");
     expect(prompt).toContain("no recognizable face");
+  });
+
+  it("mappe les dimensions vers le ratio Ultra le plus proche", () => {
+    expect(closestAspectRatio(960, 1152)).toBe("3:4");
+    expect(closestAspectRatio(896, 1120)).toBe("3:4");
+    expect(closestAspectRatio(1024, 576)).toBe("16:9");
+    expect(closestAspectRatio(1024, 1024)).toBe("1:1");
   });
 
   it("un mood explicite remplace la consigne sans-visage (portraits)", () => {

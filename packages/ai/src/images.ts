@@ -36,17 +36,50 @@ export interface ImageProvider {
   generate(request: ImageRequest): Promise<GeneratedImage>;
 }
 
+/**
+ * Modèles fal.ai par niveau de qualité (surchargables via IMAGE_MODEL_STANDARD
+ * / IMAGE_MODEL_HIGH, sans redéploiement) :
+ * - standard : FLUX schnell (~0,003 $/image) — articles de blog, ambiances.
+ * - high : FLUX 1.1 Pro Ultra (~0,06 $/image) — les 3 photos principales du
+ *   site, mode « raw » pour un rendu photo naturel et des visages crédibles.
+ */
 const FAL_MODELS = {
   standard: "fal-ai/flux/schnell",
-  high: "fal-ai/flux/dev",
+  high: "fal-ai/flux-pro/v1.1-ultra",
 } as const;
+
+/** Ratios acceptés par FLUX Pro Ultra (pas de dimensions libres sur ce modèle). */
+const ULTRA_RATIOS = ["21:9", "16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "9:21"] as const;
+
+export function closestAspectRatio(width: number, height: number): string {
+  const target = width / height;
+  let best: string = ULTRA_RATIOS[0];
+  let bestDelta = Infinity;
+  for (const ratio of ULTRA_RATIOS) {
+    const [w, h] = ratio.split(":").map(Number);
+    const delta = Math.abs(w! / h! - target);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = ratio;
+    }
+  }
+  return best;
+}
 
 export class FalImageProvider implements ImageProvider {
   constructor(private readonly apiKey: string) {}
 
   async generate(request: ImageRequest): Promise<GeneratedImage> {
     const prompt = buildImagePrompt(request);
-    const model = FAL_MODELS[request.quality ?? "standard"];
+    const quality = request.quality ?? "standard";
+    const model =
+      (quality === "high" ? process.env.IMAGE_MODEL_HIGH : process.env.IMAGE_MODEL_STANDARD) ??
+      FAL_MODELS[quality];
+    const width = request.width ?? 1024;
+    const height = request.height ?? 768;
+    const sizing = model.includes("ultra")
+      ? { aspect_ratio: closestAspectRatio(width, height), raw: true }
+      : { image_size: { width, height } };
     const response = await fetch(`https://fal.run/${model}`, {
       method: "POST",
       headers: {
@@ -55,7 +88,7 @@ export class FalImageProvider implements ImageProvider {
       },
       body: JSON.stringify({
         prompt,
-        image_size: { width: request.width ?? 1024, height: request.height ?? 768 },
+        ...sizing,
         num_images: 1,
         enable_safety_checker: true,
       }),

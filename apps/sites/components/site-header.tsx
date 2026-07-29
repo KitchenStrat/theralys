@@ -31,7 +31,10 @@ export function SiteHeader({
           </span>
         </Link>
 
-        <nav aria-label="Navigation principale" className="hidden items-center gap-6 text-[0.95rem] lg:flex">
+        <nav
+          aria-label="Navigation principale"
+          className="hidden items-center gap-6 whitespace-nowrap text-[0.95rem] lg:flex"
+        >
           {motifPages.length > 0 ? (
             <div className="group relative">
               <button type="button" className="flex items-center gap-1 hover:text-[var(--site-primary)]">
