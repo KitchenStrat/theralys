@@ -46,6 +46,8 @@ function SectionRenderer({ section, ctx }: { section: Section; ctx: SectionConte
       return <Highlights section={section} />;
     case "specialties":
       return <Specialties section={section} ctx={ctx} />;
+    case "future":
+      return <Future section={section} ctx={ctx} />;
     case "about":
       return <About section={section} ctx={ctx} />;
     case "reviews":
@@ -389,8 +391,12 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           alt=""
           className="hy-kenburns h-full w-full object-cover"
           style={{
-            maskImage: "linear-gradient(to right, black 55%, transparent 97%)",
-            WebkitMaskImage: "linear-gradient(to right, black 55%, transparent 97%)",
+            maskImage:
+              "linear-gradient(to right, black 55%, transparent 97%), linear-gradient(to bottom, black 78%, transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(to right, black 55%, transparent 97%), linear-gradient(to bottom, black 78%, transparent 100%)",
+            maskComposite: "intersect",
+            WebkitMaskComposite: "source-in",
           }}
         />
       </div>
@@ -447,7 +453,12 @@ function Highlights({ section }: { section: Extract<Section, { type: "highlights
         ? "lg:grid-cols-3"
         : "lg:grid-cols-2";
   return (
-    <section className="relative overflow-hidden bg-[var(--site-primary)] py-14 lg:py-16">
+    <section
+      className="relative overflow-hidden pb-14 pt-24 lg:pb-16"
+      style={{
+        background: "linear-gradient(to bottom, var(--site-bg), var(--site-primary) 5rem)",
+      }}
+    >
       <div aria-hidden className="wave-bg-light absolute inset-0" />
       <div className={`relative mx-auto grid max-w-7xl gap-6 px-4 sm:grid-cols-2 ${cols}`}>
         {section.items.map((item, i) => (
@@ -542,7 +553,166 @@ function Specialties({
   );
 }
 
+/** Projection positive : bénéfices ✅ à gauche, photo de séance fondue à droite. */
+function Future({ section, ctx }: { section: Extract<Section, { type: "future" }>; ctx: SectionContext }) {
+  return (
+    <section className="relative scroll-mt-20 overflow-hidden">
+      <div
+        aria-hidden
+        className="glow h-80 w-80 opacity-40"
+        style={{
+          left: "-5rem",
+          bottom: "-4rem",
+          background: "radial-gradient(circle, color-mix(in srgb, var(--site-primary) 18%, transparent), transparent 70%)",
+        }}
+      />
+      {section.imageUrl ? (
+        <>
+          <div className="relative lg:hidden">
+            <img
+              src={section.imageUrl}
+              alt=""
+              className="max-h-[44vh] w-full object-cover"
+              style={{
+                maskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+              }}
+            />
+          </div>
+          <div aria-hidden className="absolute inset-y-0 right-0 hidden w-[44%] overflow-hidden lg:block">
+            <img
+              src={section.imageUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              style={{
+                maskImage:
+                  "linear-gradient(to left, black 55%, transparent 97%), linear-gradient(to bottom, black 82%, transparent 100%), linear-gradient(to top, black 82%, transparent 100%)",
+                WebkitMaskImage:
+                  "linear-gradient(to left, black 55%, transparent 97%), linear-gradient(to bottom, black 82%, transparent 100%), linear-gradient(to top, black 82%, transparent 100%)",
+                maskComposite: "intersect",
+                WebkitMaskComposite: "source-in",
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+      <div className="relative mx-auto flex max-w-7xl px-4 py-12 lg:min-h-[42rem] lg:items-center lg:py-24">
+        <div className="reveal lg:w-[55%] lg:pr-8">
+          {section.badge ? <Pill>{section.badge}</Pill> : null}
+          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
+            {section.title}
+          </h2>
+          {section.intro ? (
+            <p className="mt-6 text-xl opacity-85">
+              <Rich text={section.intro} />
+            </p>
+          ) : null}
+          <ul className="mt-6 space-y-3.5">
+            {section.bullets.map((bullet, i) => (
+              <li
+                key={i}
+                style={{ transitionDelay: `${Math.min(i, 5) * 70}ms` }}
+                className="reveal flex items-start gap-2.5 text-[1.1rem] leading-relaxed"
+              >
+                <span aria-hidden className="mt-0.5 shrink-0">
+                  ✅
+                </span>
+                <span className="whitespace-pre-line opacity-90">
+                  <Rich text={bullet} />
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-9">
+            <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function About({ section, ctx }: { section: Extract<Section, { type: "about" }>; ctx: SectionContext }) {
+  // Avec photo : portrait plein hauteur fondu à gauche (comme le hero)
+  if (section.imageUrl) {
+    return (
+      <section id="a-propos" className="wave-bg relative scroll-mt-20 overflow-hidden">
+        <div
+          aria-hidden
+          className="glow h-96 w-96 opacity-50"
+          style={{
+            right: "-6rem",
+            top: "10%",
+            background: "radial-gradient(circle, color-mix(in srgb, var(--site-primary) 22%, transparent), transparent 70%)",
+          }}
+        />
+        <div className="relative lg:hidden">
+          <img
+            src={section.imageUrl}
+            alt=""
+            className="max-h-[44vh] w-full object-cover object-top"
+            style={{
+              maskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 68%, transparent 100%)",
+            }}
+          />
+        </div>
+        <div aria-hidden className="absolute inset-y-0 left-0 hidden w-[44%] overflow-hidden lg:block">
+          <img
+            src={section.imageUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            style={{
+              maskImage:
+                "linear-gradient(to right, black 55%, transparent 97%), linear-gradient(to bottom, black 82%, transparent 100%), linear-gradient(to top, black 82%, transparent 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to right, black 55%, transparent 97%), linear-gradient(to bottom, black 82%, transparent 100%), linear-gradient(to top, black 82%, transparent 100%)",
+              maskComposite: "intersect",
+              WebkitMaskComposite: "source-in",
+            }}
+          />
+        </div>
+        <div className="relative mx-auto flex max-w-7xl px-4 py-12 lg:min-h-[42rem] lg:items-center lg:justify-end lg:py-24">
+          <div className="reveal lg:w-[55%] lg:pl-8">
+            <Pill>Votre praticien·ne</Pill>
+            <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+            <div className="mt-7 space-y-4 text-xl opacity-85">
+              {section.paragraphs.map((p, i) => (
+                <p key={i} className="whitespace-pre-line leading-relaxed">
+                  <Rich text={p} />
+                </p>
+              ))}
+            </div>
+            {section.infoCards && section.infoCards.length > 0 ? (
+              <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {section.infoCards.map((card, i) => (
+                  <div
+                    key={i}
+                    style={{ transitionDelay: `${Math.min(i, 4) * 80}ms` }}
+                    className="reveal rounded-[var(--r-md)] bg-[var(--site-soft)]/60 p-6 text-center"
+                  >
+                    <span className="mx-auto flex h-11 w-11 items-center justify-center text-[var(--site-primary)]">
+                      <SectionIcon name={card.icon} size={30} />
+                    </span>
+                    <h3 className="mt-2.5 text-lg font-bold">{card.title}</h3>
+                    <p className="mt-1.5 whitespace-pre-line text-[0.95rem] leading-relaxed opacity-80">
+                      <Rich text={card.text} />
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-9 flex flex-wrap items-center gap-3">
+              <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
+              {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Sans photo : mise en page d'origine avec panneau dégradé
   return (
     <section id="a-propos" className="wave-bg relative scroll-mt-20 overflow-hidden py-20 lg:py-24">
       <div

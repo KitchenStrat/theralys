@@ -61,12 +61,16 @@ export class FalImageProvider implements ImageProvider {
   }
 }
 
-/** Prompt d'image : photographie douce, jamais de visage reconnaissable. */
+/**
+ * Prompt d'image : photographie douce. Sans `mood` explicite (articles),
+ * on évite les visages ; les portraits du site passent leur propre `mood`.
+ */
 export function buildImagePrompt(request: ImageRequest): string {
   return [
-    `Photographie éditoriale apaisante pour un blog de bien-être : ${request.subject}.`,
-    request.mood ?? "Ambiance chaleureuse, lumière naturelle douce, tons neutres.",
-    "Pas de texte, pas de logo, pas de visage reconnaissable en gros plan.",
+    `Photographie éditoriale apaisante pour un site de bien-être : ${request.subject}.`,
+    request.mood ??
+      "Ambiance chaleureuse, lumière naturelle douce, tons neutres, pas de visage reconnaissable en gros plan.",
+    "Pas de texte, pas de logo.",
   ].join(" ");
 }
 

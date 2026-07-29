@@ -70,24 +70,36 @@ async function generate(site: Site): Promise<void> {
   // ── 1. Accueil ──────────────────────────────────────────────────────────────
   const home = await generator.generateHome(input);
 
-  // Illustrations d'ambiance (fal.ai, ou SVG mock sans clé) : hero + à-propos.
-  // Jamais de visage reconnaissable — remplaçables par de vraies photos dans
-  // le studio. Un échec d'image ne bloque pas la démo.
+  // Illustrations (fal.ai, ou SVG mock sans clé) : cabinet, portrait du
+  // praticien (sexe des paramètres de la démo), séance avec un(e) patient(e).
+  // Personnes fictives, remplaçables par de vraies photos dans le studio.
+  // Un échec d'image ne bloque pas la démo.
   const imageProvider = createImageProvider();
   console.log(
     `[images] provider=${process.env.IMAGE_PROVIDER === "mock" || !process.env.FAL_API_KEY ? "mock" : "fal"}` +
       ` (FAL_API_KEY ${process.env.FAL_API_KEY ? "présente" : "absente"})`,
   );
   const themeColor = PRESET_COLORS[home.theme.preset];
-  const [heroImage, aboutImage] = await Promise.all([
+  const feminin = input.gender === "feminin";
+  const praticien = feminin ? "une praticienne" : "un praticien";
+  const [heroImage, aboutImage, futureImage] = await Promise.all([
     tryGenerateImage(imageProvider, {
-      subject: `cabinet de ${input.profession} à ${input.city}, espace d'accueil apaisant`,
+      subject: `intérieur d'un cabinet de ${input.profession}, salle de consultation soignée et apaisante`,
+      mood: "lumière chaude et dorée de fin de journée, ambiance chaleureuse et accueillante, sans personne, photographie réaliste",
       themeColor,
       width: 960,
       height: 1152,
     }),
     tryGenerateImage(imageProvider, {
-      subject: `séance de ${input.profession}, gestes de soin, cadre chaleureux`,
+      subject: `portrait professionnel d'${praticien} (${input.profession}), ${feminin ? "souriante et confiante" : "souriant et confiant"}, dans son cabinet`,
+      mood: "lumière naturelle douce, arrière-plan sobre du cabinet, photographie réaliste de qualité éditoriale",
+      themeColor,
+      width: 896,
+      height: 1120,
+    }),
+    tryGenerateImage(imageProvider, {
+      subject: `${praticien} (${input.profession}) en séance avec un patient ou une patiente, gestes de soin attentifs et bienveillants`,
+      mood: "cadre chaleureux du cabinet, lumière naturelle douce, photographie réaliste de qualité éditoriale",
       themeColor,
       width: 896,
       height: 1120,
@@ -95,6 +107,7 @@ async function generate(site: Site): Promise<void> {
   ]);
   let homeSections = withSectionImage(home.sections, "hero", heroImage);
   homeSections = withSectionImage(homeSections, "about", aboutImage);
+  homeSections = withSectionImage(homeSections, "future", futureImage);
 
   await db.delete(pages).where(eq(pages.siteId, site.id));
   await db.insert(pages).values({
@@ -254,7 +267,7 @@ const PRESET_COLORS: Record<ThemePreset, string> = {
 /** Génère une image d'ambiance ; en cas d'échec la démo continue sans image. */
 async function tryGenerateImage(
   provider: ImageProvider,
-  request: { subject: string; themeColor?: string; width: number; height: number },
+  request: { subject: string; mood?: string; themeColor?: string; width: number; height: number },
 ): Promise<string | undefined> {
   try {
     const image = await provider.generate(request);
@@ -274,7 +287,7 @@ async function tryGenerateImage(
  */
 function withSectionImage(
   sections: PageSections,
-  type: "hero" | "about",
+  type: "hero" | "about" | "future",
   url: string | undefined,
 ): PageSections {
   return sections.map((section) =>

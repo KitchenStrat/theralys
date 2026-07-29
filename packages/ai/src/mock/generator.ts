@@ -124,6 +124,20 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       items: motifs.map(({ slug, title, excerpt }) => ({ slug, title, excerpt })),
     },
     {
+      type: "future",
+      badge: "Santé & Équilibre",
+      title: "Et si vous retrouviez enfin un quotidien plus léger ?",
+      intro: `Grâce à ${seed.practiceName} et un accompagnement **personnalisé**, il devient possible de :`,
+      bullets: [
+        "**Relâcher les tensions** accumulées dans le corps et l'esprit",
+        "**Retrouver un sommeil** plus profond et plus régulier",
+        "**Apaiser le stress** et les réactions disproportionnées du quotidien",
+        "**Reprendre confiance** en vous, à votre rythme et sans pression",
+        "**Installer des habitudes** simples qui vous font durablement du bien",
+      ],
+      ctaLabel: "Prendre Rendez-Vous",
+    },
+    {
       type: "about",
       title: `À propos de ${input.firstName}`,
       paragraphs: [

@@ -9,6 +9,7 @@ export const SECTION_LABELS: Record<Section["type"], string> = {
   hero: "En-tête (hero)",
   highlights: "Points forts",
   specialties: "Spécialités",
+  future: "Projection vers l'avenir",
   about: "À propos",
   reviews: "Avis Google",
   process: "Déroulement d'une séance",
@@ -157,6 +158,56 @@ export function SectionFields({
               />
             </Field>
           ))}
+        </SectionBox>
+      );
+
+    case "future":
+      return (
+        <SectionBox title="Projection vers l'avenir">
+          <Field label="Badge (ex. « Santé & Équilibre »)">
+            <TextInput value={section.badge ?? ""} onChange={(badge) => onChange({ badge })} />
+          </Field>
+          <Field label="Titre (question projective)">
+            <TextArea value={section.title} rows={2} onChange={(title) => onChange({ title })} />
+          </Field>
+          <Field label="Phrase d'introduction">
+            <TextArea value={section.intro ?? ""} rows={2} onChange={(intro) => onChange({ intro })} />
+          </Field>
+          {section.bullets.map((bullet, i) => (
+            <Field key={i} label={`Bénéfice ✅ ${i + 1}`}>
+              <TextArea
+                value={bullet}
+                rows={2}
+                onChange={(text) =>
+                  onChange({ bullets: section.bullets.map((b, j) => (j === i ? text : b)) })
+                }
+              />
+              {section.bullets.length > 1 ? (
+                <div className="mt-1">
+                  <RemoveButton
+                    label="Supprimer ce bénéfice"
+                    onClick={() => onChange({ bullets: section.bullets.filter((_, j) => j !== i) })}
+                  />
+                </div>
+              ) : null}
+            </Field>
+          ))}
+          <AddButton
+            label="+ Ajouter un bénéfice"
+            onClick={() => onChange({ bullets: [...section.bullets, ""] })}
+          />
+          <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+            💡 <strong>**texte**</strong> = passage en gras — mettez le bénéfice clé en gras en début
+            de ligne
+          </p>
+          <ImageField
+            label="Photo (séance avec un(e) patient(e)…)"
+            value={section.imageUrl ?? ""}
+            onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
+          />
+          <Field label="Texte du bouton">
+            <TextInput value={section.ctaLabel ?? ""} onChange={(ctaLabel) => onChange({ ctaLabel })} />
+          </Field>
         </SectionBox>
       );
 

@@ -70,12 +70,16 @@ describe("pipeline mock", () => {
       "hero",
       "highlights",
       "specialties",
+      "future",
       "about",
       "reviews",
       "process",
       "faq",
       "contact",
     ]);
+
+    const future = home.sections.find((s) => s.type === "future");
+    expect(future && future.type === "future" && future.bullets).toHaveLength(5);
 
     // Les nouveaux encarts sont générés par défaut
     const hero = home.sections.find((s) => s.type === "hero");

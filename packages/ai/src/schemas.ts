@@ -39,6 +39,15 @@ export const aboutSectionSchema = z.object({
     .optional(),
 });
 
+export const futureSectionSchema = z.object({
+  type: z.literal("future"),
+  badge: z.string().optional(),
+  title: z.string().min(10),
+  intro: z.string().optional(),
+  bullets: z.array(z.string()).min(3),
+  ctaLabel: z.string().optional(),
+});
+
 export const reviewsSectionSchema = z.object({
   type: z.literal("reviews"),
   title: z.string(),
@@ -83,6 +92,7 @@ export const sectionSchema = z.discriminatedUnion("type", [
   heroSectionSchema,
   highlightsSectionSchema,
   specialtiesSectionSchema,
+  futureSectionSchema,
   aboutSectionSchema,
   reviewsSectionSchema,
   processSectionSchema,

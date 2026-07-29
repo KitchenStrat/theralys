@@ -89,6 +89,21 @@ export type AboutSection = {
   infoCards?: { icon?: string; title: string; text: string }[];
 };
 
+/** Projection positive vers l'avenir : bénéfices ✅ + photo de séance. */
+export type FutureSection = {
+  type: "future";
+  /** Badge pilule, ex. « Santé & Équilibre » */
+  badge?: string;
+  /** Titre projectif, ex. « Et si vous retrouviez enfin … ? » */
+  title: string;
+  /** Phrase d'introduction de la liste, avec **gras** */
+  intro?: string;
+  /** Lignes de bénéfices (rendues avec une coche ✅) */
+  bullets: string[];
+  ctaLabel?: string;
+  imageUrl?: string;
+};
+
 /** Les avis eux-mêmes viennent de la table google_reviews (synchronisés). */
 export type ReviewsSection = {
   type: "reviews";
@@ -136,6 +151,7 @@ export type Section =
   | HeroSection
   | HighlightsSection
   | SpecialtiesSection
+  | FutureSection
   | AboutSection
   | ReviewsSection
   | ProcessSection
