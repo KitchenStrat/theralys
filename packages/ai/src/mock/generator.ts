@@ -78,10 +78,19 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       ],
       showGoogleRating: hasGoogle,
       ctaLabel: "Prendre Rendez-Vous",
-      stats: [
-        { icon: "personnes", value: "100 %", label: "Séances personnalisées" },
-        { icon: "horloge", value: "24 h", label: "Réponse à vos messages" },
-      ],
+      stats: hasGoogle
+        ? [
+            { icon: "diplome", value: "+1000", label: "Patients accompagnés" },
+            {
+              icon: "etoile",
+              value: `${input.googleEnrichment!.rating}/5`,
+              label: `Basé sur ${input.googleEnrichment!.reviewCount ?? "nos"} avis Google`,
+            },
+          ]
+        : [
+            { icon: "diplome", value: "+1000", label: "Patients accompagnés" },
+            { icon: "medaille", value: "6 ans", label: "D'expérience" },
+          ],
     },
     {
       type: "highlights",
@@ -132,12 +141,12 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
         {
           icon: "euro",
           title: "Tarification",
-          text: "Séance : **60 €**\nCB, chèque ou espèces",
+          text: "Séance **60 €** — première séance **75 €**\nCB, chèque ou espèces",
         },
         {
           icon: "document",
-          title: "Mutuelles",
-          text: "Certaines mutuelles proposent un **forfait bien-être**",
+          title: "Remboursement",
+          text: "Prise en charge par de **nombreuses mutuelles**",
         },
       ],
     },
