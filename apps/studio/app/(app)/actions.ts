@@ -19,6 +19,9 @@ import {
   signPreviewToken,
   THEME_PRESETS,
   FONT_PRESETS,
+  THEME_INTENSITIES,
+  THEME_CORNERS,
+  THEME_AMBIANCES,
   type Section,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
@@ -274,6 +277,9 @@ export async function saveSiteStyle(input: unknown): Promise<{ error?: string }>
     .object({
       preset: z.enum(THEME_PRESETS),
       fontPreset: z.enum(FONT_PRESETS),
+      intensity: z.enum(THEME_INTENSITIES),
+      corners: z.enum(THEME_CORNERS),
+      ambiance: z.enum(THEME_AMBIANCES),
     })
     .safeParse(input);
   if (!parsed.success) return { error: "Style invalide" };
@@ -284,7 +290,7 @@ export async function saveSiteStyle(input: unknown): Promise<{ error?: string }>
   await db
     .update(sites)
     .set({
-      theme: { ...site.theme, preset: parsed.data.preset, fontPreset: parsed.data.fontPreset },
+      theme: { ...site.theme, ...parsed.data },
       updatedAt: new Date(),
     })
     .where(eq(sites.id, session.siteId));

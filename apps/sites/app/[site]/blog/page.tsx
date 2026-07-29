@@ -36,13 +36,13 @@ export default async function BlogIndexPage({ params }: Props) {
             <Link
               key={article.id}
               href={`/${siteKey}/blog/${article.slug}`}
-              className="flex gap-5 rounded-3xl border border-black/5 bg-[var(--site-surface)] p-5 shadow-sm transition-shadow hover:shadow-md"
+              className="flex gap-5 rounded-[var(--r-lg)] border border-black/5 bg-[var(--site-surface)] p-5 shadow-sm transition-shadow hover:shadow-md"
             >
               {article.imageUrl ? (
                 <img
                   src={article.imageUrl}
                   alt=""
-                  className="hidden h-32 w-44 shrink-0 rounded-2xl object-cover sm:block"
+                  className="hidden h-32 w-44 shrink-0 rounded-[var(--r-md)] object-cover sm:block"
                 />
               ) : null}
               <span className="min-w-0">

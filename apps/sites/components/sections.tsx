@@ -68,8 +68,8 @@ function Pill({ children, onDark = false }: { children: React.ReactNode; onDark?
     <span
       className={
         onDark
-          ? "inline-block rounded-full border border-current/30 px-4 py-1.5 text-xs font-medium uppercase tracking-wider opacity-90"
-          : "inline-block rounded-full bg-[var(--site-soft)] px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
+          ? "inline-block rounded-[var(--r-pill)] border border-current/30 px-4 py-1.5 text-xs font-medium uppercase tracking-wider opacity-90"
+          : "inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-4 py-1.5 text-xs font-medium uppercase tracking-wider text-[var(--site-primary-dark)]"
       }
     >
       {children}
@@ -124,8 +124,8 @@ function ArchImage({
 }) {
   const radius =
     arch === "top"
-      ? "rounded-[2.5rem] rounded-t-[10rem]"
-      : "rounded-[2.5rem] lg:rounded-tl-[8rem]";
+      ? "rounded-[var(--r-xl)] rounded-t-[var(--r-arch)]"
+      : "rounded-[var(--r-xl)] lg:rounded-tl-[var(--r-arch)]";
   if (!url) {
     return (
       <div
@@ -144,8 +144,8 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
       href={`tel:${phone.replace(/\s/g, "")}`}
       className={
         onDark
-          ? "inline-flex items-center justify-center gap-2 rounded-full border border-current/40 px-6 py-3 font-medium transition-opacity hover:opacity-80"
-          : "inline-flex items-center justify-center gap-2 rounded-full border border-[var(--site-primary)]/50 px-6 py-3 font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)]"
+          ? "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-current/40 px-6 py-3 font-medium transition-opacity hover:opacity-80"
+          : "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-[var(--site-primary)]/50 px-6 py-3 font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)]"
       }
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -183,7 +183,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
             {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
           </div>
-          <div className="mt-8 inline-flex items-center gap-3 rounded-2xl bg-[var(--site-surface)] px-4 py-3 shadow-sm">
+          <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-4 py-3 shadow-sm">
             <AvatarInitial name={ctx.site.name} />
             <span className="min-w-0">
               <span className="block text-sm font-semibold">{ctx.site.name}</span>
@@ -244,7 +244,7 @@ function Specialties({
             <Link
               key={item.slug}
               href={`${ctx.prefix}/motifs/${item.slug}`}
-              className="group rounded-[1.75rem] bg-[var(--site-bg)] p-7 text-[var(--site-text)] transition-transform hover:-translate-y-1"
+              className="group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-7 text-[var(--site-text)] transition-transform hover:-translate-y-1"
             >
               <span
                 aria-hidden
@@ -313,7 +313,7 @@ function Reviews({
     <section id="avis" className="scroll-mt-20 py-16">
       <div className="mx-auto max-w-6xl px-4">
         <div className="grid items-start gap-6 lg:grid-cols-[17rem_1fr]">
-          <div className="rounded-3xl bg-[var(--site-surface)] p-6 shadow-sm">
+          <div className="rounded-[var(--r-lg)] bg-[var(--site-surface)] p-6 shadow-sm">
             <AvatarInitial name={ctx.site.name} className="h-12 w-12 text-lg" />
             <p className="mt-3 font-semibold">{ctx.site.name}</p>
             {ctx.googleRating ? (
@@ -335,7 +335,7 @@ function Reviews({
             {ctx.reviews.slice(0, 8).map((review) => (
               <figure
                 key={review.id}
-                className="w-72 shrink-0 snap-start rounded-3xl bg-[var(--site-surface)] p-6 shadow-sm"
+                className="w-72 shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-6 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   <AvatarInitial name={review.authorName} />
@@ -409,9 +409,9 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
           {section.items.map((item, i) => (
             <details
               key={i}
-              className="group overflow-hidden rounded-2xl open:bg-[var(--site-surface)] open:shadow-sm"
+              className="group overflow-hidden rounded-[var(--r-md)] open:bg-[var(--site-surface)] open:shadow-sm"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl bg-[var(--site-primary)] px-5 py-4 font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-5 py-4 font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
                 {item.question}
                 <span aria-hidden className="shrink-0 transition-transform group-open:rotate-45">
                   +
@@ -447,7 +447,7 @@ function Contact({
             {section.phone ? <PhoneButton phone={section.phone} onDark /> : null}
           </div>
         </div>
-        <div className="rounded-3xl bg-white/5 p-7">
+        <div className="rounded-[var(--r-lg)] bg-white/5 p-7">
           <div className="flex items-center gap-3">
             <AvatarInitial name={ctx.site.name} />
             <span className="font-semibold">{ctx.site.name}</span>
@@ -486,7 +486,7 @@ function RichText({ section }: { section: Extract<Section, { type: "richText" }>
 function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx: SectionContext }) {
   return (
     <section className="mx-auto max-w-4xl px-4 py-12">
-      <div className="wave-bg-light rounded-[2.5rem] bg-[var(--site-primary)] px-8 py-12 text-center text-white">
+      <div className="wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-12 text-center text-white">
         <h2 className="mx-auto max-w-xl text-3xl font-semibold">{section.title}</h2>
         {section.body ? <p className="mx-auto mt-4 max-w-xl opacity-90">{section.body}</p> : null}
         <div className="mt-8">
@@ -494,7 +494,7 @@ function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx
             siteId={ctx.site.id}
             bookingUrl={ctx.site.bookingUrl}
             label={section.buttonLabel}
-            className="inline-flex items-center justify-center rounded-full bg-white px-7 py-3 font-medium text-[var(--site-primary)] transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center rounded-[var(--r-pill)] bg-white px-7 py-3 font-medium text-[var(--site-primary)] transition-opacity hover:opacity-90"
           />
         </div>
       </div>

@@ -23,6 +23,9 @@ export default async function EditorPage({ searchParams }: Props) {
         bookingUrl: site.bookingUrl ?? "",
         themePreset: site.theme.preset,
         fontPreset: site.theme.fontPreset,
+        intensity: site.theme.intensity ?? "naturel",
+        corners: site.theme.corners ?? "rond",
+        ambiance: site.theme.ambiance ?? "naturel",
         url: siteUrl(site),
         updatedAt: site.updatedAt.toISOString(),
       }}

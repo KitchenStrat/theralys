@@ -16,6 +16,18 @@
   --site-on-deep: #f8ede4;
   --site-font-heading: "Fraunces", Georgia, "Times New Roman", serif;
   --site-font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Forme des coins (surchargée par thème — voir lib/theme.ts) */
+  --r-xl: 2.5rem;
+  --r-lg: 1.75rem;
+  --r-md: 1rem;
+  --r-pill: 999px;
+  --r-arch: 9rem;
+}
+
+/* Ambiance « structuré » : lignes droites, sans textures ondulées */
+[data-ambiance="structure"] .wave-bg,
+[data-ambiance="structure"] .wave-bg-light {
+  background-image: none;
 }
 
 body {

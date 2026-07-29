@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Button, Select, Spinner } from "@theralys/ui";
-import { THEME_PRESETS, type Section, type ThemePreset, type FontPreset } from "@theralys/shared";
+import {
+  THEME_PRESETS,
+  type Section,
+  type ThemePreset,
+  type FontPreset,
+  type ThemeIntensity,
+  type ThemeCorners,
+  type ThemeAmbiance,
+} from "@theralys/shared";
 import { savePageSections, saveSiteSettings, saveSiteStyle } from "../../(app)/actions";
 import { SECTION_LABELS, SectionFields } from "./section-fields";
 
@@ -18,6 +26,9 @@ type Props = {
     bookingUrl: string;
     themePreset: ThemePreset;
     fontPreset: FontPreset;
+    intensity: ThemeIntensity;
+    corners: ThemeCorners;
+    ambiance: ThemeAmbiance;
     url: string;
     updatedAt: string;
   };
@@ -27,6 +38,33 @@ type Props = {
 };
 
 type Panel = "contenu" | "style" | "parametres";
+type StyleTab = "couleur" | "typo" | "forme";
+
+/** Aperçus « Typo » — mêmes polices que les sites publics (chargées au layout). */
+const FONT_CHOICES: { value: FontPreset; label: string; family: string }[] = [
+  { value: "chaleureux", label: "Chaleureux", family: "'Fraunces', Georgia, serif" },
+  { value: "elegant", label: "Élégant", family: "'Cormorant Garamond', Palatino, serif" },
+  { value: "moderne", label: "Moderne", family: "'Inter', system-ui, sans-serif" },
+  { value: "classique", label: "Classique", family: "'Lora', Georgia, serif" },
+];
+
+const INTENSITY_CHOICES: { value: ThemeIntensity; label: string }[] = [
+  { value: "pastel", label: "Pastel" },
+  { value: "naturel", label: "Naturel" },
+  { value: "intense", label: "Intense" },
+];
+
+const CORNER_CHOICES: { value: ThemeCorners; label: string; radius: string }[] = [
+  { value: "rond", label: "Tout en rondeur", radius: "999px" },
+  { value: "adouci", label: "Adouci", radius: "10px" },
+  { value: "equilibre", label: "Équilibré", radius: "6px" },
+  { value: "net", label: "Droit et net", radius: "2px" },
+];
+
+const AMBIANCE_CHOICES: { value: ThemeAmbiance; label: string; caption: string }[] = [
+  { value: "naturel", label: "Naturel", caption: "Courbes douces et textures" },
+  { value: "structure", label: "Structuré", caption: "Lignes droites et géométrie" },
+];
 
 const THEME_SWATCHES: Record<ThemePreset, string> = {
   terracotta: "#b05038",
@@ -56,8 +94,12 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
   const siteOrigin = useMemo(() => new URL(site.url).origin, [site.url]);
 
   // Style & paramètres
+  const [styleTab, setStyleTab] = useState<StyleTab>("couleur");
   const [themePreset, setThemePreset] = useState(site.themePreset);
   const [fontPreset, setFontPreset] = useState(site.fontPreset);
+  const [intensity, setIntensity] = useState(site.intensity);
+  const [corners, setCorners] = useState(site.corners);
+  const [ambiance, setAmbiance] = useState(site.ambiance);
   const [siteName, setSiteName] = useState(site.name);
   const [bookingUrl, setBookingUrl] = useState(site.bookingUrl);
   const [cityValue, setCityValue] = useState(city);
@@ -112,7 +154,7 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
     if (panel === "contenu" && selectedPage) {
       result = await savePageSections({ pageId: selectedPage.id, sections });
     } else if (panel === "style") {
-      result = await saveSiteStyle({ preset: themePreset, fontPreset });
+      result = await saveSiteStyle({ preset: themePreset, fontPreset, intensity, corners, ambiance });
     } else {
       result = await saveSiteSettings({ name: siteName, bookingUrl, city: cityValue });
     }
@@ -214,45 +256,175 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
 
             {panel === "style" ? (
               <div className="space-y-5">
-                <div>
-                  <p className="text-sm font-semibold">Couleur du site</p>
-                  <div className="mt-2 grid grid-cols-5 gap-2">
-                    {THEME_PRESETS.map((preset) => (
+                <div className="flex gap-1 rounded-full bg-cream-100 p-1">
+                  {(
+                    [
+                      ["couleur", "🎨 Couleur"],
+                      ["typo", "T Typo"],
+                      ["forme", "◫ Style"],
+                    ] as [StyleTab, string][]
+                  ).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setStyleTab(tab)}
+                      className={clsx(
+                        "flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                        styleTab === tab ? "bg-white text-ink-900 shadow-sm" : "text-ink-500",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {styleTab === "couleur" ? (
+                  <>
+                    <div>
+                      <p className="text-sm font-semibold">Couleur du site</p>
+                      <div className="mt-2 grid grid-cols-5 gap-2">
+                        {THEME_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            title={preset}
+                            aria-pressed={themePreset === preset}
+                            onClick={() => {
+                              setThemePreset(preset);
+                              setDirty(true);
+                            }}
+                            className={clsx(
+                              "h-10 w-10 rounded-xl border-2 transition-transform",
+                              themePreset === preset ? "scale-110 border-ink-900" : "border-transparent",
+                            )}
+                            style={{ background: THEME_SWATCHES[preset] }}
+                          />
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs capitalize text-ink-500">{themePreset}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Intensité</p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {INTENSITY_CHOICES.map((choice) => (
+                          <button
+                            key={choice.value}
+                            type="button"
+                            aria-pressed={intensity === choice.value}
+                            onClick={() => {
+                              setIntensity(choice.value);
+                              setDirty(true);
+                            }}
+                            className={clsx(
+                              "flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-xs font-medium",
+                              intensity === choice.value
+                                ? "border-ink-900 bg-cream-100"
+                                : "border-cream-300 hover:bg-cream-50",
+                            )}
+                          >
+                            <span
+                              aria-hidden
+                              className="h-6 w-6 rounded-lg"
+                              style={{
+                                background: THEME_SWATCHES[themePreset],
+                                opacity:
+                                  choice.value === "pastel" ? 0.35 : choice.value === "naturel" ? 0.65 : 1,
+                              }}
+                            />
+                            {choice.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
+                {styleTab === "typo" ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {FONT_CHOICES.map((choice) => (
                       <button
-                        key={preset}
+                        key={choice.value}
                         type="button"
-                        title={preset}
-                        aria-pressed={themePreset === preset}
+                        aria-pressed={fontPreset === choice.value}
                         onClick={() => {
-                          setThemePreset(preset);
+                          setFontPreset(choice.value);
                           setDirty(true);
                         }}
                         className={clsx(
-                          "h-10 w-10 rounded-xl border-2 transition-transform",
-                          themePreset === preset ? "scale-110 border-ink-900" : "border-transparent",
+                          "rounded-2xl border p-4 text-center",
+                          fontPreset === choice.value
+                            ? "border-ink-900 bg-cream-100"
+                            : "border-cream-300 hover:bg-cream-50",
                         )}
-                        style={{ background: THEME_SWATCHES[preset] }}
-                      />
+                      >
+                        <span className="block text-xl leading-tight" style={{ fontFamily: choice.family }}>
+                          Votre cabinet
+                        </span>
+                        <span className="mt-1.5 block text-xs text-ink-500">{choice.label}</span>
+                      </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs capitalize text-ink-500">{themePreset}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Polices</p>
-                  <Select
-                    aria-label="Jeu de polices"
-                    value={fontPreset}
-                    onChange={(e) => {
-                      setFontPreset(e.target.value as typeof fontPreset);
-                      setDirty(true);
-                    }}
-                    className="mt-2"
-                  >
-                    <option value="classique">Classique (titres serif)</option>
-                    <option value="moderne">Moderne (sans serif)</option>
-                    <option value="elegant">Élégant (tout serif)</option>
-                  </Select>
-                </div>
+                ) : null}
+
+                {styleTab === "forme" ? (
+                  <>
+                    <div>
+                      <p className="text-sm font-semibold">Forme des coins</p>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        {CORNER_CHOICES.map((choice) => (
+                          <button
+                            key={choice.value}
+                            type="button"
+                            aria-pressed={corners === choice.value}
+                            title={choice.label}
+                            onClick={() => {
+                              setCorners(choice.value);
+                              setDirty(true);
+                            }}
+                            className={clsx(
+                              "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 text-[10px] font-medium leading-tight",
+                              corners === choice.value
+                                ? "border-ink-900 bg-cream-100"
+                                : "border-cream-300 hover:bg-cream-50",
+                            )}
+                          >
+                            <span
+                              aria-hidden
+                              className="h-6 w-6 border-2 border-ink-500 bg-white"
+                              style={{ borderRadius: choice.radius }}
+                            />
+                            {choice.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Ambiance</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        {AMBIANCE_CHOICES.map((choice) => (
+                          <button
+                            key={choice.value}
+                            type="button"
+                            aria-pressed={ambiance === choice.value}
+                            onClick={() => {
+                              setAmbiance(choice.value);
+                              setDirty(true);
+                            }}
+                            className={clsx(
+                              "rounded-2xl border p-3 text-left",
+                              ambiance === choice.value
+                                ? "border-ink-900 bg-cream-100"
+                                : "border-cream-300 hover:bg-cream-50",
+                            )}
+                          >
+                            <span className="block text-sm font-semibold">{choice.label}</span>
+                            <span className="mt-0.5 block text-xs text-ink-500">{choice.caption}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
 

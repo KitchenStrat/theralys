@@ -120,25 +120,85 @@ const PALETTES: Record<ThemePreset, Palette> = {
  * Polices chargées via Google Fonts dans app/layout.tsx — toujours avec un
  * repli système pour que le rendu reste correct sans réseau.
  */
-const FONTS: Record<FontPreset, { heading: string; body: string }> = {
-  classique: {
+export const FONTS: Record<FontPreset, { heading: string; body: string; label: string }> = {
+  chaleureux: {
+    label: "Chaleureux",
     heading: "'Fraunces', Georgia, 'Times New Roman', serif",
     body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
+  classique: {
+    label: "Classique",
+    heading: "'Lora', Georgia, 'Times New Roman', serif",
+    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+  },
   moderne: {
+    label: "Moderne",
     heading: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
     body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
   elegant: {
+    label: "Élégant",
     heading: "'Cormorant Garamond', 'Palatino Linotype', Palatino, serif",
     body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
   },
 };
 
+/** Rayons de courbure par forme de coins (photos/panneaux, cartes, pilules). */
+const CORNER_RADII: Record<NonNullable<SiteTheme["corners"]>, Record<string, string>> = {
+  rond: { xl: "2.5rem", lg: "1.75rem", md: "1rem", pill: "999px", arch: "9rem" },
+  adouci: { xl: "1.5rem", lg: "1.15rem", md: "0.8rem", pill: "999px", arch: "3.5rem" },
+  equilibre: { xl: "1rem", lg: "0.75rem", md: "0.6rem", pill: "0.9rem", arch: "1rem" },
+  net: { xl: "0.25rem", lg: "0.25rem", md: "0.25rem", pill: "0.35rem", arch: "0.25rem" },
+};
+
+/** Mélange linéaire de deux couleurs hex (ratio ∈ [0,1] vers `into`). */
+function mix(hex: string, into: string, ratio: number): string {
+  const parse = (h: string) => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [r1, g1, b1] = parse(hex);
+  const [r2, g2, b2] = parse(into);
+  const channel = (a: number, b: number) => Math.round(a + (b - a) * ratio);
+  return `#${[channel(r1!, r2!), channel(g1!, g2!), channel(b1!, b2!)]
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/** Décline la palette selon l'intensité choisie (pastel / naturel / intense). */
+function applyIntensity(palette: Palette, intensity: SiteTheme["intensity"]): Palette {
+  if (intensity === "pastel") {
+    return {
+      ...palette,
+      primary: mix(palette.primary, "#ffffff", 0.22),
+      primaryDark: mix(palette.primaryDark, "#ffffff", 0.14),
+      soft: mix(palette.soft, "#ffffff", 0.45),
+      background: mix(palette.background, "#ffffff", 0.5),
+      deep: mix(palette.deep, "#ffffff", 0.12),
+    };
+  }
+  if (intensity === "intense") {
+    return {
+      ...palette,
+      primary: mix(palette.primary, "#000000", 0.08),
+      primaryDark: mix(palette.primaryDark, "#000000", 0.12),
+      soft: mix(palette.soft, palette.primary, 0.14),
+      background: mix(palette.background, palette.primary, 0.05),
+      deep: mix(palette.deep, "#000000", 0.25),
+    };
+  }
+  return palette;
+}
+
 /** Variables CSS injectées sur le conteneur du site (thème par site). */
 export function themeCssVars(theme: SiteTheme): Record<string, string> {
-  const palette = { ...PALETTES[theme.preset], ...theme.palette };
-  const fonts = FONTS[theme.fontPreset] ?? FONTS.classique;
+  const palette = {
+    ...applyIntensity(PALETTES[theme.preset], theme.intensity ?? "naturel"),
+    ...theme.palette,
+  };
+  const fonts = FONTS[theme.fontPreset] ?? FONTS.chaleureux;
+  const radii = CORNER_RADII[theme.corners ?? "rond"];
   return {
     "--site-primary": palette.primary,
     "--site-primary-dark": palette.primaryDark,
@@ -150,5 +210,10 @@ export function themeCssVars(theme: SiteTheme): Record<string, string> {
     "--site-on-deep": palette.onDeep,
     "--site-font-heading": fonts.heading,
     "--site-font-body": fonts.body,
+    "--r-xl": radii.xl!,
+    "--r-lg": radii.lg!,
+    "--r-md": radii.md!,
+    "--r-pill": radii.pill!,
+    "--r-arch": radii.arch!,
   };
 }

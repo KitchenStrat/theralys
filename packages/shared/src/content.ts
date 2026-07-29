@@ -109,12 +109,28 @@ export const THEME_PRESETS = [
 ] as const;
 export type ThemePreset = (typeof THEME_PRESETS)[number];
 
-export const FONT_PRESETS = ["classique", "moderne", "elegant"] as const;
+export const FONT_PRESETS = ["chaleureux", "classique", "moderne", "elegant"] as const;
 export type FontPreset = (typeof FONT_PRESETS)[number];
+
+/** Intensité de la palette : décline la couleur choisie en 3 forces. */
+export const THEME_INTENSITIES = ["pastel", "naturel", "intense"] as const;
+export type ThemeIntensity = (typeof THEME_INTENSITIES)[number];
+
+/** Forme des coins (photos, cartes, boutons). */
+export const THEME_CORNERS = ["rond", "adouci", "equilibre", "net"] as const;
+export type ThemeCorners = (typeof THEME_CORNERS)[number];
+
+/** Ambiance : courbes/textures organiques ou lignes droites. */
+export const THEME_AMBIANCES = ["naturel", "structure"] as const;
+export type ThemeAmbiance = (typeof THEME_AMBIANCES)[number];
 
 export type SiteTheme = {
   preset: ThemePreset;
   fontPreset: FontPreset;
+  /** Défauts (sites existants inclus) : naturel / rond / naturel */
+  intensity?: ThemeIntensity;
+  corners?: ThemeCorners;
+  ambiance?: ThemeAmbiance;
   /** Overrides ponctuels de la palette du preset */
   palette?: Partial<{
     primary: string;
@@ -125,4 +141,4 @@ export type SiteTheme = {
   }>;
 };
 
-export const DEFAULT_THEME: SiteTheme = { preset: "terracotta", fontPreset: "classique" };
+export const DEFAULT_THEME: SiteTheme = { preset: "terracotta", fontPreset: "chaleureux" };

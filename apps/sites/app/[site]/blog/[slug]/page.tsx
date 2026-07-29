@@ -74,7 +74,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
         <img
           src={article.imageUrl}
           alt=""
-          className="mt-8 aspect-[16/9] w-full rounded-[2rem] object-cover"
+          className="mt-8 aspect-[16/9] w-full rounded-[var(--r-xl)] object-cover"
         />
       ) : null}
 
@@ -82,7 +82,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
         <Markdown content={article.content} />
       </article>
 
-      <div className="mt-12 rounded-3xl bg-[var(--site-soft)]/60 p-6 text-center">
+      <div className="mt-12 rounded-[var(--r-lg)] bg-[var(--site-soft)]/60 p-6 text-center">
         <p className="font-medium">Envie de passer à la pratique ?</p>
         <div className="mt-4">
           <RdvButton siteId={site.id} bookingUrl={site.bookingUrl} />

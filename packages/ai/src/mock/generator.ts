@@ -147,7 +147,7 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
     metaDescription: `${name}, ${practitioner} à ${input.city}. ${seed.heroTagline}. Prise de rendez-vous en ligne.`,
     sections,
     motifsPlan: motifs.map(({ slug, title, excerpt }) => ({ slug, title, excerpt })),
-    theme: { preset: seed.themePreset, fontPreset: "classique" },
+    theme: { preset: seed.themePreset, fontPreset: "chaleureux" },
   };
 }
 

@@ -60,7 +60,11 @@ export default async function SiteLayout({ children, params }: Props) {
   const prefix = `/${siteKey}`;
 
   return (
-    <div style={themeCssVars(site.theme)} className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]">
+    <div
+      style={themeCssVars(site.theme)}
+      data-ambiance={site.theme.ambiance ?? "naturel"}
+      className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]"
+    >
       <SiteHeader site={site} motifPages={motifPages} prefix={prefix} />
       {children}
       <SiteFooter site={site} />

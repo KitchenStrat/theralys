@@ -75,7 +75,7 @@ export function createSiteGenerator(env: NodeJS.ProcessEnv = process.env): SiteG
       );
       // Le thème reste déterminé par le catalogue métier (cohérence visuelle)
       const seed = resolveProfession(input.profession);
-      return { ...result, theme: { preset: seed.themePreset, fontPreset: "classique" } };
+      return { ...result, theme: { preset: seed.themePreset, fontPreset: "chaleureux" } };
     },
     generateMotifPage(input, motif) {
       return completeStructured(opts, MOTIF_SYSTEM, motifUserPrompt(input, motif), generatedMotifPageSchema);
