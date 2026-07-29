@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { PROFESSION_CATEGORIES } from "@theralys/shared";
 import { Badge, Button, FieldHint, Input, Label, Modal, Select, Spinner } from "@theralys/ui";
 import { createDemo, searchGooglePlaces } from "./actions";
 import type { PlaceResult } from "@/lib/places";
@@ -143,7 +144,21 @@ export function NewDemoModal({ open, onClose }: { open: boolean; onClose: () => 
           </div>
           <div>
             <Label htmlFor="profession">Métier *</Label>
-            <Input id="profession" name="profession" placeholder="ex. Sophrologue" required />
+            <Select id="profession" name="profession" defaultValue="" required>
+              <option value="" disabled>
+                Choisir un métier…
+              </option>
+              {PROFESSION_CATEGORIES.map((category) => (
+                <optgroup key={category.label} label={category.label}>
+                  {category.professions.map((profession) => (
+                    <option key={profession} value={profession}>
+                      {profession}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </Select>
+            <FieldHint>Tout le contenu généré s&apos;adapte au métier choisi.</FieldHint>
           </div>
           <div>
             <Label htmlFor="city">Ville *</Label>

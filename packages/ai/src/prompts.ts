@@ -54,11 +54,25 @@ Produis un JSON avec cette forme exacte :
   "motifsPlan": [ { "slug": "…", "title": "…", "excerpt": "…" } ]  // les mêmes ${input.motifPageCount} spécialités que la section specialties
 }
 
-Icônes autorisées pour "icon" (choisis la plus pertinente) : medaille, diplome, coeur, mains, fleur, feuille, soleil, etoile, carte, maison, calendrier, horloge, euro, document, bouclier, personnes.`;
+Icônes autorisées pour "icon" (choisis la plus pertinente) : medaille, diplome, coeur, mains, fleur, feuille, soleil, etoile, carte, maison, calendrier, horloge, euro, document, bouclier, personnes.
+
+MOTIFS DE CONSULTATION (crucial) :
+- Les items de "specialties" et "motifsPlan" sont de VRAIS motifs de consultation : les problèmes
+  concrets pour lesquels on prend rendez-vous chez un praticien de ce métier précis.
+  Exemples — ostéopathie : « Mal de dos et lombalgies », « Torticolis et cervicalgies »,
+  « Coliques du nourrisson » ; hypnothérapie : « Arrêt du tabac », « Peurs et phobies »,
+  « Troubles du sommeil » ; naturopathie : « Troubles digestifs », « Fatigue chronique »,
+  « Équilibre hormonal ».
+- JAMAIS de grands thèmes vagues (« Bien-être », « Détente », « Harmonie », « Équilibre de vie »).
+- Chaque motif correspond à une pratique réelle et courante de ce métier, dans le respect de son
+  cadre légal, et devient une page dédiée + un mot-clé de recherche Google local.`;
 }
 
 export const MOTIF_SYSTEM = `Tu rédiges une page de spécialité (« motif ») d'un site de praticien
-en médecines douces : un contenu de fond, ~500 mots, optimisé SEO local. ${VOICE}`;
+en médecines douces : un contenu de fond, ~500 mots, optimisé SEO local. La page traite un VRAI
+motif de consultation (le problème concret qui amène à prendre rendez-vous) : décris les
+situations vécues, comment la pratique accompagne ce motif précis, à qui cela s'adresse —
+sans jamais promettre de résultat. ${VOICE}`;
 
 export function motifUserPrompt(input: GenerationInput, motif: MotifPlan): string {
   return `${buildContext(input)}
@@ -98,10 +112,14 @@ maillage naturel avec la spécialité concernée et la ville. ${VOICE}`;
 export function articlesUserPrompt(input: GenerationInput, motifs: MotifPlan[]): string {
   return `${buildContext(input)}
 
-SPÉCIALITÉS DU SITE : ${motifs.map((m) => `${m.title} (slug ${m.slug})`).join(", ")}
+MOTIFS DE CONSULTATION DU SITE : ${motifs.map((m) => `${m.title} (slug ${m.slug})`).join(", ")}
 
 Produis un JSON : un tableau de 3 articles de la forme
-[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown ~450 mots", "motifSlug": "slug de la spécialité liée ou null" } ]
-Chaque article traite un problème concret du quotidien (stress, sommeil, tensions, récupération…)
+[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown ~450 mots", "motifSlug": "slug du motif traité" } ]
+Chaque article approfondit UN des motifs de consultation ci-dessus ("motifSlug" = son slug,
+un motif différent par article) : il répond à une vraie question que se posent les personnes
+concernées — celle qu'elles taperaient dans Google (ex. « Comment soulager une lombalgie au
+bureau ? ») — avec des conseils concrets, la manière dont la pratique peut accompagner, et la
+ville pour le référencement local. L'article complète la page de spécialité sans la répéter,
 et se termine par une phrase rappelant que la pratique ne se substitue pas à un avis médical.`;
 }

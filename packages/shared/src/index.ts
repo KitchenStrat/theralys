@@ -3,3 +3,4 @@ export * from "./preview-token";
 export * from "./dates";
 export * from "./ids";
 export * from "./content";
+export * from "./professions";

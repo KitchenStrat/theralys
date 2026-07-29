@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PROFESSION_CATEGORIES } from "@theralys/shared";
 import { Badge, Button, Card, FieldHint, Input, Label, ProgressDots, Select, Spinner } from "@theralys/ui";
 import { getSiteEditorUrl, regenerateDemo, updateDemo } from "../../actions";
 import { ConvertModal } from "./convert-modal";
@@ -232,7 +233,20 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
             </div>
             <div>
               <Label htmlFor="profession">Métier *</Label>
-              <Input id="profession" name="profession" defaultValue={demo.profession} required />
+              <Select id="profession" name="profession" defaultValue={demo.profession} required>
+                {PROFESSION_CATEGORIES.some((c) => c.professions.includes(demo.profession)) ? null : (
+                  <option value={demo.profession}>{demo.profession}</option>
+                )}
+                {PROFESSION_CATEGORIES.map((category) => (
+                  <optgroup key={category.label} label={category.label}>
+                    {category.professions.map((profession) => (
+                      <option key={profession} value={profession}>
+                        {profession}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
             </div>
             <div>
               <Label htmlFor="city">Ville *</Label>
