@@ -109,17 +109,32 @@ export const ARTICLES_SYSTEM = `Tu rédiges des exemples d'articles de blog SEO 
 de praticien en médecines douces. Chaque article : ~450 mots en markdown, titres ##, ton accessible,
 maillage naturel avec la spécialité concernée et la ville. ${VOICE}`;
 
+/**
+ * Structure éditoriale imposée à TOUS les articles de blog (initiaux et
+ * calendrier éditorial) — la page article du site public s'appuie dessus
+ * (la section « Questions fréquentes » est rendue en accordéons).
+ */
+export const ARTICLE_STRUCTURE = `STRUCTURE OBLIGATOIRE du "content" markdown (identique pour tous les articles, ~600 mots) :
+1. Un paragraphe d'accroche qui décrit la situation vécue par le lecteur (PAS de titre # — le titre s'affiche au-dessus).
+2. Un « ## » pour comprendre ce qui se passe (titre libre) : 2 paragraphes courts, puis une sous-liste à puces des signes ou zones les plus fréquents (4-5 puces commençant par un passage **gras**).
+3. Une citation d'une seule phrase en blockquote (« > ») : parole typique d'un patient, en italique.
+4. Un « ## » sur ce que la pratique peut apporter (titre libre) : 1-2 paragraphes, puis une liste numérotée de 4-5 apports concrets (début en **gras**) — des possibilités, jamais de promesse de résultat.
+5. « ### Un exercice à essayer maintenant » : 1 phrase d'introduction puis une liste numérotée de 5 à 7 étapes simples réalisables chez soi.
+6. « ## Quand consulter ? » : 3-4 puces de situations où une consultation peut aider, puis 1 paragraphe rappelant que la pratique ne se substitue pas à un avis médical et qu'une douleur intense ou persistante relève d'un professionnel de santé.
+7. « ## Questions fréquentes » : exactement 3 questions ; chaque question seule sur sa ligne en **gras** (ex. **Le stress peut-il causer des douleurs ?**), suivie d'un paragraphe de réponse.`;
+
 export function articlesUserPrompt(input: GenerationInput, motifs: MotifPlan[]): string {
   return `${buildContext(input)}
 
 MOTIFS DE CONSULTATION DU SITE : ${motifs.map((m) => `${m.title} (slug ${m.slug})`).join(", ")}
 
 Produis un JSON : un tableau de 3 articles de la forme
-[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown ~450 mots", "motifSlug": "slug du motif traité" } ]
+[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown", "motifSlug": "slug du motif traité" } ]
 Chaque article approfondit UN des motifs de consultation ci-dessus ("motifSlug" = son slug,
 un motif différent par article) : il répond à une vraie question que se posent les personnes
 concernées — celle qu'elles taperaient dans Google (ex. « Comment soulager une lombalgie au
 bureau ? ») — avec des conseils concrets, la manière dont la pratique peut accompagner, et la
-ville pour le référencement local. L'article complète la page de spécialité sans la répéter,
-et se termine par une phrase rappelant que la pratique ne se substitue pas à un avis médical.`;
+ville pour le référencement local. L'article complète la page de spécialité sans la répéter.
+
+${ARTICLE_STRUCTURE}`;
 }

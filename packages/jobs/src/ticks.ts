@@ -81,8 +81,13 @@ export async function ensureEditorialCalendars(now = new Date()): Promise<TickRe
       ...existingArticles.map((a) => a.title),
     ]);
 
+    const settings = await db.query.blogSettings.findFirst({
+      where: eq(blogSettings.siteId, site.id),
+    });
+
     const topics = planEditorialTopics({
       motifs: motifs.map((m) => ({ slug: m.slug, title: m.title })),
+      themes: settings?.themes ?? undefined,
       city: prospect?.city ?? "votre ville",
       plan: site.plan,
       from: addDays(startOfDayUtc(now), 1),

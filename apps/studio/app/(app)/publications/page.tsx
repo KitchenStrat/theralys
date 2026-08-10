@@ -1,7 +1,7 @@
-import { hasBlog } from "@theralys/db";
+import { hasBlog, PLANS } from "@theralys/db";
 import { Card } from "@theralys/ui";
 import { requireClient } from "@/lib/auth";
-import { getBlogSettings, getMonthItems, getSite } from "@/lib/data";
+import { getBlogSettings, getEditablePages, getMonthItems, getSite } from "@/lib/data";
 import { PublicationsClient } from "./publications-client";
 
 export const metadata = { title: "Publications" };
@@ -34,16 +34,22 @@ export default async function PublicationsPage({ searchParams }: Props) {
   const year = Number(yearStr) || now.getUTCFullYear();
   const month = Number(monthStr) || now.getUTCMonth() + 1;
 
-  const [items, settings] = await Promise.all([
+  const [items, settings, editablePages] = await Promise.all([
     getMonthItems(site.id, year, month),
     getBlogSettings(site.id),
+    getEditablePages(site.id),
   ]);
+  // Thématiques par défaut du wizard : les motifs de consultation du site
+  const motifTitles = editablePages.filter((p) => p.type === "motif").map((p) => p.title);
+  const monthlyQuota = PLANS[site.plan].blogArticlesPerWeek * 4;
 
   return (
     <PublicationsClient
       year={year}
       month={month}
       items={items}
+      monthlyQuota={monthlyQuota}
+      defaultThemeLabels={motifTitles}
       settings={
         settings
           ? {
@@ -52,6 +58,7 @@ export default async function PublicationsPage({ searchParams }: Props) {
               voiceAccord: settings.voiceAccord,
               voiceReader: settings.voiceReader,
               voiceTone: settings.voiceTone,
+              themes: settings.themes ?? undefined,
             }
           : null
       }

@@ -82,6 +82,15 @@ const blogSettingsSchema = z.object({
   voiceAccord: z.enum(["feminin", "masculin"]),
   voiceReader: z.enum(["vous", "tu"]),
   voiceTone: z.enum(["chaleureux", "rassurant", "pose", "direct", "pedagogue"]),
+  themes: z
+    .array(
+      z.object({
+        label: z.string().trim().min(2).max(120),
+        perMonth: z.number().int().min(0).max(30),
+      }),
+    )
+    .max(12)
+    .optional(),
 });
 
 export async function saveBlogSettings(input: unknown): Promise<{ error?: string }> {

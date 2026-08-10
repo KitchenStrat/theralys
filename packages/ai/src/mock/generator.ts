@@ -4,6 +4,7 @@
  */
 
 import { slugify, type PageSections } from "@theralys/shared";
+import { mockVoicedArticle } from "../article";
 import { COMMON_FAQ, resolveProfession, type ProfessionSeed, type SpecialtySeed } from "./catalog";
 import type {
   GeneratedArticle,
@@ -363,39 +364,31 @@ export function mockGenerateArticles(
     }),
   ];
 
+  // Même structure éditoriale que les articles du calendrier (mockVoicedArticle)
+  const tones = ["chaleureux", "rassurant", "pedagogue"] as const;
   return picks.map((motif, idx) => {
     const template = templates[idx % templates.length]!(motif);
-    const content = [
-      template.intro,
-      "",
-      `## Un moment pour vous, avant tout`,
-      "",
-      `Dans un quotidien où tout va vite, s'accorder une vraie pause est devenu un luxe. À ${input.city}, de plus en plus de personnes choisissent ${seed.practiceName} pour retrouver un équilibre entre corps et esprit. Le principe est simple : un cadre calme, une écoute attentive, et des pratiques ajustées à ce que vous vivez.`,
-      "",
-      `## Comment cela se passe concrètement`,
-      "",
-      `Chaque rendez-vous commence par un temps d'échange : où en êtes-vous, qu'est-ce qui pèse en ce moment, qu'attendez-vous de la séance ? Ensuite vient le temps de la pratique, centré sur ${picks[idx]?.excerpt.toLowerCase() ?? "votre détente"}`,
-      "",
-      `La séance se termine toujours par un retour au calme en douceur, et quelques repères à emporter chez vous : une respiration, une posture, un rituel du soir.`,
-      "",
-      `## Trois repères à retenir`,
-      "",
-      `1. **Venez comme vous êtes** : aucune préparation n'est nécessaire, une tenue confortable suffit.`,
-      `2. **Écoutez votre rythme** : les effets d'une séance se déploient souvent dans les heures qui suivent — accordez-vous une fin de journée tranquille.`,
-      `3. **La régularité fait la différence** : comme pour toute pratique de bien-être, c'est la répétition qui installe durablement la détente.`,
-      "",
-      `## En pratique à ${input.city}`,
-      "",
-      `Je vous accueille sur rendez-vous à ${input.city}, dans un cadre calme et chaleureux. Chaque accompagnement est personnalisé : nous construisons ensemble la séance qui vous convient.`,
-      "",
-      `*Cette pratique de bien-être ne se substitue ni à un avis médical ni à un suivi par un professionnel de santé.*`,
-    ].join("\n");
-
+    const voiced = mockVoicedArticle(
+      {
+        topic: template.title,
+        motifSlug: motif.slug,
+        motifTitle: motif.title,
+        profession: input.profession,
+        city: input.city,
+        firstName: input.firstName,
+      },
+      {
+        designation: "je",
+        accord: input.gender,
+        reader: "vous",
+        tone: tones[idx % tones.length]!,
+      },
+    );
     return {
       title: template.title,
       slug: slugify(template.title),
       excerpt: template.intro,
-      content,
+      content: voiced.content,
       motifSlug: motif.slug,
     };
   });

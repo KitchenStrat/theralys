@@ -212,8 +212,13 @@ export const blogSettings = pgTable("blog_settings", {
   voiceAccord: genderEnum("voice_accord").notNull().default("feminin"),
   voiceReader: voiceReaderEnum("voice_reader").notNull().default("vous"),
   voiceTone: voiceToneEnum("voice_tone").notNull().default("chaleureux"),
+  /** Thématiques du blog + répartition mensuelle (wizard Paramètres, étapes 2-3) */
+  themes: jsonb("themes").$type<BlogTheme[]>(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Thématique éditoriale : libellé + nombre d'articles par mois. */
+export type BlogTheme = { label: string; perMonth: number };
 
 export const editorialCalendarEntries = pgTable(
   "editorial_calendar_entries",

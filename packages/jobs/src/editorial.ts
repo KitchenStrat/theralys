@@ -5,7 +5,7 @@
  * Boost 2/semaine (lun, jeu) · Scale 4/semaine (lun, mar, jeu, ven).
  */
 
-import type { PlanId } from "@theralys/db";
+import type { BlogTheme, PlanId } from "@theralys/db";
 
 export type MotifRef = { slug: string; title: string };
 
@@ -64,9 +64,19 @@ export function planEditorialTopics(opts: {
   existingDates: Set<string>;
   /** Sujets déjà planifiés/publiés (évite les répétitions entre lots) */
   existingTopics?: Set<string>;
+  /**
+   * Thématiques du wizard (étapes 2-3). Si présentes, elles pilotent les
+   * sujets, pondérées par leur répartition mensuelle ; sinon repli sur les
+   * pages de motifs.
+   */
+  themes?: BlogTheme[];
 }): PlannedTopic[] {
   const days = cadenceDays(opts.plan);
-  if (days.length === 0 || opts.motifs.length === 0) return [];
+  // Cycle pondéré des thématiques : chaque libellé apparaît `perMonth` fois.
+  const themeCycle = (opts.themes ?? [])
+    .filter((t) => t.label.trim().length > 0 && t.perMonth > 0)
+    .flatMap((t) => Array<string>(Math.min(t.perMonth, 30)).fill(t.label.trim()));
+  if (days.length === 0 || (opts.motifs.length === 0 && themeCycle.length === 0)) return [];
 
   const result: PlannedTopic[] = [];
   const usedTopics = new Set<string>(opts.existingTopics ?? []);
@@ -81,20 +91,39 @@ export function planEditorialTopics(opts: {
     if (opts.existingDates.has(iso)) continue;
 
     // Avance jusqu'à un sujet encore inédit dans l'horizon (borné)
-    let motif = opts.motifs[slot % opts.motifs.length]!;
-    let topic = topicFor(slot, motif, opts.city);
-    for (let tries = 0; usedTopics.has(topic) && tries < 200; tries++) {
+    const pick = (s: number): { topic: string; motifSlug: string | null } => {
+      if (themeCycle.length > 0) {
+        const theme = themeCycle[s % themeCycle.length]!;
+        const motif = opts.motifs.find((m) => m.title.toLowerCase() === theme.toLowerCase());
+        return { topic: themedTopicFor(s, theme, opts.city), motifSlug: motif?.slug ?? null };
+      }
+      const motif = opts.motifs[s % opts.motifs.length]!;
+      return { topic: topicFor(s, motif, opts.city), motifSlug: motif.slug };
+    };
+
+    let choice = pick(slot);
+    for (let tries = 0; usedTopics.has(choice.topic) && tries < 200; tries++) {
       slot++;
-      motif = opts.motifs[slot % opts.motifs.length]!;
-      topic = topicFor(slot, motif, opts.city);
+      choice = pick(slot);
     }
-    if (usedTopics.has(topic)) topic = `${topic} (${iso})`;
+    const topic = usedTopics.has(choice.topic) ? `${choice.topic} (${iso})` : choice.topic;
 
     usedTopics.add(topic);
-    result.push({ scheduledFor: iso, topic, motifSlug: motif.slug });
+    result.push({ scheduledFor: iso, topic, motifSlug: choice.motifSlug });
     slot++;
   }
   return result;
+}
+
+/** Sujet piloté par une thématique du wizard. */
+function themedTopicFor(slot: number, theme: string, city: string): string {
+  return slot % 3 === 2
+    ? `${capitalizeFirst(theme)} à ${city} : ${ANGLES[Math.floor(slot / 3) % ANGLES.length]}`
+    : `${HOOKS[slot % HOOKS.length]} : ${lowerFirst(theme)}`;
+}
+
+function capitalizeFirst(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function topicFor(slot: number, motif: MotifRef, city: string): string {

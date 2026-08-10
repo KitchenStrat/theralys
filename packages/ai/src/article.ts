@@ -10,6 +10,7 @@ import { completeStructured } from "./anthropic";
 import { resolveAiMode } from "./generate-site";
 import { checkEthicalComplianceDeep } from "./guardrails";
 import { resolveProfession } from "./mock/catalog";
+import { ARTICLE_STRUCTURE } from "./prompts";
 
 export type BlogVoice = {
   designation: "nous" | "je" | "on";
@@ -88,13 +89,14 @@ export function createArticleGenerator(env: NodeJS.ProcessEnv = process.env): Ar
 
 function articleSystemPrompt(voice: BlogVoice): string {
   return `Tu rédiges un article de blog SEO local pour le site d'un praticien en médecines douces.
-~450 mots en markdown, titres ##, maillage naturel avec la spécialité et la ville.
+Markdown, maillage naturel avec la spécialité et la ville.
 
 VOIX IMPOSÉE (réglages du client, à respecter strictement) :
 - Désignation du praticien : « ${voice.designation} » (${voice.designation === "je" ? "première personne du singulier" : voice.designation === "nous" ? "première personne du pluriel" : "pronom « on »"}), accords au ${voice.accord}.
 - Adresse au lecteur : ${voice.reader === "vous" ? "vouvoiement" : "tutoiement"}.
 - Ton : ${TONE_LABEL[voice.tone]}.
-L'article se termine par une phrase rappelant que la pratique ne se substitue pas à un avis médical.`;
+
+${ARTICLE_STRUCTURE}`;
 }
 
 function articleUserPrompt(brief: ArticleBrief, voice: BlogVoice): string {
@@ -136,25 +138,60 @@ export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): Voiced
     "",
     `## Ce qui se joue dans ${yourAdj} quotidien`,
     "",
-    `Rythme soutenu, sollicitations permanentes, pauses qui se font rares : le corps encaisse, puis finit par le faire savoir. ${capitalize(feelYou)} peut-être des tensions qui s'installent, un sommeil moins réparateur, une énergie en dents de scie. C'est précisément là que ${practice} trouve sa place.`,
+    `Rythme soutenu, sollicitations permanentes, pauses qui se font rares : le corps encaisse, puis finit par le faire savoir. ${capitalize(feelYou)} peut-être des tensions qui s'installent, un sommeil moins réparateur, une énergie en dents de scie.`,
     "",
-    `## Comment ${subj("je travaille", "nous travaillons", "on travaille")} à ${brief.city}`,
+    `Ces signaux ne sont pas anodins : ce sont des messages. Les zones les plus souvent touchées :`,
     "",
-    `${capitalize(subj("Je commence", "Nous commençons", "On commence"))} toujours par un temps d'échange : où en ${voice.reader === "vous" ? "êtes-vous" : "es-tu"}, qu'est-ce qui pèse en ce moment ? ${capitalize(subj("Je construis", "Nous construisons", "On construit"))} ensuite la séance autour de ${yourPl} besoins du jour${brief.motifTitle ? `, en particulier autour de « ${brief.motifTitle.toLowerCase()} »` : ""}.`,
+    `- **Les épaules et la nuque** : la zone classique de la charge mentale`,
+    `- **Le bas du dos** : souvent associé aux longues journées assises`,
+    `- **La mâchoire** : un indicateur fréquent de tension accumulée`,
+    `- **Le souffle** : une respiration qui se bloque ou se raccourcit`,
     "",
-    `Chaque séance se termine en douceur, avec des repères simples à emporter : une respiration, une posture, un rituel du soir.`,
+    `> « J'ai l'impression que mon corps parle quand les mots manquent. »`,
     "",
-    `## Trois habitudes qui changent la donne`,
+    `## Comment ${practice} peut ${voice.reader === "vous" ? "vous accompagner" : "t'accompagner"}`,
     "",
-    `1. **Des micro-pauses dans la journée** : deux minutes, ${voice.reader === "vous" ? "les épaules relâchées, votre" : "les épaules relâchées, ta"} respiration qui descend dans le ventre.`,
-    `2. **Un vrai sas en fin de journée** : écrans en veille, lumière douce, quelques étirements.`,
-    `3. **La régularité** : c'est la répétition des séances et des bons gestes qui installe durablement la détente.`,
+    `${capitalize(subj("Je commence", "Nous commençons", "On commence"))} toujours par un temps d'échange : où en ${voice.reader === "vous" ? "êtes-vous" : "es-tu"}, qu'est-ce qui pèse en ce moment ? ${capitalize(subj("Je construis", "Nous construisons", "On construit"))} ensuite la séance autour de ${yourPl} besoins du jour${brief.motifTitle ? `, en particulier autour de « ${brief.motifTitle.toLowerCase()} »` : ""}. Ce que cela peut apporter, concrètement :`,
     "",
-    `## En pratique`,
+    `1. **Un relâchement progressif** des zones de tension`,
+    `2. **Une meilleure conscience corporelle** — repérer les signaux avant qu'ils ne s'installent`,
+    `3. **Un espace de décompression** dans une semaine chargée`,
+    `4. **Des repères simples** à réutiliser chez ${voice.reader === "vous" ? "vous" : "toi"}`,
     "",
-    `${capitalize(subj("Je vous accueille", voice.reader === "tu" ? "Nous t'accueillons" : "Nous vous accueillons", voice.reader === "tu" ? "On t'accueille" : "On vous accueille"))} sur rendez-vous à ${brief.city}, dans un cadre calme et chaleureux. ${capitalize(canYou)} réserver un créneau en quelques clics depuis ce site.`,
+    `### Un exercice à essayer maintenant`,
     "",
-    `*Cette pratique de bien-être ne se substitue ni à un avis médical ni à un suivi par un professionnel de santé.*`,
+    `Voici une technique simple pour amorcer un relâchement, en trois minutes :`,
+    "",
+    `1. ${capitalize(voice.reader === "vous" ? "Asseyez-vous" : "Assieds-toi")} confortablement, pieds à plat sur le sol.`,
+    `2. ${capitalize(voice.reader === "vous" ? "Fermez" : "Ferme")} les yeux et ${voice.reader === "vous" ? "posez vos" : "pose tes"} mains sur ${yourPl} cuisses.`,
+    `3. ${capitalize(voice.reader === "vous" ? "Inspirez" : "Inspire")} lentement par le nez pendant 4 secondes.`,
+    `4. ${capitalize(voice.reader === "vous" ? "Retenez" : "Retiens")} l'air 2 secondes.`,
+    `5. ${capitalize(voice.reader === "vous" ? "Expirez" : "Expire")} lentement par la bouche pendant 6 secondes.`,
+    `6. ${capitalize(voice.reader === "vous" ? "Répétez" : "Répète")} 6 fois, en relâchant les épaules à chaque expiration.`,
+    "",
+    `## Quand consulter ?`,
+    "",
+    `Quelques situations où une séance peut être utile :`,
+    "",
+    `- ${capitalize(feelYou)} des tensions qui reviennent chaque semaine malgré le repos`,
+    `- ${capitalize(yourAdj)} sommeil est perturbé par des douleurs ou une agitation physique`,
+    `- ${capitalize(voice.reader === "vous" ? "Vous voulez" : "Tu veux")} offrir à ${yourAdj} corps une vraie pause`,
+    "",
+    `${capitalize(subj("Je vous accueille", voice.reader === "tu" ? "Nous t'accueillons" : "Nous vous accueillons", voice.reader === "tu" ? "On t'accueille" : "On vous accueille"))} sur rendez-vous à ${brief.city}, dans un cadre calme et chaleureux. Cette pratique de bien-être ne se substitue ni à un avis médical ni à un suivi par un professionnel de santé : en cas de douleur intense ou persistante, ${voice.reader === "vous" ? "consultez" : "consulte"} d'abord ${yourAdj} médecin.`,
+    "",
+    `## Questions fréquentes`,
+    "",
+    `**Le stress peut-il vraiment provoquer des douleurs physiques ?**`,
+    "",
+    `Oui, c'est fréquent : les tensions émotionnelles se traduisent souvent par des contractures musculaires, notamment au niveau des épaules, du dos et de la mâchoire.`,
+    "",
+    `**Combien de séances faut-il pour ressentir un mieux-être ?**`,
+    "",
+    `Tout dépend de la situation de chacun : certaines personnes ressentent une détente dès la première séance, d'autres préfèrent un accompagnement régulier. Nous en parlons ensemble, sans engagement.`,
+    "",
+    `**La séance est-elle douloureuse ?**`,
+    "",
+    `Non : chaque séance s'ajuste en continu à ${yourAdj} confort, et rien n'est jamais forcé.`,
   ].join("\n");
 
   // Correction du "Je vous accueille" quand le lecteur est tutoyé

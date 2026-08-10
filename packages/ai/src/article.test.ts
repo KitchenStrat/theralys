@@ -20,7 +20,7 @@ describe("mockVoicedArticle — la voix du blog est respectée", () => {
       tone: "chaleureux",
     });
     expect(article.content).toContain("Je vous accueille");
-    expect(article.content).toContain("je travaille");
+    expect(article.content).toContain("Je commence");
     expect(article.content).not.toMatch(/\btu\b/i);
   });
 
@@ -31,10 +31,10 @@ describe("mockVoicedArticle — la voix du blog est respectée", () => {
       reader: "tu",
       tone: "direct",
     });
-    expect(article.content).toContain("nous travaillons");
+    expect(article.content).toContain("Nous commençons");
     expect(article.content).toContain("t'accueillons");
-    expect(article.content).toContain("tu peux");
-    expect(article.content).not.toContain("vous pouvez");
+    expect(article.content).toContain("Tu ressens");
+    expect(article.content).not.toContain("vous ressentez");
   });
 
   it("désignation « on »", () => {
@@ -44,7 +44,22 @@ describe("mockVoicedArticle — la voix du blog est respectée", () => {
       reader: "vous",
       tone: "pose",
     });
-    expect(article.content).toContain("on travaille");
+    expect(article.content).toContain("On commence");
+  });
+
+  it("suit la structure éditoriale imposée (exercice, quand consulter, FAQ)", () => {
+    const article = mockVoicedArticle(BRIEF, {
+      designation: "je",
+      accord: "feminin",
+      reader: "vous",
+      tone: "chaleureux",
+    });
+    expect(article.content).toContain("### Un exercice à essayer maintenant");
+    expect(article.content).toContain("## Quand consulter ?");
+    expect(article.content).toContain("## Questions fréquentes");
+    expect(article.content).toMatch(/^> /m);
+    const questions = article.content.match(/^\*\*.+\?\*\*$/gm) ?? [];
+    expect(questions).toHaveLength(3);
   });
 
   it("le ton change l'accroche", () => {

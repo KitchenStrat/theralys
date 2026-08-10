@@ -88,6 +88,19 @@ export async function getArticleBySlug(siteId: string, slug: string): Promise<Bl
   return article ?? null;
 }
 
+/** Articles similaires : même motif d'abord, puis les plus récents. */
+export async function getRelatedArticles(
+  siteId: string,
+  excludeId: string,
+  motifSlug: string | null,
+  limit = 3,
+): Promise<BlogArticle[]> {
+  const all = (await getPublishedArticles(siteId)).filter((a) => a.id !== excludeId);
+  const sameMotif = motifSlug ? all.filter((a) => a.motifSlug === motifSlug) : [];
+  const others = all.filter((a) => !sameMotif.includes(a));
+  return [...sameMotif, ...others].slice(0, limit);
+}
+
 export async function getProspect(prospectId: string | null) {
   if (!prospectId) return null;
   const db = getDb();

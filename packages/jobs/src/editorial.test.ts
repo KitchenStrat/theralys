@@ -64,3 +64,41 @@ describe("planEditorialTopics", () => {
     for (const t of a) expect(MOTIFS.some((m) => m.slug === t.motifSlug)).toBe(true);
   });
 });
+
+describe("planification par thématiques (wizard)", () => {
+  it("les thématiques pilotent les sujets, pondérées par leur répartition", () => {
+    const topics = planEditorialTopics({
+      motifs: [{ slug: "gestion-du-stress", title: "Gestion du stress" }],
+      themes: [
+        { label: "Soulager les tensions musculaires", perMonth: 3 },
+        { label: "Gestion du stress", perMonth: 1 },
+      ],
+      city: "Paris",
+      plan: "scale",
+      from: new Date("2026-08-03T00:00:00Z"),
+      horizonWeeks: 4,
+      existingDates: new Set(),
+    });
+    expect(topics.length).toBeGreaterThan(8);
+    for (const t of topics) {
+      expect(/tensions musculaires|gestion du stress/i.test(t.topic)).toBe(true);
+    }
+    const linked = topics.filter((t) => t.motifSlug === "gestion-du-stress");
+    expect(linked.length).toBeGreaterThan(0);
+    for (const t of linked) expect(t.topic.toLowerCase()).toContain("gestion du stress");
+  });
+
+  it("sans thématiques : repli sur les motifs (comportement historique)", () => {
+    const topics = planEditorialTopics({
+      motifs: [{ slug: "sommeil", title: "Sommeil et récupération" }],
+      themes: [],
+      city: "Albi",
+      plan: "boost",
+      from: new Date("2026-08-03T00:00:00Z"),
+      horizonWeeks: 2,
+      existingDates: new Set(),
+    });
+    expect(topics.length).toBe(4);
+    for (const t of topics) expect(t.motifSlug).toBe("sommeil");
+  });
+});

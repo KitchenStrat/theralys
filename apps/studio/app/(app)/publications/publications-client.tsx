@@ -23,11 +23,15 @@ export function PublicationsClient({
   month,
   items,
   settings,
+  monthlyQuota,
+  defaultThemeLabels,
 }: {
   year: number;
   month: number;
   items: CalendarItem[];
   settings: BlogSettingsValue | null;
+  monthlyQuota: number;
+  defaultThemeLabels: string[];
 }) {
   const [selected, setSelected] = useState<CalendarItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -115,6 +119,8 @@ export function PublicationsClient({
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         initial={settings}
+        monthlyQuota={monthlyQuota}
+        defaultThemeLabels={defaultThemeLabels}
       />
     </div>
   );
