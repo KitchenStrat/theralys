@@ -85,6 +85,7 @@ Produis un JSON avec cette forme exacte :
   "title": "${motif.title}",
   "metaTitle": "…",        // ≤ 60 caractères, spécialité + ville
   "metaDescription": "…",  // ≤ 155 caractères
+  "imageQuery": "…",       // 3-5 mots ANGLAIS pour trouver une photo de banque d'images adaptée au motif (ex. "peaceful sleep bedroom rest") — concret et visuel, jamais de nom propre
   "sections": [
     { "type": "hero", "badge": "…", "title": "…", "paragraphs": ["1 paragraphe d'intro"], "ctaLabel": "Prendre Rendez-Vous" },
     { "type": "richText", "body": "corps markdown ~500 mots avec des titres ## et une liste de bienfaits" },
@@ -129,7 +130,7 @@ export function articlesUserPrompt(input: GenerationInput, motifs: MotifPlan[]):
 MOTIFS DE CONSULTATION DU SITE : ${motifs.map((m) => `${m.title} (slug ${m.slug})`).join(", ")}
 
 Produis un JSON : un tableau de 3 articles de la forme
-[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown", "motifSlug": "slug du motif traité" } ]
+[ { "title": "…", "slug": "slug-url-de-l-article", "excerpt": "1-2 phrases", "content": "markdown", "motifSlug": "slug du motif traité", "imageQuery": "3-5 mots ANGLAIS pour la photo de banque d'images de couverture (concret et visuel)" } ]
 Chaque article approfondit UN des motifs de consultation ci-dessus ("motifSlug" = son slug,
 un motif différent par article) : il répond à une vraie question que se posent les personnes
 concernées — celle qu'elles taperaient dans Google (ex. « Comment soulager une lombalgie au

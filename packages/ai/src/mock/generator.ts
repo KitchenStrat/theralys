@@ -5,6 +5,7 @@
 
 import { slugify, type PageSections } from "@theralys/shared";
 import { mockVoicedArticle } from "../article";
+import { stockQueryFor } from "../stock";
 import { COMMON_FAQ, resolveProfession, type ProfessionSeed, type SpecialtySeed } from "./catalog";
 import type {
   GeneratedArticle,
@@ -309,6 +310,7 @@ export function mockGenerateMotifPage(
     metaTitle: `${spec.title} à ${input.city} — ${fullName(input)}`,
     metaDescription: spec.excerpt,
     sections,
+    imageQuery: stockQueryFor(spec.title, input.profession),
   };
 }
 
@@ -399,6 +401,7 @@ export function mockGenerateArticles(
       excerpt: template.intro,
       content: voiced.content,
       motifSlug: motif.slug,
+      imageQuery: stockQueryFor(motif.title, input.profession),
     };
   });
 }

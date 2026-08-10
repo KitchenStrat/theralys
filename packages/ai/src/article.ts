@@ -11,6 +11,7 @@ import { resolveAiMode } from "./generate-site";
 import { checkEthicalComplianceDeep } from "./guardrails";
 import { resolveProfession } from "./mock/catalog";
 import { ARTICLE_STRUCTURE } from "./prompts";
+import { stockQueryFor } from "./stock";
 
 export type BlogVoice = {
   designation: "nous" | "je" | "on";
@@ -40,6 +41,8 @@ export type VoicedArticle = {
   slug: string;
   excerpt: string;
   content: string;
+  /** Requête (anglais) pour la photo de banque d'images de couverture */
+  imageQuery?: string;
 };
 
 const voicedArticleSchema = z.object({
@@ -47,6 +50,7 @@ const voicedArticleSchema = z.object({
   slug: z.string().min(3),
   excerpt: z.string().min(20),
   content: z.string().min(300),
+  imageQuery: z.string().optional(),
 });
 
 const TONE_LABEL: Record<BlogVoice["tone"], string> = {
@@ -107,7 +111,7 @@ function articleUserPrompt(brief: ArticleBrief, voice: BlogVoice): string {
 - Lecteur : ${voice.reader === "vous" ? "vouvoyé" : "tutoyé"}
 
 Produis un JSON de la forme :
-{ "title": "…", "slug": "slug-url", "excerpt": "1-2 phrases", "content": "markdown ~450 mots" }`;
+{ "title": "…", "slug": "slug-url", "excerpt": "1-2 phrases", "content": "markdown ~450 mots", "imageQuery": "3-5 mots ANGLAIS pour la photo de banque d'images de couverture (concret et visuel, jamais de nom propre)" }`;
 }
 
 // ─── Mock déterministe, sensible à la voix ────────────────────────────────────
@@ -205,6 +209,7 @@ export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): Voiced
     slug: slugify(title),
     excerpt: toneIntro[voice.tone],
     content: fixed,
+    imageQuery: stockQueryFor(brief.topic, brief.profession),
   };
 }
 

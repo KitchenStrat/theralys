@@ -46,6 +46,8 @@ export type GeneratedMotifPage = {
   metaTitle: string;
   metaDescription: string;
   sections: PageSections;
+  /** Requête (anglais) pour la photo de banque d'images de la page */
+  imageQuery?: string;
 };
 
 export type GeneratedReview = {
@@ -61,4 +63,6 @@ export type GeneratedArticle = {
   /** markdown */
   content: string;
   motifSlug: string | null;
+  /** Requête (anglais) pour la photo de banque d'images de couverture */
+  imageQuery?: string;
 };

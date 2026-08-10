@@ -28,6 +28,9 @@ import {
 import {
   createArticleGenerator,
   createImageProvider,
+  createStockImageProvider,
+  findStockOrGenerate,
+  stockQueryFor,
   DEFAULT_VOICE,
   type BlogVoice,
 } from "@theralys/ai";
@@ -116,6 +119,7 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
   const db = getDb();
   const generator = createArticleGenerator();
   const imageProvider = createImageProvider();
+  const stock = createStockImageProvider();
   const deadline = addDays(startOfDayUtc(now), WRITE_AHEAD_DAYS).toISOString().slice(0, 10);
   let processed = 0;
 
@@ -167,9 +171,13 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
         voice,
       );
 
-      const image = await imageProvider.generate({
+      // Photo de banque d'images adaptée au sujet ; repli IA si indisponible
+      const image = await findStockOrGenerate(stock, imageProvider, {
+        query: article.imageQuery ?? stockQueryFor(entry.topic, prospect?.profession ?? undefined),
         subject: article.title,
-        themeColor: undefined,
+        seed: article.slug || article.title,
+        width: 1024,
+        height: 576,
       });
 
       const publishAt = new Date(`${entry.scheduledFor}T00:00:00Z`);
@@ -184,8 +192,8 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
           slug,
           excerpt: article.excerpt,
           content: article.content,
-          imageUrl: image.url,
-          imageAiGenerated: image.aiGenerated,
+          imageUrl: image?.url ?? null,
+          imageAiGenerated: image?.aiGenerated ?? false,
           // Publication automatique → planifié ; manuelle → brouillon à valider
           status: settings?.publicationMode === "manual" ? "draft" : "scheduled",
           aiGenerated: true,

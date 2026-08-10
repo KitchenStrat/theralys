@@ -2,6 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import {
   createImageProvider,
   createSiteGenerator,
+  createStockImageProvider,
+  findStockOrGenerate,
+  stockQueryFor,
   type GenerationInput,
   type ImageProvider,
   type SiteGenerator,
@@ -175,15 +178,19 @@ async function generateMotifPagesStep(
 ): Promise<void> {
   const db = getDb();
   // 2 générations de front : bon compromis vitesse / limites de débit API
+  const stock = createStockImageProvider();
   const generated = await mapPool(motifsPlan, 2, async (motif) => {
     const page = await generator.generateMotifPage(input, motif);
-    const image = await tryGenerateImage(imageProvider, {
+    // Photo de banque d'images adaptée au motif ; repli IA si indisponible
+    const image = await findStockOrGenerate(stock, imageProvider, {
+      query: page.imageQuery ?? stockQueryFor(motif.title, input.profession),
       subject: `wellness treatment scene evoking « ${motif.title} », soothing hands-on care details, cozy practice room`,
+      seed: motif.slug,
       themeColor,
       width: 960,
       height: 1152,
     });
-    return { ...page, sections: withSectionImage(page.sections, "hero", image) };
+    return { ...page, sections: withSectionImage(page.sections, "hero", image?.url) };
   });
   for (const [i, page] of generated.entries()) {
     await db.insert(pages).values({
@@ -268,10 +275,13 @@ async function generateArticlesStep(
 ): Promise<void> {
   const db = getDb();
   const articles = await generator.generateArticles(input, motifsPlan);
-  // Une illustration par article — comme celles du robot éditorial (J-7)
+  // Photo de banque d'images adaptée au sujet ; repli IA si indisponible
+  const stock = createStockImageProvider();
   const images = await mapPool(articles, 2, (a) =>
-    tryGenerateImage(imageProvider, {
+    findStockOrGenerate(stock, imageProvider, {
+      query: a.imageQuery ?? stockQueryFor(a.title, input.profession),
       subject: a.title,
+      seed: a.slug || a.title,
       themeColor,
       width: 1024,
       height: 576,
@@ -286,8 +296,8 @@ async function generateArticlesStep(
       slug: a.slug || slugify(a.title),
       excerpt: a.excerpt,
       content: a.content,
-      imageUrl: images[i] ?? null,
-      imageAiGenerated: Boolean(images[i]),
+      imageUrl: images[i]?.url ?? null,
+      imageAiGenerated: images[i]?.aiGenerated ?? false,
       status: (i < articles.length - 1 ? "published" : "draft") as "published" | "draft",
       aiGenerated: true,
       motifSlug: a.motifSlug,

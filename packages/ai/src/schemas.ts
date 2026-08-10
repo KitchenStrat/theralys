@@ -121,6 +121,8 @@ export const generatedMotifPageSchema = z.object({
   metaTitle: z.string(),
   metaDescription: z.string(),
   sections: z.array(sectionSchema).min(2),
+  /** Requête (anglais) pour la photo de banque d'images de la page */
+  imageQuery: z.string().optional(),
 });
 
 export const generatedReviewsSchema = z.array(
@@ -138,5 +140,7 @@ export const generatedArticlesSchema = z.array(
     excerpt: z.string(),
     content: z.string().min(300),
     motifSlug: z.string().nullable(),
+    /** Requête (anglais) pour la photo de banque d'images de l'article */
+    imageQuery: z.string().optional(),
   }),
 );

@@ -14,7 +14,12 @@ import {
   prospects,
   sites,
 } from "@theralys/db";
-import { createImageProvider } from "@theralys/ai";
+import {
+  createImageProvider,
+  createStockImageProvider,
+  findStockOrGenerate,
+  stockQueryFor,
+} from "@theralys/ai";
 import { createGooglePlacesProvider, type GooglePlaceResult } from "@theralys/providers/google";
 import { syncGoogleData } from "@theralys/jobs";
 import {
@@ -243,21 +248,27 @@ export async function updateArticle(input: unknown): Promise<{ error?: string }>
   return {};
 }
 
-/** Régénère l'image de couverture par IA (fal.ai ou mock). */
+/** Régénère l'image de couverture : nouvelle photo de banque d'images (repli IA). */
 export async function regenerateArticleImage(articleId: string): Promise<{ imageUrl: string }> {
   const session = await requireClient();
   const article = await ownedArticle(session.siteId, articleId);
   const db = getDb();
 
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
-  const image = await createImageProvider().generate({
+  // La graine change à chaque clic → une photo différente à chaque régénération
+  const image = await findStockOrGenerate(createStockImageProvider(), createImageProvider(), {
+    query: stockQueryFor(article.title),
     subject: `${article.title} (variante ${Date.now() % 7})`,
+    seed: `${article.id}-${Date.now()}`,
     themeColor: site?.theme.palette?.primary,
+    width: 1024,
+    height: 576,
   });
+  if (!image) return { imageUrl: article.imageUrl ?? "" };
 
   await db
     .update(blogArticles)
-    .set({ imageUrl: image.url, imageAiGenerated: true, updatedAt: new Date() })
+    .set({ imageUrl: image.url, imageAiGenerated: image.aiGenerated, updatedAt: new Date() })
     .where(eq(blogArticles.id, articleId));
   revalidatePath("/publications");
   return { imageUrl: image.url };
