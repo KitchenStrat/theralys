@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
 import { reviewDateFr, type Section } from "@theralys/shared";
-import { GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
+import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
 
@@ -95,16 +95,6 @@ function DotsRow({ className = "" }: { className?: string }) {
       {Array.from({ length: 17 }).map((_, i) => (
         <span key={i} className="h-1.5 w-1.5 rotate-45 bg-current opacity-30" />
       ))}
-    </span>
-  );
-}
-
-function Stars({ rating, className = "" }: { rating: number; className?: string }) {
-  const full = Math.round(rating);
-  return (
-    <span aria-label={`${rating} étoiles sur 5`} className={`text-[var(--site-primary)] ${className}`}>
-      {"★".repeat(Math.min(full, 5))}
-      <span className="opacity-25">{"★".repeat(Math.max(5 - full, 0))}</span>
     </span>
   );
 }
@@ -297,11 +287,67 @@ function StatBadge({ stat }: { stat: { icon?: string; value: string; label: stri
   );
 }
 
+/** Lien vers la fiche sur Google Maps (place_id quand une fiche est reliée). */
+function googleMapsUrl(ctx: SectionContext, address: string | null): string | null {
+  if (!address) return null;
+  const query = `${ctx.googleBusinessName ?? ctx.site.name}, ${address}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}${
+    ctx.googlePlaceId ? `&query_place_id=${encodeURIComponent(ctx.googlePlaceId)}` : ""
+  }`;
+}
+
 // ─── Sections ────────────────────────────────────────────────────────────────
 
 function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; ctx: SectionContext }) {
   const showRating =
     section.showGoogleRating && ctx.googleRating !== null && ctx.googleRating > 0;
+  const cardAddress = ctx.googleAddress ?? ctx.address ?? null;
+  const mapsUrl = googleMapsUrl(ctx, cardAddress);
+
+  const cardInner = (
+    <>
+      {ctx.googlePhotoUrl ? (
+        <img
+          src={ctx.googlePhotoUrl}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="h-12 w-12 shrink-0 rounded-full object-cover"
+        />
+      ) : null}
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">
+          {ctx.googleBusinessName ?? ctx.site.name}
+        </span>
+        {cardAddress ? (
+          <span className="block max-w-56 truncate text-xs opacity-70">{cardAddress}</span>
+        ) : null}
+        {showRating ? (
+          <span className="flex items-center gap-1.5 text-xs">
+            <GoogleStars rating={ctx.googleRating!} />
+            <span className="opacity-70">
+              {ctx.googleReviewCount ? `${ctx.googleReviewCount} avis Google` : "Avis Google"}
+            </span>
+          </span>
+        ) : null}
+      </span>
+      {showRating ? <GoogleG className="ml-1 h-5 w-5 shrink-0" /> : null}
+    </>
+  );
+  const googleCard = mapsUrl ? (
+    <a
+      href={mapsUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Voir la fiche sur Google Maps"
+      className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      {cardInner}
+    </a>
+  ) : (
+    <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
+      {cardInner}
+    </div>
+  );
 
   const content = (
     <>
@@ -320,22 +366,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
         <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
         {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
       </div>
-      <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold">{ctx.site.name}</span>
-          {ctx.address ? (
-            <span className="block max-w-56 truncate text-xs opacity-70">{ctx.address}</span>
-          ) : null}
-          {showRating ? (
-            <span className="flex items-center gap-1.5 text-xs">
-              <Stars rating={ctx.googleRating!} />
-              <span className="opacity-70">
-                {ctx.googleReviewCount ? `${ctx.googleReviewCount} avis Google` : "Avis Google"}
-              </span>
-            </span>
-          ) : null}
-        </span>
-      </div>
+      {googleCard}
     </>
   );
 
@@ -927,11 +958,7 @@ function Contact({
   const address = ctx.googleAddress ?? section.address ?? null;
   const placeName = ctx.googleBusinessName ?? ctx.site.name;
   const mapQuery = address ? `${placeName}, ${address}` : null;
-  const mapsUrl = mapQuery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}${
-        ctx.googlePlaceId ? `&query_place_id=${encodeURIComponent(ctx.googlePlaceId)}` : ""
-      }`
-    : null;
+  const mapsUrl = googleMapsUrl(ctx, address);
 
   return (
     <section
