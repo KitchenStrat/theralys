@@ -37,21 +37,21 @@
   background: linear-gradient(
     to bottom,
     var(--site-bg),
-    var(--site-deep) 7rem,
-    var(--site-deep) calc(100% - 7rem),
+    var(--site-deep) 3.5rem,
+    var(--site-deep) calc(100% - 3.5rem),
     var(--site-bg)
   );
 }
 .fade-deep-top {
-  background: linear-gradient(to bottom, var(--site-bg), var(--site-deep) 7rem);
+  background: linear-gradient(to bottom, var(--site-bg), var(--site-deep) 3.5rem);
 }
 /* Section teintée fondue (déroulement) */
 .fade-soft {
   background: linear-gradient(
     to bottom,
     var(--site-bg),
-    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 25%,
-    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 75%,
+    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 12%,
+    color-mix(in srgb, var(--site-soft) 55%, var(--site-bg)) 88%,
     var(--site-bg)
   );
 }
