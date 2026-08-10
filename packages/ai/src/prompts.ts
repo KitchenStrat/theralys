@@ -49,7 +49,7 @@ Produis un JSON avec cette forme exacte :
     { "type": "reviews", "title": "…" },
     { "type": "process", "title": "Le déroulement d'une séance", "steps": [ { "title": "…", "description": "…" } ] },  // exactement 4 étapes (ex. : échange, séance, retour au calme, suivi)
     { "type": "faq", "title": "Questions fréquentes", "items": [ { "question": "…", "answer": "…" } ] },  // exactement 7 questions (déroulement, préparation, durée, tarif/règlement, nombre de séances, public concerné, complémentarité avec un suivi médical)
-    { "type": "contact", "title": "…", "address": "…", "note": "…" }
+    { "type": "contact", "title": "Informations", "address": "…", "phone": "06 39 98 01 23", "note": "…", "infoCards": [ { "icon": "medaille", "title": "6 années d'expérience", "text": "métier" }, { "icon": "carte", "title": "Cabinet facile d'accès", "text": "parking, horaires…" } ] }  // exactement 2 cartes ; le téléphone est un numéro fictif (plage réservée), le praticien mettra le sien
   ],
   "motifsPlan": [ { "slug": "…", "title": "…", "excerpt": "…" } ]  // les mêmes ${input.motifPageCount} spécialités que la section specialties
 }

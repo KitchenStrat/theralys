@@ -73,6 +73,9 @@ export const contactSectionSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   note: z.string().optional(),
+  infoCards: z
+    .array(z.object({ icon: z.string().optional(), title: z.string(), text: z.string() }))
+    .optional(),
 });
 
 export const richTextSectionSchema = z.object({

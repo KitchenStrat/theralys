@@ -381,6 +381,53 @@ export function SectionFields({
           <Field label="Note pratique (parking, accès…)">
             <TextInput value={section.note ?? ""} onChange={(note) => onChange({ note })} />
           </Field>
+          <p className="text-xs text-ink-500">
+            La carte interactive et l&apos;encart « Le cabinet » utilisent votre fiche Google
+            (onglet Paramètres) ou, à défaut, l&apos;adresse ci-dessus.
+          </p>
+          <p className="text-xs font-medium text-ink-700">Cartes de rappel (expérience, accès…)</p>
+          {(section.infoCards ?? []).map((card, i) => {
+            const cards = section.infoCards ?? [];
+            return (
+              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+                <IconField
+                  value={card.icon}
+                  onChange={(icon) =>
+                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })
+                  }
+                />
+                <Field label={`Carte ${i + 1} — titre`}>
+                  <TextInput
+                    value={card.title}
+                    onChange={(title) =>
+                      onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
+                    }
+                  />
+                </Field>
+                <Field label="Texte">
+                  <TextArea
+                    value={card.text}
+                    rows={2}
+                    onChange={(text) =>
+                      onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
+                    }
+                  />
+                </Field>
+                <RemoveButton
+                  label="Supprimer cette carte"
+                  onClick={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
+                />
+              </div>
+            );
+          })}
+          <AddButton
+            label="+ Ajouter une carte"
+            onClick={() =>
+              onChange({
+                infoCards: [...(section.infoCards ?? []), { icon: "medaille", title: "", text: "" }],
+              })
+            }
+          />
         </SectionBox>
       );
 

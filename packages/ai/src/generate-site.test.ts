@@ -145,6 +145,7 @@ describe("ensureHomeSections (filet de sécurité)", () => {
         { type: "hero" as const, title: "Un espace pour souffler", paragraphs: ["p"] },
         { type: "specialties" as const, title: "Spécialités", items: [] },
         { type: "about" as const, title: "À propos", paragraphs: ["p"] },
+        { type: "contact" as const, title: "Informations" },
       ],
       motifsPlan: [],
     };
@@ -155,11 +156,14 @@ describe("ensureHomeSections (filet de sécurité)", () => {
       "specialties",
       "future",
       "about",
+      "contact",
     ]);
     const hero = fixed.sections.find((s) => s.type === "hero");
     expect(hero && hero.type === "hero" && hero.stats).toHaveLength(2);
     const about = fixed.sections.find((s) => s.type === "about");
     expect(about && about.type === "about" && about.infoCards).toHaveLength(3);
+    const contact = fixed.sections.find((s) => s.type === "contact");
+    expect(contact && contact.type === "contact" && contact.infoCards).toHaveLength(2);
     expect(checkEthicalComplianceDeep(fixed).ok).toBe(true);
   });
 

@@ -131,6 +131,8 @@ export type ContactSection = {
   email?: string;
   hours?: { label: string; value: string }[];
   note?: string; // ex. « Parking facile et gratuit »
+  /** Cartes de rappel (expérience, accès…) affichées sous les boutons */
+  infoCards?: { icon?: string; title: string; text: string }[];
 };
 
 /** Corps de texte markdown (pages de motifs, mentions légales…). */

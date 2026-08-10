@@ -175,9 +175,26 @@ export function ensureHomeSections(
           ],
         };
       }
+      if (section.type === "contact" && (!section.infoCards || section.infoCards.length === 0)) {
+        return {
+          ...section,
+          infoCards: [
+            { icon: "medaille", title: "6 années d'expérience", text: capitalize(input.profession) },
+            {
+              icon: "carte",
+              title: "Cabinet facile d'accès",
+              text: "Parking à proximité et horaires flexibles",
+            },
+          ],
+        };
+      }
       return section;
     }),
   };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /** Filet de sécurité : même le contenu mock passe par les garde-fous. */

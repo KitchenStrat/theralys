@@ -12,9 +12,10 @@ export type SectionContext = {
   reviews: GoogleReview[];
   googleRating: number | null;
   googleReviewCount: number | null;
-  /** Fiche Google reliée (avis réels) : identifiant, nom et photo de la fiche */
+  /** Fiche Google reliée (avis réels) : identifiant, nom, adresse et photo */
   googlePlaceId?: string | null;
   googleBusinessName?: string | null;
+  googleAddress?: string | null;
   googlePhotoUrl?: string | null;
   /** Slugs des pages de motifs visibles (gating par formule) — null = tous */
   allowedMotifSlugs?: string[] | null;
@@ -154,7 +155,7 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
           strokeLinejoin="round"
         />
       </svg>
-      {phone}
+      Appeler au {phone}
     </a>
   );
 }
@@ -922,39 +923,108 @@ function Contact({
   section: Extract<Section, { type: "contact" }>;
   ctx: SectionContext;
 }) {
+  // Fiche Google reliée → carte et lien centrés sur la fiche ; sinon l'adresse
+  const address = ctx.googleAddress ?? section.address ?? null;
+  const placeName = ctx.googleBusinessName ?? ctx.site.name;
+  const mapQuery = address ? `${placeName}, ${address}` : null;
+  const mapsUrl = mapQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}${
+        ctx.googlePlaceId ? `&query_place_id=${encodeURIComponent(ctx.googlePlaceId)}` : ""
+      }`
+    : null;
+
   return (
     <section
       id="contact"
       className="fade-deep-top relative scroll-mt-20 py-20 text-[var(--site-on-deep)] lg:py-24"
     >
       <div aria-hidden className="wave-bg-light stage-light absolute inset-0" />
-      <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="reveal">
+          {mapQuery ? (
+            <iframe
+              title="Carte d'accès au cabinet"
+              src={`https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&z=14&hl=fr&output=embed`}
+              className="h-64 w-full rounded-[var(--r-lg)] border-0 bg-white/5 sm:h-72"
+              loading="lazy"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          ) : null}
+          <DotsRow className="mt-9 justify-start! text-[var(--site-primary)]" />
+          <p className="mt-9 text-2xl font-semibold">Le cabinet</p>
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex w-full max-w-md items-center gap-4 rounded-[var(--r-lg)] bg-[var(--site-surface)] p-4 pr-6 text-[var(--site-text)] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              {ctx.googlePhotoUrl ? (
+                <img
+                  src={ctx.googlePhotoUrl}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="h-16 w-16 shrink-0 rounded-[var(--r-md)] object-cover"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--site-soft)] text-[var(--site-primary-dark)]"
+                >
+                  <SectionIcon name="carte" />
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="block font-semibold text-[var(--site-primary-dark)]">{placeName}</span>
+                {address ? <span className="mt-0.5 block text-sm opacity-75">{address}</span> : null}
+                <span className="mt-1 block text-xs font-medium text-[var(--site-primary)]">
+                  Voir sur Google Maps ↗
+                </span>
+              </span>
+            </a>
+          ) : null}
+        </div>
+        <div className="reveal" style={{ transitionDelay: "120ms" }}>
           <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
-          <p className="mt-5 text-xl opacity-80">Prenez rendez-vous en ligne ou par téléphone.</p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
+          <p className="mt-4 text-lg opacity-85">Prendre rendez-vous en ligne ou par téléphone :</p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
             {section.phone ? <PhoneButton phone={section.phone} onDark /> : null}
           </div>
-        </div>
-        <div className="reveal rounded-[var(--r-lg)] bg-white/5 p-9" style={{ transitionDelay: "120ms" }}>
-          <span className="text-lg font-semibold">{ctx.site.name}</span>
-          <div className="mt-5 space-y-2 text-[1.05rem] opacity-85">
-            {section.address ? <p>{section.address}</p> : null}
-            {section.email ? (
-              <p>
-                <a href={`mailto:${section.email}`} className="underline">
-                  {section.email}
-                </a>
-              </p>
-            ) : null}
-            {section.hours?.map((h) => (
-              <p key={h.label}>
-                {h.label} : {h.value}
-              </p>
-            ))}
-            {section.note ? <p className="pt-1 opacity-75">{section.note}</p> : null}
-          </div>
+          {section.email || section.hours?.length || section.note ? (
+            <div className="mt-6 space-y-1.5 text-[0.95rem] opacity-80">
+              {section.email ? (
+                <p>
+                  <a href={`mailto:${section.email}`} className="underline">
+                    {section.email}
+                  </a>
+                </p>
+              ) : null}
+              {section.hours?.map((h) => (
+                <p key={h.label}>
+                  {h.label} : {h.value}
+                </p>
+              ))}
+              {section.note ? <p>{section.note}</p> : null}
+            </div>
+          ) : null}
+          {section.infoCards?.length ? (
+            <div className="mt-9 grid gap-4 sm:grid-cols-2">
+              {section.infoCards.map((card, i) => (
+                <div
+                  key={i}
+                  className="rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 text-center text-[var(--site-text)] shadow-sm"
+                >
+                  <span className="inline-flex text-[var(--site-primary-dark)]">
+                    <SectionIcon name={card.icon} size={34} />
+                  </span>
+                  <p className="mt-3 text-xl font-semibold">{card.title}</p>
+                  <p className="mt-1.5 text-sm opacity-75">{card.text}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

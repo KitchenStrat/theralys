@@ -226,9 +226,19 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
     },
     {
       type: "contact",
-      title: "Me contacter",
+      title: "Informations",
       address: input.googleEnrichment?.address ?? `${input.city}`,
+      // Numéro fictif (plage réservée 06 39 98 XX XX) — remplacé par le praticien
+      phone: "06 39 98 01 23",
       note: "Parking facile et gratuit",
+      infoCards: [
+        { icon: "medaille", title: "6 années d'expérience", text: capitalize(input.profession) },
+        {
+          icon: "carte",
+          title: "Cabinet facile d'accès",
+          text: "Parking à proximité et horaires flexibles",
+        },
+      ],
     },
   ];
 
