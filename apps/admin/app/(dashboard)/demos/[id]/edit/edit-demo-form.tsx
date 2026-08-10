@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PROFESSION_CATEGORIES } from "@theralys/shared";
 import { Badge, Button, Card, FieldHint, Input, Label, ProgressDots, Select, Spinner } from "@theralys/ui";
-import { getSiteEditorUrl, regenerateDemo, updateDemo } from "../../actions";
+import { getSiteEditorUrl, regenerateDemo, searchGooglePlaces, updateDemo } from "../../actions";
+import type { PlaceResult } from "@/lib/places";
 import { ConvertModal } from "./convert-modal";
 
 type DemoData = {
@@ -50,6 +51,29 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
   const [regenerating, setRegenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [openingEditor, setOpeningEditor] = useState(false);
+
+  // Fiche Google (recherche / changement)
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  function onPlaceQueryChange(value: string) {
+    setPlaceQuery(value);
+    setSelectedPlace(null);
+    clearTimeout(searchTimer.current);
+    if (value.trim().length < 3) {
+      setPlaceResults([]);
+      return;
+    }
+    searchTimer.current = setTimeout(() => {
+      setSearching(true);
+      searchGooglePlaces(value)
+        .then(setPlaceResults)
+        .finally(() => setSearching(false));
+    }, 350);
+  }
 
   function openEditor() {
     // Fenêtre ouverte de façon synchrone (bloqueur de popups)
@@ -101,6 +125,7 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
       bookingUrl: form.get("bookingUrl") ?? "",
       validityDays: form.get("validityDays") || 30,
       themePreset: form.get("themePreset"),
+      googlePlace: selectedPlace ?? undefined,
     });
     setSaving(false);
     if (result.error) setError(result.error);
@@ -222,6 +247,67 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
       <Card className="mt-5 p-5">
         <h2 className="font-semibold">Fiche praticien &amp; réglages</h2>
         <form onSubmit={onSubmit} className="mt-4 space-y-5">
+          <fieldset className="rounded-2xl border border-cream-300 p-4">
+            <legend className="px-1 text-sm font-medium">Fiche Google</legend>
+            {demo.googleBusinessName && !selectedPlace ? (
+              <p className="text-sm">
+                Fiche reliée : <strong>{demo.googleBusinessName}</strong>
+                <span className="ml-2 text-xs text-ink-500">
+                  (les vrais avis Google sont récupérés à la génération)
+                </span>
+              </p>
+            ) : null}
+            <Input
+              value={placeQuery}
+              onChange={(e) => onPlaceQueryChange(e.target.value)}
+              placeholder={
+                demo.googleBusinessName ? "Changer de fiche : rechercher…" : "Rechercher le cabinet sur Google…"
+              }
+              className="mt-2"
+            />
+            {searching ? (
+              <p className="mt-2 flex items-center gap-2 text-sm text-ink-500">
+                <Spinner /> Recherche…
+              </p>
+            ) : null}
+            {!selectedPlace && placeResults.length > 0 ? (
+              <ul className="mt-2 overflow-hidden rounded-xl border border-cream-300">
+                {placeResults.map((place) => (
+                  <li key={place.placeId}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlace(place)}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-cream-100"
+                    >
+                      <span>
+                        <span className="font-medium">{place.name}</span>
+                        <span className="block text-xs text-ink-500">{place.address}</span>
+                      </span>
+                      <Badge tone="primary">
+                        ★ {place.rating} · {place.reviewCount} avis
+                      </Badge>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {selectedPlace ? (
+              <p className="mt-2 flex items-center gap-2 text-sm">
+                <Badge tone="success">Nouvelle fiche : {selectedPlace.name}</Badge>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlace(null);
+                    setPlaceQuery("");
+                  }}
+                  className="text-xs text-ink-500 underline"
+                >
+                  Annuler
+                </button>
+              </p>
+            ) : null}
+          </fieldset>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="firstName">Prénom *</Label>

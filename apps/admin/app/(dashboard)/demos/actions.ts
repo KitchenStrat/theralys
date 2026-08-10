@@ -49,6 +49,44 @@ const demoFormSchema = z.object({
 
 export type DemoFormState = { error?: string };
 
+/**
+ * Remplace les avis du site par les vrais avis Google de la fiche
+ * (API Places réelle uniquement — le mock garde les avis existants).
+ * Best-effort : un échec n'empêche pas l'enregistrement du formulaire.
+ */
+async function refreshReviewsFromPlace(
+  siteId: string,
+  prospectId: string,
+  placeId: string,
+): Promise<void> {
+  const places = getPlacesProvider();
+  if (places.mode !== "google") return;
+  try {
+    const db = getDb();
+    const details = await places.fetchDetails(placeId);
+    if (details.reviews.length === 0) return;
+    await db.delete(googleReviews).where(eq(googleReviews.siteId, siteId));
+    await db.insert(googleReviews).values(
+      details.reviews.map((r) => ({
+        siteId,
+        sourceReviewId: r.sourceReviewId,
+        authorName: r.authorName,
+        rating: r.rating,
+        text: r.text,
+        reviewedAt: r.reviewedAt,
+      })),
+    );
+    if (details.rating !== null) {
+      await db
+        .update(prospects)
+        .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+        .where(eq(prospects.id, prospectId));
+    }
+  } catch (err) {
+    console.warn("[reviews] rafraîchissement depuis la fiche Google impossible :", err);
+  }
+}
+
 /** Création d'une démo : prospect + site puis job de génération asynchrone. */
 export async function createDemo(input: unknown): Promise<DemoFormState> {
   await requireAdmin();
@@ -191,7 +229,7 @@ export async function duplicateDemo(siteId: string): Promise<void> {
   redirect(`/demos/${newSiteId}/edit`);
 }
 
-const updateDemoSchema = demoFormSchema.omit({ googlePlace: true }).extend({
+const updateDemoSchema = demoFormSchema.extend({
   siteId: z.string().uuid(),
   themePreset: z.enum(THEME_PRESETS),
 });
@@ -218,8 +256,23 @@ export async function updateDemo(input: unknown): Promise<DemoFormState> {
         profession: data.profession,
         city: data.city,
         gender: data.gender,
+        // Fiche Google : uniquement si une nouvelle fiche a été sélectionnée
+        ...(data.googlePlace
+          ? {
+              googlePlaceId: data.googlePlace.placeId,
+              googleBusinessName: data.googlePlace.name,
+              googleAddress: data.googlePlace.address,
+              googleRating: data.googlePlace.rating,
+              googleReviewCount: data.googlePlace.reviewCount,
+            }
+          : {}),
       })
       .where(eq(prospects.id, site.prospectId));
+
+    // Récupération immédiate des vrais avis de la nouvelle fiche (best-effort)
+    if (data.googlePlace) {
+      await refreshReviewsFromPlace(site.id, site.prospectId, data.googlePlace.placeId);
+    }
   }
 
   await db

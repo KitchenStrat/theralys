@@ -17,7 +17,8 @@
     "@theralys/ai": "workspace:*",
     "@theralys/db": "workspace:*",
     "@theralys/shared": "workspace:*",
-    "drizzle-orm": "^0.44.0"
+    "drizzle-orm": "^0.44.0",
+    "@theralys/providers": "workspace:*"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",

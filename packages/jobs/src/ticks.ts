@@ -34,6 +34,7 @@ import {
 import { readingTimeMinutes, slugify } from "@theralys/shared";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
 import { generateMockSearchStats } from "./google-mock";
+import { createGooglePlacesProvider } from "@theralys/providers/google";
 import { generateMockReviews } from "./reviews-mock";
 
 const HORIZON_WEEKS = 6;
@@ -268,12 +269,45 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
   });
   let processed = 0;
 
+  const places = createGooglePlacesProvider();
+
   for (const connection of connections) {
     const site = await db.query.sites.findFirst({ where: eq(sites.id, connection.siteId) });
     if (!site) continue;
     const prospect = site.prospectId
       ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
       : null;
+
+    // Fiche Google reliée + API réelle : les vrais avis remplacent tout
+    if (places.mode === "google" && prospect?.googlePlaceId) {
+      try {
+        const details = await places.fetchDetails(prospect.googlePlaceId);
+        if (details.reviews.length > 0) {
+          await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
+          await db.insert(googleReviews).values(
+            details.reviews.map((r) => ({
+              siteId: site.id,
+              sourceReviewId: r.sourceReviewId,
+              authorName: r.authorName,
+              rating: r.rating,
+              text: r.text,
+              reviewedAt: r.reviewedAt,
+              syncedAt: now,
+            })),
+          );
+          if (details.rating !== null) {
+            await db
+              .update(prospects)
+              .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+              .where(eq(prospects.id, prospect.id));
+          }
+          processed += details.reviews.length;
+        }
+        continue;
+      } catch (err) {
+        console.warn(`[sync-reviews] fiche Google indisponible pour ${site.slug} :`, err);
+      }
+    }
 
     const incoming = generateMockReviews({
       siteId: site.id,

@@ -8,12 +8,14 @@ import {
   blogSettings,
   getDb,
   googleConnections,
+  googleReviews,
   onboardingTasks,
   pages,
   prospects,
   sites,
 } from "@theralys/db";
 import { createImageProvider } from "@theralys/ai";
+import { createGooglePlacesProvider, type GooglePlaceResult } from "@theralys/providers/google";
 import { syncGoogleData } from "@theralys/jobs";
 import {
   signPreviewToken,
@@ -46,6 +48,84 @@ export async function completeOnboardingTask(key: string): Promise<void> {
 }
 
 // ─── Connexion Google (OAuth — mock tant que GOOGLE_CLIENT_ID est absent) ────
+
+/** Recherche de fiche Google depuis l'éditeur (client ou accès agence). */
+export async function searchGoogle(query: unknown): Promise<GooglePlaceResult[]> {
+  await requireClient();
+  const parsed = z.string().trim().min(3).max(120).safeParse(query);
+  if (!parsed.success) return [];
+  try {
+    return await createGooglePlacesProvider().search(parsed.data);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Relie la fiche Google du praticien à son site : met à jour la fiche
+ * prospect (note, nombre d'avis) et récupère immédiatement les vrais avis
+ * quand l'API Places est configurée.
+ */
+export async function connectGooglePlace(input: unknown): Promise<{ error?: string }> {
+  const session = await requireClient();
+  const parsed = z
+    .object({
+      placeId: z.string().min(3),
+      name: z.string(),
+      address: z.string(),
+      rating: z.number(),
+      reviewCount: z.number(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Fiche invalide" };
+
+  const db = getDb();
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
+  if (!site?.prospectId) return { error: "Site sans fiche praticien" };
+
+  await db
+    .update(prospects)
+    .set({
+      googlePlaceId: parsed.data.placeId,
+      googleBusinessName: parsed.data.name,
+      googleAddress: parsed.data.address,
+      googleRating: parsed.data.rating,
+      googleReviewCount: parsed.data.reviewCount,
+    })
+    .where(eq(prospects.id, site.prospectId));
+
+  // Vrais avis tout de suite (API réelle uniquement — best-effort)
+  const places = createGooglePlacesProvider();
+  if (places.mode === "google") {
+    try {
+      const details = await places.fetchDetails(parsed.data.placeId);
+      if (details.reviews.length > 0) {
+        await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
+        await db.insert(googleReviews).values(
+          details.reviews.map((r) => ({
+            siteId: site.id,
+            sourceReviewId: r.sourceReviewId,
+            authorName: r.authorName,
+            rating: r.rating,
+            text: r.text,
+            reviewedAt: r.reviewedAt,
+          })),
+        );
+        if (details.rating !== null) {
+          await db
+            .update(prospects)
+            .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+            .where(eq(prospects.id, site.prospectId));
+        }
+      }
+    } catch (err) {
+      console.warn("[reviews] récupération des avis de la fiche impossible :", err);
+    }
+  }
+
+  revalidatePath("/editor");
+  return {};
+}
 
 export async function connectGoogle(): Promise<{ error?: string } | void> {
   const session = await requireClient();

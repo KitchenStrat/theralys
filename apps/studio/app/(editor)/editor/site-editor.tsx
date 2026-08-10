@@ -14,7 +14,13 @@ import {
   type ThemeCorners,
   type ThemeAmbiance,
 } from "@theralys/shared";
-import { savePageSections, saveSiteSettings, saveSiteStyle } from "../../(app)/actions";
+import {
+  connectGooglePlace,
+  savePageSections,
+  saveSiteSettings,
+  saveSiteStyle,
+  searchGoogle,
+} from "../../(app)/actions";
 import { SECTION_LABELS, SectionFields } from "./section-fields";
 
 type PageRef = { id: string; type: string; slug: string; title: string };
@@ -34,6 +40,12 @@ type Props = {
     updatedAt: string;
   };
   city: string;
+  googleBusiness: {
+    name: string;
+    address: string;
+    rating: number | null;
+    reviewCount: number | null;
+  } | null;
   pages: PageRef[];
   selectedPage: { id: string; type: string; slug: string; sections: Section[] } | null;
 };
@@ -80,7 +92,7 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   lavande: "#6f5b9c",
 };
 
-export function SiteEditor({ site, city, pages, selectedPage }: Props) {
+export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: Props) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("contenu");
   const [sections, setSections] = useState<Section[]>(selectedPage?.sections ?? []);
@@ -108,6 +120,57 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Fiche Google (recherche + connexion)
+  const [gBusiness, setGBusiness] = useState(googleBusiness);
+  const [gQuery, setGQuery] = useState("");
+  const [gResults, setGResults] = useState<
+    { placeId: string; name: string; address: string; rating: number; reviewCount: number }[]
+  >([]);
+  const [gSearching, setGSearching] = useState(false);
+  const [gStatus, setGStatus] = useState<string | null>(null);
+  const gTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  function onGoogleQueryChange(value: string) {
+    setGQuery(value);
+    setGStatus(null);
+    clearTimeout(gTimer.current);
+    if (value.trim().length < 3) {
+      setGResults([]);
+      return;
+    }
+    gTimer.current = setTimeout(() => {
+      setGSearching(true);
+      searchGoogle(value)
+        .then(setGResults)
+        .finally(() => setGSearching(false));
+    }, 350);
+  }
+
+  async function onConnectPlace(place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating: number;
+    reviewCount: number;
+  }) {
+    setGStatus(null);
+    const result = await connectGooglePlace(place);
+    if (result.error) {
+      setGStatus(result.error);
+      return;
+    }
+    setGBusiness({
+      name: place.name,
+      address: place.address,
+      rating: place.rating,
+      reviewCount: place.reviewCount,
+    });
+    setGQuery("");
+    setGResults([]);
+    setGStatus("Fiche reliée — les avis Google du site sont synchronisés.");
+    setPreviewKey((k) => k + 1);
+  }
 
   async function uploadLogo(file: File) {
     setLogoUploading(true);
@@ -532,6 +595,70 @@ export function SiteEditor({ site, city, pages, selectedPage }: Props) {
                     }}
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
+                </FieldBlock>
+                <FieldBlock
+                  label="Fiche Google"
+                  hint="Les vrais avis Google de la fiche s'affichent sur le site."
+                >
+                  {gBusiness ? (
+                    <div className="mb-2 rounded-xl bg-cream-100 px-3 py-2 text-sm">
+                      <p className="font-medium">{gBusiness.name}</p>
+                      <p className="text-xs text-ink-500">
+                        {gBusiness.address}
+                        {gBusiness.rating ? (
+                          <>
+                            {" · ★ "}
+                            {gBusiness.rating}
+                            {gBusiness.reviewCount ? ` (${gBusiness.reviewCount} avis)` : null}
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                  ) : null}
+                  <input
+                    value={gQuery}
+                    onChange={(e) => onGoogleQueryChange(e.target.value)}
+                    placeholder={
+                      gBusiness ? "Changer de fiche : rechercher…" : "Rechercher votre cabinet sur Google…"
+                    }
+                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                  />
+                  {gSearching ? (
+                    <p className="mt-2 flex items-center gap-2 text-xs text-ink-500">
+                      <Spinner /> Recherche…
+                    </p>
+                  ) : null}
+                  {gResults.length > 0 ? (
+                    <ul className="mt-2 overflow-hidden rounded-xl border border-cream-300">
+                      {gResults.map((place) => (
+                        <li key={place.placeId}>
+                          <button
+                            type="button"
+                            onClick={() => void onConnectPlace(place)}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-cream-100"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium">{place.name}</span>
+                              <span className="block truncate text-xs text-ink-500">{place.address}</span>
+                            </span>
+                            <span className="shrink-0 text-xs text-primary-600">
+                              ★ {place.rating} · {place.reviewCount}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {gStatus ? (
+                    <p
+                      className={clsx(
+                        "mt-2 text-xs",
+                        gStatus.startsWith("Fiche reliée") ? "text-success-500" : "text-danger-500",
+                      )}
+                    >
+                      {gStatus}
+                    </p>
+                  ) : null}
                 </FieldBlock>
                 <p className="text-xs text-ink-500">
                   Téléphone, adresse et horaires se modifient dans la section « Contact » de la

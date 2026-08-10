@@ -14,11 +14,13 @@ import {
   googleReviews,
   motifPagesAllowance,
   pages,
+  prospects,
   sites,
   type GenerationProgress,
   type Prospect,
   type Site,
 } from "@theralys/db";
+import { createGooglePlacesProvider } from "@theralys/providers/google";
 import { readingTimeMinutes, slugify } from "@theralys/shared";
 
 /**
@@ -140,7 +142,7 @@ async function generate(site: Site): Promise<void> {
   // (300 s) avec les modèles les plus lents — en parallèle, on tient large.
   const results = await Promise.allSettled([
     generateMotifPagesStep(site, generator, input, home.motifsPlan, imageProvider, themeColor),
-    generateReviewsStep(site, generator, input),
+    generateReviewsStep(site, generator, input, prospect.googlePlaceId),
     generateArticlesStep(site, generator, input, home.motifsPlan, imageProvider, themeColor),
   ]);
   const failure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
@@ -202,8 +204,42 @@ async function generateReviewsStep(
   site: Site,
   generator: SiteGenerator,
   input: GenerationInput,
+  googlePlaceId: string | null,
 ): Promise<void> {
   const db = getDb();
+
+  // Fiche Google reliée + API configurée → les VRAIS avis de la fiche
+  // (jusqu'à 5, limite de l'API Places). Repli sur les avis IA en cas d'échec.
+  const places = createGooglePlacesProvider();
+  if (googlePlaceId && places.mode === "google") {
+    try {
+      const details = await places.fetchDetails(googlePlaceId);
+      if (details.reviews.length > 0) {
+        await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
+        await db.insert(googleReviews).values(
+          details.reviews.map((r) => ({
+            siteId: site.id,
+            sourceReviewId: r.sourceReviewId,
+            authorName: r.authorName,
+            rating: r.rating,
+            text: r.text,
+            reviewedAt: r.reviewedAt,
+          })),
+        );
+        if (site.prospectId && details.rating !== null) {
+          await db
+            .update(prospects)
+            .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+            .where(eq(prospects.id, site.prospectId));
+        }
+        await setProgress(site.id, { reviews: true });
+        return;
+      }
+    } catch (err) {
+      console.warn("[reviews] fiche Google indisponible, repli sur les avis IA :", err);
+    }
+  }
+
   const reviews = await generator.generateReviews(input);
   await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
   await db.insert(googleReviews).values(

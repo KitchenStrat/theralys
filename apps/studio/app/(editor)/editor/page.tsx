@@ -31,6 +31,16 @@ export default async function EditorPage({ searchParams }: Props) {
         updatedAt: site.updatedAt.toISOString(),
       }}
       city={prospect?.city ?? ""}
+      googleBusiness={
+        prospect?.googlePlaceId
+          ? {
+              name: prospect.googleBusinessName ?? "Fiche Google",
+              address: prospect.googleAddress ?? "",
+              rating: prospect.googleRating,
+              reviewCount: prospect.googleReviewCount,
+            }
+          : null
+      }
       pages={pages.map((p) => ({
         id: p.id,
         type: p.type,
