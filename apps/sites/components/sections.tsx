@@ -246,9 +246,17 @@ const ICON_PATHS: Record<string, ReactNode> = {
 };
 
 /** Icône d'encart par nom (repli : cœur si le nom est inconnu). */
-function SectionIcon({ name, size = 28 }: { name?: string; size?: number }) {
+function SectionIcon({
+  name,
+  size = 28,
+  strokeWidth = 1.6,
+}: {
+  name?: string;
+  size?: number;
+  strokeWidth?: number;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} aria-hidden>
       {ICON_PATHS[name ?? ""] ?? ICON_PATHS.coeur}
     </svg>
   );
@@ -484,19 +492,19 @@ function Highlights({ section }: { section: Extract<Section, { type: "highlights
       }}
     >
       <div aria-hidden className="wave-bg-light absolute inset-0" />
-      <div className={`relative mx-auto grid max-w-7xl gap-6 px-4 sm:grid-cols-2 ${cols}`}>
+      <div className={`relative mx-auto grid max-w-7xl gap-7 px-4 sm:grid-cols-2 ${cols}`}>
         {section.items.map((item, i) => (
           <div
             key={i}
             style={{ transitionDelay: `${Math.min(i, 5) * 80}ms` }}
-            className="reveal rounded-[var(--r-md)] bg-[var(--site-bg)] p-8 text-center text-[var(--site-text)] shadow-lg shadow-black/15"
+            className="reveal flex flex-col items-center justify-center rounded-[var(--r-md)] bg-[var(--site-bg)] px-7 py-10 text-center text-[var(--site-text)] shadow-lg shadow-black/15"
           >
-            <span className="mx-auto flex h-12 w-12 items-center justify-center text-[var(--site-primary)]">
-              <SectionIcon name={item.icon} size={34} />
+            <span className="flex h-14 w-14 items-center justify-center text-[var(--site-primary)]">
+              <SectionIcon name={item.icon} size={46} strokeWidth={1.9} />
             </span>
-            <h3 className="mt-3 text-xl font-bold">{item.title}</h3>
+            <h3 className="mt-4 text-[1.55rem] font-bold leading-snug">{item.title}</h3>
             {item.text ? (
-              <p className="mt-2 text-[0.95rem] leading-relaxed opacity-75">
+              <p className="mt-2.5 text-[1.08rem] leading-relaxed opacity-75">
                 <Rich text={item.text} />
               </p>
             ) : null}
