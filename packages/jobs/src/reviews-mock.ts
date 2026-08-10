@@ -5,9 +5,12 @@
  * l'OAuth Google réel sera branché.
  */
 
+import { mockReviewerAvatarDataUri } from "@theralys/providers/google";
+
 export type MockReview = {
   sourceReviewId: string;
   authorName: string;
+  authorPhotoUrl: string | null;
   rating: number;
   text: string;
   reviewedAt: Date;
@@ -69,6 +72,8 @@ export function generateMockReviews(opts: {
     return {
       sourceReviewId: `mock-${opts.siteId.slice(0, 8)}-${i}`,
       authorName: author,
+      // Un avis sur deux avec photo, comme sur une vraie fiche
+      authorPhotoUrl: (seed + i) % 2 === 0 ? mockReviewerAvatarDataUri(author) : null,
       rating,
       text,
       reviewedAt,

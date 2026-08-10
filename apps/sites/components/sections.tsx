@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
-import type { Section } from "@theralys/shared";
+import { reviewDateFr, type Section } from "@theralys/shared";
+import { GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
 
@@ -11,6 +12,10 @@ export type SectionContext = {
   reviews: GoogleReview[];
   googleRating: number | null;
   googleReviewCount: number | null;
+  /** Fiche Google reliée (avis réels) : identifiant, nom et photo de la fiche */
+  googlePlaceId?: string | null;
+  googleBusinessName?: string | null;
+  googlePhotoUrl?: string | null;
   /** Slugs des pages de motifs visibles (gating par formule) — null = tous */
   allowedMotifSlugs?: string[] | null;
   /** Coordonnées extraites de la section contact (réutilisées par le hero) */
@@ -762,6 +767,16 @@ function Reviews({
   ctx: SectionContext;
 }) {
   if (ctx.reviews.length === 0) return null;
+  const businessName = ctx.googleBusinessName ?? ctx.site.name;
+  const now = new Date();
+  const cards = ctx.reviews.slice(0, 8).map((review) => ({
+    id: review.id,
+    authorName: review.authorName,
+    authorPhotoUrl: review.authorPhotoUrl,
+    rating: review.rating,
+    dateLabel: review.reviewedAt ? reviewDateFr(review.reviewedAt, now) : null,
+    text: review.text,
+  }));
   return (
     <section id="avis" className="relative scroll-mt-20 overflow-hidden py-20">
       <div
@@ -775,40 +790,45 @@ function Reviews({
       />
       <div className="relative mx-auto max-w-7xl px-4">
         <div className="grid items-start gap-6 lg:grid-cols-[19rem_1fr]">
-          <div className="reveal rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm">
-            <p className="text-lg font-semibold">{ctx.site.name}</p>
+          <div className="reveal rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 shadow-sm">
+            <div className="flex items-center gap-3.5">
+              {ctx.googlePhotoUrl ? (
+                <img
+                  src={ctx.googlePhotoUrl}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="h-14 w-14 shrink-0 rounded-full object-cover shadow-sm"
+                />
+              ) : null}
+              <p className="text-lg font-semibold leading-snug">{businessName}</p>
+            </div>
             {ctx.googleRating ? (
               <>
-                <p className="mt-1 flex items-center gap-2">
+                <p className="mt-3 flex items-center gap-2">
                   <span className="text-4xl font-bold">{ctx.googleRating}</span>
-                  <Stars rating={ctx.googleRating} />
+                  <GoogleStars rating={ctx.googleRating} className="text-[1.2rem]" />
                 </p>
                 <p className="mt-1 text-sm opacity-70">
                   {ctx.googleReviewCount ? `${ctx.googleReviewCount} avis Google` : "Avis Google"}
                 </p>
               </>
             ) : (
-              <p className="mt-1 text-sm opacity-70">{section.title}</p>
+              <p className="mt-3 text-sm opacity-70">{section.title}</p>
             )}
-            {section.intro ? <p className="mt-3 text-sm opacity-75">{section.intro}</p> : null}
-          </div>
-          <div className="flex snap-x gap-4 overflow-x-auto pb-3">
-            {ctx.reviews.slice(0, 8).map((review, index) => (
-              <figure
-                key={review.id}
-                style={{ transitionDelay: `${Math.min(index, 4) * 80}ms` }}
-                className="reveal w-[24rem] shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-8 shadow-sm"
+            {ctx.googlePlaceId ? (
+              <a
+                href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(ctx.googlePlaceId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-block rounded-[var(--r-pill)] border border-current/25 px-5 py-2 text-sm font-medium transition hover:bg-[var(--site-soft)]"
               >
-                <figcaption className="min-w-0">
-                  <span className="block truncate font-semibold">{review.authorName}</span>
-                  <span className="block text-xs opacity-60">Avis Google</span>
-                </figcaption>
-                <Stars rating={review.rating} className="mt-3 block" />
-                <blockquote className="mt-3 line-clamp-6 text-[1.05rem] leading-relaxed opacity-85">
-                  {review.text}
-                </blockquote>
-              </figure>
-            ))}
+                Écrire un avis
+              </a>
+            ) : null}
+            {section.intro ? <p className="mt-4 text-sm opacity-75">{section.intro}</p> : null}
+          </div>
+          <div className="reveal min-w-0">
+            <GoogleReviewsCarousel reviews={cards} />
           </div>
         </div>
       </div>

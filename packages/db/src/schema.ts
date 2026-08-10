@@ -108,6 +108,8 @@ export const prospects = pgTable("prospects", {
   googleAddress: text("google_address"),
   googleRating: real("google_rating"),
   googleReviewCount: integer("google_review_count"),
+  // Photo principale de la fiche (URL googleusercontent résolue côté serveur)
+  googlePhotoUrl: text("google_photo_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -282,6 +284,8 @@ export const googleReviews = pgTable(
       .references(() => sites.id, { onDelete: "cascade" }),
     sourceReviewId: text("source_review_id"),
     authorName: text("author_name").notNull(),
+    // Photo de profil Google de l'auteur (null → pastille avec initiale)
+    authorPhotoUrl: text("author_photo_url"),
     rating: integer("rating").notNull(), // 1..5
     text: text("text").notNull(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),

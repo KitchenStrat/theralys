@@ -19,6 +19,8 @@ export type GooglePlaceResult = {
 export type GooglePlaceReview = {
   sourceReviewId: string | null;
   authorName: string;
+  /** Photo de profil Google de l'auteur (googleusercontent, publique). */
+  authorPhotoUrl: string | null;
   rating: number;
   text: string;
   reviewedAt: Date | null;
@@ -27,6 +29,8 @@ export type GooglePlaceReview = {
 export type GooglePlaceDetails = {
   rating: number | null;
   reviewCount: number | null;
+  /** Photo principale de la fiche, résolue côté serveur (jamais de clé API dans l'URL). */
+  photoUrl: string | null;
   reviews: GooglePlaceReview[];
 };
 
@@ -84,7 +88,7 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
       {
         headers: {
           "X-Goog-Api-Key": this.apiKey,
-          "X-Goog-FieldMask": "id,rating,userRatingCount,reviews",
+          "X-Goog-FieldMask": "id,rating,userRatingCount,reviews,photos",
         },
       },
     );
@@ -94,28 +98,51 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
     const data = (await response.json()) as {
       rating?: number;
       userRatingCount?: number;
+      photos?: { name?: string }[];
       reviews?: {
         name?: string;
         rating?: number;
         text?: { text?: string };
         originalText?: { text?: string };
-        authorAttribution?: { displayName?: string };
+        authorAttribution?: { displayName?: string; photoUri?: string };
         publishTime?: string;
       }[];
     };
     return {
       rating: data.rating ?? null,
       reviewCount: data.userRatingCount ?? null,
+      photoUrl: await this.resolvePhotoUrl(data.photos?.[0]?.name),
       reviews: (data.reviews ?? [])
         .map((r) => ({
           sourceReviewId: r.name ?? null,
           authorName: r.authorAttribution?.displayName ?? "Client Google",
+          authorPhotoUrl: r.authorAttribution?.photoUri ?? null,
           rating: Math.round(r.rating ?? 5),
           text: r.text?.text ?? r.originalText?.text ?? "",
           reviewedAt: r.publishTime ? new Date(r.publishTime) : null,
         }))
         .filter((r) => r.text.length > 0),
     };
+  }
+
+  /**
+   * Échange le nom de photo Places contre son URL publique googleusercontent
+   * (skipHttpRedirect) : la clé API reste côté serveur, l'URL stockée est
+   * affichable telle quelle sur le site public. Best-effort.
+   */
+  private async resolvePhotoUrl(photoName: string | undefined): Promise<string | null> {
+    if (!photoName) return null;
+    try {
+      const response = await fetch(
+        `${PLACES_BASE}/${photoName}/media?maxWidthPx=400&skipHttpRedirect=true`,
+        { headers: { "X-Goog-Api-Key": this.apiKey } },
+      );
+      if (!response.ok) return null;
+      const data = (await response.json()) as { photoUri?: string };
+      return data.photoUri ?? null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -139,9 +166,13 @@ export class MockGooglePlacesProvider implements GooglePlacesProvider {
     return {
       rating: 4.9,
       reviewCount: 34,
+      photoUrl: mockPlacePhotoDataUri(),
       reviews: authors.map((authorName, i) => ({
         sourceReviewId: `${placeId}-avis-${i + 1}`,
         authorName,
+        // Un avis sur deux avec photo de profil : les deux rendus (photo /
+        // pastille initiale) restent visibles dans les démos locales.
+        authorPhotoUrl: i % 2 === 0 ? mockReviewerAvatarDataUri(authorName) : null,
         rating: i === 3 ? 4 : 5,
         text: [
           "Un accueil chaleureux et une vraie écoute. Je ressors de chaque séance apaisé(e), je recommande vivement !",
@@ -165,4 +196,35 @@ export function createGooglePlacesProvider(
 
 function slugKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+}
+
+// ─── Images mock (data URI SVG : aucune requête réseau en local) ─────────────
+
+const AVATAR_COLORS = ["#7c5cbf", "#d1477a", "#3a7bd5", "#2f9e6e", "#d97d3c"];
+
+/** Silhouette de profil dans un cercle coloré, déterministe par nom. */
+export function mockReviewerAvatarDataUri(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  const color = AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]!;
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'>` +
+    `<circle cx='20' cy='20' r='20' fill='${color}'/>` +
+    `<circle cx='20' cy='15' r='7' fill='rgba(255,255,255,.9)'/>` +
+    `<path d='M6 38c2-9 9-12 14-12s12 3 14 12z' fill='rgba(255,255,255,.9)'/>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** Vignette « devanture de cabinet » pour la photo de fiche mock. */
+export function mockPlacePhotoDataUri(): string {
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'>` +
+    `<rect width='80' height='80' fill='#e8dfd3'/>` +
+    `<rect x='12' y='26' width='56' height='42' fill='#b5a48c'/>` +
+    `<rect x='18' y='34' width='18' height='16' fill='#f4efe7'/>` +
+    `<rect x='44' y='34' width='18' height='34' fill='#8a7a63'/>` +
+    `<path d='M8 28 L40 10 L72 28 Z' fill='#6f8f6f'/>` +
+    `</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

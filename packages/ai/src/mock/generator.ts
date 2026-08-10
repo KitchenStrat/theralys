@@ -347,7 +347,6 @@ export function mockGenerateArticles(
   input: GenerationInput,
   motifs: MotifPlan[],
 ): GeneratedArticle[] {
-  const seed = resolveProfession(input.profession);
   const picks = motifs.slice(0, 3);
   const templates = [
     (m: MotifPlan) => ({

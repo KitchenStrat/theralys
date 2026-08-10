@@ -71,6 +71,7 @@ async function refreshReviewsFromPlace(
         siteId,
         sourceReviewId: r.sourceReviewId,
         authorName: r.authorName,
+        authorPhotoUrl: r.authorPhotoUrl,
         rating: r.rating,
         text: r.text,
         reviewedAt: r.reviewedAt,
@@ -79,7 +80,11 @@ async function refreshReviewsFromPlace(
     if (details.rating !== null) {
       await db
         .update(prospects)
-        .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+        .set({
+          googleRating: details.rating,
+          googleReviewCount: details.reviewCount,
+          ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
+        })
         .where(eq(prospects.id, prospectId));
     }
   } catch (err) {

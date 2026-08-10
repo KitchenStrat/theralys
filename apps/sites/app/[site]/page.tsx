@@ -74,6 +74,9 @@ export default async function HomePage({ params }: Props) {
           reviews,
           googleRating,
           googleReviewCount,
+          googlePlaceId: prospect?.googlePlaceId ?? null,
+          googleBusinessName: prospect?.googleBusinessName ?? null,
+          googlePhotoUrl: prospect?.googlePhotoUrl ?? null,
           allowedMotifSlugs: motifPages.map((p) => p.slug),
         }}
       />

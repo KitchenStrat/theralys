@@ -221,6 +221,7 @@ async function generateReviewsStep(
             siteId: site.id,
             sourceReviewId: r.sourceReviewId,
             authorName: r.authorName,
+            authorPhotoUrl: r.authorPhotoUrl,
             rating: r.rating,
             text: r.text,
             reviewedAt: r.reviewedAt,
@@ -229,7 +230,11 @@ async function generateReviewsStep(
         if (site.prospectId && details.rating !== null) {
           await db
             .update(prospects)
-            .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+            .set({
+              googleRating: details.rating,
+              googleReviewCount: details.reviewCount,
+              ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
+            })
             .where(eq(prospects.id, site.prospectId));
         }
         await setProgress(site.id, { reviews: true });

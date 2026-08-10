@@ -289,6 +289,7 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
               siteId: site.id,
               sourceReviewId: r.sourceReviewId,
               authorName: r.authorName,
+              authorPhotoUrl: r.authorPhotoUrl,
               rating: r.rating,
               text: r.text,
               reviewedAt: r.reviewedAt,
@@ -298,7 +299,11 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
           if (details.rating !== null) {
             await db
               .update(prospects)
-              .set({ googleRating: details.rating, googleReviewCount: details.reviewCount })
+              .set({
+                googleRating: details.rating,
+                googleReviewCount: details.reviewCount,
+                ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
+              })
               .where(eq(prospects.id, prospect.id));
           }
           processed += details.reviews.length;
@@ -329,6 +334,7 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
           siteId: site.id,
           sourceReviewId: r.sourceReviewId,
           authorName: r.authorName,
+          authorPhotoUrl: r.authorPhotoUrl,
           rating: r.rating,
           text: r.text,
           reviewedAt: r.reviewedAt,

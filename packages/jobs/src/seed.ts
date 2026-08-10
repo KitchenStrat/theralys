@@ -35,6 +35,7 @@ import {
   sites,
   users,
 } from "@theralys/db";
+import { mockPlacePhotoDataUri, mockReviewerAvatarDataUri } from "@theralys/providers/google";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
 import {
   ensureEditorialCalendars,
@@ -224,6 +225,7 @@ async function createDemoSite() {
       googleAddress: input.googleEnrichment.address,
       googleRating: input.googleEnrichment.rating,
       googleReviewCount: input.googleEnrichment.reviewCount,
+      googlePhotoUrl: mockPlacePhotoDataUri(),
     })
     .returning();
 
@@ -271,7 +273,13 @@ async function createDemoSite() {
   }
   const reviews = await generator.generateReviews(input);
   await db.insert(googleReviews).values(
-    reviews.map((r) => ({ siteId, authorName: r.authorName, rating: r.rating, text: r.text })),
+    reviews.map((r, i) => ({
+      siteId,
+      authorName: r.authorName,
+      authorPhotoUrl: i % 2 === 0 ? mockReviewerAvatarDataUri(r.authorName) : null,
+      rating: r.rating,
+      text: r.text,
+    })),
   );
   await db.insert(blogSettings).values({ siteId, voiceAccord: "feminin" });
   return site!;

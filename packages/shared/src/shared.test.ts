@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { signPreviewToken, verifyPreviewToken } from "./preview-token";
-import { readingTimeMinutes, relativeTimeFr } from "./dates";
+import { readingTimeMinutes, relativeTimeFr, reviewDateFr } from "./dates";
 import { slugify, uniqueSlug } from "./slug";
 
 describe("slugify", () => {
@@ -48,6 +48,15 @@ describe("dates", () => {
     expect(relativeTimeFr(new Date("2026-07-15T11:59:40Z"), now)).toBe("à l'instant");
     expect(relativeTimeFr(new Date("2026-07-15T11:30:00Z"), now)).toContain("30");
     expect(relativeTimeFr(new Date("2026-07-12T12:00:00Z"), now)).toContain("3");
+  });
+
+  it("reviewDateFr : jours, semaines, mois, ans façon Google", () => {
+    const now = new Date("2026-07-15T12:00:00Z");
+    expect(reviewDateFr(new Date("2026-07-15T08:00:00Z"), now)).toBe("aujourd'hui");
+    expect(reviewDateFr(new Date("2026-07-11T12:00:00Z"), now)).toBe("il y a 4 jours");
+    expect(reviewDateFr(new Date("2026-06-17T12:00:00Z"), now)).toBe("il y a 4 semaines");
+    expect(reviewDateFr(new Date("2026-04-15T12:00:00Z"), now)).toBe("il y a 3 mois");
+    expect(reviewDateFr(new Date("2024-06-15T12:00:00Z"), now)).toBe("il y a 2 ans");
   });
 
   it("readingTimeMinutes : 200 mots/min, minimum 1", () => {
