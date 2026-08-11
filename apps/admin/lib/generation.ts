@@ -91,11 +91,24 @@ async function generate(site: Site): Promise<void> {
     input.gender === "feminin"
       ? "a French woman in her thirties, a wellness practitioner"
       : "a French man in his thirties, a wellness practitioner";
+  // Ostéopathes, chiropracteurs, étiopathes : cabinet plus médical et sobre
+  // (table de soin professionnelle, tons neutres) — chaleureux mais clinique.
+  const medicalCabinet = /ost[ée]opath|chiro|[ée]tiopath/.test(input.profession.toLowerCase());
+  const heroCabinet = medicalCabinet
+    ? {
+        subject:
+          "interior of a modern osteopathy consultation room in France, empty room, professional adjustable treatment table, clean and uncluttered medical practice, anatomical model on a tidy desk, white walls with light wood accents",
+        mood: "soft warm daylight through a large window, sober professional yet welcoming atmosphere, neutral palette, one discreet green plant, high-end interior photography, sharp focus",
+      }
+    : {
+        subject:
+          "interior of an elegant wellness practitioner's consultation room in France, empty room, massage table or armchairs, plants and soft textiles",
+        mood: "golden hour, warm sunlight streaming through a window, cozy and inviting, high-end interior photography, sharp focus",
+      };
   const [heroImage, aboutImage, futureImage] = await Promise.all([
     tryGenerateImage(imageProvider, {
-      subject:
-        "interior of an elegant wellness practitioner's consultation room in France, empty room, massage table or armchairs, plants and soft textiles",
-      mood: "golden hour, warm sunlight streaming through a window, cozy and inviting, high-end interior photography, sharp focus",
+      subject: heroCabinet.subject,
+      mood: heroCabinet.mood,
       themeColor,
       width: 960,
       height: 1152,
