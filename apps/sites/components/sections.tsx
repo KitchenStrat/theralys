@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
-import { reviewDateFr, type Section } from "@theralys/shared";
+import { reviewDateFr, specialtyIconFor, type Section } from "@theralys/shared";
 import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
@@ -200,6 +200,33 @@ const ICON_PATHS: Record<string, ReactNode> = {
     <>
       <path d="M3.5 6.5 9 4.5l6 2 5.5-2v13l-5.5 2-6-2-5.5 2z" strokeLinejoin="round" />
       <path d="M9 4.5v13M15 6.5v13" />
+    </>
+  ),
+  colonne: (
+    <>
+      <rect x="9.2" y="2.8" width="5.6" height="3.6" rx="1.5" />
+      <rect x="9.2" y="7.8" width="5.6" height="3.6" rx="1.5" />
+      <rect x="9.2" y="12.8" width="5.6" height="3.6" rx="1.5" />
+      <rect x="9.2" y="17.8" width="5.6" height="3.6" rx="1.5" />
+    </>
+  ),
+  bebe: (
+    <>
+      <circle cx="12" cy="8.5" r="4.5" />
+      <path d="M12 4c.2-1.2 1-2 2.1-2" strokeLinecap="round" />
+      <path d="M5.5 21c.7-4.4 3.2-6.8 6.5-6.8s5.8 2.4 6.5 6.8" strokeLinecap="round" />
+    </>
+  ),
+  lune: <path d="M19.5 14.5A8.5 8.5 0 1 1 9.5 4.5a7 7 0 0 0 10 10z" strokeLinejoin="round" />,
+  eclair: <path d="M13.5 2.5 5.5 13.5h5l-1 8 8-11h-5z" strokeLinejoin="round" />,
+  tete: (
+    <>
+      <path
+        d="M9.5 21v-3.1a7.5 7.5 0 1 1 9.4-8.3c.2 1.3-.1 2.6-.8 3.7-.3.4-.3.9-.2 1.3l.7 1.8c.2.6-.2 1.2-.9 1.2h-1.2v.9c0 1.1-.9 2-2 2z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10.8 9.6c.8-.7 1.7-.7 2.5 0" strokeLinecap="round" />
     </>
   ),
   maison: (
@@ -555,15 +582,7 @@ function Specialties({
                 aria-hidden
                 className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
               >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 21c-4-2.5-6.5-5.5-6.5-9A6.5 6.5 0 0 1 12 5.5 6.5 6.5 0 0 1 18.5 12c0 3.5-2.5 6.5-6.5 9z"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M12 5.5V3M8.5 6.5 7 4.5M15.5 6.5 17 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
+                <SectionIcon name={item.icon ?? specialtyIconFor(item.title, index)} size={32} />
               </span>
               <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
                 {item.title}

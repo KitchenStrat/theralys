@@ -6,9 +6,11 @@ import { z } from "zod";
 import {
   blogArticles,
   blogSettings,
+  editorialCalendarEntries,
   getDb,
   googleConnections,
   googleReviews,
+  motifPagesAllowance,
   onboardingTasks,
   pages,
   prospects,
@@ -16,12 +18,14 @@ import {
 } from "@theralys/db";
 import {
   createImageProvider,
+  createSiteGenerator,
   createStockImageProvider,
   findStockOrGenerate,
   stockQueryFor,
+  type GenerationInput,
 } from "@theralys/ai";
 import { createGooglePlacesProvider, type GooglePlaceResult } from "@theralys/providers/google";
-import { syncGoogleData } from "@theralys/jobs";
+import { ensureEditorialCalendars, syncGoogleData } from "@theralys/jobs";
 import {
   signPreviewToken,
   THEME_PRESETS,
@@ -244,6 +248,127 @@ export async function updateArticle(input: unknown): Promise<{ error?: string }>
       updatedAt: new Date(),
     })
     .where(eq(blogArticles.id, articleId));
+  revalidatePath("/publications");
+  return {};
+}
+
+/**
+ * Régénère une page de spécialité (IA) après modification de son titre :
+ * nouveau contenu + nouvelle photo adaptée, le slug (URL) ne change pas.
+ * Synchronise la carte correspondante de l'accueil et re-planifie les sujets
+ * d'articles à venir de ce motif (les articles déjà rédigés restent).
+ */
+export async function regenerateMotifPage(input: unknown): Promise<{ error?: string }> {
+  const session = await requireClient();
+  const parsed = z
+    .object({
+      slug: z.string().min(1),
+      title: z.string().trim().min(3).max(120),
+      excerpt: z.string().trim().max(400).optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Titre invalide (3 caractères minimum)" };
+  const { slug, title, excerpt } = parsed.data;
+
+  const db = getDb();
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
+  if (!site?.prospectId) return { error: "Site sans fiche praticien" };
+  const prospect = await db.query.prospects.findFirst({
+    where: eq(prospects.id, site.prospectId),
+  });
+  if (!prospect) return { error: "Fiche praticien introuvable" };
+  const page = await db.query.pages.findFirst({
+    where: and(eq(pages.siteId, site.id), eq(pages.type, "motif"), eq(pages.slug, slug)),
+  });
+  if (!page) return { error: "Page de spécialité introuvable" };
+
+  const genInput: GenerationInput = {
+    firstName: prospect.firstName,
+    lastName: prospect.lastName,
+    profession: prospect.profession,
+    city: prospect.city,
+    gender: prospect.gender,
+    highlightedMotifs: site.highlightedMotifs ?? [],
+    motifPageCount: motifPagesAllowance(site.plan),
+    googleEnrichment: prospect.googleBusinessName
+      ? {
+          businessName: prospect.googleBusinessName ?? undefined,
+          address: prospect.googleAddress ?? undefined,
+          rating: prospect.googleRating ?? undefined,
+          reviewCount: prospect.googleReviewCount ?? undefined,
+        }
+      : undefined,
+  };
+
+  try {
+    const generated = await createSiteGenerator().generateMotifPage(genInput, {
+      slug,
+      title,
+      excerpt: excerpt || title,
+    });
+    // Nouvelle photo adaptée au nouveau titre (banque d'images, repli IA)
+    const image = await findStockOrGenerate(createStockImageProvider(), createImageProvider(), {
+      query: generated.imageQuery ?? stockQueryFor(title, prospect.profession),
+      subject: `wellness treatment scene evoking « ${title} », soothing hands-on care details, cozy practice room`,
+      seed: `${slug}-${Date.now()}`,
+      themeColor: site.theme.palette?.primary,
+      width: 960,
+      height: 1152,
+    });
+    const sections = generated.sections
+      .filter((s) => s.type !== "cta")
+      .map((s) => (s.type === "hero" ? { ...s, imageUrl: image?.url ?? s.imageUrl } : s));
+
+    await db
+      .update(pages)
+      .set({
+        title: generated.title,
+        metaTitle: generated.metaTitle,
+        metaDescription: generated.metaDescription,
+        sections,
+        updatedAt: new Date(),
+      })
+      .where(eq(pages.id, page.id));
+
+    // Carte correspondante de l'accueil : titre (et résumé) synchronisés
+    const home = await db.query.pages.findFirst({
+      where: and(eq(pages.siteId, site.id), eq(pages.type, "home")),
+    });
+    if (home) {
+      const homeSections = home.sections.map((s) =>
+        s.type === "specialties"
+          ? {
+              ...s,
+              items: s.items.map((it) =>
+                it.slug === slug ? { ...it, title, ...(excerpt ? { excerpt } : {}) } : it,
+              ),
+            }
+          : s,
+      );
+      await db
+        .update(pages)
+        .set({ sections: homeSections, updatedAt: new Date() })
+        .where(eq(pages.id, home.id));
+    }
+
+    // Blog : les sujets pas encore rédigés de ce motif sont re-planifiés avec
+    // le nouveau titre (calendrier éditorial du back office)
+    await db
+      .delete(editorialCalendarEntries)
+      .where(
+        and(
+          eq(editorialCalendarEntries.siteId, site.id),
+          eq(editorialCalendarEntries.motifSlug, slug),
+          eq(editorialCalendarEntries.status, "planned"),
+        ),
+      );
+    await ensureEditorialCalendars();
+  } catch (err) {
+    console.error("[motif] régénération impossible :", err);
+    return { error: "La régénération a échoué — réessayez dans un instant." };
+  }
+
+  revalidatePath("/editor");
   revalidatePath("/publications");
   return {};
 }

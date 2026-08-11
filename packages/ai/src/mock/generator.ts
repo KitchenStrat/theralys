@@ -3,7 +3,7 @@
  * sans appel API. Utilisé quand ANTHROPIC_API_KEY est absente ou AI_MOCK=1.
  */
 
-import { slugify, type PageSections } from "@theralys/shared";
+import { slugify, specialtyIconFor, type PageSections } from "@theralys/shared";
 import { mockVoicedArticle } from "../article";
 import { stockQueryFor } from "../stock";
 import { COMMON_FAQ, resolveProfession, type ProfessionSeed, type SpecialtySeed } from "./catalog";
@@ -123,7 +123,12 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       type: "specialties",
       title: "Mes spécialités",
       intro: `Chaque séance est construite avec vous, selon vos besoins du moment. Voici les accompagnements que je propose à ${input.city}.`,
-      items: motifs.map(({ slug, title, excerpt }) => ({ slug, title, excerpt })),
+      items: motifs.map(({ slug, title, excerpt }, i) => ({
+        slug,
+        title,
+        excerpt,
+        icon: specialtyIconFor(title, i),
+      })),
     },
     {
       type: "future",

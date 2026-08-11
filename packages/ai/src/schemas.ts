@@ -26,7 +26,12 @@ export const specialtiesSectionSchema = z.object({
   title: z.string(),
   intro: z.string().optional(),
   items: z.array(
-    z.object({ slug: z.string(), title: z.string(), excerpt: z.string() }),
+    z.object({
+      slug: z.string(),
+      title: z.string(),
+      excerpt: z.string(),
+      icon: z.string().optional(),
+    }),
   ),
 });
 

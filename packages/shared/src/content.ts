@@ -24,6 +24,11 @@ export const SECTION_ICONS = [
   "document",
   "bouclier",
   "personnes",
+  "colonne",
+  "bebe",
+  "lune",
+  "eclair",
+  "tete",
 ] as const;
 export type SectionIconName = (typeof SECTION_ICONS)[number];
 
@@ -44,7 +49,48 @@ export const SECTION_ICON_LABELS: Record<SectionIconName, string> = {
   document: "Document",
   bouclier: "Bouclier",
   personnes: "Personnes",
+  colonne: "Colonne vertébrale",
+  bebe: "Bébé / maternité",
+  lune: "Lune / sommeil",
+  eclair: "Éclair / énergie",
+  tete: "Tête / mental",
 };
+
+/**
+ * Icône par défaut d'une carte de spécialité : choisie par mots-clés du titre
+ * (dos → colonne, sommeil → lune…) ; sans correspondance, une rotation
+ * d'icônes génériques évite que toutes les cartes se ressemblent.
+ */
+const SPECIALTY_ICON_RULES: [RegExp, SectionIconName][] = [
+  [/dos|lombal|cervical|torticolis|vert[èe]br|scolios|posture|articul|sciatiq/, "colonne"],
+  [/nourrisson|b[ée]b[ée]|enfant|p[ée]diatr|grossesse|maternit|post.?partum|p[ée]rinat/, "bebe"],
+  [/sommeil|insomni|nuit|dormir/, "lune"],
+  [/sport|performanc|r[ée]cup[ée]ration|effort|athl[èe]t/, "eclair"],
+  [/t[êe]te|migrain|c[ée]phal|cr[âa]ne|m[âa]choire|stress|anxi[ée]t|charge mentale|[ée]motion|burn/, "tete"],
+  [/digest|aliment|intestin|ventre|poids/, "feuille"],
+  [/femme|cycle|m[ée]nopause|hormon/, "fleur"],
+  [/[ée]nergie|fatigue|vitalit/, "soleil"],
+  [/tabac|addiction|d[ée]pendan|protection/, "bouclier"],
+  [/couple|famille|relation|social|accompagnement collectif/, "personnes"],
+  [/confiance|estime|examen|r[ée]ussite/, "etoile"],
+];
+
+const SPECIALTY_ICON_FALLBACK: SectionIconName[] = [
+  "mains",
+  "coeur",
+  "fleur",
+  "feuille",
+  "soleil",
+  "etoile",
+];
+
+export function specialtyIconFor(title: string, index = 0): SectionIconName {
+  const haystack = title.toLowerCase();
+  for (const [pattern, icon] of SPECIALTY_ICON_RULES) {
+    if (pattern.test(haystack)) return icon;
+  }
+  return SPECIALTY_ICON_FALLBACK[index % SPECIALTY_ICON_FALLBACK.length]!;
+}
 
 export type HeroSection = {
   type: "hero";
@@ -77,6 +123,8 @@ export type SpecialtiesSection = {
     title: string;
     excerpt: string;
     imageUrl?: string;
+    /** Icône de la carte (SECTION_ICONS) — défaut : specialtyIconFor(title) */
+    icon?: string;
   }[];
 };
 

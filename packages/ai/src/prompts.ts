@@ -43,7 +43,7 @@ Produis un JSON avec cette forme exacte :
   "sections": [
     { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts, avec des passages **gras**"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous", "stats": [ { "icon": "…", "value": "…", "label": "…" } ] },  // exactement 2 badges de preuve sociale, chiffres plausibles pour ce métier (le praticien les ajustera) : ex. « +1000 / Patients accompagnés », « 8 ans / D'expérience »${input.googleEnrichment?.rating ? " — utilise la note Google du contexte pour l'un des deux (ex. « 5/5 / Basé sur N avis Google », icon « etoile »)" : ""}
     { "type": "highlights", "items": [ { "icon": "…", "title": "2 à 4 mots", "text": "1 phrase courte" } ] },  // exactement 4 points forts concrets (approche, personnalisation, cadre, accès/praticité)
-    { "type": "specialties", "title": "…", "intro": "…", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "1 phrase" } ] },  // exactement ${input.motifPageCount} items
+    { "type": "specialties", "title": "…", "intro": "…", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "1 phrase", "icon": "…" } ] },  // exactement ${input.motifPageCount} items — icône DIFFÉRENTE par carte, la plus évocatrice du motif (dos → colonne, sommeil → lune, périnatalité → bebe…)
     { "type": "future", "badge": "2-3 mots (ex. « Santé & Équilibre »)", "title": "question projective ≤ 75 caractères (ex. « Et si vous retrouviez enfin un sommeil paisible ? »)", "intro": "1 phrase avec **gras** qui introduit la liste, se terminant par « il devient possible de : »", "bullets": ["exactement 5 lignes ; chaque ligne commence par un passage **gras** (le bénéfice) suivi d'un complément concret — possibilités et mieux-être, jamais de promesse de résultat"], "ctaLabel": "Prendre Rendez-Vous" },
     { "type": "about", "title": "…", "paragraphs": ["3 à 4 paragraphes courts avec **gras** ; le dernier est une liste de lignes ✅ (parcours, formations, points forts) séparées par des retours à la ligne"], "infoCards": [ { "icon": "…", "title": "…", "text": "avec **gras**" } ] },  // exactement 3 cartes infos pratiques : durée de la séance, tarification avec des montants réalistes pour ce métier (ex. « Consultation **60 €** — séance sportive **90 €** », CB/chèque/espèces — le praticien ajustera), remboursement/mutuelles (ex. « prise en charge par de nombreuses mutuelles »)
     { "type": "reviews", "title": "…" },
@@ -54,7 +54,7 @@ Produis un JSON avec cette forme exacte :
   "motifsPlan": [ { "slug": "…", "title": "…", "excerpt": "…" } ]  // les mêmes ${input.motifPageCount} spécialités que la section specialties
 }
 
-Icônes autorisées pour "icon" (choisis la plus pertinente) : medaille, diplome, coeur, mains, fleur, feuille, soleil, etoile, carte, maison, calendrier, horloge, euro, document, bouclier, personnes.
+Icônes autorisées pour "icon" (choisis la plus pertinente) : medaille, diplome, coeur, mains, fleur, feuille, soleil, etoile, carte, maison, calendrier, horloge, euro, document, bouclier, personnes, colonne, bebe, lune, eclair, tete.
 
 MOTIFS DE CONSULTATION (crucial) :
 - Les items de "specialties" et "motifsPlan" sont de VRAIS motifs de consultation : les problèmes

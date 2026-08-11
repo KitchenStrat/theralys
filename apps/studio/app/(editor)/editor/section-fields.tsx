@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
-import { SECTION_ICONS, SECTION_ICON_LABELS, type Section } from "@theralys/shared";
+import { SECTION_ICONS, SECTION_ICON_LABELS, specialtyIconFor, type Section } from "@theralys/shared";
+import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
 
 /** Libellés des sections, partagés avec l'accordéon de l'éditeur. */
@@ -26,9 +27,12 @@ export const SECTION_LABELS: Record<Section["type"], string> = {
 export function SectionFields({
   section,
   onChange,
+  onPageRegenerated,
 }: {
   section: Section;
   onChange: (patch: Partial<Section>) => void;
+  /** Appelé après la régénération d'une page de spécialité (rafraîchit l'aperçu). */
+  onPageRegenerated?: () => void;
 }) {
   switch (section.type) {
     case "hero":
@@ -146,17 +150,39 @@ export function SectionFields({
             <TextArea value={section.intro ?? ""} rows={2} onChange={(intro) => onChange({ intro })} />
           </Field>
           {section.items.map((item, i) => (
-            <Field key={item.slug} label={`Carte « ${item.title} »`}>
-              <TextArea
-                value={item.excerpt}
-                rows={2}
-                onChange={(excerpt) =>
-                  onChange({
-                    items: section.items.map((it, j) => (j === i ? { ...it, excerpt } : it)),
-                  })
+            <div key={item.slug} className="space-y-3 rounded-xl bg-cream-100 p-3">
+              <IconField
+                value={item.icon ?? specialtyIconFor(item.title, i)}
+                onChange={(icon) =>
+                  onChange({ items: section.items.map((it, j) => (j === i ? { ...it, icon } : it)) })
                 }
               />
-            </Field>
+              <Field label={`Spécialité ${i + 1} — titre`}>
+                <TextInput
+                  value={item.title}
+                  onChange={(title) =>
+                    onChange({ items: section.items.map((it, j) => (j === i ? { ...it, title } : it)) })
+                  }
+                />
+              </Field>
+              <Field label="Résumé de la carte">
+                <TextArea
+                  value={item.excerpt}
+                  rows={2}
+                  onChange={(excerpt) =>
+                    onChange({
+                      items: section.items.map((it, j) => (j === i ? { ...it, excerpt } : it)),
+                    })
+                  }
+                />
+              </Field>
+              <RegenerateMotifButton
+                slug={item.slug}
+                title={item.title}
+                excerpt={item.excerpt}
+                onDone={onPageRegenerated}
+              />
+            </div>
           ))}
         </SectionBox>
       );
@@ -593,6 +619,53 @@ function IconField({
         ))}
       </select>
     </Field>
+  );
+}
+
+/**
+ * Régénère la page de spécialité liée à une carte (titre modifié → nouveau
+ * contenu IA + nouvelle photo, mêmes URL ; sujets d'articles re-planifiés).
+ */
+function RegenerateMotifButton({
+  slug,
+  title,
+  excerpt,
+  onDone,
+}: {
+  slug: string;
+  title: string;
+  excerpt: string;
+  onDone?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setStatus("Régénération en cours… (environ une minute, la page reste en ligne)");
+          try {
+            const result = await regenerateMotifPage({ slug, title, excerpt });
+            if (result.error) setStatus(result.error);
+            else {
+              setStatus("Page régénérée ✓ — contenu, photo et sujets d'articles mis à jour");
+              onDone?.();
+            }
+          } catch {
+            setStatus("La régénération a échoué — réessayez dans un instant.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+        className="w-full rounded-xl border border-primary-300 px-3 py-2 text-sm font-medium text-primary-600 transition hover:bg-primary-50 disabled:opacity-50"
+      >
+        {busy ? "Régénération en cours…" : "↻ Re-générer la page de spécialité"}
+      </button>
+      {status ? <p className="text-xs text-ink-500">{status}</p> : null}
+    </div>
   );
 }
 

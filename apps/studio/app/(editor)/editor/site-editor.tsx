@@ -333,7 +333,14 @@ export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: 
                       </button>
                       {active === i ? (
                         <div className="border-t border-cream-200 p-4">
-                          <SectionFields section={section} onChange={(patch) => updateSection(i, patch)} />
+                          <SectionFields
+                            section={section}
+                            onChange={(patch) => updateSection(i, patch)}
+                            onPageRegenerated={() => {
+                              setPreviewKey((k) => k + 1);
+                              router.refresh();
+                            }}
+                          />
                         </div>
                       ) : null}
                     </div>

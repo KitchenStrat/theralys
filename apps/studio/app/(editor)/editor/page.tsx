@@ -4,6 +4,8 @@ import { SiteEditor } from "./site-editor";
 
 export const metadata = { title: "Éditer votre site" };
 export const dynamic = "force-dynamic";
+// La régénération d'une page de spécialité (action serveur) peut prendre ~1 min
+export const maxDuration = 300;
 
 type Props = { searchParams: Promise<{ page?: string }> };
 
