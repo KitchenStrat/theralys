@@ -40,6 +40,8 @@ type Props = {
     updatedAt: string;
   };
   city: string;
+  /** Numéro affiché sur le site (source : section contact de l'accueil) */
+  phone: string;
   googleBusiness: {
     name: string;
     address: string;
@@ -92,7 +94,7 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   lavande: "#6f5b9c",
 };
 
-export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: Props) {
+export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedPage }: Props) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("contenu");
   const [sections, setSections] = useState<Section[]>(selectedPage?.sections ?? []);
@@ -116,6 +118,7 @@ export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: 
   const [siteName, setSiteName] = useState(site.name);
   const [bookingUrl, setBookingUrl] = useState(site.bookingUrl);
   const [cityValue, setCityValue] = useState(city);
+  const [phoneValue, setPhoneValue] = useState(phone);
   const [logoUrl, setLogoUrl] = useState(site.logoUrl);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -246,7 +249,22 @@ export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: 
     } else if (panel === "style") {
       result = await saveSiteStyle({ preset: themePreset, fontPreset, intensity, corners, ambiance });
     } else {
-      result = await saveSiteSettings({ name: siteName, bookingUrl, city: cityValue, logoUrl });
+      result = await saveSiteSettings({
+        name: siteName,
+        bookingUrl,
+        city: cityValue,
+        logoUrl,
+        phone: phoneValue,
+      });
+      // Garde l'état local du panneau Contenu aligné : si la page d'accueil y
+      // est chargée, sa section contact reflète le numéro fraîchement publié.
+      if (!result.error && selectedPage?.type === "home") {
+        setSections((prev) =>
+          prev.map((s) =>
+            s.type === "contact" ? { ...s, phone: phoneValue.trim() || undefined } : s,
+          ),
+        );
+      }
     }
     setSaving(false);
     if (result.error) {
@@ -590,6 +608,21 @@ export function SiteEditor({ site, city, googleBusiness, pages, selectedPage }: 
                       setDirty(true);
                     }}
                     placeholder="https://www.doctolib.fr/…"
+                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                  />
+                </FieldBlock>
+                <FieldBlock
+                  label="Numéro de téléphone"
+                  hint="Affiché sur les boutons « Appeler au … » du site. Laisser vide pour les masquer."
+                >
+                  <input
+                    type="tel"
+                    value={phoneValue}
+                    onChange={(e) => {
+                      setPhoneValue(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder="06 12 34 56 78"
                     className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
                   />
                 </FieldBlock>

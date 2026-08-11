@@ -539,6 +539,12 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .refine((v) => v === "" || /^(https?:\/\/|tel:)/.test(v), "Lien invalide"),
       city: z.string().trim().min(1),
       logoUrl: z.string().trim().optional(),
+      phone: z
+        .string()
+        .trim()
+        .max(20)
+        .regex(/^$|^\+?[0-9][0-9 .-]{5,}$/, "Numéro de téléphone invalide")
+        .optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Réglages invalides" };
@@ -560,6 +566,22 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
       .update(prospects)
       .set({ city: parsed.data.city })
       .where(eq(prospects.id, site.prospectId));
+  }
+  // Le numéro vit dans la section contact de l'accueil (source unique) —
+  // il alimente les boutons « Appeler au … » du hero et du bas de page.
+  if (parsed.data.phone !== undefined) {
+    const home = await db.query.pages.findFirst({
+      where: and(eq(pages.siteId, session.siteId), eq(pages.type, "home")),
+    });
+    if (home) {
+      const updated = home.sections.map((s) =>
+        s.type === "contact" ? { ...s, phone: parsed.data.phone || undefined } : s,
+      );
+      await db
+        .update(pages)
+        .set({ sections: updated, updatedAt: new Date() })
+        .where(eq(pages.id, home.id));
+    }
   }
   revalidatePath("/editor");
   return {};

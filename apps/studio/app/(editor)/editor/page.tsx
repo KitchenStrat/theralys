@@ -1,3 +1,4 @@
+import type { Section } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getEditablePages, getProspect, getSite, siteUrl } from "@/lib/data";
 import { SiteEditor } from "./site-editor";
@@ -17,6 +18,11 @@ export default async function EditorPage({ searchParams }: Props) {
   const [pages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
   const selected = pages.find((p) => p.id === pageParam) ?? pages.find((p) => p.type === "home") ?? pages[0];
 
+  // Numéro affiché sur le site (source : section contact de l'accueil)
+  const homeContact = pages
+    .find((p) => p.type === "home")
+    ?.sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
+
   return (
     <SiteEditor
       site={{
@@ -33,6 +39,7 @@ export default async function EditorPage({ searchParams }: Props) {
         updatedAt: site.updatedAt.toISOString(),
       }}
       city={prospect?.city ?? ""}
+      phone={homeContact?.phone ?? ""}
       googleBusiness={
         prospect?.googlePlaceId
           ? {
