@@ -81,7 +81,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
       {isPreview ? (
-        <p className="mb-8 rounded-2xl bg-[var(--site-soft)] px-5 py-3 text-sm">
+        <p className="mb-8 rounded-[var(--r-md)] bg-[var(--site-soft)] px-5 py-3 text-sm">
           <strong>Prévisualisation</strong> — cet article n&apos;est pas encore publié. Ne partagez
           ce lien qu&apos;avec des personnes de confiance.
         </p>

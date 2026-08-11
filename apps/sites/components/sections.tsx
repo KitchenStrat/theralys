@@ -311,7 +311,7 @@ function Rich({ text }: { text: string }) {
 function StatBadge({ stat }: { stat: { icon?: string; value: string; label: string } }) {
   return (
     <span className="flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-deep)]/90 px-5 py-3 text-[var(--site-on-deep)] shadow-xl shadow-black/25 backdrop-blur-sm">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--site-on-deep)] text-[var(--site-deep)]">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--site-on-deep)] text-[var(--site-deep)]">
         <SectionIcon name={stat.icon} size={24} />
       </span>
       <span className="min-w-0">

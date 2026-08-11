@@ -45,12 +45,12 @@ export function SiteHeader({
                   <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </button>
-              <div className="invisible absolute left-0 top-full z-50 w-72 rounded-2xl border border-black/5 bg-[var(--site-surface)] p-2 opacity-0 shadow-xl transition-all group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+              <div className="invisible absolute left-0 top-full z-50 w-72 rounded-[var(--r-md)] border border-black/5 bg-[var(--site-surface)] p-2 opacity-0 shadow-xl transition-all group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
                 {motifPages.map((page) => (
                   <Link
                     key={page.id}
                     href={`${prefix}/motifs/${page.slug}`}
-                    className="block rounded-xl px-3 py-2 hover:bg-[var(--site-soft)]"
+                    className="block rounded-[var(--r-md)] px-3 py-2 hover:bg-[var(--site-soft)]"
                   >
                     {page.title}
                   </Link>

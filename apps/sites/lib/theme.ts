@@ -160,10 +160,11 @@ export const FONTS: Record<
 
 /** Rayons de courbure par forme de coins (photos/panneaux, cartes, pilules). */
 const CORNER_RADII: Record<NonNullable<SiteTheme["corners"]>, Record<string, string>> = {
-  rond: { xl: "2.5rem", lg: "1.75rem", md: "1rem", pill: "999px", arch: "9rem" },
+  rond: { xl: "3rem", lg: "2rem", md: "1.15rem", pill: "999px", arch: "9rem" },
   adouci: { xl: "1.5rem", lg: "1.15rem", md: "0.8rem", pill: "999px", arch: "3.5rem" },
-  equilibre: { xl: "1rem", lg: "0.75rem", md: "0.6rem", pill: "0.9rem", arch: "1rem" },
-  net: { xl: "0.25rem", lg: "0.25rem", md: "0.25rem", pill: "0.35rem", arch: "0.25rem" },
+  equilibre: { xl: "1rem", lg: "0.7rem", md: "0.5rem", pill: "0.7rem", arch: "1rem" },
+  // « Droit et net » : angles francs partout, pilules à peine cassées
+  net: { xl: "0px", lg: "0px", md: "0px", pill: "0.3rem", arch: "0px" },
 };
 
 /** Mélange linéaire de deux couleurs hex (ratio ∈ [0,1] vers `into`). */
