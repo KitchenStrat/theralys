@@ -172,6 +172,7 @@ h2,
 h3,
 h4 {
   font-family: var(--site-font-heading);
+  letter-spacing: var(--site-heading-tracking, -0.01em);
 }
 
 html {

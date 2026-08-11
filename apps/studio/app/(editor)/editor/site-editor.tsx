@@ -56,11 +56,31 @@ type Panel = "contenu" | "style" | "parametres";
 type StyleTab = "couleur" | "typo" | "forme";
 
 /** Aperçus « Typo » — mêmes polices que les sites publics (chargées au layout). */
-const FONT_CHOICES: { value: FontPreset; label: string; family: string }[] = [
-  { value: "chaleureux", label: "Chaleureux", family: "'Fraunces', Georgia, serif" },
-  { value: "elegant", label: "Élégant", family: "'Cormorant Garamond', Palatino, serif" },
-  { value: "moderne", label: "Moderne", family: "'Inter', system-ui, sans-serif" },
-  { value: "classique", label: "Classique", family: "'Lora', Georgia, serif" },
+const FONT_CHOICES: { value: FontPreset; label: string; family: string; bodyFamily: string }[] = [
+  {
+    value: "chaleureux",
+    label: "Chaleureux",
+    family: "'Fraunces', Georgia, serif",
+    bodyFamily: "'Nunito', 'Trebuchet MS', sans-serif",
+  },
+  {
+    value: "elegant",
+    label: "Élégant",
+    family: "'Cormorant Garamond', Palatino, serif",
+    bodyFamily: "'EB Garamond', Palatino, serif",
+  },
+  {
+    value: "moderne",
+    label: "Moderne",
+    family: "'Space Grotesk', system-ui, sans-serif",
+    bodyFamily: "'Inter', system-ui, sans-serif",
+  },
+  {
+    value: "classique",
+    label: "Classique",
+    family: "'Playfair Display', Georgia, serif",
+    bodyFamily: "'Source Sans 3', 'Segoe UI', sans-serif",
+  },
 ];
 
 const INTENSITY_CHOICES: { value: ThemeIntensity; label: string }[] = [
@@ -474,6 +494,12 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
                       >
                         <span className="block text-xl leading-tight" style={{ fontFamily: choice.family }}>
                           Votre cabinet
+                        </span>
+                        <span
+                          className="mt-1 block text-[0.8rem] leading-snug text-ink-700"
+                          style={{ fontFamily: choice.bodyFamily }}
+                        >
+                          Un espace pour souffler
                         </span>
                         <span className="mt-1.5 block text-xs text-ink-500">{choice.label}</span>
                       </button>

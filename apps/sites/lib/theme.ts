@@ -120,26 +120,41 @@ const PALETTES: Record<ThemePreset, Palette> = {
  * Polices chargées via Google Fonts dans app/layout.tsx — toujours avec un
  * repli système pour que le rendu reste correct sans réseau.
  */
-export const FONTS: Record<FontPreset, { heading: string; body: string; label: string }> = {
+/**
+ * Paires de polices par preset — chaque preset change les TITRES ET le CORPS
+ * de texte pour un rendu immédiatement différenciable :
+ * - chaleureux : serif généreuse + sans arrondie douce
+ * - classique  : didone traditionnelle + sans humaniste sobre
+ * - moderne    : grotesque géométrique resserrée + Inter
+ * - élégant    : garalde fine + corps en serif (esprit magazine)
+ */
+export const FONTS: Record<
+  FontPreset,
+  { heading: string; body: string; label: string; headingTracking: string }
+> = {
   chaleureux: {
     label: "Chaleureux",
     heading: "'Fraunces', Georgia, 'Times New Roman', serif",
-    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    body: "'Nunito', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif",
+    headingTracking: "-0.01em",
   },
   classique: {
     label: "Classique",
-    heading: "'Lora', Georgia, 'Times New Roman', serif",
-    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    heading: "'Playfair Display', Georgia, 'Times New Roman', serif",
+    body: "'Source Sans 3', 'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+    headingTracking: "0",
   },
   moderne: {
     label: "Moderne",
-    heading: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    heading: "'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif",
     body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    headingTracking: "-0.03em",
   },
   elegant: {
     label: "Élégant",
     heading: "'Cormorant Garamond', 'Palatino Linotype', Palatino, serif",
-    body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    body: "'EB Garamond', 'Palatino Linotype', Georgia, serif",
+    headingTracking: "0.015em",
   },
 };
 
@@ -210,6 +225,7 @@ export function themeCssVars(theme: SiteTheme): Record<string, string> {
     "--site-on-deep": palette.onDeep,
     "--site-font-heading": fonts.heading,
     "--site-font-body": fonts.body,
+    "--site-heading-tracking": fonts.headingTracking,
     "--r-xl": radii.xl!,
     "--r-lg": radii.lg!,
     "--r-md": radii.md!,

@@ -62,7 +62,9 @@ export default async function SiteLayout({ children, params }: Props) {
 
   return (
     <div
-      style={themeCssVars(site.theme)}
+      // La police du corps s'applique ici (et pas seulement sur <body>) : les
+      // variables du thème sont définies sur ce conteneur, pas sur la racine.
+      style={{ ...themeCssVars(site.theme), fontFamily: "var(--site-font-body)" }}
       data-ambiance={site.theme.ambiance ?? "naturel"}
       className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]"
     >
