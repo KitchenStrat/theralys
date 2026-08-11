@@ -296,12 +296,7 @@ export function mockGenerateMotifPage(
       title: "Vos questions sur cette séance",
       items: [...spec.faq, ...COMMON_FAQ(seed.practiceName).slice(0, 2)],
     },
-    {
-      type: "cta",
-      title: `Envie d'essayer ${spec.title.toLowerCase()} ?`,
-      body: `Je vous accueille à ${input.city} sur rendez-vous. Réservez votre séance en quelques clics.`,
-      buttonLabel: "Prendre Rendez-Vous",
-    },
+    // Pas de bandeau CTA : les avis Google et le contact suivent automatiquement
   ];
 
   return {

@@ -51,10 +51,11 @@ export default async function MotifPage({ params }: Props) {
 
   // Bas de page identique à l'accueil : avis Google puis contact — hérités de
   // la page d'accueil (une seule source de vérité, éditée une fois pour tout).
+  // Le bandeau CTA des anciennes générations est retiré : redondant ici.
   const homeReviews = home?.sections.find((s): s is Extract<Section, { type: "reviews" }> => s.type === "reviews");
   const homeContact = home?.sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
   const sections: Section[] = [
-    ...page.sections,
+    ...page.sections.filter((s) => s.type !== "cta"),
     homeReviews ?? { type: "reviews", title: "Ils me font confiance" },
     ...(homeContact ? [homeContact] : []),
   ];

@@ -89,8 +89,7 @@ Produis un JSON avec cette forme exacte :
   "sections": [
     { "type": "hero", "badge": "…", "title": "…", "paragraphs": ["1 paragraphe d'intro"], "ctaLabel": "Prendre Rendez-Vous" },
     { "type": "richText", "body": "corps markdown ~500 mots avec des titres ## et une liste de bienfaits" },
-    { "type": "faq", "title": "…", "items": [ { "question": "…", "answer": "…" } ] },  // 3 questions spécifiques
-    { "type": "cta", "title": "…", "body": "…", "buttonLabel": "Prendre Rendez-Vous" }
+    { "type": "faq", "title": "…", "items": [ { "question": "…", "answer": "…" } ] }  // 3 questions spécifiques — PAS de section cta : les avis Google et le contact suivent automatiquement
   ]
 }`;
 }
