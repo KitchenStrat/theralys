@@ -4,9 +4,87 @@
 /* Les composants du design system vivent dans packages/ui */
 @source "../../../packages/ui/src";
 
+/*
+ * ── Refonte visuelle du studio : thème bleu ciel ────────────────────────────
+ * Les tokens du design system (packages/ui) sont surchargés ICI, pour le
+ * studio uniquement — l'admin conserve son identité orange/crème.
+ */
+:root {
+  --color-primary-50: #f0f8ff;
+  --color-primary-100: #ddf0fd;
+  --color-primary-200: #b7e2fb;
+  --color-primary-300: #7bccf7;
+  --color-primary-400: #38b3f0;
+  --color-primary-500: #0e97dd;
+  --color-primary-600: #037bbd;
+  --color-primary-700: #07619b;
+  --color-primary-800: #0b5280;
+  --color-primary-900: #0f456a;
+
+  /* Neutres froids (remplacent la gamme crème de l'admin) */
+  --color-cream-50: #fbfdff;
+  --color-cream-100: #f3f8fc;
+  --color-cream-200: #e6eff7;
+  --color-cream-300: #d3e3ef;
+
+  --color-ink-900: #0e2233;
+  --color-ink-700: #375063;
+  --color-ink-500: #647f91;
+  --color-ink-300: #c2d4df;
+
+  /* Ombres teintées bleu nuit, plus profondes et plus douces */
+  --shadow-card: 0 1px 2px rgb(12 74 110 / 0.05), 0 12px 32px -16px rgb(12 74 110 / 0.18);
+  --shadow-pop: 0 20px 55px -18px rgb(12 74 110 / 0.32);
+}
+
 body {
-  background: var(--color-cream-100);
+  /* Halos bleu ciel discrets dans les coins, fixes au défilement */
+  background:
+    radial-gradient(58rem 26rem at 88% -10rem, rgb(56 179 240 / 0.12), transparent 65%),
+    radial-gradient(48rem 24rem at -12% -2rem, rgb(14 151 221 / 0.08), transparent 60%),
+    radial-gradient(60rem 30rem at 50% 115%, rgb(56 179 240 / 0.06), transparent 65%),
+    var(--color-cream-100);
+  background-attachment: fixed;
   color: var(--color-ink-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Mise en scène : apparitions en cascade + élévation des cartes ─────────── */
+
+@keyframes studio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  main > * > * {
+    animation: studio-rise 0.55s cubic-bezier(0.22, 0.8, 0.35, 1) both;
+  }
+  main > * > *:nth-child(2) {
+    animation-delay: 90ms;
+  }
+  main > * > *:nth-child(3) {
+    animation-delay: 180ms;
+  }
+  main > * > *:nth-child(n + 4) {
+    animation-delay: 260ms;
+  }
+}
+
+/* Les cartes se soulèvent légèrement au survol */
+main .shadow-card {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 0.8, 0.35, 1),
+    box-shadow 0.25s ease;
+}
+main .shadow-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pop);
 }

@@ -29,10 +29,13 @@ export default async function StudioLayout({ children }: { children: ReactNode }
           </form>
         </div>
       ) : null}
-      <header className="sticky top-0 z-40 border-b border-cream-300 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/70 bg-white/70 shadow-[0_1px_0_rgb(12_74_110/0.05)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3">
           <div className="flex items-center gap-8">
-            <Link href="/" className="text-xl font-bold text-primary-500">
+            <Link
+              href="/"
+              className="bg-gradient-to-r from-primary-700 via-primary-500 to-primary-400 bg-clip-text text-xl font-bold text-transparent"
+            >
               Harmony
             </Link>
             <StudioNav />
@@ -40,7 +43,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
           <div className="flex items-center gap-2">
             <Link
               href="/editor"
-              className="hidden items-center gap-1.5 rounded-full border border-ink-300 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-100 sm:inline-flex"
+              className="hidden items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-4 py-1.5 text-sm font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50 sm:inline-flex"
             >
               ✎ Éditer site
             </Link>
@@ -48,13 +51,13 @@ export default async function StudioLayout({ children }: { children: ReactNode }
               href={siteUrl(site)}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden items-center gap-1.5 rounded-full border border-ink-300 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-100 sm:inline-flex"
+              className="hidden items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-4 py-1.5 text-sm font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50 sm:inline-flex"
             >
               ↗ Voir site
             </a>
             <Link
               href="/compte"
-              className="ml-1 rounded-full bg-cream-200 px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-300"
+              className="ml-1 rounded-full bg-primary-100 px-3 py-1.5 text-sm font-medium text-primary-800 transition-colors hover:bg-primary-200"
             >
               {session.name.split(" ")[0]}
             </Link>
@@ -63,7 +66,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
                 type="submit"
                 title="Déconnexion"
                 aria-label="Déconnexion"
-                className="rounded-full px-2 py-1.5 text-sm text-ink-500 hover:bg-cream-200"
+                className="rounded-full px-2 py-1.5 text-sm text-ink-500 transition-colors hover:bg-cream-200"
               >
                 ⏻
               </button>
