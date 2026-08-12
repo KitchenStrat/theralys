@@ -101,8 +101,7 @@ export function DomainSection({
         result.available ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-success-500/40 bg-success-100/40 px-4 py-3">
             <p className="text-sm">
-              <strong>{result.domain}</strong> est disponible —{" "}
-              <strong>{result.pricePerYear?.toFixed(2)} €/an</strong>
+              <strong>{result.domain}</strong> est disponible ✓
             </p>
             <Button size="sm" disabled={busy} onClick={onBuy}>
               {busy ? <Spinner className="text-white" /> : null} Acheter ce domaine
