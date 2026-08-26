@@ -94,6 +94,49 @@ export function Faq() {
           );
         })}
       </div>
+
+      {/* Une porte de sortie chaleureuse pour les questions restantes */}
+      <div
+        data-reveal
+        className="mt-10 flex flex-col items-center justify-between gap-5 rounded-2xl border border-cream-200 bg-white px-6 py-5 shadow-[var(--shadow-card)] sm:flex-row"
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex -space-x-2.5">
+            {[
+              { initial: "C", classes: "from-primary-400 to-primary-600" },
+              { initial: "A", classes: "from-[#7cc9a8] to-[#3d9a72]" },
+              { initial: "S", classes: "from-primary-500 to-primary-800" },
+            ].map((avatar) => (
+              <span
+                key={avatar.initial}
+                className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${avatar.classes} text-sm font-bold text-white ring-2 ring-white`}
+              >
+                {avatar.initial}
+              </span>
+            ))}
+          </div>
+          <div>
+            <p className="font-semibold text-ink-900">Une question supplémentaire&nbsp;?</p>
+            <p className="text-sm text-ink-500">Notre équipe est là pour vous accompagner.</p>
+          </div>
+        </div>
+        <a
+          href="#demo"
+          className="group flex items-center gap-2 whitespace-nowrap rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-primary-600"
+        >
+          Nous contacter
+          <svg
+            viewBox="0 0 16 16"
+            className="h-4 w-4 transition-transform group-hover:translate-x-1"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden
+          >
+            <path d="M2 8h11M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </a>
+      </div>
     </section>
   );
 }

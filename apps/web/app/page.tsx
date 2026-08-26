@@ -1,6 +1,7 @@
 import { OFFERED_PLANS, PLANS } from "@theralys/db";
 import { Band } from "@/components/band";
 import { DemoForm } from "@/components/demo-form";
+import { ParallaxObserver, SpotlightObserver } from "@/components/effects";
 import { Faq } from "@/components/faq";
 import { Features } from "@/components/features";
 import { Footer } from "@/components/footer";
@@ -10,6 +11,8 @@ import { Logos } from "@/components/logos";
 import { Presence } from "@/components/presence";
 import { Pricing, type PlanCard } from "@/components/pricing";
 import { RevealObserver } from "@/components/reveal";
+import { ScrollProgress } from "@/components/scroll-progress";
+import { SocialProof } from "@/components/social-proof";
 import { Temoignages } from "@/components/temoignages";
 
 /*
@@ -36,6 +39,10 @@ export default function HomePage() {
   return (
     <>
       <RevealObserver />
+      <SpotlightObserver />
+      <ParallaxObserver />
+      <ScrollProgress />
+      <SocialProof />
       <Header />
       <main>
         <Hero />

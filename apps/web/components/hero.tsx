@@ -1,11 +1,20 @@
 import { type CSSProperties } from "react";
-import { MiniKpi, MiniReview, MiniSite } from "./vignettes";
+import { Tilt } from "./tilt";
+import { MiniGauge, MiniKpi, MiniReview, MiniSite } from "./vignettes";
+
+const AVATARS = [
+  { initial: "C", classes: "from-primary-400 to-primary-600" },
+  { initial: "S", classes: "from-[#7cc9a8] to-[#3d9a72]" },
+  { initial: "N", classes: "from-primary-300 to-primary-500" },
+  { initial: "G", classes: "from-[#f0b45c] to-[#d98a1f]" },
+  { initial: "É", classes: "from-primary-500 to-primary-800" },
+];
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden pb-20 pt-32 md:pb-28 md:pt-40">
       {/* Halos animés */}
-      <div aria-hidden className="absolute inset-0 -z-10">
+      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
         <div className="blob left-[-10rem] top-[-6rem] h-[26rem] w-[26rem] bg-primary-200/70" />
         <div
           className="blob right-[-8rem] top-[4rem] h-[30rem] w-[30rem] bg-primary-300/50"
@@ -32,7 +41,7 @@ export function Hero() {
             className="font-display mt-5 text-4xl font-bold leading-[1.08] text-ink-900 md:text-6xl"
           >
             Votre site de thérapeute,{" "}
-            <span className="wordmark">créé et référencé</span> pour vous.
+            <span className="shimmer-text shimmer-blue">créé et référencé</span> pour vous.
           </h1>
           <p
             data-reveal
@@ -72,6 +81,28 @@ export function Hero() {
             </svg>
             Livré clé en main — zéro technique de votre côté
           </p>
+          <div
+            data-reveal
+            style={{ "--rv-delay": "440ms" } as CSSProperties}
+            className="mt-6 flex items-center gap-3.5"
+          >
+            <div className="flex -space-x-2.5">
+              {AVATARS.map((avatar) => (
+                <span
+                  key={avatar.initial + avatar.classes}
+                  className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${avatar.classes} text-xs font-bold text-white ring-2 ring-cream-50`}
+                >
+                  {avatar.initial}
+                </span>
+              ))}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink-900">
+                <span className="tracking-wider text-gold-400">★★★★★</span> 4,9/5
+              </p>
+              <p className="text-xs text-ink-500">Plus de 800 praticiens accompagnés</p>
+            </div>
+          </div>
         </div>
 
         {/* Composition produit flottante */}
@@ -80,11 +111,20 @@ export function Hero() {
           style={{ "--rv-delay": "220ms" } as CSSProperties}
           className="relative mx-auto w-full max-w-md lg:max-w-none"
         >
-          <div className="float-slow">
-            <MiniSite />
+          <Tilt>
+            <div className="float-slow">
+              <MiniSite />
+            </div>
+          </Tilt>
+          <div data-parallax="0.05" className="absolute -left-6 -bottom-8 hidden sm:block">
+            <MiniReview className="float-slower" />
           </div>
-          <MiniReview className="float-slower absolute -left-6 -bottom-8 hidden sm:block" />
-          <MiniKpi className="float-slow absolute -right-4 -top-8 hidden sm:block" />
+          <div data-parallax="-0.07" className="absolute -right-4 -top-8 hidden sm:block">
+            <MiniKpi className="float-slow" />
+          </div>
+          <div data-parallax="0.1" className="absolute -right-8 bottom-20 hidden lg:block">
+            <MiniGauge className="float-slower" />
+          </div>
         </div>
       </div>
     </section>

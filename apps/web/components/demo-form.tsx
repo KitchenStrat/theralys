@@ -40,7 +40,7 @@ export function DemoForm() {
 
   return (
     <section id="demo" className="relative overflow-hidden py-24">
-      <div aria-hidden className="absolute inset-0 -z-10">
+      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
         <div className="blob right-[-10rem] top-[-4rem] h-[26rem] w-[26rem] bg-primary-200/60" />
         <div className="blob bottom-[-10rem] left-[-8rem] h-[24rem] w-[24rem] bg-[#dbeee6]" style={{ animationDelay: "-11s" }} />
       </div>
@@ -84,9 +84,15 @@ export function DemoForm() {
         >
           {sent ? (
             <div className="py-10 text-center">
-              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-100">
+              <span className="pop-in mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-100">
                 <svg viewBox="0 0 24 24" className="h-8 w-8 text-success-500" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
-                  <path d="m5 12.5 4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    className="check-draw"
+                    pathLength={1}
+                    d="m5 12.5 4.5 4.5L19 7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </span>
               <h3 className="font-display mt-5 text-2xl font-bold text-ink-900">

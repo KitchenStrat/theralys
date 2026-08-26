@@ -110,8 +110,9 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
               key={plan.id}
               data-reveal
               style={{ "--rv-delay": `${i * 120}ms` } as CSSProperties}
+              data-spotlight
               className={clsx(
-                "lift relative rounded-3xl p-8",
+                "lift spotlight relative rounded-3xl p-8",
                 popular
                   ? "card-gradient-border shadow-[var(--shadow-pop)]"
                   : "border border-cream-200 bg-white shadow-[var(--shadow-card)]",

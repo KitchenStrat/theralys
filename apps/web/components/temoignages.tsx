@@ -1,5 +1,29 @@
 import { type CSSProperties } from "react";
 import { CountUp } from "./counter";
+import { QuoteCarousel, type CarouselQuote } from "./quote-carousel";
+
+const FEATURED: CarouselQuote[] = [
+  {
+    text: "J'ai fait appel à Harmony pour la création de mon site. L'objectif était d'avoir un site élégant, structuré et réellement performant sur Google. L'accompagnement a été sérieux du premier échange à la mise en ligne — et les résultats ont suivi.",
+    author: "Gabriel M.",
+    role: "Étiopathe · Paris",
+  },
+  {
+    text: "Mon site est magnifique et surtout, il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur Google, ce qui n'était jamais arrivé avant.",
+    author: "Mathilde B.",
+    role: "Sophrologue · Albi",
+  },
+  {
+    text: "En trois mois, je suis passé de la page 3 à la première page sur « ostéopathe » dans ma ville. Le suivi des mots-clés rend tout ça très concret.",
+    author: "Grégoire T.",
+    role: "Ostéopathe · Lyon",
+  },
+  {
+    text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, j'ai ajusté deux couleurs, et j'ai signé le lendemain.",
+    author: "Célia A.",
+    role: "Psychopraticienne · Nantes",
+  },
+];
 
 /*
  * Témoignages de démonstration : à remplacer par vos vrais retours clients
@@ -80,7 +104,7 @@ export function Temoignages() {
   const rowB = [...QUOTES.slice(4), ...QUOTES.slice(4)];
   return (
     <section id="temoignages" className="relative overflow-hidden bg-night-900 py-24 text-white">
-      <div aria-hidden className="absolute inset-0">
+      <div aria-hidden data-parallax="0.07" className="absolute inset-0">
         <div className="blob left-[30%] top-[-12rem] h-[30rem] w-[30rem] bg-primary-600/25" />
       </div>
 
@@ -96,19 +120,18 @@ export function Temoignages() {
           Nos praticiens témoignent
         </h2>
 
-        <blockquote
+        <p
           data-reveal
-          style={{ "--rv-delay": "160ms" } as CSSProperties}
-          className="font-display mx-auto mt-10 max-w-3xl px-5 text-center text-xl font-medium leading-relaxed text-white/90 md:text-2xl"
+          style={{ "--rv-delay": "130ms" } as CSSProperties}
+          className="mt-5 flex justify-center"
         >
-          « J'ai fait appel à Harmony pour la création de mon site. L'objectif était
-          d'avoir un site élégant, structuré et réellement performant sur Google.
-          L'accompagnement a été sérieux du premier échange à la mise en ligne —
-          et les résultats ont suivi. »
-        </blockquote>
-        <p data-reveal style={{ "--rv-delay": "220ms" } as CSSProperties} className="mt-4 text-center text-sm text-white/60">
-          Gabriel M. — Étiopathe · Paris
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-sm text-white/85 backdrop-blur">
+            <span className="tracking-wider text-gold-400">★★★★★</span>
+            <span className="font-semibold text-white">4,8/5</span> · plus de 50 avis de praticiens
+          </span>
         </p>
+
+        <QuoteCarousel quotes={FEATURED} />
 
         {/* Deux rangées défilant en sens opposés */}
         <div data-reveal style={{ "--rv-delay": "260ms" } as CSSProperties} className="mt-14 space-y-5">

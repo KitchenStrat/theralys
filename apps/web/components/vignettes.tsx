@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode } from "react";
+import { CountUp } from "./counter";
 
 /*
  * Maquettes produit dessinées en pur CSS/SVG (aucune image externe) :
@@ -131,6 +132,52 @@ export function MiniKpi({ className = "" }: { className?: string }) {
         </svg>
         +18 % vs mois dernier
       </p>
+    </div>
+  );
+}
+
+/** Jauge circulaire flottante : le score SEO se remplit à l'apparition. */
+export function MiniGauge({ className = "" }: { className?: string }) {
+  const circumference = 2 * Math.PI * 26;
+  const score = 98;
+  return (
+    <div
+      className={`w-44 rounded-2xl border border-cream-200 bg-white p-3.5 shadow-[0_20px_50px_-20px_rgb(12_74_110/0.45)] ${className}`}
+    >
+      <p className="text-[9px] font-medium text-ink-500">Score SEO de votre site</p>
+      <div className="mt-1.5 flex items-center gap-3">
+        <svg viewBox="0 0 60 60" className="h-14 w-14 -rotate-90" aria-hidden>
+          <circle cx="30" cy="30" r="26" fill="none" stroke="#e6eff7" strokeWidth="6" />
+          <circle
+            cx="30"
+            cy="30"
+            r="26"
+            fill="none"
+            stroke="#0e97dd"
+            strokeWidth="6"
+            strokeLinecap="round"
+            className="gauge-arc"
+            style={
+              {
+                "--gauge-c": `${circumference.toFixed(2)}`,
+                "--gauge-off": `${(circumference * (1 - score / 100)).toFixed(2)}`,
+              } as CSSProperties
+            }
+          />
+        </svg>
+        <div>
+          <p className="font-display text-xl font-bold leading-tight text-ink-900">
+            <CountUp to={score} duration={1900} />
+            <span className="text-xs font-semibold text-ink-500">/100</span>
+          </p>
+          <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-success-500">
+            <svg viewBox="0 0 10 10" className="h-2 w-2" fill="currentColor" aria-hidden>
+              <path d="M5 1 9 6H6v3H4V6H1L5 1Z" />
+            </svg>
+            +12 pts ce trimestre
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

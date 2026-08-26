@@ -28,7 +28,7 @@ const PILLARS = [
 export function Presence() {
   return (
     <section className="relative overflow-hidden bg-night-900 py-24 text-white">
-      <div aria-hidden className="absolute inset-0">
+      <div aria-hidden data-parallax="0.06" className="absolute inset-0">
         <div className="blob left-[-8rem] top-[-10rem] h-[26rem] w-[26rem] bg-primary-700/30" />
         <div
           className="blob bottom-[-10rem] right-[-6rem] h-[28rem] w-[28rem] bg-primary-500/20"

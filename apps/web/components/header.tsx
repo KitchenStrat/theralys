@@ -21,16 +21,17 @@ export function Header() {
   }, []);
 
   return (
-    <header
-      className={clsx(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "border-b border-cream-200/80 bg-white/75 shadow-[0_8px_30px_-18px_rgb(12_74_110/0.25)] backdrop-blur-xl"
-          : "bg-transparent",
-      )}
-    >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-        <a href="#" className="font-display text-2xl font-bold">
+    <header className="header-in fixed inset-x-0 top-0 z-50 px-3">
+      {/* Au défilement, la barre se resserre en pilule flottante translucide */}
+      <div
+        className={clsx(
+          "mx-auto flex items-center justify-between border px-5 transition-all duration-500 ease-out",
+          scrolled
+            ? "mt-3 h-14 max-w-4xl rounded-full border-cream-200/80 bg-white/80 shadow-[0_18px_40px_-18px_rgb(12_74_110/0.35)] backdrop-blur-xl"
+            : "mt-0 h-16 max-w-6xl rounded-3xl border-transparent bg-transparent",
+        )}
+      >
+        <a href="#" className="font-display shrink-0 text-2xl font-bold">
           <span className="wordmark">Harmony</span>
         </a>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navigation principale">
@@ -46,7 +47,7 @@ export function Header() {
         </nav>
         <a
           href="#demo"
-          className="rounded-full bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_-10px_rgb(14_151_221/0.7)] transition hover:-translate-y-0.5 hover:bg-primary-600"
+          className="ml-3 shrink-0 whitespace-nowrap rounded-full bg-primary-500 px-4 py-2 text-xs font-semibold text-white shadow-[0_10px_24px_-10px_rgb(14_151_221/0.7)] transition hover:-translate-y-0.5 hover:bg-primary-600 sm:px-5 sm:py-2.5 sm:text-sm"
         >
           Demander une démo
         </a>

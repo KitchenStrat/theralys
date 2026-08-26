@@ -32,7 +32,7 @@ export function Logos() {
           {row.map((name, i) => (
             <span
               key={`${name}-${i}`}
-              className="whitespace-nowrap rounded-full border border-cream-200 bg-white px-5 py-2 font-display text-base font-semibold text-ink-700 shadow-sm"
+              className="whitespace-nowrap rounded-full border border-cream-200 bg-white px-5 py-2 font-display text-base font-semibold text-ink-700 shadow-sm transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
             >
               {name}
             </span>

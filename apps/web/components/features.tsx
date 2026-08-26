@@ -55,7 +55,8 @@ export function Features() {
             key={card.title}
             data-reveal
             style={{ "--rv-delay": `${i * 110}ms` } as CSSProperties}
-            className="lift group rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-card)] md:p-8"
+            data-spotlight
+            className="lift spotlight group overflow-hidden rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-card)] md:p-8"
           >
             <span className="inline-block rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-700">
               {card.tag}
