@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type FocusEvent } from "react";
 import clsx from "clsx";
 
 export type CarouselQuote = {
@@ -11,8 +11,11 @@ export type CarouselQuote = {
 
 /**
  * Grande citation en carrousel : avance seule toutes les quelques secondes,
- * se met en pause au survol, et reste pilotable aux points et aux flèches.
- * Pas d'avance automatique si l'utilisateur réduit les animations.
+ * se met en pause au survol et tant que le focus clavier est dedans, et
+ * reste pilotable aux points et aux flèches. Les citations sont empilées
+ * dans la même cellule de grille : la hauteur ne bouge jamais, quelle que
+ * soit la longueur de la citation active. Pas d'avance automatique si
+ * l'utilisateur réduit les animations.
  */
 export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
   const [index, setIndex] = useState(0);
@@ -25,8 +28,11 @@ export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
     return () => clearInterval(id);
   }, [paused, quotes.length]);
 
-  const quote = quotes[index];
-  if (!quote) return null;
+  if (quotes.length === 0) return null;
+
+  function onBlur(event: FocusEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false);
+  }
 
   return (
     <div
@@ -35,14 +41,24 @@ export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
       className="mx-auto mt-10 max-w-3xl px-5"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={onBlur}
     >
-      <div key={index} className="quote-in min-h-44 text-center md:min-h-36">
-        <blockquote className="font-display text-xl font-medium leading-relaxed text-white/90 md:text-2xl">
-          «&nbsp;{quote.text}&nbsp;»
-        </blockquote>
-        <p className="mt-4 text-sm text-white/60">
-          {quote.author} — {quote.role}
-        </p>
+      <div className="grid text-center">
+        {quotes.map((quote, i) => (
+          <div
+            key={quote.author}
+            aria-hidden={i !== index}
+            className={clsx("[grid-area:1/1]", i === index ? "quote-in" : "invisible")}
+          >
+            <blockquote className="font-display text-xl font-medium leading-relaxed text-white/90 md:text-2xl">
+              «&nbsp;{quote.text}&nbsp;»
+            </blockquote>
+            <p className="mt-4 text-sm text-white/60">
+              {quote.author} — {quote.role}
+            </p>
+          </div>
+        ))}
       </div>
 
       <div className="mt-6 flex items-center justify-center gap-4">

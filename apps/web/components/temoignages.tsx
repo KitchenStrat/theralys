@@ -9,19 +9,19 @@ const FEATURED: CarouselQuote[] = [
     role: "Étiopathe · Paris",
   },
   {
-    text: "Mon site est magnifique et surtout, il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur Google, ce qui n'était jamais arrivé avant.",
-    author: "Mathilde B.",
-    role: "Sophrologue · Albi",
+    text: "Le cabinet affiche complet trois semaines à l'avance depuis la refonte : le site fait le travail d'accueil à ma place.",
+    author: "Inès R.",
+    role: "Kinésiologue · Strasbourg",
   },
   {
-    text: "En trois mois, je suis passé de la page 3 à la première page sur « ostéopathe » dans ma ville. Le suivi des mots-clés rend tout ça très concret.",
-    author: "Grégoire T.",
-    role: "Ostéopathe · Lyon",
+    text: "On m'a expliqué chaque choix — structure, textes, mots-clés — sans jargon. Six mois plus tard, je suis en tête des recherches locales.",
+    author: "Thomas D.",
+    role: "Ostéopathe · Bordeaux",
   },
   {
-    text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, j'ai ajusté deux couleurs, et j'ai signé le lendemain.",
-    author: "Célia A.",
-    role: "Psychopraticienne · Nantes",
+    text: "J'ai remplacé un site vieillissant par une vitrine dont je suis fière, sans y passer un seul week-end.",
+    author: "Claire V.",
+    role: "Sophrologue · Angers",
   },
 ];
 

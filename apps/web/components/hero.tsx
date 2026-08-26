@@ -98,7 +98,7 @@ export function Hero() {
             </div>
             <div>
               <p className="text-sm font-semibold text-ink-900">
-                <span className="tracking-wider text-gold-400">★★★★★</span> 4,9/5
+                <span className="tracking-wider text-gold-400">★★★★★</span> 4,8/5
               </p>
               <p className="text-xs text-ink-500">Plus de 800 praticiens accompagnés</p>
             </div>

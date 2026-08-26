@@ -26,7 +26,7 @@
 
   --color-ink-900: #0e2233;
   --color-ink-700: #375063;
-  --color-ink-500: #647f91;
+  --color-ink-500: #5a7386; /* 4,96:1 sur blanc, 4,87:1 sur cream-50 (AA) */
   --color-ink-300: #c2d4df;
 
   /* Fond des sections sombres (marine profond, teinté bleu) */
@@ -180,7 +180,8 @@ body {
   100% { background-position: 0% 50%; }
 }
 .band-animated {
-  background: linear-gradient(115deg, #07619b, #0e97dd, #38b3f0, #0e97dd, #07619b);
+  /* Plafonné à #0e97dd : le blanc du titre garde ≥ 3:1 sur tout le cycle */
+  background: linear-gradient(115deg, #07619b, #0e97dd, #07619b, #0e97dd, #07619b);
   background-size: 240% 240%;
   animation: gradient-pan 14s ease infinite;
 }
@@ -254,11 +255,14 @@ body {
 }
 .wr > span {
   grid-area: 1 / 1;
-  white-space: nowrap;
   transition:
     opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
     translate 0.55s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.55s ease;
+}
+/* Une seule ligne à partir de md ; en dessous, les phrases passent à la ligne */
+@media (min-width: 48rem) {
+  .wr > span { white-space: nowrap; }
 }
 .wr > span[data-state="enter"] { opacity: 1; translate: 0 0; filter: blur(0); }
 .wr > span[data-state="above"] { opacity: 0; translate: 0 -0.6em; filter: blur(5px); }
@@ -292,22 +296,25 @@ body {
   to   { -webkit-mask-position: -30% 0; mask-position: -30% 0; }
 }
 
-/* ── Liseré conique tournant autour du CTA principal ───────────────────────── */
-@property --glow-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-@keyframes glow-spin {
-  to { --glow-angle: 360deg; }
-}
+/* ── Liseré conique tournant autour du CTA principal. Le dégradé est statique
+   et c'est un enfant surdimensionné qui tourne (transform composité : fluide
+   partout, aucun repaint, pas de dépendance à @property). ─────────────────── */
 .glow-ring,
 .glow-halo {
   position: absolute;
   border-radius: 9999px;
   pointer-events: none;
+}
+.glow-ring {
+  inset: -4px;
+  overflow: hidden;
+}
+.glow-ring::before {
+  content: "";
+  position: absolute;
+  inset: -150%;
   background: conic-gradient(
-    from var(--glow-angle),
+    from 0deg,
     transparent 0deg,
     rgb(255 255 255 / 0.95) 45deg,
     transparent 100deg,
@@ -315,13 +322,16 @@ body {
     rgb(183 226 251 / 0.9) 225deg,
     transparent 280deg
   );
-  animation: glow-spin 4s linear infinite;
+  animation: glow-rotate 4s linear infinite;
 }
-.glow-ring { inset: -4px; }
+@keyframes glow-rotate {
+  to { transform: rotate(360deg); }
+}
 .glow-halo {
-  inset: -12px;
-  filter: blur(14px);
-  opacity: 0.75;
+  inset: -14px;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.55), transparent 78%);
+  filter: blur(10px);
+  opacity: 0.7;
 }
 
 /* ── Toast de preuve sociale (avis qui apparaissent en bas à gauche) ───────── */
@@ -447,6 +457,7 @@ body {
     animation: none;
     opacity: 0;
   }
+  .glow-ring::before { animation: none; }
   .wr > span { transition: none; }
   .tilt { transition: none; }
   .gauge-arc,

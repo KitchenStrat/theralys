@@ -42,7 +42,6 @@ export default function HomePage() {
       <SpotlightObserver />
       <ParallaxObserver />
       <ScrollProgress />
-      <SocialProof />
       <Header />
       <main>
         <Hero />
@@ -56,6 +55,8 @@ export default function HomePage() {
         <DemoForm />
       </main>
       <Footer />
+      {/* En fin de document : le toast fixe reste après tout dans l'ordre de tabulation */}
+      <SocialProof />
     </>
   );
 }

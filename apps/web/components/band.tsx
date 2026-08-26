@@ -23,7 +23,7 @@ export function Band() {
           <span className="sr-only"> développer votre cabinet.</span>
           <WordRotator
             words={GOALS}
-            className="mt-2 w-full max-w-full justify-items-center text-2xl text-primary-100 [&>span]:max-w-full [&>span]:truncate md:text-4xl"
+            className="mt-2 w-full max-w-full items-center justify-items-center text-2xl text-white [&>span]:max-w-full md:text-4xl md:[&>span]:truncate"
           />
         </h2>
         <p

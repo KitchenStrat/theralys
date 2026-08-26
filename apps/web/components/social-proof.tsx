@@ -50,7 +50,25 @@ export function SocialProof() {
     if (closed) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (phase === "idle") {
-      timer.current = setTimeout(() => setPhase("shown"), FIRST_DELAY);
+      // N'apparaît qu'une fois le hero défilé : sa rangée d'avis reste dégagée
+      const arm = () => {
+        timer.current = setTimeout(() => setPhase("shown"), FIRST_DELAY);
+      };
+      if (window.scrollY > 400) {
+        arm();
+      } else {
+        const onScroll = () => {
+          if (window.scrollY > 400) {
+            window.removeEventListener("scroll", onScroll);
+            arm();
+          }
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+          window.removeEventListener("scroll", onScroll);
+          if (timer.current) clearTimeout(timer.current);
+        };
+      }
     } else if (phase === "shown") {
       timer.current = setTimeout(() => setPhase("leaving"), VISIBLE_FOR);
     } else {
@@ -70,6 +88,7 @@ export function SocialProof() {
 
   return (
     <div
+      inert={phase === "leaving"}
       className={clsx(
         "fixed bottom-5 left-5 z-40 hidden w-72 rounded-2xl border border-cream-200 bg-white p-4 shadow-[var(--shadow-pop)] md:block",
         phase === "shown" ? "toast-in" : "toast-out pointer-events-none",
