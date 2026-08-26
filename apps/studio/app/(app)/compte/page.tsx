@@ -50,7 +50,12 @@ export default async function AccountPage() {
                 : ""}
             </p>
             <ul className="mt-4 space-y-1 text-sm text-ink-700">
-              <li>✓ {plan.maxMotifPages} pages de spécialités</li>
+              <li>✓ {plan.homeSpecialties} spécialités présentées sur votre page d&apos;accueil</li>
+              <li>
+                {plan.maxMotifPages > 0
+                  ? `✓ ${plan.maxMotifPages} pages de spécialités dédiées (SEO local)`
+                  : "— Pages de spécialités dédiées non incluses"}
+              </li>
               <li>
                 {plan.blogArticlesPerWeek > 0
                   ? `✓ ${plan.blogArticlesPerYear} articles SEO par an (${plan.blogArticlesPerWeek}/semaine)`

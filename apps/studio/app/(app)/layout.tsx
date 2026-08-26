@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { hasBlog } from "@theralys/db";
 import { destroySession, requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { StudioNav } from "./studio-nav";
@@ -38,7 +39,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
             >
               Harmony
             </Link>
-            <StudioNav />
+            <StudioNav showPublications={site.type === "demo" || hasBlog(site.plan)} />
           </div>
           <div className="flex items-center gap-2">
             <Link

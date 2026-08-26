@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Page, Site } from "@theralys/db";
+import { hasBlogAccess } from "@/lib/site-data";
 import { RdvButton } from "./rdv-button";
 
 /**
@@ -63,7 +64,9 @@ export function SiteHeader({
           <Link href={`${home}#deroulement`} className="hover:text-[var(--site-primary)]">Déroulement</Link>
           <Link href={`${home}#questions`} className="hover:text-[var(--site-primary)]">Questions</Link>
           <Link href={`${home}#contact`} className="hover:text-[var(--site-primary)]">Contact</Link>
-          <Link href={`${prefix}/blog`} className="hover:text-[var(--site-primary)]">Blog</Link>
+          {hasBlogAccess(site) ? (
+            <Link href={`${prefix}/blog`} className="hover:text-[var(--site-primary)]">Blog</Link>
+          ) : null}
         </nav>
 
         <RdvButton

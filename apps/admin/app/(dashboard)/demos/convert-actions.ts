@@ -10,7 +10,7 @@ import { createClientInvitation } from "@/lib/invitations";
 
 const convertSchema = z.object({
   siteId: z.string().uuid(),
-  plan: z.enum(["starter", "boost", "scale"]),
+  plan: z.enum(["starter", "boost"]),
   period: z.enum(["monthly", "annual"]),
   clientEmail: z.string().trim().email("Email invalide"),
 });

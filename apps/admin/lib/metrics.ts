@@ -1,4 +1,4 @@
-import { PLANS, type PlanId } from "@theralys/db";
+import { normalizePlan, PLANS, type OfferedPlanId, type PlanId } from "@theralys/db";
 
 /**
  * Métriques de la vue d'ensemble — fonctions pures, testées unitairement.
@@ -15,13 +15,14 @@ export type SubscriptionLike = {
 export type MrrSummary = {
   /** €/mois — abonnements actifs et impayés (churn non acté), hors essais/annulés */
   total: number;
-  byPlan: Record<PlanId, number>;
+  byPlan: Record<OfferedPlanId, number>;
   payingCount: number;
   pastDueCount: number;
 };
 
 export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
-  const byPlan: Record<PlanId, number> = { starter: 0, boost: 0, scale: 0 };
+  // Offre à 2 formules : les anciens abonnements « Scale » comptent avec Boost
+  const byPlan: Record<OfferedPlanId, number> = { starter: 0, boost: 0 };
   let total = 0;
   let payingCount = 0;
   let pastDueCount = 0;
@@ -32,7 +33,7 @@ export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
     const monthly =
       subscription.billingPeriod === "annual" ? def.annualMonthlyPrice : def.monthlyPrice;
     total += monthly;
-    byPlan[subscription.plan] += monthly;
+    byPlan[normalizePlan(subscription.plan)] += monthly;
     payingCount++;
     if (subscription.status === "past_due") pastDueCount++;
   }

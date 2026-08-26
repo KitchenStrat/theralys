@@ -400,7 +400,9 @@ function buildGenerationInput(site: Site, prospect: Prospect): GenerationInput {
     city: prospect.city,
     gender: prospect.gender,
     highlightedMotifs: site.highlightedMotifs,
-    motifPageCount: motifPagesAllowance(site.plan),
+    // Les démos présentent toujours l'offre complète (équivalent Boost)
+    motifPageCount:
+      site.type === "demo" ? motifPagesAllowance("boost") : motifPagesAllowance(site.plan),
     googleEnrichment: prospect.googlePlaceId
       ? {
           businessName: prospect.googleBusinessName ?? undefined,

@@ -8,7 +8,7 @@ import {
   PLANS,
   prospects,
   sites,
-  type PlanId,
+  type OfferedPlanId,
 } from "@theralys/db";
 import { resolveAiMode } from "@theralys/ai";
 import { requireAdmin } from "@/lib/auth";
@@ -113,7 +113,7 @@ export default async function OverviewPage() {
         <Card className="p-5">
           <h2 className="font-semibold">MRR par formule</h2>
           <ul className="mt-4 space-y-2">
-            {(Object.keys(mrr.byPlan) as PlanId[]).map((plan) => {
+            {(Object.keys(mrr.byPlan) as OfferedPlanId[]).map((plan) => {
               const value = mrr.byPlan[plan];
               const share = mrr.total > 0 ? (value / mrr.total) * 100 : 0;
               return (

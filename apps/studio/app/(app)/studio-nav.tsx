@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 
-export function StudioNav() {
+export function StudioNav({ showPublications = true }: { showPublications?: boolean }) {
   const pathname = usePathname();
   const tabs = [
     { href: "/", label: "Accueil", active: pathname === "/" },
-    { href: "/publications", label: "Publications", active: pathname.startsWith("/publications") },
+    ...(showPublications
+      ? [{ href: "/publications", label: "Publications", active: pathname.startsWith("/publications") }]
+      : []),
   ];
 
   return (

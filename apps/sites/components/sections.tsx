@@ -549,9 +549,12 @@ function Specialties({
   section: Extract<Section, { type: "specialties" }>;
   ctx: SectionContext;
 }) {
-  const items = ctx.allowedMotifSlugs
-    ? section.items.filter((item) => ctx.allowedMotifSlugs!.includes(item.slug))
-    : section.items;
+  // Toutes les spécialités restent affichées quelle que soit la formule ;
+  // seules les cartes dont la page secondaire est accessible sont cliquables
+  // (Starter : cartes simples, sans lien « En savoir plus »).
+  const items = section.items;
+  const isLinked = (slug: string) =>
+    !ctx.allowedMotifSlugs || ctx.allowedMotifSlugs.includes(slug);
   if (items.length === 0) return null;
   return (
     <section
@@ -571,30 +574,44 @@ function Specialties({
           ) : null}
         </div>
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {items.map((item, index) => (
-            <Link
-              key={item.slug}
-              href={`${ctx.prefix}/motifs/${item.slug}`}
-              style={{ transitionDelay: `${Math.min(index, 5) * 70}ms` }}
-              className="reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-10 text-[var(--site-text)] shadow-lg shadow-black/10 transition-transform hover:-translate-y-1"
-            >
-              <span
-                aria-hidden
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
+          {items.map((item, index) => {
+            const inner = (
+              <>
+                <span
+                  aria-hidden
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--site-soft)] text-[var(--site-primary)]"
+                >
+                  <SectionIcon name={item.icon ?? specialtyIconFor(item.title, index)} size={32} />
+                </span>
+                <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
+                  {item.title}
+                </h3>
+                <p className="mt-3 text-[1.05rem] leading-relaxed opacity-75">
+                  <Rich text={item.excerpt} />
+                </p>
+              </>
+            );
+            const cardClass =
+              "reveal group rounded-[var(--r-lg)] bg-[var(--site-bg)] p-10 text-[var(--site-text)] shadow-lg shadow-black/10";
+            const delay = { transitionDelay: `${Math.min(index, 5) * 70}ms` };
+            return isLinked(item.slug) ? (
+              <Link
+                key={item.slug}
+                href={`${ctx.prefix}/motifs/${item.slug}`}
+                style={delay}
+                className={`${cardClass} transition-transform hover:-translate-y-1`}
               >
-                <SectionIcon name={item.icon ?? specialtyIconFor(item.title, index)} size={32} />
-              </span>
-              <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
-                {item.title}
-              </h3>
-              <p className="mt-3 text-[1.05rem] leading-relaxed opacity-75">
-                <Rich text={item.excerpt} />
-              </p>
-              <span className="mt-6 inline-block text-[1.05rem] font-medium text-[var(--site-primary)]">
-                En savoir plus →
-              </span>
-            </Link>
-          ))}
+                {inner}
+                <span className="mt-6 inline-block text-[1.05rem] font-medium text-[var(--site-primary)]">
+                  En savoir plus →
+                </span>
+              </Link>
+            ) : (
+              <div key={item.slug} style={delay} className={cardClass}>
+                {inner}
+              </div>
+            );
+          })}
         </div>
         <div className="mt-12 text-center">
           <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />

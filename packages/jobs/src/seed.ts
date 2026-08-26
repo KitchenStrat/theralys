@@ -203,7 +203,7 @@ async function createDemoSite() {
     city: "Albi",
     gender: "feminin" as const,
     highlightedMotifs: ["Gestion du stress"],
-    motifPageCount: motifPagesAllowance("scale"),
+    motifPageCount: motifPagesAllowance("boost"),
     googleEnrichment: {
       businessName: "Claire Dupont Sophrologie",
       address: "14 rue de la Berbie, 81000 Albi",
@@ -237,7 +237,7 @@ async function createDemoSite() {
       status: "ready",
       slug: DEMO_SLUG,
       name: home.siteName,
-      plan: "scale",
+      plan: "boost",
       theme: home.theme,
       prospectId: prospect!.id,
       highlightedMotifs: input.highlightedMotifs,
@@ -299,7 +299,7 @@ async function seedBlogHistory(siteId: string, now: Date) {
   const past = planEditorialTopics({
     motifs: motifs.map((m) => ({ slug: m.slug, title: m.title })),
     city: "Albi",
-    plan: "scale",
+    plan: "boost",
     from: addDays(startOfDayUtc(now), -35),
     horizonWeeks: 5,
     existingDates: new Set(),

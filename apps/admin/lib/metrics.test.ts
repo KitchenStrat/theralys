@@ -5,13 +5,14 @@ describe("computeMrr", () => {
   it("additionne actifs et impayés au bon tarif, ignore essais et annulés", () => {
     const mrr = computeMrr([
       { plan: "boost", billingPeriod: "annual", status: "active" }, // 55
-      { plan: "scale", billingPeriod: "monthly", status: "active" }, // 89
+      { plan: "scale", billingPeriod: "monthly", status: "active" }, // héritage → tarif Boost : 79
       { plan: "starter", billingPeriod: "annual", status: "past_due" }, // 48
       { plan: "scale", billingPeriod: "annual", status: "canceled" }, // 0
       { plan: "boost", billingPeriod: "monthly", status: "trialing" }, // 0
     ]);
-    expect(mrr.total).toBe(55 + 89 + 48);
-    expect(mrr.byPlan).toEqual({ starter: 48, boost: 55, scale: 89 });
+    expect(mrr.total).toBe(55 + 79 + 48);
+    // Les anciens abonnements « Scale » sont servis et comptés comme Boost
+    expect(mrr.byPlan).toEqual({ starter: 48, boost: 55 + 79 });
     expect(mrr.payingCount).toBe(3);
     expect(mrr.pastDueCount).toBe(1);
   });
@@ -74,7 +75,8 @@ describe("blogHealth", () => {
     ).toBe("late");
   });
 
-  it("Scale en retard plus vite (cadence 4/sem → 3,5 j d'intervalle)", () => {
+  it("l'ancienne formule Scale suit la cadence Boost (2/sem)", () => {
+    // 4 jours sans publication : dans les temps pour une cadence 2/sem
     expect(
       blogHealth({
         plan: "scale",
@@ -82,7 +84,7 @@ describe("blogHealth", () => {
         nextScheduledFor: null,
         now,
       }).status,
-    ).toBe("late");
+    ).toBe("ok");
   });
 
   it("aucun article mais premier planifié → ok", () => {

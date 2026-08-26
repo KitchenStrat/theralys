@@ -131,7 +131,7 @@ export const sites = pgTable(
     slug: text("slug").notNull().unique(),
     domain: text("domain").unique(), // domaine custom (Phase 3)
     name: text("name").notNull(), // ex. « Séverine Salesa, massages bien-être »
-    plan: planEnum("plan").notNull().default("scale"),
+    plan: planEnum("plan").notNull().default("boost"),
     language: text("language").notNull().default("fr"),
     bookingUrl: text("booking_url"), // lien RDV externe (Calendly, Crenolib, tel:…)
     theme: jsonb("theme").$type<SiteTheme>().notNull(),

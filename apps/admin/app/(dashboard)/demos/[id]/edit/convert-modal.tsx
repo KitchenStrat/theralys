@@ -8,7 +8,6 @@ import { convertDemoToClient, type ConversionResult } from "../../convert-action
 const PLAN_LABELS = {
   starter: "Starter — 48 €/mois (annuel) · 69 €/mois",
   boost: "Boost — 55 €/mois (annuel) · 79 €/mois",
-  scale: "Scale — 62 €/mois (annuel) · 89 €/mois",
 } as const;
 
 export function ConvertModal({
@@ -125,7 +124,9 @@ export function ConvertModal({
               ))}
             </Select>
             <FieldHint>
-              Le nombre de pages de spécialités visibles et la cadence du blog suivent la formule.
+              Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni suivi des
+              mots-clés. Boost : 6 pages de spécialités, blog (2 articles/semaine) et suivi des
+              mots-clés.
             </FieldHint>
           </div>
           <div>

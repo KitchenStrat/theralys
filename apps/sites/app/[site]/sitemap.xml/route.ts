@@ -3,6 +3,7 @@ import {
   getMotifPages,
   getPublishedArticles,
   getSiteByKey,
+  hasBlogAccess,
   siteBaseUrl,
 } from "@/lib/site-data";
 
@@ -25,12 +26,14 @@ export async function GET(_request: Request, ctx: { params: Promise<{ site: stri
     for (const page of motifs) {
       urls.push({ loc: `${base}/motifs/${page.slug}`, lastmod: page.updatedAt.toISOString() });
     }
-    urls.push({ loc: `${base}/blog` });
-    for (const article of articles) {
-      urls.push({
-        loc: `${base}/blog/${article.slug}`,
-        lastmod: (article.publishedAt ?? article.updatedAt).toISOString(),
-      });
+    if (hasBlogAccess(site)) {
+      urls.push({ loc: `${base}/blog` });
+      for (const article of articles) {
+        urls.push({
+          loc: `${base}/blog/${article.slug}`,
+          lastmod: (article.publishedAt ?? article.updatedAt).toISOString(),
+        });
+      }
     }
   }
 

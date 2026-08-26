@@ -129,7 +129,7 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
       status: "generating",
       slug,
       name: `${data.firstName} ${data.lastName}`,
-      plan: "scale", // les démos présentent la formule la plus complète
+      plan: "boost", // les démos présentent l'offre complète (équivalent Boost)
       language: data.language,
       bookingUrl: data.bookingUrl || null,
       theme: DEFAULT_THEME,

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDateFr } from "@theralys/shared";
-import { getPublishedArticles, getSiteByKey, siteBaseUrl } from "@/lib/site-data";
+import { getPublishedArticles, getSiteByKey, hasBlogAccess, siteBaseUrl } from "@/lib/site-data";
 
 type Props = { params: Promise<{ site: string }> };
 
@@ -21,6 +21,8 @@ export default async function BlogIndexPage({ params }: Props) {
   const { site: siteKey } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
+  // Formule sans blog (Starter) : la rubrique n'existe pas sur le site public
+  if (!hasBlogAccess(site)) notFound();
   const articles = await getPublishedArticles(site.id);
 
   return (

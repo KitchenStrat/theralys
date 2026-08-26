@@ -3,6 +3,7 @@ import {
   blogArticles,
   getDb,
   googleReviews,
+  hasBlog,
   motifPagesAllowance,
   pages,
   prospects,
@@ -11,6 +12,14 @@ import {
   type Page,
   type Site,
 } from "@theralys/db";
+
+/**
+ * Blog visible sur le site public ? Les démos présentent toujours l'offre
+ * complète ; pour un client, le blog suit la formule (Starter : non).
+ */
+export function hasBlogAccess(site: Site): boolean {
+  return site.type === "demo" || hasBlog(site.plan);
+}
 
 /**
  * Résout un site par clé de segment [site] :
@@ -43,9 +52,10 @@ export async function getHomePage(siteId: string): Promise<Page | null> {
 }
 
 /**
- * Pages de motifs visibles — le gating suit la formule (Starter 0, Boost 3,
- * Scale 6). Les pages excédentaires restent en base : un passage à la formule
- * supérieure les réactive sans régénération.
+ * Pages de motifs visibles — le gating suit la formule (Starter 0, Boost 6).
+ * Les pages restent en base : un passage à la formule supérieure les
+ * réactive sans régénération. Les 6 spécialités restent affichées sur la
+ * page d'accueil dans tous les cas (cartes non cliquables en Starter).
  */
 export async function getMotifPages(site: Site): Promise<Page[]> {
   const db = getDb();
