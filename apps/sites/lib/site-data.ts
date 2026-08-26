@@ -29,8 +29,11 @@ export function hasBlogAccess(site: Site): boolean {
 export async function getSiteByKey(key: string): Promise<Site | null> {
   const db = getDb();
   const decoded = decodeURIComponent(key);
+  // www.<domaine> est redirigé vers le domaine nu par Vercel ; on résout
+  // aussi sans le préfixe par sécurité (autres hébergements, mode local).
+  const host = decoded.startsWith("www.") ? decoded.slice(4) : decoded;
   const site = decoded.includes(".")
-    ? await db.query.sites.findFirst({ where: eq(sites.domain, decoded) })
+    ? await db.query.sites.findFirst({ where: eq(sites.domain, host) })
     : await db.query.sites.findFirst({ where: eq(sites.slug, decoded) });
   return site ?? null;
 }

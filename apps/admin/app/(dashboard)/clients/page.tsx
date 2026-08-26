@@ -1,8 +1,9 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { Badge, Card } from "@theralys/ui";
 import {
   blogArticles,
+  domains,
   getDb,
   PLANS,
   prospects,
@@ -37,7 +38,7 @@ export default async function ClientsPage() {
   await requireAdmin();
   const db = getDb();
 
-  const [rows, articleStats] = await Promise.all([
+  const [rows, articleStats, externalRequests] = await Promise.all([
     db
       .select({ site: sites, prospect: prospects, subscription: subscriptions, user: users })
       .from(sites)
@@ -54,9 +55,16 @@ export default async function ClientsPage() {
       })
       .from(blogArticles)
       .groupBy(blogArticles.siteId),
+    // Domaines que les clients possèdent déjà et confient à l'équipe pour
+    // rattachement (demande faite depuis leur back office, statut en attente).
+    db
+      .select({ siteId: domains.siteId, name: domains.name })
+      .from(domains)
+      .where(and(eq(domains.registrar, "externe"), eq(domains.status, "pending"))),
   ]);
 
   const statsBySite = new Map(articleStats.map((s) => [s.siteId, s]));
+  const externalRequestBySite = new Map(externalRequests.map((d) => [d.siteId, d.name]));
   const sitesBase = (process.env.SITES_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
   return (
@@ -138,6 +146,13 @@ export default async function ClientsPage() {
                     <td className="px-4 py-3">
                       {site.domain ? (
                         <span className="font-medium">{site.domain}</span>
+                      ) : externalRequestBySite.has(site.id) ? (
+                        <span>
+                          <span className="font-medium">{externalRequestBySite.get(site.id)}</span>
+                          <span className="block text-xs font-medium text-warning-500">
+                            à rattacher — domaine du client
+                          </span>
+                        </span>
                       ) : (
                         <span className="text-ink-500">—</span>
                       )}

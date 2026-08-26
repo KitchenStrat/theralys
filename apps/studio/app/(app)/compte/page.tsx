@@ -21,10 +21,16 @@ export default async function AccountPage() {
   const session = await requireClient();
   const site = await getSite(session.siteId);
   const db = getDb();
-  const [subscription, domain] = await Promise.all([
+  const [subscription, domainRows] = await Promise.all([
     db.query.subscriptions.findFirst({ where: eq(subscriptions.siteId, site.id) }),
-    db.query.domains.findFirst({ where: eq(domains.siteId, site.id) }),
+    db.query.domains.findMany({ where: eq(domains.siteId, site.id) }),
   ]);
+  // Domaine rattaché (acheté via Harmony) vs demande de rattachement d'un
+  // domaine que le client possède déjà (registrar « externe », en attente).
+  const attachedDomain = site.domain ? domainRows.find((d) => d.name === site.domain) : undefined;
+  const externalRequest = domainRows.find(
+    (d) => d.registrar === "externe" && d.status === "pending",
+  );
 
   const plan = PLANS[site.plan as PlanId];
   const badge = subscription ? STATUS_BADGES[subscription.status] : null;
@@ -77,7 +83,8 @@ export default async function AccountPage() {
 
       <DomainSection
         currentDomain={site.domain}
-        domainStatus={domain?.status ?? null}
+        domainStatus={attachedDomain?.status ?? null}
+        externalRequest={externalRequest?.name ?? null}
         fallbackUrl={siteUrl(site)}
       />
     </div>

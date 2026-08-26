@@ -80,6 +80,40 @@ export async function purchaseDomain(raw: string): Promise<{ error?: string; dom
   return { domain: domainName };
 }
 
+/**
+ * Le client possède déjà un nom de domaine (OVH, Ionos, Gandi…) : il le
+ * confie à Harmony et l'équipe s'occupe du rattachement (transfert ou DNS,
+ * puis certificat). La demande est enregistrée en `pending` avec le
+ * registrar « externe » et remonte dans le back office agence (page Clients).
+ */
+export async function requestExternalDomain(
+  raw: string,
+): Promise<{ error?: string; domain?: string }> {
+  const session = await requireClient();
+  const parsed = domainSchema.safeParse(raw);
+  if (!parsed.success) return { error: "Nom de domaine invalide (ex. mon-cabinet.fr)" };
+  const domainName = parsed.data;
+
+  const db = getDb();
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
+  if (!site) return { error: "Site introuvable" };
+  if (site.domain) return { error: `Un domaine est déjà rattaché : ${site.domain}` };
+
+  const existing = await db.query.domains.findFirst({ where: eq(domains.name, domainName) });
+  if (existing) {
+    return existing.siteId === site.id
+      ? { error: "Votre demande pour ce domaine est déjà enregistrée" }
+      : { error: "Ce domaine est déjà géré par Harmony" };
+  }
+
+  await db
+    .insert(domains)
+    .values({ siteId: site.id, name: domainName, registrar: "externe", status: "pending" });
+
+  revalidatePath("/compte");
+  return { domain: domainName };
+}
+
 /** Portail de facturation Stripe (null en mode mock). */
 export async function openBillingPortal(): Promise<{ url: string | null }> {
   const session = await requireClient();

@@ -31,23 +31,41 @@ export class VercelHostingProvider implements HostingProvider {
   }
 
   async attachDomain(domain: string): Promise<DomainAttachment> {
+    await this.addProjectDomain({ name: domain });
+    // www.<domaine> : rattaché avec redirection permanente vers le domaine nu
+    // (le CNAME créé chez OVH pointe déjà vers Vercel — sans ce rattachement,
+    // les visiteurs tapant www tomberaient sur une erreur).
+    await this.addProjectDomain({
+      name: `www.${domain}`,
+      redirect: domain,
+      redirectStatusCode: 308,
+    });
+    const verify = await fetch(this.url(`/v9/projects/${this.projectId}/domains/${domain}`), {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    const info = verify.ok ? ((await verify.json()) as { verified?: boolean }) : {};
+    return { domain, attached: true, sslReady: Boolean(info.verified) };
+  }
+
+  private async addProjectDomain(body: {
+    name: string;
+    redirect?: string;
+    redirectStatusCode?: number;
+  }): Promise<void> {
     const response = await fetch(this.url(`/v10/projects/${this.projectId}/domains`), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ name: domain }),
+      body: JSON.stringify(body),
     });
     // 409 = domaine déjà rattaché : considéré comme un succès idempotent
     if (!response.ok && response.status !== 409) {
-      throw new Error(`Vercel domains ${response.status}: ${(await response.text()).slice(0, 300)}`);
+      throw new Error(
+        `Vercel domains ${response.status}: ${(await response.text()).slice(0, 300)}`,
+      );
     }
-    const verify = await fetch(this.url(`/v9/projects/${this.projectId}/domains/${domain}`), {
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
-    const info = verify.ok ? ((await verify.json()) as { verified?: boolean }) : {};
-    return { domain, attached: true, sslReady: Boolean(info.verified) };
   }
 }
 
