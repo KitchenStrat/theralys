@@ -98,7 +98,7 @@ export type BlogHealth = {
 
 /**
  * Un blog est « en retard » si le dernier article publié est plus vieux que
- * deux intervalles de cadence (Boost 2/sem → 7 jours, Scale 4/sem → 3,5 jours).
+ * deux intervalles de cadence (Boost 4/sem → 3,5 jours).
  */
 export function blogHealth(input: {
   plan: PlanId;

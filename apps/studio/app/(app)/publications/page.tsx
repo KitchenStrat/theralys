@@ -20,7 +20,7 @@ export default async function PublicationsPage({ searchParams }: Props) {
         <Card className="mt-6 p-10 text-center text-ink-500">
           <p className="font-medium text-ink-700">Le blog automatisé n&apos;est pas inclus dans votre formule</p>
           <p className="mt-1 text-sm">
-            Passez à la formule <strong>Boost</strong> (2 articles/semaine, 6 pages de
+            Passez à la formule <strong>Boost</strong> (4 articles/semaine, 6 pages de
             spécialités et suivi des mots-clés) pour activer votre blog SEO.
           </p>
         </Card>

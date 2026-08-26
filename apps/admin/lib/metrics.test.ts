@@ -53,34 +53,34 @@ describe("blogHealth", () => {
     ).toBe("none");
   });
 
-  it("Boost à jour si dernier article < 7 jours", () => {
+  it("Boost à jour si dernier article < 3,5 jours (4/sem)", () => {
     expect(
       blogHealth({
         plan: "boost",
-        lastPublishedAt: new Date("2026-07-10T07:00:00Z"),
+        lastPublishedAt: new Date("2026-07-13T07:00:00Z"),
         nextScheduledFor: null,
         now,
       }).status,
     ).toBe("ok");
   });
 
-  it("Boost en retard au-delà de 7 jours", () => {
+  it("Boost en retard au-delà de 3,5 jours", () => {
     expect(
       blogHealth({
         plan: "boost",
-        lastPublishedAt: new Date("2026-07-01T07:00:00Z"),
+        lastPublishedAt: new Date("2026-07-10T07:00:00Z"),
         nextScheduledFor: null,
         now,
       }).status,
     ).toBe("late");
   });
 
-  it("l'ancienne formule Scale suit la cadence Boost (2/sem)", () => {
-    // 4 jours sans publication : dans les temps pour une cadence 2/sem
+  it("l'ancienne formule Scale suit la cadence Boost (4/sem)", () => {
+    // 2 jours sans publication : dans les temps pour une cadence 4/sem
     expect(
       blogHealth({
         plan: "scale",
-        lastPublishedAt: new Date("2026-07-10T07:00:00Z"),
+        lastPublishedAt: new Date("2026-07-13T07:00:00Z"),
         nextScheduledFor: null,
         now,
       }).status,

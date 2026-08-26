@@ -20,8 +20,7 @@ export type PlannedTopic = {
 export function cadenceDays(plan: PlanId): number[] {
   switch (plan) {
     case "boost":
-      return [1, 4];
-    case "scale":
+    case "scale": // héritage : servie comme Boost
       return [1, 2, 4, 5];
     default:
       return [];

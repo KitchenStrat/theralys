@@ -9,7 +9,7 @@ const MOTIFS = [
 
 describe("cadence par formule", () => {
   it("Boost : 2/semaine (lundi, jeudi)", () => {
-    expect(cadenceDays("boost")).toEqual([1, 4]);
+    expect(cadenceDays("boost")).toEqual([1, 2, 4, 5]);
   });
   it("Scale : 4/semaine (lundi, mardi, jeudi, vendredi)", () => {
     expect(cadenceDays("scale")).toEqual([1, 2, 4, 5]);
@@ -37,9 +37,9 @@ describe("planEditorialTopics", () => {
     }
   });
 
-  it("Boost : 2 sujets par semaine", () => {
+  it("Boost : 4 sujets par semaine", () => {
     const topics = planEditorialTopics({ ...base, plan: "boost" });
-    expect(topics.length).toBe(8);
+    expect(topics.length).toBe(16);
   });
 
   it("Starter : aucun sujet", () => {
@@ -98,7 +98,7 @@ describe("planification par thématiques (wizard)", () => {
       horizonWeeks: 2,
       existingDates: new Set(),
     });
-    expect(topics.length).toBe(4);
+    expect(topics.length).toBe(8);
     for (const t of topics) expect(t.motifSlug).toBe("sommeil");
   });
 });

@@ -37,11 +37,11 @@ describe("gating des formules (offre à 2 formules : Starter / Boost)", () => {
     expect(canAddMotifPage("boost", 6)).toBe(false);
   });
 
-  it("blog automatisé : Boost uniquement (104/an, 2/sem)", () => {
+  it("blog automatisé : Boost uniquement (208/an, 4/sem)", () => {
     expect(hasBlog("starter")).toBe(false);
     expect(hasBlog("boost")).toBe(true);
-    expect(PLANS.boost.blogArticlesPerWeek).toBe(2);
-    expect(PLANS.boost.blogArticlesPerYear).toBe(104);
+    expect(PLANS.boost.blogArticlesPerWeek).toBe(4);
+    expect(PLANS.boost.blogArticlesPerYear).toBe(208);
   });
 
   it("suivi des mots-clés réservé à Boost", () => {

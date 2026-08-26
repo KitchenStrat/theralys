@@ -125,7 +125,7 @@ export function ConvertModal({
             </Select>
             <FieldHint>
               Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni suivi des
-              mots-clés. Boost : 6 pages de spécialités, blog (2 articles/semaine) et suivi des
+              mots-clés. Boost : 6 pages de spécialités, blog (4 articles/semaine) et suivi des
               mots-clés.
             </FieldHint>
           </div>

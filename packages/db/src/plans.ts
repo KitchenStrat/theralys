@@ -31,7 +31,7 @@ export type PlanDefinition = {
   maxMotifPages: number;
   /** Articles SEO automatisés par semaine (0 = pas de blog automatisé) */
   blogArticlesPerWeek: number;
-  /** Articles par an (104 = 2/semaine) */
+  /** Articles par an (208 = 4/semaine) */
   blogArticlesPerYear: number;
   /** Suivi des mots-clés Google (Search Console) */
   searchConsoleAccess: boolean;
@@ -63,8 +63,8 @@ const BOOST: PlanDefinition = {
   monthlyPrice: 79,
   homeSpecialties: 6,
   maxMotifPages: 6,
-  blogArticlesPerWeek: 2,
-  blogArticlesPerYear: 104,
+  blogArticlesPerWeek: 4,
+  blogArticlesPerYear: 208,
   searchConsoleAccess: true,
   googleReviewsSync: true,
   advancedAnalytics: true,
