@@ -1,29 +1,31 @@
 /*
- * Design system Harmony (admin + studio) — identité des captures :
- * orange primaire, fonds crème/blanc cassé, cartes arrondies, ombres douces.
+ * Design system Harmony (admin + studio) — refonte bleu ciel :
+ * primaire bleu ciel, neutres froids bleu-gris, cartes arrondies,
+ * ombres douces teintées bleu nuit, halos en fond et apparitions en cascade.
  * Tokens Tailwind v4 (@theme).
  */
 @theme {
-  --color-primary-50: #fef3ee;
-  --color-primary-100: #fde4d7;
-  --color-primary-200: #fac5ae;
-  --color-primary-300: #f69e7b;
-  --color-primary-400: #f17046;
-  --color-primary-500: #ee5a2c;
-  --color-primary-600: #df4218;
-  --color-primary-700: #b93115;
-  --color-primary-800: #932a19;
-  --color-primary-900: #772617;
+  --color-primary-50: #f0f8ff;
+  --color-primary-100: #ddf0fd;
+  --color-primary-200: #b7e2fb;
+  --color-primary-300: #7bccf7;
+  --color-primary-400: #38b3f0;
+  --color-primary-500: #0e97dd;
+  --color-primary-600: #037bbd;
+  --color-primary-700: #07619b;
+  --color-primary-800: #0b5280;
+  --color-primary-900: #0f456a;
 
-  --color-cream-50: #fdfcfa;
-  --color-cream-100: #faf7f2;
-  --color-cream-200: #f5f0e8;
-  --color-cream-300: #ece4d8;
+  /* Neutres froids (la gamme garde son nom « cream » historique) */
+  --color-cream-50: #fbfdff;
+  --color-cream-100: #f3f8fc;
+  --color-cream-200: #e6eff7;
+  --color-cream-300: #d3e3ef;
 
-  --color-ink-900: #1c1917;
-  --color-ink-700: #44403c;
-  --color-ink-500: #78716c;
-  --color-ink-300: #d6d3d1;
+  --color-ink-900: #0e2233;
+  --color-ink-700: #375063;
+  --color-ink-500: #647f91;
+  --color-ink-300: #c2d4df;
 
   --color-success-500: #16a34a;
   --color-success-100: #dcfce7;
@@ -35,8 +37,59 @@
   --color-danger-100: #fee2e2;
 
   --radius-card: 1rem;
-  --shadow-card: 0 1px 3px rgb(28 25 23 / 0.05), 0 8px 24px -12px rgb(28 25 23 / 0.12);
-  --shadow-pop: 0 12px 40px -12px rgb(28 25 23 / 0.25);
+  --shadow-card: 0 1px 2px rgb(12 74 110 / 0.05), 0 12px 32px -16px rgb(12 74 110 / 0.18);
+  --shadow-pop: 0 20px 55px -18px rgb(12 74 110 / 0.32);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Fond commun : halos bleu ciel discrets, fixes au défilement ───────────── */
+body {
+  background:
+    radial-gradient(58rem 26rem at 88% -10rem, rgb(56 179 240 / 0.12), transparent 65%),
+    radial-gradient(48rem 24rem at -12% -2rem, rgb(14 151 221 / 0.08), transparent 60%),
+    radial-gradient(60rem 30rem at 50% 115%, rgb(56 179 240 / 0.06), transparent 65%),
+    var(--color-cream-100);
+  background-attachment: fixed;
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Mise en scène : apparitions en cascade + élévation des cartes ─────────── */
+@keyframes studio-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  main > * > * {
+    animation: studio-rise 0.55s cubic-bezier(0.22, 0.8, 0.35, 1) both;
+  }
+  main > * > *:nth-child(2) {
+    animation-delay: 90ms;
+  }
+  main > * > *:nth-child(3) {
+    animation-delay: 180ms;
+  }
+  main > * > *:nth-child(n + 4) {
+    animation-delay: 260ms;
+  }
+}
+
+/* Les cartes se soulèvent légèrement au survol */
+main .shadow-card {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 0.8, 0.35, 1),
+    box-shadow 0.25s ease;
+}
+main .shadow-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-pop);
 }

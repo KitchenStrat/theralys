@@ -23,7 +23,9 @@ export function NavTabs() {
             href={tab.href}
             className={clsx(
               "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-              active ? "bg-cream-200 text-ink-900" : "text-ink-500 hover:text-ink-900",
+              active
+                ? "bg-primary-500 text-white shadow-[0_6px_16px_-6px_rgb(14_151_221/0.55)]"
+                : "text-ink-500 hover:bg-primary-50 hover:text-primary-700",
             )}
           >
             {tab.label}
