@@ -58,36 +58,40 @@ export function Faq() {
         {QUESTIONS.map((item, i) => {
           const isOpen = open === i;
           return (
-            <div
-              key={item.q}
-              data-reveal
-              style={{ "--rv-delay": `${i * 60}ms` } as CSSProperties}
-              className={clsx(
-                "overflow-hidden rounded-2xl border bg-white transition-colors duration-300",
-                isOpen ? "border-primary-300 shadow-[var(--shadow-card)]" : "border-cream-200",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setOpen(isOpen ? null : i)}
-                aria-expanded={isOpen}
-                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+            /*
+             * data-reveal vit sur un conteneur dont la classe ne change
+             * jamais : la classe .is-in ajoutée par l'observer survit aux
+             * re-rendus React déclenchés par l'ouverture/fermeture.
+             */
+            <div key={item.q} data-reveal style={{ "--rv-delay": `${i * 60}ms` } as CSSProperties}>
+              <div
+                className={clsx(
+                  "overflow-hidden rounded-2xl border bg-white transition-colors duration-300",
+                  isOpen ? "border-primary-300 shadow-[var(--shadow-card)]" : "border-cream-200",
+                )}
               >
-                <span className="font-semibold text-ink-900">{item.q}</span>
-                <span
-                  className={clsx(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-300",
-                    isOpen ? "rotate-45 bg-primary-500 text-white" : "bg-primary-100 text-primary-600",
-                  )}
+                <button
+                  type="button"
+                  onClick={() => setOpen(isOpen ? null : i)}
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
                 >
-                  <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <path d="M8 3v10M3 8h10" strokeLinecap="round" />
-                  </svg>
-                </span>
-              </button>
-              <div className={clsx("faq-panel", isOpen && "open")}>
-                <div>
-                  <p className="px-6 pb-5 leading-relaxed text-ink-700">{item.a}</p>
+                  <span className="font-semibold text-ink-900">{item.q}</span>
+                  <span
+                    className={clsx(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-300",
+                      isOpen ? "rotate-45 bg-primary-500 text-white" : "bg-primary-100 text-primary-600",
+                    )}
+                  >
+                    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                      <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                </button>
+                <div className={clsx("faq-panel", isOpen && "open")}>
+                  <div>
+                    <p className="px-6 pb-5 leading-relaxed text-ink-700">{item.a}</p>
+                  </div>
                 </div>
               </div>
             </div>

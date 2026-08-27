@@ -1,19 +1,19 @@
 import { type CSSProperties } from "react";
 
 /**
- * Bandeau défilant : là où le cabinet devient visible. Marques citées en
- * texte (pas de logos embarqués) — Google, Maps, et les assistants IA qui
+ * Bandeau défilant : là où le cabinet devient visible. Logos officiels
+ * servis depuis /public/logos — Google, Maps, et les assistants IA qui
  * s'appuient sur un site bien structuré pour recommander un praticien.
  */
 const PLATFORMS = [
-  "Google",
-  "Google Maps",
-  "ChatGPT",
-  "Claude",
-  "Perplexity",
-  "Gemini",
-  "Bing",
-  "Mistral",
+  { name: "Google", logo: "/logos/google.svg" },
+  { name: "Google Maps", logo: "/logos/google-maps.svg" },
+  { name: "ChatGPT", logo: "/logos/chatgpt.svg" },
+  { name: "Claude", logo: "/logos/claude.svg" },
+  { name: "Perplexity", logo: "/logos/perplexity.svg" },
+  { name: "Gemini", logo: "/logos/gemini.svg" },
+  { name: "Bing", logo: "/logos/bing.svg" },
+  { name: "Mistral", logo: "/logos/mistral.svg" },
 ];
 
 export function Logos() {
@@ -29,12 +29,13 @@ export function Logos() {
         style={{ "--marquee-speed": "30s" } as CSSProperties}
       >
         <div className="marquee-track items-center gap-3 pr-3">
-          {row.map((name, i) => (
+          {row.map((platform, i) => (
             <span
-              key={`${name}-${i}`}
-              className="whitespace-nowrap rounded-full border border-cream-200 bg-white px-5 py-2 font-display text-base font-semibold text-ink-700 shadow-sm transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
+              key={`${platform.name}-${i}`}
+              className="flex items-center gap-2.5 whitespace-nowrap rounded-full border border-cream-200 bg-white px-5 py-2 font-display text-base font-semibold text-ink-700 shadow-sm transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
             >
-              {name}
+              <img src={platform.logo} alt="" loading="lazy" className="h-5 w-auto" />
+              {platform.name}
             </span>
           ))}
         </div>
