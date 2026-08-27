@@ -4,6 +4,7 @@ const COLUMNS = [
     links: [
       { href: "#fonctionnalites", label: "Fonctionnalités" },
       { href: "#tarifs", label: "Tarifs" },
+      { href: "#simulateur", label: "Simulateur de revenus" },
       { href: "#temoignages", label: "Témoignages" },
       { href: "#faq", label: "FAQ" },
     ],
