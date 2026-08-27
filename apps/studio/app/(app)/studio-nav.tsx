@@ -4,38 +4,49 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 
+/**
+ * Navigation latérale du studio (horizontale et défilable sur mobile).
+ * L'éditeur de site n'apparaît volontairement pas ici : on y accède
+ * depuis la carte « Votre site » de l'Accueil.
+ */
 export function StudioNav({ showPublications = true }: { showPublications?: boolean }) {
   const pathname = usePathname();
-  const tabs = [
+  const items = [
     { href: "/", label: "Accueil", active: pathname === "/" },
     ...(showPublications
-      ? [{ href: "/publications", label: "Publications", active: pathname.startsWith("/publications") }]
+      ? [
+          {
+            href: "/publications",
+            label: "Publications",
+            active: pathname.startsWith("/publications"),
+          },
+        ]
       : []),
+    { href: "/mots-cles", label: "Mots-clés", active: pathname.startsWith("/mots-cles") },
+    { href: "/academie", label: "Académie", active: pathname.startsWith("/academie") },
+    { href: "/compte", label: "Compte", active: pathname.startsWith("/compte") },
   ];
 
   return (
-    <nav className="flex items-center gap-1" aria-label="Navigation">
-      {tabs.map((tab) => (
+    <nav
+      aria-label="Navigation"
+      className="flex items-center gap-1 overflow-x-auto px-4 pb-3 md:flex-col md:items-stretch md:overflow-visible md:px-3 md:pb-0"
+    >
+      {items.map((item) => (
         <Link
-          key={tab.href}
-          href={tab.href}
+          key={item.href}
+          href={item.href}
+          aria-current={item.active ? "page" : undefined}
           className={clsx(
-            "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-            tab.active
-              ? "bg-primary-500 text-white shadow-[0_6px_16px_-6px_rgb(14_151_221/0.55)]"
+            "whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-medium transition-colors",
+            item.active
+              ? "bg-primary-100 text-primary-800"
               : "text-ink-500 hover:bg-primary-50 hover:text-primary-700",
           )}
         >
-          {tab.label}
+          {item.label}
         </Link>
       ))}
-      {/* E-learning : phase ultérieure — visible mais inactif */}
-      <span
-        title="Bientôt disponible"
-        className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-medium text-ink-300"
-      >
-        E-learning
-      </span>
     </nav>
   );
 }

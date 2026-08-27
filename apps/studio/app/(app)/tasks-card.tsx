@@ -8,7 +8,7 @@ import type { OnboardingTask } from "@theralys/db";
 import { completeOnboardingTask } from "./actions";
 
 const TASK_META: Record<string, { label: string; href: string }> = {
-  connect_google: { label: "Connecter votre fiche Google", href: "/#visibilite" },
+  connect_google: { label: "Connecter votre fiche Google", href: "/mots-cles#visibilite" },
   verify_pages: { label: "Vérifier vos pages secondaires", href: "/editor" },
   publish_site: { label: "Publier votre site", href: "/editor" },
   activate_blog: { label: "Activer votre blog", href: "/publications" },
