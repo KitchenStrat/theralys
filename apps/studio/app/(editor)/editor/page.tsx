@@ -25,6 +25,10 @@ export default async function EditorPage({ searchParams }: Props) {
 
   return (
     <SiteEditor
+      // Remonte l'éditeur quand on change de page : sans ça, l'état `sections`
+      // de l'ancienne page survit à la navigation ?page=… et peut être publié
+      // sur la nouvelle (les pages motifs partagent la même structure).
+      key={selected?.id ?? "aucune"}
       site={{
         id: site.id,
         name: site.name,

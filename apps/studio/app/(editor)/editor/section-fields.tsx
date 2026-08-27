@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -772,7 +773,8 @@ function textToHtml(text: string): string {
   return text
     .split("\n")
     .map((line) => {
-      const inner = escapeHtml(line).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      // Quantificateur paresseux : le contenu peut contenir un « * » isolé
+      const inner = escapeHtml(line).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
       return `<div>${inner || "<br>"}</div>`;
     })
     .join("");
@@ -780,33 +782,90 @@ function textToHtml(text: string): string {
 
 /** HTML de la zone d'édition → texte stocké (le gras redevient **…**). */
 function htmlToText(root: HTMLElement): string {
-  const inline = (node: Node): string => {
+  const inline = (node: Node, inBold: boolean): string => {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
     if (!(node instanceof HTMLElement)) return "";
     if (node.tagName === "BR") return "\n";
-    const content = Array.from(node.childNodes).map(inline).join("");
-    if ((node.tagName === "STRONG" || node.tagName === "B") && content.trim()) {
-      return `**${content}**`;
+    const bold = node.tagName === "STRONG" || node.tagName === "B";
+    const content = Array.from(node.childNodes)
+      .map((child) => inline(child, inBold || bold))
+      .join("");
+    // Un gras imbriqué dans un gras ne rouvre pas de marqueurs ; un gras
+    // multi-lignes est refermé puis rouvert à chaque ligne pour rester
+    // analysable par les regex mono-lignes.
+    if (bold && !inBold && content.trim()) {
+      return content
+        .split("\n")
+        .map((part) => (part.trim() ? `**${part}**` : part))
+        .join("\n");
     }
     return content;
   };
   const lines: string[] = [];
   let loose = "";
+  const pushLoose = () => {
+    if (loose) {
+      // Un <br> final (reliquat Firefox) ne doit pas devenir un \n stocké
+      lines.push(loose.replace(/\n+$/, ""));
+      loose = "";
+    }
+  };
   for (const child of Array.from(root.childNodes)) {
     const isBlock =
       child instanceof HTMLElement && (child.tagName === "DIV" || child.tagName === "P");
     if (isBlock) {
-      if (loose) {
-        lines.push(loose);
-        loose = "";
-      }
-      lines.push(inline(child).replace(/\n+$/, ""));
+      pushLoose();
+      lines.push(inline(child, false).replace(/\n+$/, ""));
     } else {
-      loose += inline(child);
+      loose += inline(child, false);
     }
   }
-  if (loose) lines.push(loose);
+  pushLoose();
   return lines.join("\n");
+}
+
+/**
+ * Dépôt (glisser-déposer) forcé en texte brut, inséré au point de dépôt :
+ * sans interception, le navigateur insère la version HTML riche (liens,
+ * couleurs, listes…) que la sérialisation ne sait pas représenter.
+ */
+function dropAsPlainText(
+  event: DragEvent<HTMLDivElement>,
+  el: HTMLElement | null,
+  flatten: boolean,
+): boolean {
+  event.preventDefault();
+  if (!el) return false;
+  let text = event.dataTransfer.getData("text/plain");
+  if (flatten) text = text.replace(/\s*\n+\s*/g, " ");
+  if (!text) return false;
+  const doc = document as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  const selection = window.getSelection();
+  if (!selection) return false;
+  let range: Range | null = null;
+  if (doc.caretRangeFromPoint) {
+    range = doc.caretRangeFromPoint(event.clientX, event.clientY);
+  } else if (doc.caretPositionFromPoint) {
+    const position = doc.caretPositionFromPoint(event.clientX, event.clientY);
+    if (position) {
+      range = document.createRange();
+      range.setStart(position.offsetNode, position.offset);
+    }
+  }
+  if (!range || !el.contains(range.startContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  el.focus();
+  document.execCommand("insertText", false, text);
+  return true;
 }
 
 /**
@@ -966,6 +1025,9 @@ function ParagraphsField({
         onInput={emit}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
+        onDrop={(event) => {
+          if (dropAsPlainText(event, ref.current, false)) emit();
+        }}
         className="min-h-36 w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 [&_b]:font-semibold [&_strong]:font-semibold"
       />
       <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
@@ -1014,6 +1076,9 @@ function RichField({
     if (!el) return;
     let text = htmlToText(el);
     if (!multiline) text = text.replace(/\s*\n+\s*/g, " ");
+    // Un champ vidé doit stocker "" (Firefox laisse un <br> résiduel qui
+    // deviendrait sinon un espace) : le rendu public masque les champs vides.
+    if (!text.trim()) text = "";
     lastEmitted.current = text;
     onChange(text);
   }
@@ -1076,6 +1141,9 @@ function RichField({
         onInput={emit}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
+        onDrop={(event) => {
+          if (dropAsPlainText(event, ref.current, !multiline)) emit();
+        }}
         className={`${minHeight} w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 [&_b]:font-semibold [&_strong]:font-semibold`}
       />
     </div>

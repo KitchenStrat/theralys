@@ -291,7 +291,8 @@ function SectionIcon({
 
 /** Rendu inline léger des textes générés : **gras** (jamais de HTML libre). */
 function Rich({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  // Quantificateur paresseux : le contenu peut contenir un « * » isolé
+  const parts = text.split(/(\*\*.+?\*\*)/g);
   return (
     <>
       {parts.map((part, i) =>
