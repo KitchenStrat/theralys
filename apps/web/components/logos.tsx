@@ -8,12 +8,12 @@ import { type CSSProperties } from "react";
 const PLATFORMS = [
   { name: "Google", logo: "/logos/google.svg" },
   { name: "Google Maps", logo: "/logos/google-maps.svg" },
+  { name: "Pages Jaunes", logo: "/logos/pages-jaunes.svg" },
   { name: "ChatGPT", logo: "/logos/chatgpt.svg" },
   { name: "Claude", logo: "/logos/claude.svg" },
-  { name: "Perplexity", logo: "/logos/perplexity.svg" },
-  { name: "Gemini", logo: "/logos/gemini.svg" },
+  { name: "Meta", logo: "/logos/meta.svg" },
+  { name: "Instagram", logo: "/logos/instagram.svg" },
   { name: "Bing", logo: "/logos/bing.svg" },
-  { name: "Mistral", logo: "/logos/mistral.svg" },
 ];
 
 export function Logos() {
