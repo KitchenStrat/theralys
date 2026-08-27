@@ -112,7 +112,7 @@ export function MiniReview({ className = "" }: { className?: string }) {
       </div>
       <p className="mt-1.5 text-[10px] tracking-wider text-gold-400">{GOLD_STARS}</p>
       <p className="mt-1 text-[9px] leading-relaxed text-ink-700">
-        « Une écoute exceptionnelle, je recommande vivement ce cabinet. »
+        « Très bonne écoute, cabinet chaleureux. Je recommande ! »
       </p>
     </div>
   );

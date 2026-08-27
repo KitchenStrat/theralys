@@ -4,22 +4,22 @@ import { QuoteCarousel, type CarouselQuote } from "./quote-carousel";
 
 const FEATURED: CarouselQuote[] = [
   {
-    text: "J'ai fait appel à Harmony pour la création de mon site. L'objectif était d'avoir un site élégant, structuré et réellement performant sur Google. L'accompagnement a été sérieux du premier échange à la mise en ligne — et les résultats ont suivi.",
+    text: "J'ai fait appel à Harmony pour la création de mon site. Je voulais un site élégant et surtout bien référencé, pas juste une jolie vitrine. L'accompagnement a été sérieux du premier échange jusqu'à la mise en ligne, et les résultats ont suivi. Je recommande !",
     author: "Gabriel M.",
     role: "Étiopathe · Paris",
   },
   {
-    text: "Le cabinet affiche complet trois semaines à l'avance depuis la refonte : le site fait le travail d'accueil à ma place.",
+    text: "Le cabinet affiche complet 3 semaines à l'avance depuis la refonte... le site fait le travail d'accueil à ma place, moi je me concentre sur mes séances.",
     author: "Inès R.",
     role: "Kinésiologue · Strasbourg",
   },
   {
-    text: "On m'a expliqué chaque choix — structure, textes, mots-clés — sans jargon. Six mois plus tard, je suis en tête des recherches locales.",
+    text: "On m'a expliqué chaque choix (structure, textes, mots clés) sans jargon. 6 mois plus tard je suis en tête des recherches sur ma ville, honnêtement je m'y attendais pas.",
     author: "Thomas D.",
     role: "Ostéopathe · Bordeaux",
   },
   {
-    text: "J'ai remplacé un site vieillissant par une vitrine dont je suis fière, sans y passer un seul week-end.",
+    text: "J'ai remplacé mon vieux site qui datait de 2015 par une vitrine dont je suis fière, sans y passer un seul week end. Rien que ça, ça valait le coup",
     author: "Claire V.",
     role: "Sophrologue · Angers",
   },
@@ -34,49 +34,49 @@ const QUOTES = [
   {
     name: "Mathilde B.",
     role: "Sophrologue · Albi",
-    text: "Mon site est magnifique et surtout, il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur Google, ce qui n'était jamais arrivé avant.",
+    text: "Mon site est magnifique et surtout il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur google, ça m'était jamais arrivé avant",
     photo: "/avatars/therapist-10.jpg",
   },
   {
     name: "Rose L.",
     role: "Naturopathe · Montpellier",
-    text: "Le blog se remplit tout seul avec des articles sérieux et bien écrits. Mes patients me disent qu'ils les lisent — et Google aussi, visiblement.",
+    text: "Le blog se remplit tout seul avec des articles sérieux, mes patients m'en parlent en consultation. Et visiblement google aime bien aussi :)",
     photo: "/avatars/cabinet-3.jpg",
   },
   {
     name: "Nadine F.",
     role: "Hypnothérapeute · Toulouse",
-    text: "Zéro technique de mon côté : le domaine, l'hébergement, les mises à jour… tout est géré. Je modifie mes horaires en deux clics et c'est en ligne.",
+    text: "Franchement top. Je m'occupe de rien, le domaine l'hébergement les mises à jour tout est géré. Je change mes horaires en 2 clics et c'est en ligne.",
     photo: "/avatars/cabinet-5.jpg",
   },
   {
     name: "Grégoire T.",
     role: "Ostéopathe · Lyon",
-    text: "En trois mois, je suis passé de la page 3 à la première page sur « ostéopathe » dans ma ville. Le suivi des mots-clés rend tout ça très concret.",
+    text: "En 3 mois je suis passé de la page 3 à la 1ère page sur ostéopathe dans ma ville... je pensais pas que ça irait aussi vite. Le suivi des mots clés rend tout ça très concret.",
     photo: "/avatars/therapist-4.jpg",
   },
   {
     name: "Célia A.",
     role: "Psychopraticienne · Nantes",
-    text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, j'ai ajusté deux couleurs, et j'ai signé le lendemain.",
+    text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, ajusté 2-3 couleurs et signé le lendemain. Rien à redire",
     photo: "/avatars/logo-cabinet-3.svg",
   },
   {
     name: "Karim S.",
     role: "Réflexologue · Bordeaux",
-    text: "Mes avis Google apparaissent directement sur mon site, ça rassure énormément les nouveaux patients. Très pro, très simple.",
+    text: "Mes avis google apparaissent directement sur le site ça rassure les nouveaux patients. Tres pro et tres simple d'utilisation !!",
     photo: "/avatars/cabinet-1.jpg",
   },
   {
     name: "Élodie P.",
     role: "Sage-femme · Rennes",
-    text: "Je voulais un site sobre et rassurant, pas un truc criard. Le résultat est exactement dans l'esprit de mon cabinet.",
+    text: "Je voulais un site sobre et rassurant, pas un truc criard. C'est exactement ça. Merci encore",
     photo: "/avatars/cabinet-6.jpg",
   },
   {
     name: "Vincent M.",
     role: "Chiropracteur · Grenoble",
-    text: "Le tableau de bord me montre les appels et les demandes d'itinéraire générés par le site. Je sais exactement ce que ça me rapporte.",
+    text: "Le tableau de bord montre les appels et les demandes d'itinéraire générés par le site, au moins je sais ce que ça me rapporte concrètement.",
     photo: "/avatars/therapist-12.jpg",
   },
 ];
