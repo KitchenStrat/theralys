@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { SECTION_ICONS, SECTION_ICON_LABELS, specialtyIconFor, type Section } from "@theralys/shared";
 import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
@@ -750,11 +757,56 @@ function splitParagraphs(text: string): string[] {
     .filter((p) => p.trim().length > 0);
 }
 
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Texte stocké (marqueurs **gras**) → HTML affiché : vrai gras, une div par ligne. */
+function textToHtml(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const inner = escapeHtml(line).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      return `<div>${inner || "<br>"}</div>`;
+    })
+    .join("");
+}
+
+/** HTML de la zone d'édition → texte stocké (le gras redevient **…**). */
+function htmlToText(root: HTMLElement): string {
+  const inline = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (!(node instanceof HTMLElement)) return "";
+    if (node.tagName === "BR") return "\n";
+    const content = Array.from(node.childNodes).map(inline).join("");
+    if ((node.tagName === "STRONG" || node.tagName === "B") && content.trim()) {
+      return `**${content}**`;
+    }
+    return content;
+  };
+  const lines: string[] = [];
+  let loose = "";
+  for (const child of Array.from(root.childNodes)) {
+    const isBlock =
+      child instanceof HTMLElement && (child.tagName === "DIV" || child.tagName === "P");
+    if (isBlock) {
+      if (loose) {
+        lines.push(loose);
+        loose = "";
+      }
+      lines.push(inline(child).replace(/\n+$/, ""));
+    } else {
+      loose += inline(child);
+    }
+  }
+  if (loose) lines.push(loose);
+  return lines.join("\n");
+}
+
 /**
- * Un seul champ « Paragraphe » : Entrée passe à la ligne, une ligne vide
- * sépare deux paragraphes. La mini-barre met la sélection en gras (**…**,
- * aussi via Ctrl/Cmd+B) ou transforme la ligne courante en coche ✅ —
- * le format stocké (tableau de paragraphes) ne change pas.
+ * Un seul champ « Paragraphe », en vrai WYSIWYG : le gras s'affiche en gras
+ * (aucun marqueur visible), Entrée passe à la ligne, une ligne vide sépare
+ * deux paragraphes. La zone convertit vers le format stocké (tableau de
+ * paragraphes avec **gras**) — le rendu côté site ne change pas.
  */
 function ParagraphsField({
   paragraphs,
@@ -763,90 +815,101 @@ function ParagraphsField({
   paragraphs: string[];
   onChange: (paragraphs: string[]) => void;
 }) {
-  const [text, setText] = useState(() => paragraphs.join("\n\n"));
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const lastEmitted = useRef<string | null>(null);
 
-  // Valeur modifiée ailleurs (changement de page, régénération) → resynchronise
+  // Injection initiale, puis resynchronisation si la valeur change ailleurs
+  // (changement de page, régénération) — jamais pendant la frappe.
   useEffect(() => {
-    if (splitParagraphs(text).join("\u0001") !== paragraphs.join("\u0001")) {
-      setText(paragraphs.join("\n\n"));
+    const el = ref.current;
+    if (!el) return;
+    if (
+      lastEmitted.current !== null &&
+      splitParagraphs(lastEmitted.current).join("\u0001") === paragraphs.join("\u0001")
+    ) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const incoming = paragraphs.join("\n\n");
+    el.innerHTML = textToHtml(incoming);
+    lastEmitted.current = incoming;
   }, [paragraphs]);
 
-  function update(next: string, selStart?: number, selEnd?: number) {
-    setText(next);
-    onChange(splitParagraphs(next));
-    if (selStart !== undefined) {
-      requestAnimationFrame(() => {
-        const el = ref.current;
-        if (el) {
-          el.focus();
-          el.setSelectionRange(selStart, selEnd ?? selStart);
-        }
-      });
-    }
+  function emit() {
+    const el = ref.current;
+    if (!el) return;
+    const text = htmlToText(el);
+    lastEmitted.current = text;
+    onChange(splitParagraphs(text));
   }
 
   function toggleBold() {
-    const el = ref.current;
-    if (!el) return;
-    let s = el.selectionStart;
-    let e = el.selectionEnd;
-    // Sélection (ou simple curseur) qui touche un passage déjà en gras → on l'enlève
-    const bold = /\*\*([^*]+)\*\*/g;
-    for (let m = bold.exec(text); m; m = bold.exec(text)) {
-      const start = m.index;
-      const end = start + m[0].length;
-      if (s <= end && e >= start) {
-        const inner = m[1] ?? "";
-        update(text.slice(0, start) + inner + text.slice(end), start, start + inner.length);
-        return;
-      }
-    }
-    // Sinon on entoure la sélection, sans les espaces de bord
-    while (s < e && /\s/.test(text[s] ?? "")) s++;
-    while (e > s && /\s/.test(text[e - 1] ?? "")) e--;
-    const content = text.slice(s, e) || "texte en gras";
-    update(`${text.slice(0, s)}**${content}**${text.slice(e)}`, s + 2, s + 2 + content.length);
+    document.execCommand("styleWithCSS", false, "false");
+    document.execCommand("bold");
+    emit();
   }
 
   function toggleCheck() {
     const el = ref.current;
     if (!el) return;
-    const s = el.selectionStart;
-    const e = Math.max(el.selectionEnd, s);
-    const start = text.lastIndexOf("\n", s - 1) + 1;
-    const endIdx = text.indexOf("\n", e);
-    const end = endIdx === -1 ? text.length : endIdx;
-    const lines = text.slice(start, end).split("\n");
-    const filled = lines.filter((l) => l.trim().length > 0);
-    const allChecked = filled.length > 0 && filled.every((l) => l.trimStart().startsWith("✅"));
-    const next = lines
-      .map((l) => {
-        if (!l.trim()) return l;
-        if (allChecked) return l.replace(/^(\s*)✅\s?/, "$1");
-        return l.trimStart().startsWith("✅") ? l : `✅ ${l.trimStart()}`;
-      })
-      .join("\n");
-    update(text.slice(0, start) + next + text.slice(end), start, start + next.length);
+    if (el.children.length === 0) el.innerHTML = "<div><br></div>";
+    const blocks = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+    const selection = window.getSelection();
+    const blockOf = (start: Node | null): HTMLElement | null => {
+      let n = start;
+      while (n && n !== el) {
+        if (n.parentNode === el && n instanceof HTMLElement) return n;
+        n = n.parentNode;
+      }
+      return null;
+    };
+    let a = selection ? blockOf(selection.anchorNode) : null;
+    let f = selection ? blockOf(selection.focusNode) : null;
+    if (!a && !f) return;
+    a = a ?? f;
+    f = f ?? a;
+    const ia = blocks.indexOf(a as HTMLElement);
+    const io = blocks.indexOf(f as HTMLElement);
+    const covered = blocks.slice(Math.min(ia, io), Math.max(ia, io) + 1);
+    const filled = covered.filter((b) => (b.textContent ?? "").trim().length > 0);
+    if (filled.length === 0) return;
+    const allChecked = filled.every((b) => (b.textContent ?? "").trimStart().startsWith("✅"));
+    for (const b of filled) {
+      if (allChecked) {
+        const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+        const t = walker.nextNode() as Text | null;
+        if (t) t.data = t.data.replace(/^\s*✅\s?/, "");
+      } else if (!(b.textContent ?? "").trimStart().startsWith("✅")) {
+        b.insertBefore(document.createTextNode("✅ "), b.firstChild);
+      }
+    }
+    emit();
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
       event.preventDefault();
       toggleBold();
+      return;
+    }
+    // Seul le gras est proposé : italique et souligné sont neutralisés
+    if ((event.ctrlKey || event.metaKey) && ["i", "u"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
     }
   }
 
-  const rows = Math.min(14, Math.max(6, text.split("\n").length + 1));
+  function onPaste(event: ClipboardEvent<HTMLDivElement>) {
+    // Collage en texte brut : pas de HTML importé de Word ou d'ailleurs
+    event.preventDefault();
+    document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+    emit();
+  }
 
   return (
     <div>
       <div className="mb-1 flex items-end justify-between gap-2">
         <p className="text-xs font-medium text-ink-700">Paragraphe</p>
         <div className="flex gap-1">
-          {/* onMouseDown + preventDefault : la sélection du textarea reste active */}
+          {/* onMouseDown + preventDefault : la sélection reste active */}
           <button
             type="button"
             title="Mettre la sélection en gras (Ctrl+B)"
@@ -873,18 +936,22 @@ function ParagraphsField({
           </button>
         </div>
       </div>
-      <textarea
+      <div
         ref={ref}
-        value={text}
-        rows={rows}
-        onChange={(e) => update(e.target.value)}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="true"
+        aria-label="Paragraphe"
+        onInput={emit}
         onKeyDown={onKeyDown}
-        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        onPaste={onPaste}
+        className="min-h-36 w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 [&_b]:font-semibold [&_strong]:font-semibold"
       />
       <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-        💡 Sélectionnez un passage puis <strong>B</strong> (ou Ctrl+B) pour le mettre en gras ·{" "}
-        <strong>✅</strong> transforme la ligne en coche · Entrée passe à la ligne, une ligne
-        vide sépare deux paragraphes
+        💡 Sélectionnez un passage puis <strong>B</strong> (ou Ctrl+B) : il passe en gras
+        directement · <strong>✅</strong> transforme la ligne en coche · Entrée passe à la
+        ligne, une ligne vide sépare deux paragraphes
       </p>
     </div>
   );
