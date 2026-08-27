@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
 
 /** Données de formule sérialisées côté serveur depuis @theralys/db (source unique). */
@@ -21,28 +21,98 @@ const TAGLINES: Record<string, string> = {
   boost: "La croissance en automatique : SEO, blog et suivi complet.",
 };
 
-function featureList(plan: PlanCard): { text: string; included: boolean }[] {
+/* Icônes des caractéristiques (traits 20×20, couleur héritée du badge) */
+const ICONS: Record<string, ReactNode> = {
+  article: (
+    <>
+      <path d="M5.5 2.75h6.25l3.25 3.25v11.25H5.5z" strokeLinejoin="round" />
+      <path d="M11.5 2.75V6.5h3.5M8 10h4.5M8 13h4.5" strokeLinecap="round" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m10 3 7 3.75L10 10.5 3 6.75 10 3Z" strokeLinejoin="round" />
+      <path d="m3 10.5 7 3.75 7-3.75M3 14l7 3.75L17 14" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="8.75" cy="8.75" r="5.25" />
+      <path d="m12.75 12.75 4 4M7 8.75h3.5M8.75 7v3.5" strokeLinecap="round" />
+    </>
+  ),
+  site: (
+    <>
+      <rect x="2.75" y="3.75" width="14.5" height="10" rx="1.5" />
+      <path d="M7.5 17h5M10 13.75V17M2.75 7h14.5" strokeLinecap="round" />
+    </>
+  ),
+  grid: (
+    <>
+      <rect x="3" y="3" width="6" height="6" rx="1.5" />
+      <rect x="11" y="3" width="6" height="6" rx="1.5" />
+      <rect x="3" y="11" width="6" height="6" rx="1.5" />
+      <rect x="11" y="11" width="6" height="6" rx="1.5" />
+    </>
+  ),
+  star: (
+    <path
+      d="m10 2.75 2.2 4.55 5 .7-3.65 3.5.9 4.95L10 14.1l-4.45 2.35.9-4.95-3.65-3.5 5-.7L10 2.75Z"
+      strokeLinejoin="round"
+    />
+  ),
+  chart: <path d="M3.5 16.5h13M5.75 16.5v-6M10 16.5V5.5M14.25 16.5v-4" strokeLinecap="round" />,
+  server: (
+    <>
+      <circle cx="10" cy="10" r="7.25" />
+      <path d="M2.75 10h14.5M10 2.75c-4.5 4.5-4.5 10 0 14.5 4.5-4.5 4.5-10 0-14.5Z" strokeLinecap="round" />
+    </>
+  ),
+};
+
+type Feature = { text: string; included: boolean; highlight: boolean; icon: string };
+
+/*
+ * Les trois différenciateurs (blog SEO, pages dédiées, suivi des mots-clés)
+ * ouvrent la liste, mis en avant quand la formule les inclut, élégamment
+ * grisés sinon.
+ */
+function featureList(plan: PlanCard): Feature[] {
   return [
-    { text: "Site professionnel complet, livré clé en main", included: true },
-    { text: `${plan.homeSpecialties} spécialités présentées sur votre accueil`, included: true },
+    {
+      text:
+        plan.blogArticlesPerWeek > 0
+          ? `${plan.blogArticlesPerYear} articles de blog SEO / an`
+          : "Articles de blog SEO automatisés",
+      included: plan.blogArticlesPerWeek > 0,
+      highlight: true,
+      icon: "article",
+    },
     {
       text:
         plan.maxMotifPages > 0
           ? `${plan.maxMotifPages} pages de spécialités dédiées (SEO local)`
           : "Pages de spécialités dédiées",
       included: plan.maxMotifPages > 0,
+      highlight: true,
+      icon: "layers",
     },
     {
-      text:
-        plan.blogArticlesPerWeek > 0
-          ? `Blog automatisé : ${plan.blogArticlesPerWeek} articles/semaine (${plan.blogArticlesPerYear}/an)`
-          : "Blog automatisé",
-      included: plan.blogArticlesPerWeek > 0,
+      text: "Suivi des mots-clés Google",
+      included: plan.searchConsoleAccess,
+      highlight: true,
+      icon: "search",
     },
-    { text: "Suivi des mots-clés Google", included: plan.searchConsoleAccess },
-    { text: "Avis Google synchronisés sur votre site", included: true },
-    { text: "Statistiques de visites et d'appels", included: true },
-    { text: "Hébergement, nom de domaine et SSL inclus", included: true },
+    { text: "Site professionnel complet, livré clé en main", included: true, highlight: false, icon: "site" },
+    {
+      text: `${plan.homeSpecialties} spécialités présentées sur votre accueil`,
+      included: true,
+      highlight: false,
+      icon: "grid",
+    },
+    { text: "Avis Google synchronisés sur votre site", included: true, highlight: false, icon: "star" },
+    { text: "Statistiques de visites et d'appels", included: true, highlight: false, icon: "chart" },
+    { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];
 }
 
@@ -136,19 +206,39 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
                   ? "Engagement 12 mois — le meilleur tarif"
                   : "Sans engagement, résiliable à tout moment"}
               </p>
-              <ul className="mt-6 space-y-2.5">
+              <ul className="mt-6 space-y-3">
                 {featureList(plan).map((feature) => (
-                  <li key={feature.text} className="flex items-start gap-2.5 text-sm">
-                    {feature.included ? (
-                      <svg viewBox="0 0 16 16" className="mt-0.5 h-4 w-4 shrink-0 text-primary-500" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                        <path d="m2.5 8.5 3.5 3.5 7-8" strokeLinecap="round" strokeLinejoin="round" />
+                  <li key={feature.icon} className="flex items-center gap-3 text-sm">
+                    <span
+                      className={clsx(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                        !feature.included
+                          ? "bg-cream-100 text-ink-300"
+                          : feature.highlight
+                            ? "bg-primary-500 text-white shadow-[0_6px_16px_-6px_rgb(14_151_221/0.75)]"
+                            : "bg-primary-100 text-primary-600",
+                      )}
+                    >
+                      <svg
+                        viewBox="0 0 20 20"
+                        className="h-4.5 w-4.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        aria-hidden
+                      >
+                        {ICONS[feature.icon]}
                       </svg>
-                    ) : (
-                      <svg viewBox="0 0 16 16" className="mt-0.5 h-4 w-4 shrink-0 text-ink-300" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                        <path d="M3 8h10" strokeLinecap="round" />
-                      </svg>
-                    )}
-                    <span className={feature.included ? "text-ink-700" : "text-ink-500 line-through decoration-ink-300"}>
+                    </span>
+                    <span
+                      className={clsx(
+                        !feature.included
+                          ? "text-ink-300 line-through decoration-ink-300"
+                          : feature.highlight
+                            ? "font-bold text-ink-900"
+                            : "text-ink-700",
+                      )}
+                    >
                       {feature.text}
                     </span>
                   </li>
