@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { SECTION_ICONS, SECTION_ICON_LABELS, specialtyIconFor, type Section } from "@theralys/shared";
 import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
@@ -742,6 +742,20 @@ function TextArea({
   );
 }
 
+/** Ligne vide = nouveau paragraphe ; les retours simples restent dans le paragraphe. */
+function splitParagraphs(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/^\n+|\n+$/g, ""))
+    .filter((p) => p.trim().length > 0);
+}
+
+/**
+ * Un seul champ « Paragraphe » : Entrée passe à la ligne, une ligne vide
+ * sépare deux paragraphes. La mini-barre met la sélection en gras (**…**,
+ * aussi via Ctrl/Cmd+B) ou transforme la ligne courante en coche ✅ —
+ * le format stocké (tableau de paragraphes) ne change pas.
+ */
 function ParagraphsField({
   paragraphs,
   onChange,
@@ -749,30 +763,129 @@ function ParagraphsField({
   paragraphs: string[];
   onChange: (paragraphs: string[]) => void;
 }) {
+  const [text, setText] = useState(() => paragraphs.join("\n\n"));
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // Valeur modifiée ailleurs (changement de page, régénération) → resynchronise
+  useEffect(() => {
+    if (splitParagraphs(text).join("\u0001") !== paragraphs.join("\u0001")) {
+      setText(paragraphs.join("\n\n"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paragraphs]);
+
+  function update(next: string, selStart?: number, selEnd?: number) {
+    setText(next);
+    onChange(splitParagraphs(next));
+    if (selStart !== undefined) {
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(selStart, selEnd ?? selStart);
+        }
+      });
+    }
+  }
+
+  function toggleBold() {
+    const el = ref.current;
+    if (!el) return;
+    let s = el.selectionStart;
+    let e = el.selectionEnd;
+    // Sélection (ou simple curseur) qui touche un passage déjà en gras → on l'enlève
+    const bold = /\*\*([^*]+)\*\*/g;
+    for (let m = bold.exec(text); m; m = bold.exec(text)) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (s <= end && e >= start) {
+        const inner = m[1] ?? "";
+        update(text.slice(0, start) + inner + text.slice(end), start, start + inner.length);
+        return;
+      }
+    }
+    // Sinon on entoure la sélection, sans les espaces de bord
+    while (s < e && /\s/.test(text[s] ?? "")) s++;
+    while (e > s && /\s/.test(text[e - 1] ?? "")) e--;
+    const content = text.slice(s, e) || "texte en gras";
+    update(`${text.slice(0, s)}**${content}**${text.slice(e)}`, s + 2, s + 2 + content.length);
+  }
+
+  function toggleCheck() {
+    const el = ref.current;
+    if (!el) return;
+    const s = el.selectionStart;
+    const e = Math.max(el.selectionEnd, s);
+    const start = text.lastIndexOf("\n", s - 1) + 1;
+    const endIdx = text.indexOf("\n", e);
+    const end = endIdx === -1 ? text.length : endIdx;
+    const lines = text.slice(start, end).split("\n");
+    const filled = lines.filter((l) => l.trim().length > 0);
+    const allChecked = filled.length > 0 && filled.every((l) => l.trimStart().startsWith("✅"));
+    const next = lines
+      .map((l) => {
+        if (!l.trim()) return l;
+        if (allChecked) return l.replace(/^(\s*)✅\s?/, "$1");
+        return l.trimStart().startsWith("✅") ? l : `✅ ${l.trimStart()}`;
+      })
+      .join("\n");
+    update(text.slice(0, start) + next + text.slice(end), start, start + next.length);
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+      event.preventDefault();
+      toggleBold();
+    }
+  }
+
+  const rows = Math.min(14, Math.max(6, text.split("\n").length + 1));
+
   return (
-    <>
-      {paragraphs.map((paragraph, i) => (
-        <Field key={i} label={`Paragraphe ${i + 1}`}>
-          <TextArea
-            value={paragraph}
-            rows={3}
-            onChange={(text) => onChange(paragraphs.map((p, j) => (j === i ? text : p)))}
-          />
-          {paragraphs.length > 1 ? (
-            <div className="mt-1">
-              <RemoveButton
-                label="Supprimer ce paragraphe"
-                onClick={() => onChange(paragraphs.filter((_, j) => j !== i))}
-              />
-            </div>
-          ) : null}
-        </Field>
-      ))}
-      <AddButton label="+ Ajouter un paragraphe" onClick={() => onChange([...paragraphs, ""])} />
-      <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-        💡 <strong>**texte**</strong> = passage en gras · commencez des lignes par
-        <strong> ✅ </strong>pour une liste à coches (une par ligne, touche Entrée)
+    <div>
+      <div className="mb-1 flex items-end justify-between gap-2">
+        <p className="text-xs font-medium text-ink-700">Paragraphe</p>
+        <div className="flex gap-1">
+          {/* onMouseDown + preventDefault : la sélection du textarea reste active */}
+          <button
+            type="button"
+            title="Mettre la sélection en gras (Ctrl+B)"
+            aria-label="Mettre la sélection en gras"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              toggleBold();
+            }}
+            className="h-7 w-8 rounded-lg border border-ink-300 bg-white text-sm font-bold text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            title="Transformer la ligne en coche ✅"
+            aria-label="Transformer la ligne en coche"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              toggleCheck();
+            }}
+            className="h-7 w-8 rounded-lg border border-ink-300 bg-white text-sm transition-colors hover:border-primary-400"
+          >
+            ✅
+          </button>
+        </div>
+      </div>
+      <textarea
+        ref={ref}
+        value={text}
+        rows={rows}
+        onChange={(e) => update(e.target.value)}
+        onKeyDown={onKeyDown}
+        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      />
+      <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+        💡 Sélectionnez un passage puis <strong>B</strong> (ou Ctrl+B) pour le mettre en gras ·{" "}
+        <strong>✅</strong> transforme la ligne en coche · Entrée passe à la ligne, une ligne
+        vide sépare deux paragraphes
       </p>
-    </>
+    </div>
   );
 }
