@@ -106,18 +106,17 @@ export function Faq() {
       >
         <div className="flex items-center gap-4">
           <div className="flex -space-x-2.5">
-            {[
-              { initial: "C", classes: "from-primary-400 to-primary-600" },
-              { initial: "A", classes: "from-[#7cc9a8] to-[#3d9a72]" },
-              { initial: "S", classes: "from-primary-500 to-primary-800" },
-            ].map((avatar) => (
-              <span
-                key={avatar.initial}
-                className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${avatar.classes} text-sm font-bold text-white ring-2 ring-white`}
-              >
-                {avatar.initial}
-              </span>
-            ))}
+            {["/avatars/therapist-7.jpg", "/avatars/therapist-6.jpg", "/avatars/therapist-11.jpg"].map(
+              (src) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  loading="lazy"
+                  className="h-10 w-10 rounded-full object-cover ring-2 ring-white"
+                />
+              ),
+            )}
           </div>
           <div>
             <p className="font-semibold text-ink-900">Une question supplémentaire&nbsp;?</p>

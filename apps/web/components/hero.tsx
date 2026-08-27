@@ -2,12 +2,13 @@ import { type CSSProperties } from "react";
 import { Tilt } from "./tilt";
 import { MiniGauge, MiniKpi, MiniReview, MiniSite } from "./vignettes";
 
+/* Photos d'illustration (banque d'images) en attendant les vrais retours clients */
 const AVATARS = [
-  { initial: "C", classes: "from-primary-400 to-primary-600" },
-  { initial: "S", classes: "from-[#7cc9a8] to-[#3d9a72]" },
-  { initial: "N", classes: "from-primary-300 to-primary-500" },
-  { initial: "G", classes: "from-[#f0b45c] to-[#d98a1f]" },
-  { initial: "É", classes: "from-primary-500 to-primary-800" },
+  "/avatars/cabinet-4.jpg",
+  "/avatars/therapist-1.jpg",
+  "/avatars/logo-cabinet-1.svg",
+  "/avatars/therapist-2.jpg",
+  "/avatars/cabinet-2.jpg",
 ];
 
 export function Hero() {
@@ -87,13 +88,14 @@ export function Hero() {
             className="mt-6 flex items-center gap-3.5"
           >
             <div className="flex -space-x-2.5">
-              {AVATARS.map((avatar) => (
-                <span
-                  key={avatar.initial + avatar.classes}
-                  className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${avatar.classes} text-xs font-bold text-white ring-2 ring-cream-50`}
-                >
-                  {avatar.initial}
-                </span>
+              {AVATARS.map((src) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  loading="lazy"
+                  className="h-9 w-9 rounded-full bg-white object-cover ring-2 ring-cream-50"
+                />
               ))}
             </div>
             <div>

@@ -29,46 +29,55 @@ const FEATURED: CarouselQuote[] = [
  * Témoignages de démonstration : à remplacer par vos vrais retours clients
  * au fil des signatures (prénom + profession suffisent).
  */
+/* Photos d'illustration (banque d'images) en attendant les vrais retours clients */
 const QUOTES = [
   {
     name: "Mathilde B.",
     role: "Sophrologue · Albi",
     text: "Mon site est magnifique et surtout, il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur Google, ce qui n'était jamais arrivé avant.",
+    photo: "/avatars/therapist-10.jpg",
   },
   {
     name: "Rose L.",
     role: "Naturopathe · Montpellier",
     text: "Le blog se remplit tout seul avec des articles sérieux et bien écrits. Mes patients me disent qu'ils les lisent — et Google aussi, visiblement.",
+    photo: "/avatars/cabinet-3.jpg",
   },
   {
     name: "Nadine F.",
     role: "Hypnothérapeute · Toulouse",
     text: "Zéro technique de mon côté : le domaine, l'hébergement, les mises à jour… tout est géré. Je modifie mes horaires en deux clics et c'est en ligne.",
+    photo: "/avatars/cabinet-5.jpg",
   },
   {
     name: "Grégoire T.",
     role: "Ostéopathe · Lyon",
     text: "En trois mois, je suis passé de la page 3 à la première page sur « ostéopathe » dans ma ville. Le suivi des mots-clés rend tout ça très concret.",
+    photo: "/avatars/therapist-4.jpg",
   },
   {
     name: "Célia A.",
     role: "Psychopraticienne · Nantes",
     text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, j'ai ajusté deux couleurs, et j'ai signé le lendemain.",
+    photo: "/avatars/logo-cabinet-3.svg",
   },
   {
     name: "Karim S.",
     role: "Réflexologue · Bordeaux",
     text: "Mes avis Google apparaissent directement sur mon site, ça rassure énormément les nouveaux patients. Très pro, très simple.",
+    photo: "/avatars/cabinet-1.jpg",
   },
   {
     name: "Élodie P.",
     role: "Sage-femme · Rennes",
     text: "Je voulais un site sobre et rassurant, pas un truc criard. Le résultat est exactement dans l'esprit de mon cabinet.",
+    photo: "/avatars/cabinet-6.jpg",
   },
   {
     name: "Vincent M.",
     role: "Chiropracteur · Grenoble",
     text: "Le tableau de bord me montre les appels et les demandes d'itinéraire générés par le site. Je sais exactement ce que ça me rapporte.",
+    photo: "/avatars/therapist-12.jpg",
   },
 ];
 
@@ -87,9 +96,12 @@ function ReviewCard({ quote }: { quote: (typeof QUOTES)[number] }) {
         « {quote.text} »
       </blockquote>
       <figcaption className="mt-4 flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-500/25 text-sm font-bold text-primary-200 ring-1 ring-primary-400/40">
-          {quote.name.charAt(0)}
-        </span>
+        <img
+          src={quote.photo}
+          alt=""
+          loading="lazy"
+          className="h-9 w-9 rounded-full object-cover ring-1 ring-white/25"
+        />
         <span>
           <span className="block text-sm font-semibold text-white">{quote.name}</span>
           <span className="block text-xs text-white/60">{quote.role}</span>

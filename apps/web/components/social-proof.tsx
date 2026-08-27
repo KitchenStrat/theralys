@@ -14,24 +14,28 @@ const NOTES = [
     role: "Sophrologue",
     title: "Attentes dépassées",
     text: "Résultat professionnel et moderne, interface très simple à prendre en main.",
+    photo: "/avatars/therapist-3.jpg",
   },
   {
     name: "Julien R.",
     role: "Ostéopathe",
     title: "Je recommande",
     text: "Fonctionnel et intuitif, un vrai plus pour la prise de rendez-vous.",
+    photo: "/avatars/therapist-9.jpg",
   },
   {
     name: "Sophie D.",
     role: "Naturopathe",
     title: "Un vrai gain de temps",
     text: "Le blog se remplit tout seul et mes patients me trouvent sur Google.",
+    photo: "/avatars/logo-cabinet-2.svg",
   },
   {
     name: "Claire B.",
     role: "Hypnothérapeute",
     title: "Très pro",
     text: "Démo reçue en quelques jours, site en ligne la semaine suivante.",
+    photo: "/avatars/therapist-5.jpg",
   },
 ];
 
@@ -105,9 +109,7 @@ export function SocialProof() {
         </svg>
       </button>
       <div className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-sm font-bold text-white">
-          {note.name.charAt(0)}
-        </span>
+        <img src={note.photo} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-ink-900">
             {note.name} <span className="font-normal text-ink-500">· {note.role}</span>

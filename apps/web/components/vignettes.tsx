@@ -98,9 +98,12 @@ export function MiniReview({ className = "" }: { className?: string }) {
       className={`w-52 rounded-2xl border border-cream-200 bg-white p-3.5 shadow-[0_20px_50px_-20px_rgb(12_74_110/0.45)] ${className}`}
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-500 text-[11px] font-bold text-white">
-          M
-        </span>
+        <img
+          src="/avatars/therapist-8.jpg"
+          alt=""
+          loading="lazy"
+          className="h-7 w-7 rounded-full object-cover"
+        />
         <div>
           <p className="text-[10px] font-semibold text-ink-900">Marie L.</p>
           <p className="text-[8px] text-ink-500">il y a 2 semaines</p>
