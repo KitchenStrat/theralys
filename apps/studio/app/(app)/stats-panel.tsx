@@ -32,7 +32,7 @@ export function StatsPanel({ firstName, period, stats }: Props) {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">Bonjour {firstName}</h1>
+          <h1 className="text-2xl font-bold">Bonjour {firstName}</h1>
           <div className="flex rounded-full border border-cream-300 p-0.5" role="tablist" aria-label="Période">
             {PERIODS.map((p) => (
               <Link
@@ -107,25 +107,25 @@ function StatTile({
       onClick={onSelect}
       aria-pressed={selected}
       className={clsx(
-        "rounded-2xl border px-4 py-3 text-left transition-colors",
+        "rounded-2xl border px-5 py-3.5 text-left transition-colors",
         selected
           ? "border-primary-400 bg-primary-50"
           : "border-cream-300 bg-cream-100 hover:border-ink-300",
       )}
     >
-      <p className="flex items-center gap-1.5 text-xs text-ink-700">
+      <p className="flex items-center gap-1.5 text-sm text-ink-700">
         <span aria-hidden>{icon}</span> {label}
       </p>
       <p className="mt-0.5">
-        <span className="text-2xl font-bold text-ink-900">{value}</span>
+        <span className="text-3xl font-bold text-ink-900">{value}</span>
         {changePct !== null ? (
-          <span className={clsx("ml-2 text-xs font-semibold", changePct >= 0 ? "text-success-500" : "text-danger-500")}>
+          <span className={clsx("ml-2 text-sm font-semibold", changePct >= 0 ? "text-success-500" : "text-danger-500")}>
             {changePct >= 0 ? "+" : ""}
             {changePct}%
           </span>
         ) : null}
       </p>
-      <p className="text-[11px] text-ink-500">{caption}</p>
+      <p className="text-xs text-ink-500">{caption}</p>
     </button>
   );
 }

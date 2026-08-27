@@ -59,9 +59,9 @@ export default async function HomePage({ searchParams }: Props) {
   const firstName = session.name.split(" ")[0] ?? session.name;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <div className="grid gap-6 lg:grid-cols-[1fr_390px]">
       <div className="space-y-6">
-        <Card className="p-6">
+        <Card className="p-6 md:p-7">
           <StatsPanel
             firstName={firstName}
             period={period}
@@ -76,19 +76,19 @@ export default async function HomePage({ searchParams }: Props) {
         </Card>
 
         {/* Accès à l'éditeur : uniquement ici, plus dans la navigation */}
-        <Card className="p-6">
+        <Card className="p-6 md:p-7">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="font-semibold">Votre site</h2>
-              <p className="mt-1 text-sm text-ink-500">
+              <h2 className="text-lg font-semibold">Votre site</h2>
+              <p className="mt-1 max-w-md text-[15px] text-ink-500">
                 Textes, photos, horaires, tarifs : modifiez votre site en quelques clics,
                 c&apos;est en ligne immédiatement.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Link
                 href="/editor"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-6 py-3 text-[15px] font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
               >
                 ✎ Éditer mon site
               </Link>
@@ -96,7 +96,7 @@ export default async function HomePage({ searchParams }: Props) {
                 href={siteUrl(site)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-4 py-2.5 text-sm font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50"
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-5 py-3 text-[15px] font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50"
               >
                 ↗ Voir
               </a>
@@ -109,26 +109,29 @@ export default async function HomePage({ searchParams }: Props) {
         <TasksCard tasks={tasks} />
 
         {blog ? (
-          <Card className="p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold">Prochaines publications</h2>
-              <Link href="/publications" className="text-xs font-medium text-primary-700 hover:underline">
+          <Card className="p-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-lg font-semibold">Prochaines publications</h2>
+              <Link
+                href="/publications"
+                className="whitespace-nowrap text-sm font-medium text-primary-700 hover:underline"
+              >
                 Tout l&apos;agenda →
               </Link>
             </div>
             {upcoming.length > 0 ? (
-              <ul className="mt-4 space-y-3">
+              <ul className="mt-4 space-y-3.5">
                 {upcoming.map((item) => (
                   <li key={`${item.date}-${item.title}`} className="flex items-start gap-2.5">
                     <span
                       aria-hidden
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary-400"
+                      className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary-400"
                     />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-ink-900">
+                      <span className="block truncate text-[15px] font-medium text-ink-900">
                         {item.title}
                       </span>
-                      <span className="block text-xs text-ink-500">
+                      <span className="block text-[13px] text-ink-500">
                         {formatDateFr(new Date(item.date))} · {UPCOMING_LABELS[item.status] ?? item.status}
                       </span>
                     </span>
@@ -136,7 +139,7 @@ export default async function HomePage({ searchParams }: Props) {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-ink-500">
+              <p className="mt-3 text-[15px] text-ink-500">
                 Rien de planifié pour l&apos;instant — le calendrier se remplit depuis l&apos;onglet
                 Publications.
               </p>
@@ -144,7 +147,7 @@ export default async function HomePage({ searchParams }: Props) {
           </Card>
         ) : null}
 
-        <p className="px-2 text-xs text-ink-500">
+        <p className="px-2 text-[13px] text-ink-500">
           Votre site :{" "}
           <Link href={siteUrl(site)} target="_blank" className="underline">
             {siteUrl(site)}

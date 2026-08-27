@@ -34,24 +34,21 @@ export default async function StudioLayout({ children }: { children: ReactNode }
 
       <div className="md:flex">
         {/* Barre latérale : logo, navigation, accès au site et au compte */}
-        <aside className="flex flex-col border-b border-cream-200 bg-white/75 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-[230px] md:shrink-0 md:border-b-0 md:border-r">
-          <div className="px-5 py-5">
-            <Link
-              href="/"
-              className="bg-gradient-to-r from-primary-700 via-primary-500 to-primary-400 bg-clip-text text-xl font-bold text-transparent"
-            >
+        <aside className="flex flex-col border-b border-cream-200 bg-white/75 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-[260px] md:shrink-0 md:border-b-0 md:border-r">
+          <div className="px-6 py-6">
+            <Link href="/" className="brand-word text-2xl">
               Harmony
             </Link>
           </div>
 
           <StudioNav showPublications={site.type === "demo" || hasBlog(site.plan)} />
 
-          <div className="border-t border-cream-200 p-3 md:mt-auto">
+          <div className="border-t border-cream-200 p-4 md:mt-auto">
             <a
               href={siteUrl(site)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[15px] font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
             >
               ↗ Voir mon site
             </a>
@@ -77,7 +74,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
         </aside>
 
         <main className="min-w-0 flex-1">
-          <div className="mx-auto max-w-5xl px-4 py-8">{children}</div>
+          <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">{children}</div>
         </main>
       </div>
     </div>

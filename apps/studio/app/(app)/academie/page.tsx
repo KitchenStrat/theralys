@@ -5,7 +5,7 @@ export const metadata = { title: "Académie" };
 export default function AcademyPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Académie</h1>
+      <h1 className="text-3xl font-bold">Académie</h1>
       <Card className="p-12 text-center">
         <span aria-hidden className="text-4xl">
           🎓

@@ -21,8 +21,8 @@ export function TasksCard({ tasks }: { tasks: OnboardingTask[] }) {
   const doneCount = checklist.filter((t) => t.done).length;
 
   return (
-    <Card className="p-5">
-      <h2 className="font-semibold">Vos tâches</h2>
+    <Card className="p-6">
+      <h2 className="text-lg font-semibold">Vos tâches</h2>
 
       {tour ? (
         <button

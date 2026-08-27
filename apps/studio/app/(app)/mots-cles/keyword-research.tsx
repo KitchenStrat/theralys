@@ -120,16 +120,16 @@ export function KeywordResearchCard({
 
   return (
     <Card className="p-6">
-      <h2 className="flex items-center gap-2 font-semibold">
+      <h2 className="flex items-center gap-2 text-lg font-semibold">
         <span
           aria-hidden
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-cream-200 text-sm"
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-cream-200 text-sm"
         >
           🔎
         </span>
         Trouver les bons mots-clés
       </h2>
-      <p className="mt-2 text-sm text-ink-500">
+      <p className="mt-2 text-[15px] text-ink-500">
         <strong className="text-ink-700">Comment ça marche&nbsp;?</strong> Le module croise
         votre métier, votre ville et vos spécialités avec les intentions de recherche
         réelles des patients sur Google (proximité, avis, tarifs, prise de rendez-vous…)
@@ -180,7 +180,7 @@ export function KeywordResearchCard({
         results.length > 0 ? (
           <div className="mt-6 border-t border-cream-200 pt-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-ink-900">
+              <h3 className="text-[15px] font-semibold text-ink-900">
                 {results.length} mots-clés recommandés pour votre site
               </h3>
               <Button type="button" variant="secondary" size="sm" onClick={copyAll}>
@@ -194,7 +194,7 @@ export function KeywordResearchCard({
                     <span className="w-5 shrink-0 text-right text-xs tabular-nums text-ink-300">
                       {i + 1}
                     </span>
-                    <span className="truncate text-sm font-medium text-ink-900">{r.keyword}</span>
+                    <span className="truncate text-[15px] font-medium text-ink-900">{r.keyword}</span>
                   </span>
                   <Badge tone={TYPE_TONES[r.type] ?? "neutral"} className="shrink-0">
                     {r.type}

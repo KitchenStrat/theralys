@@ -27,7 +27,7 @@ export default async function KeywordsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Mots-clés</h1>
+      <h1 className="text-3xl font-bold">Mots-clés</h1>
 
       <GoogleVisibilityCard
         gscAccess={gscAccess}

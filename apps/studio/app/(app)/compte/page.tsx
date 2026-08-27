@@ -37,7 +37,7 @@ export default async function AccountPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold">Mon compte</h1>
+      <h1 className="text-3xl font-bold">Mon compte</h1>
 
       <Card className="p-6">
         <h2 className="font-semibold">Mon abonnement</h2>

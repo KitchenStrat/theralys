@@ -58,7 +58,7 @@ export function PublicationsClient({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">Publications</h1>
+        <h1 className="text-3xl font-bold">Publications</h1>
         <div className="flex items-center gap-4">
           <Link href={`/publications?mois=${prev}`} aria-label="Mois précédent" className="rounded-full p-2 hover:bg-cream-200">◀</Link>
           <span className="min-w-32 text-center text-lg font-semibold capitalize">{monthLabel}</span>

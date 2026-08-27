@@ -16,7 +16,7 @@ export default async function PublicationsPage({ searchParams }: Props) {
   if (!hasBlog(site.plan)) {
     return (
       <div>
-        <h1 className="text-2xl font-bold">Publications</h1>
+        <h1 className="text-3xl font-bold">Publications</h1>
         <Card className="mt-6 p-10 text-center text-ink-500">
           <p className="font-medium text-ink-700">Le blog automatisé n&apos;est pas inclus dans votre formule</p>
           <p className="mt-1 text-sm">
