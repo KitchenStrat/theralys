@@ -11,6 +11,7 @@ import { Logos } from "@/components/logos";
 import { Presence } from "@/components/presence";
 import { Pricing, type PlanCard } from "@/components/pricing";
 import { RevealObserver } from "@/components/reveal";
+import { RoiCalculator } from "@/components/roi-calculator";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { SocialProof } from "@/components/social-proof";
 import { Temoignages } from "@/components/temoignages";
@@ -50,6 +51,7 @@ export default function HomePage() {
         <Presence />
         <Band />
         <Pricing plans={plans} />
+        <RoiCalculator />
         <Temoignages />
         <Faq />
         <DemoForm />
