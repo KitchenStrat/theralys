@@ -27,7 +27,7 @@ export default async function LoginPage({ searchParams }: Props) {
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <span className="text-2xl font-bold text-primary-500">Harmony</span>
+          <span className="brand-word text-3xl">Harmony</span>
           <p className="mt-1 text-sm text-ink-500">Votre espace praticien</p>
         </div>
         {error === "lien" ? (
