@@ -22,7 +22,7 @@ export function TasksCard({ tasks }: { tasks: OnboardingTask[] }) {
 
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold">Vos tâches</h2>
+      <h2 className="text-xl font-semibold">Vos tâches</h2>
 
       {tour ? (
         <button

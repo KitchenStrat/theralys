@@ -32,7 +32,7 @@ export function StatsPanel({ firstName, period, stats }: Props) {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Bonjour {firstName}</h1>
+          <h1 className="text-3xl font-bold">Bonjour {firstName}</h1>
           <div className="flex rounded-full border border-cream-300 p-0.5" role="tablist" aria-label="Période">
             {PERIODS.map((p) => (
               <Link
@@ -107,7 +107,7 @@ function StatTile({
       onClick={onSelect}
       aria-pressed={selected}
       className={clsx(
-        "rounded-2xl border px-5 py-3.5 text-left transition-colors",
+        "rounded-2xl border px-6 py-4 text-left transition-colors",
         selected
           ? "border-primary-400 bg-primary-50"
           : "border-cream-300 bg-cream-100 hover:border-ink-300",
@@ -117,7 +117,7 @@ function StatTile({
         <span aria-hidden>{icon}</span> {label}
       </p>
       <p className="mt-0.5">
-        <span className="text-3xl font-bold text-ink-900">{value}</span>
+        <span className="text-4xl font-bold text-ink-900">{value}</span>
         {changePct !== null ? (
           <span className={clsx("ml-2 text-sm font-semibold", changePct >= 0 ? "text-success-500" : "text-danger-500")}>
             {changePct >= 0 ? "+" : ""}
@@ -139,7 +139,7 @@ function LineChart({ daily, metric, label }: { daily: Daily[]; metric: "visitors
   const [hover, setHover] = useState<number | null>(null);
 
   const W = 720;
-  const H = 220;
+  const H = 250;
   const PAD = { top: 12, right: 12, bottom: 26, left: 30 };
 
   const { points, yTicks, xLabels, yMax } = useMemo(() => {

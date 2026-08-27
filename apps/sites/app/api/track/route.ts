@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   CONSENT_COOKIE,
@@ -15,16 +15,39 @@ export const dynamic = "force-dynamic";
 /**
  * Ingestion du tracking maison (pageview + rdv_click).
  * - Consentement accordé → cookie visiteur first-party (13 mois max, CNIL),
- *   événement rattaché à cet identifiant (visiteurs uniques).
- * - Pas de consentement → événement anonyme, aucun cookie posé
- *   (les clics RDV restent comptés, pas les visiteurs uniques).
+ *   événement rattaché à cet identifiant durable (visiteurs uniques exacts).
+ * - Pas de consentement → aucun cookie : identifiant anonyme haché
+ *   (IP + navigateur + sel secret) qui tourne chaque jour, à la façon des
+ *   outils de mesure d'audience exemptés de consentement. Impossible à
+ *   recouper d'un jour sur l'autre, mais les visiteurs comptent quand même.
  */
+const BOT_UA = /bot|crawl|spider|slurp|lighthouse|headless|prerender|vercel-screenshot|monitor/i;
+
+function anonymousVisitorId(request: NextRequest, siteId: string): string {
+  const day = new Date().toISOString().slice(0, 10);
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip") ??
+    "0.0.0.0";
+  const userAgent = request.headers.get("user-agent") ?? "";
+  const salt = process.env.AUTH_SECRET ?? "harmony-analytics";
+  return `anon-${createHash("sha256")
+    .update(`${salt}:${day}:${ip}:${userAgent}:${siteId}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+}
+
 export async function POST(request: NextRequest) {
   let payload;
   try {
     payload = trackEventSchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "Payload invalide" }, { status: 400 });
+  }
+
+  // Les robots (crawlers, aperçus, sondes) ne comptent ni en visiteurs ni en clics
+  if (BOT_UA.test(request.headers.get("user-agent") ?? "")) {
+    return NextResponse.json({ ok: true, ignored: "bot" });
   }
 
   const db = getDb();
@@ -43,6 +66,9 @@ export async function POST(request: NextRequest) {
       visitorId = randomUUID();
       setVisitorCookie = true;
     }
+  }
+  if (!visitorId) {
+    visitorId = anonymousVisitorId(request, site.id);
   }
 
   await db.insert(analyticsEvents).values({

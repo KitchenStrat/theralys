@@ -34,9 +34,9 @@ export default async function StudioLayout({ children }: { children: ReactNode }
 
       <div className="md:flex">
         {/* Barre latérale : logo, navigation, accès au site et au compte */}
-        <aside className="flex flex-col border-b border-cream-200 bg-white/75 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-[260px] md:shrink-0 md:border-b-0 md:border-r">
+        <aside className="flex flex-col border-b border-cream-200 bg-white/75 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-[280px] md:shrink-0 md:border-b-0 md:border-r">
           <div className="px-6 py-6">
-            <Link href="/" className="brand-word text-2xl">
+            <Link href="/" className="brand-word text-3xl">
               Harmony
             </Link>
           </div>
@@ -48,7 +48,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
               href={siteUrl(site)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[15px] font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
+              className="flex items-center gap-1.5 rounded-xl px-4 py-3 text-base font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
             >
               ↗ Voir mon site
             </a>
@@ -74,7 +74,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
         </aside>
 
         <main className="min-w-0 flex-1">
-          <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">{children}</div>
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-12 lg:py-12">{children}</div>
         </main>
       </div>
     </div>

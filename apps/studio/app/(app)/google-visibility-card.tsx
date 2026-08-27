@@ -21,7 +21,7 @@ export function GoogleVisibilityCard({
     return (
       <Card id="visibilite" className="p-6">
         <CardTitle />
-        <p className="mt-3 text-[15px] text-ink-500">
+        <p className="mt-3 text-base text-ink-500">
           Le suivi de vos mots-clés Google est disponible avec la formule{" "}
           <strong>Boost</strong>.
         </p>
@@ -33,7 +33,7 @@ export function GoogleVisibilityCard({
     return (
       <Card id="visibilite" className="p-6">
         <CardTitle />
-        <p className="mt-3 text-[15px] text-ink-700">
+        <p className="mt-3 text-base text-ink-700">
           Connectez votre compte Google pour suivre les recherches qui mènent à votre cabinet
           (Search Console + fiche d&apos;établissement).
         </p>
@@ -59,7 +59,7 @@ export function GoogleVisibilityCard({
     return (
       <Card id="visibilite" className="p-6">
         <CardTitle />
-        <p className="mt-3 text-[15px] text-ink-500">
+        <p className="mt-3 text-base text-ink-500">
           Compte connecté — les premières données arrivent d&apos;ici 2 à 3 jours.
         </p>
       </Card>
@@ -111,7 +111,7 @@ export function GoogleVisibilityCard({
 
 function CardTitle() {
   return (
-    <h2 className="flex items-center gap-2 text-lg font-semibold">
+    <h2 className="flex items-center gap-2 text-xl font-semibold">
       <span
         aria-hidden
         className="flex h-7 w-7 items-center justify-center rounded-full bg-cream-200 text-sm font-bold text-info-500"

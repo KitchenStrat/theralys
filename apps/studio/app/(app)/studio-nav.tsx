@@ -38,7 +38,7 @@ export function StudioNav({ showPublications = true }: { showPublications?: bool
           href={item.href}
           aria-current={item.active ? "page" : undefined}
           className={clsx(
-            "whitespace-nowrap rounded-xl px-4 py-2.5 text-[15px] font-medium transition-colors",
+            "whitespace-nowrap rounded-xl px-4 py-3 text-base font-medium transition-colors",
             item.active
               ? "bg-primary-100 text-primary-800"
               : "text-ink-500 hover:bg-primary-50 hover:text-primary-700",
