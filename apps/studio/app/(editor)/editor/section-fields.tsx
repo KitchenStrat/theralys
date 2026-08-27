@@ -122,14 +122,13 @@ export function SectionFields({
                   }
                 />
               </Field>
-              <Field label="Texte (1 phrase courte)">
-                <TextInput
-                  value={item.text ?? ""}
-                  onChange={(text) =>
-                    onChange({ items: section.items.map((it, j) => (j === i ? { ...it, text } : it)) })
-                  }
-                />
-              </Field>
+              <RichField
+                label="Texte (1 phrase courte)"
+                value={item.text ?? ""}
+                onChange={(text) =>
+                  onChange({ items: section.items.map((it, j) => (j === i ? { ...it, text } : it)) })
+                }
+              />
               {section.items.length > 1 ? (
                 <RemoveButton
                   label="Supprimer ce point fort"
@@ -172,17 +171,16 @@ export function SectionFields({
                   }
                 />
               </Field>
-              <Field label="Résumé de la carte">
-                <TextArea
-                  value={item.excerpt}
-                  rows={2}
-                  onChange={(excerpt) =>
-                    onChange({
-                      items: section.items.map((it, j) => (j === i ? { ...it, excerpt } : it)),
-                    })
-                  }
-                />
-              </Field>
+              <RichField
+                label="Résumé de la carte"
+                minHeight="min-h-16"
+                value={item.excerpt}
+                onChange={(excerpt) =>
+                  onChange({
+                    items: section.items.map((it, j) => (j === i ? { ...it, excerpt } : it)),
+                  })
+                }
+              />
               <RegenerateMotifButton
                 slug={item.slug}
                 title={item.title}
@@ -203,14 +201,19 @@ export function SectionFields({
           <Field label="Titre (question projective)">
             <TextArea value={section.title} rows={2} onChange={(title) => onChange({ title })} />
           </Field>
-          <Field label="Phrase d'introduction">
-            <TextArea value={section.intro ?? ""} rows={2} onChange={(intro) => onChange({ intro })} />
-          </Field>
+          <RichField
+            label="Phrase d'introduction"
+            minHeight="min-h-16"
+            value={section.intro ?? ""}
+            onChange={(intro) => onChange({ intro })}
+          />
           {section.bullets.map((bullet, i) => (
-            <Field key={i} label={`Bénéfice ✅ ${i + 1}`}>
-              <TextArea
+            <div key={i}>
+              <RichField
+                label={`Bénéfice ✅ ${i + 1}`}
+                multiline
+                minHeight="min-h-16"
                 value={bullet}
-                rows={2}
                 onChange={(text) =>
                   onChange({ bullets: section.bullets.map((b, j) => (j === i ? text : b)) })
                 }
@@ -223,15 +226,15 @@ export function SectionFields({
                   />
                 </div>
               ) : null}
-            </Field>
+            </div>
           ))}
           <AddButton
             label="+ Ajouter un bénéfice"
             onClick={() => onChange({ bullets: [...section.bullets, ""] })}
           />
           <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-            💡 <strong>**texte**</strong> = passage en gras — mettez le bénéfice clé en gras en début
-            de ligne
+            💡 Sélectionnez un passage puis <strong>B</strong> (ou Ctrl+B) : il passe en gras
+            directement — mettez le bénéfice clé en gras en début de ligne
           </p>
           <ImageField
             label="Photo (séance avec un(e) patient(e)…)"
@@ -275,15 +278,15 @@ export function SectionFields({
                     }
                   />
                 </Field>
-                <Field label="Texte">
-                  <TextArea
-                    value={card.text}
-                    rows={2}
-                    onChange={(text) =>
-                      onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
-                    }
-                  />
-                </Field>
+                <RichField
+                  label="Texte"
+                  multiline
+                  minHeight="min-h-16"
+                  value={card.text}
+                  onChange={(text) =>
+                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
+                  }
+                />
                 <RemoveButton
                   label="Supprimer cette carte"
                   onClick={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
@@ -330,17 +333,17 @@ export function SectionFields({
                   }
                 />
               </Field>
-              <Field label="Description">
-                <TextArea
-                  value={step.description}
-                  rows={3}
-                  onChange={(description) =>
-                    onChange({
-                      steps: section.steps.map((s, j) => (j === i ? { ...s, description } : s)),
-                    })
-                  }
-                />
-              </Field>
+              <RichField
+                label="Description"
+                multiline
+                minHeight="min-h-20"
+                value={step.description}
+                onChange={(description) =>
+                  onChange({
+                    steps: section.steps.map((s, j) => (j === i ? { ...s, description } : s)),
+                  })
+                }
+              />
               {section.steps.length > 1 ? (
                 <RemoveButton
                   label="Supprimer cette étape"
@@ -372,15 +375,15 @@ export function SectionFields({
                   }
                 />
               </Field>
-              <Field label="Réponse">
-                <TextArea
-                  value={item.answer}
-                  rows={3}
-                  onChange={(answer) =>
-                    onChange({ items: section.items.map((it, j) => (j === i ? { ...it, answer } : it)) })
-                  }
-                />
-              </Field>
+              <RichField
+                label="Réponse"
+                multiline
+                minHeight="min-h-20"
+                value={item.answer}
+                onChange={(answer) =>
+                  onChange({ items: section.items.map((it, j) => (j === i ? { ...it, answer } : it)) })
+                }
+              />
               {section.items.length > 1 ? (
                 <RemoveButton
                   label="Supprimer cette question"
@@ -484,9 +487,13 @@ export function SectionFields({
           <Field label="Titre">
             <TextInput value={section.title} onChange={(title) => onChange({ title })} />
           </Field>
-          <Field label="Texte">
-            <TextArea value={section.body ?? ""} rows={2} onChange={(body) => onChange({ body })} />
-          </Field>
+          <RichField
+            label="Texte"
+            multiline
+            minHeight="min-h-16"
+            value={section.body ?? ""}
+            onChange={(body) => onChange({ body })}
+          />
           <Field label="Texte du bouton">
             <TextInput value={section.buttonLabel} onChange={(buttonLabel) => onChange({ buttonLabel })} />
           </Field>
@@ -803,6 +810,18 @@ function htmlToText(root: HTMLElement): string {
 }
 
 /**
+ * La sélection courante est-elle bien dans cette zone d'édition ? Évite que
+ * le bouton B d'un champ mette en gras le texte sélectionné dans un autre
+ * (execCommand agit sur la sélection globale du document).
+ */
+function selectionInside(el: HTMLElement | null): boolean {
+  const selection = window.getSelection();
+  return Boolean(
+    el && selection && selection.rangeCount > 0 && el.contains(selection.anchorNode),
+  );
+}
+
+/**
  * Un seul champ « Paragraphe », en vrai WYSIWYG : le gras s'affiche en gras
  * (aucun marqueur visible), Entrée passe à la ligne, une ligne vide sépare
  * deux paragraphes. La zone convertit vers le format stocké (tableau de
@@ -843,6 +862,7 @@ function ParagraphsField({
   }
 
   function toggleBold() {
+    if (!selectionInside(ref.current)) return;
     document.execCommand("styleWithCSS", false, "false");
     document.execCommand("bold");
     emit();
@@ -953,6 +973,111 @@ function ParagraphsField({
         directement · <strong>✅</strong> transforme la ligne en coche · Entrée passe à la
         ligne, une ligne vide sépare deux paragraphes
       </p>
+    </div>
+  );
+}
+
+/**
+ * Champ texte riche à valeur simple (string), même mécanique WYSIWYG que le
+ * champ Paragraphe : le gras s'affiche en gras et se stocke en **marqueurs**.
+ * `multiline` autorise Entrée quand le site affiche les retours à la ligne
+ * (whitespace-pre-line) ; sinon les retours sont remplacés par des espaces,
+ * comme le rendu public le ferait de toute façon.
+ */
+function RichField({
+  label,
+  value,
+  onChange,
+  multiline = false,
+  minHeight = "min-h-10",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  multiline?: boolean;
+  minHeight?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lastEmitted = useRef<string | null>(null);
+
+  // Injection initiale, puis resynchronisation seulement quand la valeur
+  // change ailleurs (changement de page, suppression d'un élément de liste).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || lastEmitted.current === value) return;
+    el.innerHTML = textToHtml(value);
+    lastEmitted.current = value;
+  }, [value]);
+
+  function emit() {
+    const el = ref.current;
+    if (!el) return;
+    let text = htmlToText(el);
+    if (!multiline) text = text.replace(/\s*\n+\s*/g, " ");
+    lastEmitted.current = text;
+    onChange(text);
+  }
+
+  function toggleBold() {
+    if (!selectionInside(ref.current)) return;
+    document.execCommand("styleWithCSS", false, "false");
+    document.execCommand("bold");
+    emit();
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+      event.preventDefault();
+      toggleBold();
+      return;
+    }
+    // Seul le gras est proposé : italique et souligné sont neutralisés
+    if ((event.ctrlKey || event.metaKey) && ["i", "u"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      return;
+    }
+    if (!multiline && event.key === "Enter") event.preventDefault();
+  }
+
+  function onPaste(event: ClipboardEvent<HTMLDivElement>) {
+    // Collage en texte brut : pas de HTML importé de Word ou d'ailleurs
+    event.preventDefault();
+    let text = event.clipboardData.getData("text/plain");
+    if (!multiline) text = text.replace(/\s*\n+\s*/g, " ");
+    document.execCommand("insertText", false, text);
+    emit();
+  }
+
+  return (
+    <div>
+      <div className="mb-1 flex items-end justify-between gap-2">
+        <p className="text-xs font-medium text-ink-700">{label}</p>
+        {/* onMouseDown + preventDefault : la sélection reste active */}
+        <button
+          type="button"
+          title="Mettre la sélection en gras (Ctrl+B)"
+          aria-label="Mettre la sélection en gras"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            toggleBold();
+          }}
+          className="h-6 w-7 rounded-lg border border-ink-300 bg-white text-xs font-bold text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600"
+        >
+          B
+        </button>
+      </div>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline={multiline}
+        aria-label={label}
+        onInput={emit}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        className={`${minHeight} w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 [&_b]:font-semibold [&_strong]:font-semibold`}
+      />
     </div>
   );
 }
