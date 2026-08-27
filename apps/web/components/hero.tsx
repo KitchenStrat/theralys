@@ -1,4 +1,5 @@
 import { type CSSProperties } from "react";
+import { Brand } from "./brand";
 import { Tilt } from "./tilt";
 import { MiniGauge, MiniKpi, MiniReview, MiniSite } from "./vignettes";
 
@@ -50,7 +51,7 @@ export function Hero() {
             className="mt-6 max-w-xl text-lg leading-relaxed text-ink-700"
           >
             Site professionnel élégant, pages de spécialités, blog optimisé SEO, avis Google
-            synchronisés : Harmony construit votre présence en ligne et la fait grandir —
+            synchronisés : <Brand /> construit votre présence en ligne et la fait grandir —
             pendant que vous restez concentré sur vos patients.
           </p>
           <div

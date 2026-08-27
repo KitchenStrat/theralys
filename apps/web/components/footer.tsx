@@ -18,13 +18,15 @@ const COLUMNS = [
   },
 ];
 
+import { Brand } from "./brand";
+
 export function Footer() {
   return (
     <footer className="bg-night-900 py-14 text-white">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <p className="font-display text-2xl font-bold">
-            <span className="wordmark">Harmony</span>
+          <p className="text-2xl">
+            <Brand onDark />
           </p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/60">
             Sites et référencement pour thérapeutes et praticiens du bien-être.
@@ -48,7 +50,7 @@ export function Footer() {
       </div>
       <div className="mx-auto mt-12 max-w-6xl border-t border-white/10 px-5 pt-6">
         <p className="text-xs text-white/45">
-          © {new Date().getFullYear()} Harmony — Tous droits réservés.
+          © {new Date().getFullYear()} <Brand onDark /> — Tous droits réservés.
         </p>
       </div>
     </footer>

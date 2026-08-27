@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
+import { brandify } from "./brand";
 
 const QUESTIONS = [
   {
@@ -90,7 +91,7 @@ export function Faq() {
                 </button>
                 <div className={clsx("faq-panel", isOpen && "open")}>
                   <div>
-                    <p className="px-6 pb-5 leading-relaxed text-ink-700">{item.a}</p>
+                    <p className="px-6 pb-5 leading-relaxed text-ink-700">{brandify(item.a)}</p>
                   </div>
                 </div>
               </div>

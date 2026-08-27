@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { Brand } from "./brand";
 
 const LINKS = [
   { href: "#fonctionnalites", label: "Fonctionnalités" },
@@ -32,8 +33,8 @@ export function Header() {
             : "mt-0 h-16 max-w-6xl rounded-3xl border-transparent bg-transparent",
         )}
       >
-        <a href="#" className="font-display shrink-0 text-2xl font-bold">
-          <span className="wordmark">Harmony</span>
+        <a href="#" className="shrink-0 text-2xl">
+          <Brand />
         </a>
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Navigation principale">
           {LINKS.map((link) => (

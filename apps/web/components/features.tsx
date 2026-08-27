@@ -1,4 +1,5 @@
 import { type CSSProperties } from "react";
+import { Brand } from "./brand";
 import { MiniAutopilot, MiniSearch, MiniSite, MiniStats } from "./vignettes";
 
 const CARDS = [
@@ -39,14 +40,14 @@ export function Features() {
         style={{ "--rv-delay": "80ms" } as CSSProperties}
         className="font-display mx-auto mt-3 max-w-2xl text-center text-3xl font-bold text-ink-900 md:text-5xl"
       >
-        Pourquoi les praticiens choisissent Harmony&nbsp;?
+        Pourquoi les praticiens choisissent <Brand />&nbsp;?
       </h2>
       <p
         data-reveal
         style={{ "--rv-delay": "160ms" } as CSSProperties}
         className="mx-auto mt-4 max-w-2xl text-center text-lg text-ink-700"
       >
-        Parce qu'un beau site ne suffit pas : il doit être trouvé. Harmony s'occupe des deux.
+        Parce qu'un beau site ne suffit pas : il doit être trouvé. <Brand /> s'occupe des deux.
       </p>
 
       <div className="mt-14 grid gap-6 md:grid-cols-2">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FocusEvent } from "react";
 import clsx from "clsx";
+import { brandify } from "./brand";
 
 export type CarouselQuote = {
   text: string;
@@ -52,7 +53,7 @@ export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
             className={clsx("[grid-area:1/1]", i === index ? "quote-in" : "invisible")}
           >
             <blockquote className="font-display text-xl font-medium leading-relaxed text-white/90 md:text-2xl">
-              «&nbsp;{quote.text}&nbsp;»
+              «&nbsp;{brandify(quote.text, true)}&nbsp;»
             </blockquote>
             <p className="mt-4 text-sm text-white/60">
               {quote.author} — {quote.role}

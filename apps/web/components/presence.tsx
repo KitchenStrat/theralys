@@ -1,4 +1,5 @@
 import { type CSSProperties } from "react";
+import { Brand } from "./brand";
 import { BrowserFrame } from "./vignettes";
 
 const PILLARS = [
@@ -75,7 +76,9 @@ export function Presence() {
             <BrowserFrame url="app.harmony-web.fr" className="border-white/10">
               <div className="grid grid-cols-[86px_1fr] bg-cream-50">
                 <div className="border-r border-cream-200 bg-white p-3">
-                  <p className="wordmark font-display text-xs font-bold">Harmony</p>
+                  <p className="text-xs">
+                    <Brand />
+                  </p>
                   <div className="mt-3 space-y-1.5">
                     {["Accueil", "Éditeur", "Publications", "Mots-clés", "Compte"].map(
                       (item, i) => (

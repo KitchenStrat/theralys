@@ -63,12 +63,27 @@ body {
   letter-spacing: -0.02em;
 }
 
-/* ── Wordmark dégradé ──────────────────────────────────────────────────────── */
-.wordmark {
-  background: linear-gradient(100deg, var(--color-primary-400), var(--color-primary-700));
+/* ── Mot-marque « Harmony » : police dédiée, dégradé bleu, reflet mouvant ──── */
+.brand-word {
+  font-family: "Comfortaa", var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background-image: linear-gradient(
+    100deg,
+    var(--color-primary-700),
+    var(--color-primary-500) 38%,
+    var(--color-primary-200) 50%,
+    var(--color-primary-500) 62%,
+    var(--color-primary-700)
+  );
+  background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: shimmer-sweep 5s ease-in-out infinite;
+}
+.brand-word--dark {
+  background-image: linear-gradient(100deg, #ffffff, #ddf0fd 38%, #7bccf7 50%, #ddf0fd 62%, #ffffff);
 }
 
 /* ── Apparitions au défilement (cascade) ───────────────────────────────────── */
@@ -527,6 +542,7 @@ body {
   .grow-x { transform: scaleX(1); transition: none; }
 
   .shimmer-text,
+  .brand-word,
   .toast-in,
   .toast-out,
   .quote-in,

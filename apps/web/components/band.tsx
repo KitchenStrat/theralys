@@ -1,4 +1,5 @@
 import { type CSSProperties } from "react";
+import { Brand } from "./brand";
 import { WordRotator } from "./word-rotator";
 
 const GOALS = [
@@ -19,7 +20,7 @@ export function Band() {
 
       <div className="relative mx-auto max-w-4xl px-5 text-center">
         <h2 data-reveal className="font-display text-3xl font-bold leading-tight md:text-5xl">
-          Harmony est la solution pour
+          <Brand onDark /> est la solution pour
           <span className="sr-only"> développer votre cabinet.</span>
           <WordRotator
             words={GOALS}

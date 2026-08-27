@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { Brand, brandify } from "./brand";
 
 /*
  * Simulateur de revenus : le visiteur règle son trafic et son tarif de
@@ -99,7 +100,7 @@ export function RoiCalculator() {
           style={{ "--rv-delay": "80ms" } as CSSProperties}
           className="font-display mx-auto mt-3 max-w-3xl text-center text-3xl font-bold text-ink-900 md:text-5xl"
         >
-          « Calculez combien mon site Harmony me rapportera »
+          « Calculez combien mon site <Brand /> me rapportera »
         </h2>
         <p
           data-reveal
@@ -155,7 +156,7 @@ export function RoiCalculator() {
           <article className="card-gradient-border relative rounded-3xl p-7 shadow-[var(--shadow-pop)] md:p-9">
             <span className="absolute -top-3.5 left-7 inline-flex items-center gap-2 rounded-full bg-primary-500 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white shadow">
               <span className="dot-live h-1.5 w-1.5 rounded-full bg-white" />
-              Avec votre site Harmony
+              Avec votre site <Brand onDark />
             </span>
             <span className="absolute -top-3 right-5 rotate-6 rounded-xl bg-night-900 px-3 py-1.5 text-xs font-bold text-white shadow-lg">
               jusqu'à ×4 de RDV
@@ -231,9 +232,9 @@ export function RoiCalculator() {
           data-reveal
           className="mx-auto mt-8 max-w-2xl text-center text-xs leading-relaxed text-ink-500"
         >
-          Estimations indicatives : taux de conversion moyens constatés sur les sites
-          Harmony (8 à 12 %) et sur les sites vitrines traditionnels (0 à 3 %). Vos
-          résultats dépendent de votre ville, de votre spécialité et de votre trafic.
+          {brandify(
+            "Estimations indicatives : taux de conversion moyens constatés sur les sites Harmony (8 à 12 %) et sur les sites vitrines traditionnels (0 à 3 %). Vos résultats dépendent de votre ville, de votre spécialité et de votre trafic.",
+          )}
         </p>
       </div>
     </section>
