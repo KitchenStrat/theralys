@@ -34,3 +34,5 @@ Compte de démonstration seedé : `claire@demo-theralys.fr` / `client-demo`.
 Projet Vercel `harmony-studio`, auto-déployé à chaque push sur `main`
 (turbo-ignore : le build ne tourne que si `apps/studio` ou un de ses
 packages `@theralys/*` change). Domaine de production : `app.harmony-web.fr`.
+Compte Vercel en plan Pro ; fonctions en région `cdg1` (Paris), réglée
+dans Settings → Functions de chaque projet.
