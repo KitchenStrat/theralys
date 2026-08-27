@@ -184,10 +184,11 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
               className={clsx(
                 "lift spotlight relative rounded-3xl p-8",
                 popular
-                  ? "card-gradient-border shadow-[var(--shadow-pop)]"
+                  ? "card-gradient-border card-lumen"
                   : "border border-cream-200 bg-white shadow-[var(--shadow-card)]",
               )}
             >
+              {popular ? <span aria-hidden className="card-comet" /> : null}
               {popular ? (
                 <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary-500 px-4 py-1 text-xs font-bold uppercase tracking-wide text-white shadow">
                   Le plus choisi

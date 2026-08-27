@@ -197,6 +197,48 @@ body {
   animation: gradient-pan 8s ease infinite;
 }
 
+/* ── Comète lumineuse qui parcourt le liseré de la carte « Populaire » :
+   l'anneau de 2,5px est isolé par un masque (contenu exclu), et un conic
+   surdimensionné tourne dessous — transform composité, fluide partout. ────── */
+.card-lumen {
+  box-shadow:
+    0 0 0 1px rgb(56 179 240 / 0.25),
+    0 0 38px -6px rgb(56 179 240 / 0.55),
+    var(--shadow-pop);
+}
+.card-comet {
+  position: absolute;
+  inset: -2.5px;
+  border-radius: calc(1.5rem + 2.5px);
+  padding: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.card-comet::before {
+  content: "";
+  position: absolute;
+  inset: -75%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 240deg,
+    rgb(14 151 221 / 0.5) 290deg,
+    rgb(56 179 240 / 0.9) 325deg,
+    rgb(183 226 251 / 1) 345deg,
+    #ffffff 356deg,
+    transparent 360deg
+  );
+  animation: glow-rotate 3.5s linear infinite;
+}
+
 /* ── Élévation douce des cartes ────────────────────────────────────────────── */
 .lift {
   transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
@@ -499,6 +541,7 @@ body {
     opacity: 0;
   }
   .glow-ring::before { animation: none; }
+  .card-comet { display: none; }
   .wr > span { transition: none; }
   .tilt { transition: none; }
   .gauge-arc,

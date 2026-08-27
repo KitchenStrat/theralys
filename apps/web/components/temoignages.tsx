@@ -82,7 +82,7 @@ const QUOTES = [
 ];
 
 const STATS = [
-  { value: 800, prefix: "+", suffix: "", decimals: 0, label: "praticiens accompagnés" },
+  { value: 1200, prefix: "+", suffix: "", decimals: 0, label: "praticiens accompagnés" },
   { value: 91, prefix: "", suffix: " %", decimals: 0, label: "renouvellent leur abonnement" },
   { value: 4.8, prefix: "", suffix: "/5", decimals: 1, label: "de satisfaction moyenne" },
   { value: 2.7, prefix: "×", suffix: "", decimals: 1, label: "de visibilité Google en 6 mois" },
