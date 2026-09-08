@@ -49,14 +49,19 @@ export default async function MotifPage({ params }: Props) {
     prospect?.googleRating ?? (reviews.length > 0 ? averageRating(reviews) : null);
   const googleReviewCount = prospect?.googleReviewCount ?? (reviews.length || null);
 
-  // Bas de page identique à l'accueil : avis Google puis contact — hérités de
-  // la page d'accueil (une seule source de vérité, éditée une fois pour tout).
+  // Avis Google et contact hérités de la page d'accueil (une seule source de
+  // vérité, éditée une fois pour tout) ; les avis s'insèrent AVANT la FAQ
+  // (preuve sociale d'abord, questions ensuite), le contact reste en bas.
   // Le bandeau CTA des anciennes générations est retiré : redondant ici.
   const homeReviews = home?.sections.find((s): s is Extract<Section, { type: "reviews" }> => s.type === "reviews");
   const homeContact = home?.sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
+  const pageSections = page.sections.filter((s) => s.type !== "cta");
+  const reviewsSection: Section = homeReviews ?? { type: "reviews", title: "Ils me font confiance" };
+  const faqIndex = pageSections.findIndex((s) => s.type === "faq");
   const sections: Section[] = [
-    ...page.sections.filter((s) => s.type !== "cta"),
-    homeReviews ?? { type: "reviews", title: "Ils me font confiance" },
+    ...(faqIndex === -1 ? pageSections : pageSections.slice(0, faqIndex)),
+    reviewsSection,
+    ...(faqIndex === -1 ? [] : pageSections.slice(faqIndex)),
     ...(homeContact ? [homeContact] : []),
   ];
 
