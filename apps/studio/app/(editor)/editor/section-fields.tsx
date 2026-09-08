@@ -760,7 +760,7 @@ const escapeHtml = (s: string) =>
 const SAFE_LINK = /^(https?:\/\/|mailto:|tel:|\/|#)/i;
 /** Lignes de liste dans le format stocké — mêmes règles que le rendu public. */
 const BULLET_LINE = /^[-•]\s+/;
-const NUMBER_LINE = /^\d+[.)]\s+/;
+const NUMBER_LINE = /^\d{1,2}[.)]\s+/; // 1-2 chiffres : « 1993. Année… » reste du texte
 
 /** Une ligne stockée → HTML inline : gras d'abord, [liens](url) dans chaque segment. */
 function lineToHtml(line: string): string {
@@ -782,13 +782,19 @@ function lineToHtml(line: string): string {
  * Texte stocké → HTML affiché : vrai gras, vrais liens, une div par ligne ;
  * les suites de lignes « - … » / « 1. … » deviennent de vraies listes.
  */
-function textToHtml(text: string): string {
+function textToHtml(text: string, withLists = true): string {
   const lines = text.split("\n");
   const html: string[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    const marker = BULLET_LINE.test(line) ? BULLET_LINE : NUMBER_LINE.test(line) ? NUMBER_LINE : null;
+    const marker = !withLists
+      ? null
+      : BULLET_LINE.test(line)
+        ? BULLET_LINE
+        : NUMBER_LINE.test(line)
+          ? NUMBER_LINE
+          : null;
     if (!marker) {
       html.push(`<div>${lineToHtml(line) || "<br>"}</div>`);
       i++;
@@ -817,13 +823,14 @@ function htmlToText(root: HTMLElement): string {
       const label = Array.from(node.childNodes)
         .map((child) => inline(child, true))
         .join("")
-        .replace(/[[\]]/g, "")
+        .replace(/[[\]*]/g, "")
         .replace(/\n+/g, " ")
         .trim();
       const href = (node.getAttribute("href") ?? "")
         .trim()
         .replace(/\(/g, "%28")
         .replace(/\)/g, "%29")
+        .replace(/\*/g, "%2A")
         .replace(/\s/g, "%20");
       if (label && SAFE_LINK.test(href)) return `[${label}](${href})`;
       return label;
@@ -974,7 +981,19 @@ function selectionInside(el: HTMLElement | null): boolean {
 // ─── Commandes de mise en forme (partagées par tous les champs riches) ────────
 
 function toggleBoldCmd(el: HTMLElement | null): boolean {
-  if (!selectionInside(el)) return false;
+  if (!el || !selectionInside(el)) return false;
+  // Le gras à l'intérieur d'un lien n'est pas représentable dans le format
+  // stocké : on refuse plutôt que d'afficher un état qui ne serait pas gardé.
+  const selection = window.getSelection();
+  const inLink = (start: Node | null): boolean => {
+    let n: Node | null = start;
+    while (n && n !== el) {
+      if (n instanceof HTMLAnchorElement) return true;
+      n = n.parentNode;
+    }
+    return false;
+  };
+  if (selection && (inLink(selection.anchorNode) || inLink(selection.focusNode))) return false;
   document.execCommand("styleWithCSS", false, "false");
   document.execCommand("bold");
   return true;
@@ -1024,12 +1043,23 @@ function toggleLinkCmd(el: HTMLElement | null): boolean {
 function toggleCheckCmd(el: HTMLElement | null): boolean {
   if (!el) return false;
   if (el.children.length === 0) el.innerHTML = "<div><br></div>";
-  const blocks = Array.from(el.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
+  // Une « ligne » est un enfant direct… ou un <li> à l'intérieur d'une liste :
+  // insérer le ✅ dans le <li> (jamais directement dans le <ul>, que la
+  // sérialisation ignorerait).
+  const blocks: HTMLElement[] = [];
+  for (const child of Array.from(el.children)) {
+    if (!(child instanceof HTMLElement)) continue;
+    if (child.tagName === "UL" || child.tagName === "OL") {
+      for (const li of Array.from(child.querySelectorAll("li"))) blocks.push(li);
+    } else {
+      blocks.push(child);
+    }
+  }
   const selection = window.getSelection();
   const blockOf = (start: Node | null): HTMLElement | null => {
-    let n = start;
+    let n: Node | null = start;
     while (n && n !== el) {
-      if (n.parentNode === el && n instanceof HTMLElement) return n;
+      if (n instanceof HTMLElement && blocks.includes(n)) return n;
       n = n.parentNode;
     }
     return null;
@@ -1113,8 +1143,10 @@ function RichToolbar({
   const btn =
     "flex h-7 w-8 items-center justify-center rounded-lg border border-ink-300 bg-white text-sm text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600";
   const apply =
-    (command: (el: HTMLElement | null) => boolean) => (event: { preventDefault: () => void }) => {
+    (command: (el: HTMLElement | null) => boolean) =>
+    (event: { preventDefault: () => void; button: number }) => {
       event.preventDefault();
+      if (event.button !== 0) return; // clic gauche uniquement
       if (command(getEl())) onApplied();
     };
   return (
@@ -1296,9 +1328,10 @@ function RichField({
   useEffect(() => {
     const el = ref.current;
     if (!el || lastEmitted.current === value) return;
-    el.innerHTML = textToHtml(value);
+    // Mono-ligne : pas de listes — « 2. Consultation » reste du texte
+    el.innerHTML = textToHtml(value, multiline);
     lastEmitted.current = value;
-  }, [value]);
+  }, [value, multiline]);
 
   function emit() {
     const el = ref.current;

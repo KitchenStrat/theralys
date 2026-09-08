@@ -293,12 +293,14 @@ function SectionIcon({
 const SAFE_LINK = /^(https?:\/\/|mailto:|tel:|\/|#)/i;
 
 /** [texte](url) → lien ; le texte d'un lien reste brut (pas de gras imbriqué). */
-function richLinks(text: string, keyBase: string): ReactNode[] {
+function richLinks(text: string, keyBase: string, links: boolean): ReactNode[] {
   const parts = text.split(/(\[[^\]\n]+\]\([^)\s]+\))/g);
   return parts.map((part, i) => {
     const match = /^\[([^\]\n]+)\]\(([^)\s]+)\)$/.exec(part);
     if (!match || !SAFE_LINK.test(match[2] ?? "")) return part;
     const [, label, href] = match;
+    // Contexte déjà cliquable (carte <Link>) : pas de <a> imbriqué, libellé seul
+    if (!links) return label;
     const external = /^https?:\/\//i.test(href ?? "");
     return (
       <a
@@ -319,7 +321,16 @@ function richLinks(text: string, keyBase: string): ReactNode[] {
  * de HTML libre. `strongClass` adapte l'accent au contexte (couleur de marque
  * dans les titres, graisse dans le corps de texte).
  */
-function Rich({ text, strongClass = "font-semibold" }: { text: string; strongClass?: string }) {
+function Rich({
+  text,
+  strongClass = "font-semibold",
+  links = true,
+}: {
+  text: string;
+  strongClass?: string;
+  /** false : les [liens](url) s'affichent en texte simple (contexte déjà cliquable) */
+  links?: boolean;
+}) {
   // Gras d'abord (quantificateur paresseux : le contenu peut contenir un
   // « * » isolé), puis liens à l'intérieur de chaque segment.
   const parts = text.split(/(\*\*.+?\*\*)/g);
@@ -328,10 +339,10 @@ function Rich({ text, strongClass = "font-semibold" }: { text: string; strongCla
       {parts.map((part, i) =>
         part.startsWith("**") && part.endsWith("**") ? (
           <strong key={i} className={strongClass}>
-            {richLinks(part.slice(2, -2), `b${i}`)}
+            {richLinks(part.slice(2, -2), `b${i}`, links)}
           </strong>
         ) : (
-          richLinks(part, `p${i}`)
+          richLinks(part, `p${i}`, links)
         ),
       )}
     </>
@@ -339,14 +350,22 @@ function Rich({ text, strongClass = "font-semibold" }: { text: string; strongCla
 }
 
 const BULLET_LINE = /^[-•]\s+/;
-const NUMBER_LINE = /^\d+[.)]\s+/;
+const NUMBER_LINE = /^\d{1,2}[.)]\s+/; // 1-2 chiffres : « 1993. Année… » reste du texte
 
 /**
  * Rendu multi-lignes : les suites de lignes « - … » deviennent une vraie
  * liste à puces, « 1. … » une liste numérotée ; le reste garde ses retours à
  * la ligne (whitespace-pre-line). À placer dans un conteneur non-<p>.
  */
-function RichBlocks({ text, strongClass }: { text: string; strongClass?: string }) {
+function RichBlocks({
+  text,
+  strongClass,
+  markerClass = "marker:text-[var(--site-primary)]",
+}: {
+  text: string;
+  strongClass?: string;
+  markerClass?: string;
+}) {
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -377,7 +396,7 @@ function RichBlocks({ text, strongClass }: { text: string; strongClass?: string 
       blocks.push(
         <List
           key={blocks.length}
-          className={`my-1.5 space-y-1.5 pl-5 marker:text-[var(--site-primary)] ${kind === "ul" ? "list-disc" : "list-decimal"}`}
+          className={`my-1.5 space-y-1.5 pl-5 ${markerClass} ${kind === "ul" ? "list-disc" : "list-decimal"}`}
         >
           {run.map((l, j) => (
             <li key={j}>
@@ -675,10 +694,10 @@ function Specialties({
                   <SectionIcon name={item.icon ?? specialtyIconFor(item.title, index)} size={32} />
                 </span>
                 <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
-                  <Rich text={item.title} strongClass="text-[var(--site-primary)]" />
+                  <Rich text={item.title} strongClass="text-[var(--site-primary)]" links={false} />
                 </h3>
                 <p className="mt-3 text-[1.05rem] leading-relaxed opacity-75">
-                  <Rich text={item.excerpt} />
+                  <Rich text={item.excerpt} links={false} />
                 </p>
               </>
             );
@@ -1078,7 +1097,9 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
               className="reveal group overflow-hidden rounded-[var(--r-md)] open:bg-[var(--site-surface)] open:shadow-sm"
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-7 py-6 text-lg font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
-                <Rich text={item.question} strongClass="font-black" />
+                <span className="min-w-0">
+                  <Rich text={item.question} strongClass="font-black" />
+                </span>
                 <span aria-hidden className="shrink-0 transition-transform group-open:rotate-45">
                   +
                 </span>
@@ -1160,7 +1181,7 @@ function Contact({
           ) : null}
         </div>
         <div className="reveal" style={{ transitionDelay: "120ms" }}>
-          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
+          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="font-black" /></h2>
           <p className="mt-4 text-lg opacity-85">Prendre rendez-vous en ligne ou par téléphone :</p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
@@ -1232,8 +1253,8 @@ function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx
       <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-16 text-center text-white shadow-xl shadow-black/10">
         <h2 className="mx-auto max-w-2xl text-[2.2rem] font-semibold leading-[1.15] sm:text-[2.6rem]"><Rich text={section.title} strongClass="font-black" /></h2>
         {section.body ? (
-          <div className="mx-auto mt-5 max-w-2xl text-xl opacity-90 [&_ol]:inline-block [&_ol]:text-left [&_ul]:inline-block [&_ul]:text-left">
-            <RichBlocks text={section.body} />
+          <div className="mx-auto mt-5 max-w-2xl text-xl opacity-90 [&_ol]:mx-auto [&_ol]:w-fit [&_ol]:text-left [&_ul]:mx-auto [&_ul]:w-fit [&_ul]:text-left">
+            <RichBlocks text={section.body} markerClass="marker:text-current" />
           </div>
         ) : null}
         <div className="mt-9">
