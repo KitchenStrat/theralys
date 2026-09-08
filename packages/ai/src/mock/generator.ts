@@ -30,7 +30,7 @@ function fullName(input: GenerationInput): string {
 function specialtyFromMotif(motif: string, seed: ProfessionSeed): SpecialtySeed {
   return {
     title: motif.charAt(0).toUpperCase() + motif.slice(1),
-    excerpt: `Un accompagnement dédié autour de « ${motif.toLowerCase()} », construit avec vous, à votre rythme.`,
+    excerpt: `Un accompagnement dédié autour de « ${motif.toLowerCase()} », construit avec vous, à votre rythme. Le premier échange permet de préciser vos attentes et d'adapter chaque séance à votre situation.`,
     focus: motif.toLowerCase(),
     benefits: [
       "Un premier échange pour préciser vos attentes",
@@ -308,7 +308,8 @@ export function mockGenerateMotifPage(
     slug: motif.slug,
     title: spec.title,
     metaTitle: `${spec.title} à ${input.city} — ${fullName(input)}`,
-    metaDescription: spec.excerpt,
+    // La description doublée dépasse les ~155 caractères SEO : première phrase seule
+    metaDescription: (spec.excerpt.split(". ")[0] ?? spec.excerpt).slice(0, 155),
     sections,
     imageQuery: stockQueryFor(spec.title, input.profession),
   };

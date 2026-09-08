@@ -64,7 +64,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Gestion du stress",
-        "Des outils concrets de respiration et de relâchement pour apaiser les tensions du quotidien.",
+        "Des outils concrets de respiration et de relâchement pour apaiser les tensions du quotidien. Séance après séance, vous constituez votre propre boîte à outils, à réutiliser en autonomie dès que le besoin s'en fait sentir.",
         "la respiration et le relâchement des tensions",
         [
           "Des exercices de respiration simples, réutilisables partout",
@@ -75,7 +75,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Sommeil et récupération",
-        "Préparer le corps et l'esprit à un repos de meilleure qualité, soir après soir.",
+        "Préparer le corps et l'esprit à un repos de meilleure qualité, soir après soir. Nous travaillons la détente physique et le ralentissement du mental pour installer durablement de meilleures nuits.",
         "la préparation au repos et la récupération",
         [
           "Un rituel du soir simple à installer",
@@ -86,7 +86,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Confiance en soi",
-        "Renforcer vos ressources intérieures et aborder les situations importantes avec plus de sérénité.",
+        "Renforcer vos ressources intérieures et aborder les situations importantes avec plus de sérénité. Un travail progressif, à votre rythme, pour reprendre appui sur ce que vous savez déjà faire.",
         "les ressources intérieures et l'ancrage",
         [
           "Des exercices d'ancrage et de posture",
@@ -97,7 +97,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Préparation mentale",
-        "Examens, prise de parole, compétition : arriver préparé, concentré et disponible le jour J.",
+        "Examens, prise de parole, compétition : arriver préparé, concentré et disponible le jour J. Visualisation, respiration et ancrage se combinent selon votre échéance et votre manière de fonctionner.",
         "la concentration et la visualisation positive",
         [
           "Des techniques de visualisation éprouvées",
@@ -108,7 +108,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Accompagnement périnatal",
-        "Vivre la grossesse et l'arrivée de bébé avec plus de calme, en lien avec votre corps.",
+        "Vivre la grossesse et l'arrivée de bébé avec plus de calme, en lien avec votre corps. Un espace pour vous poser, traverser les changements et préparer sereinement la rencontre.",
         "l'écoute du corps pendant la grossesse",
         [
           "Des séances douces adaptées à chaque trimestre",
@@ -119,7 +119,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Enfants et adolescents",
-        "Des séances ludiques et courtes pour apprendre tôt à écouter ses émotions.",
+        "Des séances ludiques et courtes pour apprendre tôt à écouter ses émotions. Adaptées à l'âge de l'enfant, elles s'appuient sur le jeu, la respiration et l'imaginaire.",
         "l'écoute des émotions par le jeu",
         [
           "Des exercices ludiques et imagés",
@@ -138,7 +138,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Massage bien-être sur mesure",
-        "Un massage composé avec vous, selon vos envies et les zones à relâcher ce jour-là.",
+        "Un massage composé avec vous, selon vos envies et les zones à relâcher ce jour-là. Pressions, rythme et durée s'ajustent en début de séance pour un moment vraiment sur mesure.",
         "l'écoute du corps et la personnalisation",
         [
           "Un échange en début de séance pour cibler vos besoins",
@@ -149,7 +149,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Massage ayurvédique",
-        "Inspiré de la tradition indienne : des huiles chaudes et des gestes enveloppants pour une détente profonde.",
+        "Inspiré de la tradition indienne : des huiles chaudes et des gestes enveloppants pour une détente profonde. Un soin complet qui délasse le corps tout entier et invite le mental à lâcher prise.",
         "la tradition ayurvédique et les huiles chaudes",
         [
           "Des huiles chaudes choisies avec attention",
@@ -160,7 +160,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Massage sportif",
-        "Avant ou après l'effort : préparer les muscles, accompagner la récupération, relâcher les zones sollicitées.",
+        "Avant ou après l'effort : préparer les muscles, accompagner la récupération, relâcher les zones sollicitées. Le travail s'adapte à votre discipline, à votre charge d'entraînement et à vos sensations du moment.",
         "la préparation et la récupération musculaire",
         [
           "Un travail ciblé sur les zones sollicitées",
@@ -171,7 +171,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Réflexologie plantaire",
-        "Par des pressions douces sur les pieds, inviter l'ensemble du corps à la détente.",
+        "Par des pressions douces sur les pieds, inviter l'ensemble du corps à la détente. Chaque zone travaillée fait écho à une partie du corps, pour un relâchement global et durable.",
         "les zones réflexes et la détente globale",
         [
           "Des pressions douces et rythmées sous les pieds",
@@ -182,7 +182,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Massage crânien et visage",
-        "Tête, nuque, visage : dénouer les tensions accumulées et offrir une vraie pause au mental.",
+        "Tête, nuque, visage : dénouer les tensions accumulées et offrir une vraie pause au mental. Idéal en période de surcharge, d'écrans prolongés ou de maux de tête à répétition.",
         "le relâchement de la tête et de la nuque",
         [
           "Des gestes légers sur le cuir chevelu et le visage",
@@ -193,7 +193,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Drainage et jambes légères",
-        "Des manœuvres douces et rythmées pour retrouver une sensation de légèreté.",
+        "Des manœuvres douces et rythmées pour retrouver une sensation de légèreté. Particulièrement appréciées en cas de jambes lourdes, de station debout prolongée ou de chaleur.",
         "la légèreté et la circulation du bien-être",
         [
           "Des gestes doux, lents et rythmés",
@@ -212,7 +212,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Ostéopathie du sport",
-        "Accompagner les sportifs, du loisir à la compétition, pour préserver mobilité et confort.",
+        "Accompagner les sportifs, du loisir à la compétition, pour préserver mobilité et confort. En préparation d'une échéance ou en récupération, le travail s'ajuste à votre pratique.",
         "la mobilité et la préparation du corps",
         [
           "Un bilan complet de votre mobilité",
@@ -223,7 +223,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Femmes enceintes",
-        "Un accompagnement doux du corps qui change, tout au long de la grossesse.",
+        "Un accompagnement doux du corps qui change, tout au long de la grossesse. Des techniques adaptées à chaque trimestre pour soulager les inconforts et vivre cette période plus sereinement.",
         "le confort de la grossesse",
         [
           "Des techniques douces et adaptées",
@@ -234,7 +234,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Nourrissons et enfants",
-        "Des gestes très doux pour accompagner les premiers mois et la croissance.",
+        "Des gestes très doux pour accompagner les premiers mois et la croissance. Une approche respectueuse du rythme de l'enfant, en présence et avec la participation des parents.",
         "la douceur et l'accompagnement de la croissance",
         [
           "Des manipulations extrêmement douces",
@@ -245,7 +245,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Confort au travail",
-        "Postures prolongées, gestes répétitifs : redonner de la mobilité au corps qui travaille.",
+        "Postures prolongées, gestes répétitifs : redonner de la mobilité au corps qui travaille. Un accompagnement utile pour prévenir les tensions liées au bureau comme aux métiers physiques.",
         "les postures du quotidien professionnel",
         [
           "Un bilan des postures de votre quotidien",
@@ -256,7 +256,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Seniors",
-        "Entretenir la mobilité et l'aisance de mouvement pour continuer à faire ce que vous aimez.",
+        "Entretenir la mobilité et l'aisance de mouvement pour continuer à faire ce que vous aimez. Des techniques douces, adaptées à votre condition, pour préserver votre autonomie au quotidien.",
         "la mobilité au fil des années",
         [
           "Des techniques adaptées et progressives",
@@ -267,7 +267,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Suivi régulier",
-        "Un rendez-vous périodique pour entretenir votre confort et prévenir les tensions.",
+        "Un rendez-vous périodique pour entretenir votre confort et prévenir les tensions. La fréquence se décide ensemble, selon votre activité, votre âge et vos antécédents.",
         "l'entretien du confort au fil des saisons",
         [
           "Un point régulier sur votre confort",
@@ -286,7 +286,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Équilibre alimentaire",
-        "Faire le point sur votre assiette et avancer par petits pas, sans frustration.",
+        "Faire le point sur votre assiette et avancer par petits pas, sans frustration. Des ajustements réalistes, compatibles avec votre vie quotidienne, vos goûts et votre budget.",
         "l'assiette et les habitudes durables",
         [
           "Un bilan complet de vos habitudes",
@@ -297,7 +297,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Vitalité et énergie",
-        "Comprendre ce qui pèse sur votre énergie et remettre du mouvement dans vos journées.",
+        "Comprendre ce qui pèse sur votre énergie et remettre du mouvement dans vos journées. Alimentation, rythme et récupération sont passés en revue pour construire un plan simple et tenable.",
         "l'hygiène de vie et l'énergie au quotidien",
         [
           "Un regard global sur votre hygiène de vie",
@@ -308,7 +308,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Sommeil et récupération",
-        "Installer une routine du soir et des habitudes qui favorisent un repos de qualité.",
+        "Installer une routine du soir et des habitudes qui favorisent un repos de qualité. Nous identifions ensemble ce qui perturbe vos nuits pour y répondre point par point.",
         "les rituels du soir et la récupération",
         [
           "Un bilan de vos rythmes actuels",
@@ -319,7 +319,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Confort digestif",
-        "Écouter votre digestion et adopter les habitudes qui lui font du bien.",
+        "Écouter votre digestion et adopter les habitudes qui lui font du bien. Un accompagnement progressif pour identifier ce qui vous convient et retrouver du confort après les repas.",
         "l'écoute de la digestion",
         [
           "Un point détaillé sur vos habitudes de table",
@@ -330,7 +330,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Gestion du stress au naturel",
-        "Respiration, plantes de confort, hygiène de vie : une boîte à outils naturelle contre la pression.",
+        "Respiration, plantes de confort, hygiène de vie : une boîte à outils naturelle contre la pression. Vous repartez avec des rituels simples à intégrer dans vos journées, sans tout bouleverser.",
         "les outils naturels de détente",
         [
           "Des techniques de respiration accessibles",
@@ -341,7 +341,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Accompagnement de la femme",
-        "Cycles, maternité, ménopause : accompagner chaque étape avec des approches naturelles et douces.",
+        "Cycles, maternité, ménopause : accompagner chaque étape avec des approches naturelles et douces. Un suivi personnalisé qui respecte votre corps et s'adapte aux besoins de chaque période.",
         "les étapes de la vie hormonale",
         [
           "Une écoute attentive de chaque étape",
@@ -360,7 +360,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Gestion du stress et des émotions",
-        "Apprendre à accueillir ce qui se passe en vous et retrouver du calme intérieur.",
+        "Apprendre à accueillir ce qui se passe en vous et retrouver du calme intérieur. Des outils concrets, à réutiliser en autonomie, pour traverser plus sereinement les périodes chargées.",
         "l'accueil des émotions",
         [
           "Un état de détente profonde et agréable",
@@ -371,7 +371,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Sommeil",
-        "Préparer l'esprit au repos et retrouver des nuits plus paisibles.",
+        "Préparer l'esprit au repos et retrouver des nuits plus paisibles. Nous travaillons sur les ruminations du soir et les réveils nocturnes, à votre rythme.",
         "la préparation mentale au repos",
         [
           "Des inductions douces vers la détente",
@@ -382,7 +382,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Confiance en soi",
-        "Renouer avec vos capacités et aborder les défis avec plus d'assurance.",
+        "Renouer avec vos capacités et aborder les défis avec plus d'assurance. Un cheminement étape par étape pour reprendre confiance dans les situations qui comptent pour vous.",
         "les ressources et les réussites passées",
         [
           "Un travail sur vos réussites passées",
@@ -393,7 +393,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Accompagnement à l'arrêt du tabac",
-        "Un accompagnement structuré pour changer votre relation à la cigarette.",
+        "Un accompagnement structuré pour changer votre relation à la cigarette. Le protocole s'adapte à votre histoire de fumeur, à vos habitudes et à votre motivation du moment.",
         "le changement d'habitude en profondeur",
         [
           "Un protocole en plusieurs séances",
@@ -404,7 +404,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Rapport à l'alimentation",
-        "Réconcilier plaisir et écoute de soi, loin des injonctions et des régimes.",
+        "Réconcilier plaisir et écoute de soi, loin des injonctions et des régimes. Un travail en douceur sur les automatismes, les envies et la place des émotions dans l'assiette.",
         "l'écoute des vraies faims",
         [
           "Un travail sur les automatismes de table",
@@ -415,7 +415,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Préparation mentale",
-        "Examens, entretiens, compétitions : arriver disponible et concentré le jour venu.",
+        "Examens, entretiens, compétitions : arriver disponible et concentré le jour venu. La préparation combine visualisation et ancrages, répétés en séance jusqu'à devenir des réflexes.",
         "la répétition mentale du succès",
         [
           "La visualisation détaillée de l'échéance",
@@ -434,7 +434,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Réflexologie plantaire",
-        "Des pressions précises sous les pieds pour une détente qui gagne tout le corps.",
+        "Des pressions précises sous les pieds pour une détente qui gagne tout le corps. Une séance enveloppante, appréciée aussi bien en découverte qu'en accompagnement régulier.",
         "les zones réflexes des pieds",
         [
           "Un toucher précis et adapté à votre sensibilité",
@@ -445,7 +445,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Réflexologie palmaire",
-        "Les mains aussi méritent leur pause : une approche douce, idéale en découverte.",
+        "Les mains aussi méritent leur pause : une approche douce, idéale en découverte. Une séance plus courte, parfaite pour s'initier à la réflexologie ou compléter un soin plantaire.",
         "les mains et la détente accessible",
         [
           "Une approche douce et rassurante",
@@ -456,7 +456,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Détente et stress",
-        "Un protocole pensé pour relâcher la pression et retrouver du calme.",
+        "Un protocole pensé pour relâcher la pression et retrouver du calme. Les zones réflexes liées à la détente sont travaillées en profondeur, dans un cadre apaisant.",
         "le relâchement de la pression",
         [
           "Un protocole entièrement orienté détente",
@@ -467,7 +467,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Sommeil",
-        "En fin de journée, préparer le terrain d'un repos de meilleure qualité.",
+        "En fin de journée, préparer le terrain d'un repos de meilleure qualité. Une séance douce qui aide le corps à ralentir et facilite la transition vers la nuit.",
         "la préparation au repos",
         [
           "Des séances de fin de journée privilégiées",
@@ -478,7 +478,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Confort digestif",
-        "Un travail doux et ciblé pour accompagner votre confort au quotidien.",
+        "Un travail doux et ciblé pour accompagner votre confort au quotidien. Les zones réflexes du système digestif sont stimulées avec précision, séance après séance.",
         "l'accompagnement du confort quotidien",
         [
           "Des zones ciblées avec précision",
@@ -489,7 +489,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Jambes légères",
-        "Pieds et mollets fatigués : retrouver une sensation de légèreté.",
+        "Pieds et mollets fatigués : retrouver une sensation de légèreté. Des manœuvres drainantes et enveloppantes, idéales après de longues journées debout ou par temps chaud.",
         "la légèreté des jambes",
         [
           "Une attention particulière aux pieds fatigués",
@@ -508,7 +508,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Séance de reiki traditionnel",
-        "Par apposition des mains, un moment de calme profond et de ressourcement.",
+        "Par apposition des mains, un moment de calme profond et de ressourcement. La séance se déroule habillé, allongé confortablement, dans un cadre silencieux et bienveillant.",
         "l'apposition des mains et le calme",
         [
           "Une séance habillé, allongé confortablement",
@@ -519,7 +519,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Harmonisation énergétique",
-        "Rééquilibrer votre énergie et repartir plus léger, plus disponible.",
+        "Rééquilibrer votre énergie et repartir plus léger, plus disponible. Un soin global qui vise à relancer la circulation de l'énergie et à apaiser les tensions.",
         "l'équilibre et la circulation de l'énergie",
         [
           "Un protocole complet de la tête aux pieds",
@@ -530,7 +530,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Gestion du stress",
-        "Déposer la pression du quotidien et retrouver un espace intérieur de calme.",
+        "Déposer la pression du quotidien et retrouver un espace intérieur de calme. Des séances régulières aident à installer une détente plus durable entre les rendez-vous.",
         "le dépôt de la pression du quotidien",
         [
           "Un accueil bienveillant de ce que vous vivez",
@@ -541,7 +541,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Accompagnement du sommeil",
-        "Apaiser le mental en fin de journée pour favoriser un repos réparateur.",
+        "Apaiser le mental en fin de journée pour favoriser un repos réparateur. Un travail doux sur les tensions accumulées, pour aborder la nuit dans de meilleures conditions.",
         "l'apaisement du soir",
         [
           "Des séances de fin de journée conseillées",
@@ -552,7 +552,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Reiki à distance",
-        "Depuis chez vous, un moment de détente guidé à l'heure convenue.",
+        "Depuis chez vous, un moment de détente guidé à l'heure convenue. Un temps calme dans votre propre environnement, suivi d'un échange sur votre ressenti.",
         "la pratique à distance",
         [
           "Une séance depuis le confort de chez vous",
@@ -563,7 +563,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Méditation guidée",
-        "Des séances accompagnées pour apprivoiser le calme, seul ou en petit groupe.",
+        "Des séances accompagnées pour apprivoiser le calme, seul ou en petit groupe. Aucune expérience n'est nécessaire : la pratique se construit progressivement, guidée pas à pas.",
         "l'apprentissage du calme",
         [
           "Des guidages accessibles aux débutants",
@@ -582,7 +582,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
     specialties: [
       specialty(
         "Gestion du stress",
-        "Des séances dédiées au relâchement de la pression accumulée au quotidien.",
+        "Des séances dédiées au relâchement de la pression accumulée au quotidien. Vous repartez avec des exercices simples pour prolonger les effets entre deux rendez-vous.",
         "le relâchement de la pression",
         [
           "Un temps d'écoute de vos besoins",
@@ -593,7 +593,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Détente profonde",
-        "Un moment suspendu pour relâcher le corps et apaiser le mental.",
+        "Un moment suspendu pour relâcher le corps et apaiser le mental. Une parenthèse guidée, dans un cadre chaleureux, pour vous retrouver et souffler vraiment.",
         "le lâcher-prise",
         [
           "Une séance entièrement dédiée à votre détente",
@@ -604,7 +604,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Sommeil et récupération",
-        "Préparer le corps et l'esprit à un repos de meilleure qualité.",
+        "Préparer le corps et l'esprit à un repos de meilleure qualité. Nous cherchons ensemble ce qui entretient la fatigue pour installer des nuits plus sereines.",
         "la préparation au repos",
         [
           "Des séances de fin de journée privilégiées",
@@ -615,7 +615,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Vitalité au quotidien",
-        "Remettre du mouvement et de l'énergie dans vos journées.",
+        "Remettre du mouvement et de l'énergie dans vos journées. Un accompagnement global qui touche au rythme de vie, à la récupération et à la motivation.",
         "l'énergie retrouvée",
         [
           "Un regard global sur votre quotidien",
@@ -626,7 +626,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Équilibre émotionnel",
-        "Accueillir vos émotions et retrouver de la stabilité intérieure.",
+        "Accueillir vos émotions et retrouver de la stabilité intérieure. Un espace d'écoute et des outils concrets pour traverser les périodes de turbulence.",
         "l'accueil des émotions",
         [
           "Un espace de parole sans jugement",
@@ -637,7 +637,7 @@ export const PROFESSIONS: Record<string, ProfessionSeed> = {
       ),
       specialty(
         "Accompagnement personnalisé",
-        "Un parcours construit avec vous, selon vos besoins et vos objectifs.",
+        "Un parcours construit avec vous, selon vos besoins et vos objectifs. Le premier rendez-vous permet de faire le point et de définir ensemble un accompagnement adapté.",
         "le sur-mesure",
         [
           "Un premier échange approfondi",
