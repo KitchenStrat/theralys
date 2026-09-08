@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
 import { reviewDateFr, specialtyIconFor, type Section } from "@theralys/shared";
 import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
@@ -289,23 +289,109 @@ function SectionIcon({
   );
 }
 
-/** Rendu inline léger des textes générés : **gras** (jamais de HTML libre). */
-function Rich({ text }: { text: string }) {
-  // Quantificateur paresseux : le contenu peut contenir un « * » isolé
+/** Seuls ces schémas d'URL sont rendus en lien (jamais javascript: etc.). */
+const SAFE_LINK = /^(https?:\/\/|mailto:|tel:|\/|#)/i;
+
+/** [texte](url) → lien ; le texte d'un lien reste brut (pas de gras imbriqué). */
+function richLinks(text: string, keyBase: string): ReactNode[] {
+  const parts = text.split(/(\[[^\]\n]+\]\([^)\s]+\))/g);
+  return parts.map((part, i) => {
+    const match = /^\[([^\]\n]+)\]\(([^)\s]+)\)$/.exec(part);
+    if (!match || !SAFE_LINK.test(match[2] ?? "")) return part;
+    const [, label, href] = match;
+    const external = /^https?:\/\//i.test(href ?? "");
+    return (
+      <a
+        key={`${keyBase}-${i}`}
+        href={href}
+        target={external ? "_blank" : undefined}
+        rel={external ? "noopener noreferrer" : undefined}
+        className="underline decoration-current/50 underline-offset-2 transition-opacity hover:opacity-75"
+      >
+        {label}
+      </a>
+    );
+  });
+}
+
+/**
+ * Rendu inline léger des textes générés : **gras** et [liens](url) — jamais
+ * de HTML libre. `strongClass` adapte l'accent au contexte (couleur de marque
+ * dans les titres, graisse dans le corps de texte).
+ */
+function Rich({ text, strongClass = "font-semibold" }: { text: string; strongClass?: string }) {
+  // Gras d'abord (quantificateur paresseux : le contenu peut contenir un
+  // « * » isolé), puis liens à l'intérieur de chaque segment.
   const parts = text.split(/(\*\*.+?\*\*)/g);
   return (
     <>
       {parts.map((part, i) =>
         part.startsWith("**") && part.endsWith("**") ? (
-          <strong key={i} className="font-semibold">
-            {part.slice(2, -2)}
+          <strong key={i} className={strongClass}>
+            {richLinks(part.slice(2, -2), `b${i}`)}
           </strong>
         ) : (
-          part
+          richLinks(part, `p${i}`)
         ),
       )}
     </>
   );
+}
+
+const BULLET_LINE = /^[-•]\s+/;
+const NUMBER_LINE = /^\d+[.)]\s+/;
+
+/**
+ * Rendu multi-lignes : les suites de lignes « - … » deviennent une vraie
+ * liste à puces, « 1. … » une liste numérotée ; le reste garde ses retours à
+ * la ligne (whitespace-pre-line). À placer dans un conteneur non-<p>.
+ */
+function RichBlocks({ text, strongClass }: { text: string; strongClass?: string }) {
+  const lines = text.split("\n");
+  const blocks: ReactNode[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const kind = BULLET_LINE.test(line) ? "ul" : NUMBER_LINE.test(line) ? "ol" : "text";
+    const run: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i] ?? "";
+      const currentKind = BULLET_LINE.test(current) ? "ul" : NUMBER_LINE.test(current) ? "ol" : "text";
+      if (currentKind !== kind) break;
+      run.push(current);
+      i++;
+    }
+    if (kind === "text") {
+      blocks.push(
+        <span key={blocks.length} className="whitespace-pre-line">
+          {run.map((l, j) => (
+            <Fragment key={j}>
+              <Rich text={l} strongClass={strongClass} />
+              {j < run.length - 1 ? "\n" : null}
+            </Fragment>
+          ))}
+        </span>,
+      );
+    } else {
+      const List = kind === "ul" ? "ul" : "ol";
+      blocks.push(
+        <List
+          key={blocks.length}
+          className={`my-1.5 space-y-1.5 pl-5 marker:text-[var(--site-primary)] ${kind === "ul" ? "list-disc" : "list-decimal"}`}
+        >
+          {run.map((l, j) => (
+            <li key={j}>
+              <Rich
+                text={l.replace(kind === "ul" ? BULLET_LINE : NUMBER_LINE, "")}
+                strongClass={strongClass}
+              />
+            </li>
+          ))}
+        </List>,
+      );
+    }
+  }
+  return <>{blocks}</>;
 }
 
 /** Badge chiffré flottant sur la photo du hero (« +300 / Patients accompagnés »). */
@@ -389,13 +475,13 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
     <>
       {section.badge ? <Pill>{section.badge}</Pill> : null}
       <h1 className="mt-6 text-[2.75rem] font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[4.3rem]">
-        {section.title}
+        <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
       </h1>
       <div className="mt-7 max-w-xl space-y-4 text-xl opacity-85">
         {section.paragraphs.map((p, i) => (
-          <p key={i} className="whitespace-pre-line">
-            <Rich text={p} />
-          </p>
+          <div key={i}>
+            <RichBlocks text={p} />
+          </div>
         ))}
       </div>
       <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -530,7 +616,9 @@ function Highlights({ section }: { section: Extract<Section, { type: "highlights
             <span className="flex h-14 w-14 items-center justify-center text-[var(--site-primary)]">
               <SectionIcon name={item.icon} size={46} strokeWidth={1.9} />
             </span>
-            <h3 className="mt-4 text-[1.55rem] font-bold leading-snug">{item.title}</h3>
+            <h3 className="mt-4 text-[1.55rem] font-bold leading-snug">
+              <Rich text={item.title} strongClass="text-[var(--site-primary)]" />
+            </h3>
             {item.text ? (
               <p className="mt-2.5 text-[1.08rem] leading-relaxed opacity-75">
                 <Rich text={item.text} />
@@ -567,11 +655,13 @@ function Specialties({
         <div className="reveal text-center">
           <Pill onDark>Motifs de consultation</Pill>
           <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
-            {section.title}
+            <Rich text={section.title} strongClass="font-black" />
           </h2>
           <DotsRow className="mt-6" />
           {section.intro ? (
-            <p className="mx-auto mt-5 max-w-2xl text-xl opacity-80">{section.intro}</p>
+            <p className="mx-auto mt-5 max-w-2xl text-xl opacity-80">
+              <Rich text={section.intro} />
+            </p>
           ) : null}
         </div>
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -585,7 +675,7 @@ function Specialties({
                   <SectionIcon name={item.icon ?? specialtyIconFor(item.title, index)} size={32} />
                 </span>
                 <h3 className="mt-6 text-2xl font-semibold group-hover:text-[var(--site-primary)]">
-                  {item.title}
+                  <Rich text={item.title} strongClass="text-[var(--site-primary)]" />
                 </h3>
                 <p className="mt-3 text-[1.05rem] leading-relaxed opacity-75">
                   <Rich text={item.excerpt} />
@@ -669,7 +759,7 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
         <div className="reveal lg:w-[55%] lg:pr-8">
           {section.badge ? <Pill>{section.badge}</Pill> : null}
           <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
-            {section.title}
+            <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
           </h2>
           {section.intro ? (
             <p className="mt-6 text-xl opacity-85">
@@ -686,9 +776,9 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
                 <span aria-hidden className="mt-0.5 shrink-0">
                   ✅
                 </span>
-                <span className="whitespace-pre-line opacity-90">
-                  <Rich text={bullet} />
-                </span>
+                <div className="min-w-0 opacity-90">
+                  <RichBlocks text={bullet} />
+                </div>
               </li>
             ))}
           </ul>
@@ -744,12 +834,12 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
         <div className="relative mx-auto flex max-w-7xl px-4 py-12 lg:min-h-[42rem] lg:items-center lg:justify-end lg:py-24">
           <div className="reveal lg:w-[55%] lg:pl-8">
             <Pill>Votre praticien·ne</Pill>
-            <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+            <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
             <div className="mt-7 space-y-4 text-xl opacity-85">
               {section.paragraphs.map((p, i) => (
-                <p key={i} className="whitespace-pre-line leading-relaxed">
-                  <Rich text={p} />
-                </p>
+                <div key={i} className="leading-relaxed">
+                  <RichBlocks text={p} />
+                </div>
               ))}
             </div>
             {section.infoCards && section.infoCards.length > 0 ? (
@@ -763,10 +853,12 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
                     <span className="mx-auto flex h-11 w-11 items-center justify-center text-[var(--site-primary)]">
                       <SectionIcon name={card.icon} size={30} />
                     </span>
-                    <h3 className="mt-2.5 text-lg font-bold">{card.title}</h3>
-                    <p className="mt-1.5 whitespace-pre-line text-[0.95rem] leading-relaxed opacity-80">
-                      <Rich text={card.text} />
-                    </p>
+                    <h3 className="mt-2.5 text-lg font-bold">
+                      <Rich text={card.title} strongClass="text-[var(--site-primary)]" />
+                    </h3>
+                    <div className="mt-1.5 text-[0.95rem] leading-relaxed opacity-80">
+                      <RichBlocks text={card.text} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -796,12 +888,12 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
       <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
           <Pill>Votre praticien·ne</Pill>
-          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <div className="mt-7 space-y-4 text-xl opacity-85">
             {section.paragraphs.map((p, i) => (
-              <p key={i} className="whitespace-pre-line leading-relaxed">
-                <Rich text={p} />
-              </p>
+              <div key={i} className="leading-relaxed">
+                <RichBlocks text={p} />
+              </div>
             ))}
           </div>
           {section.infoCards && section.infoCards.length > 0 ? (
@@ -815,10 +907,12 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
                   <span className="mx-auto flex h-11 w-11 items-center justify-center text-[var(--site-primary)]">
                     <SectionIcon name={card.icon} size={30} />
                   </span>
-                  <h3 className="mt-2.5 text-lg font-bold">{card.title}</h3>
-                  <p className="mt-1.5 whitespace-pre-line text-[0.95rem] leading-relaxed opacity-80">
-                    <Rich text={card.text} />
-                  </p>
+                  <h3 className="mt-2.5 text-lg font-bold">
+                    <Rich text={card.title} strongClass="text-[var(--site-primary)]" />
+                  </h3>
+                  <div className="mt-1.5 text-[0.95rem] leading-relaxed opacity-80">
+                    <RichBlocks text={card.text} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -890,7 +984,9 @@ function Reviews({
                 </p>
               </>
             ) : (
-              <p className="mt-3 text-sm opacity-70">{section.title}</p>
+              <p className="mt-3 text-sm opacity-70">
+                <Rich text={section.title} />
+              </p>
             )}
             {ctx.googlePlaceId ? (
               <a
@@ -902,7 +998,11 @@ function Reviews({
                 Écrire un avis
               </a>
             ) : null}
-            {section.intro ? <p className="mt-4 text-sm opacity-75">{section.intro}</p> : null}
+            {section.intro ? (
+              <p className="mt-4 text-sm opacity-75">
+                <Rich text={section.intro} />
+              </p>
+            ) : null}
           </div>
           <div className="reveal min-w-0">
             <GoogleReviewsCarousel reviews={cards} />
@@ -920,7 +1020,7 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
       <div className="relative mx-auto max-w-6xl px-4">
         <div className="reveal text-center">
           <Pill>À quoi s&apos;attendre ?</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <DotsRow className="mt-6 text-[var(--site-primary)]" />
         </div>
         <ol className="mt-14 grid gap-7 sm:grid-cols-2">
@@ -938,10 +1038,12 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
                 {i + 1}
               </span>
               <span className="p-8">
-                <h3 className="text-2xl font-semibold">{step.title}</h3>
-                <p className="mt-3 whitespace-pre-line text-[1.05rem] leading-relaxed opacity-80">
-                  <Rich text={step.description} />
-                </p>
+                <h3 className="text-2xl font-semibold">
+                  <Rich text={step.title} strongClass="text-[var(--site-primary)]" />
+                </h3>
+                <div className="mt-3 text-[1.05rem] leading-relaxed opacity-80">
+                  <RichBlocks text={step.description} />
+                </div>
               </span>
             </li>
           ))}
@@ -960,7 +1062,7 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
       <div className="mx-auto grid max-w-7xl gap-10 px-4 lg:grid-cols-[0.75fr_1.25fr]">
         <div className="reveal">
           <Pill>Vos questions</Pill>
-          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <p className="mt-4 opacity-75">
             Une autre question ? Le plus simple est d&apos;en parler directement.
           </p>
@@ -976,14 +1078,14 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
               className="reveal group overflow-hidden rounded-[var(--r-md)] open:bg-[var(--site-surface)] open:shadow-sm"
             >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--r-md)] bg-[var(--site-primary)] px-7 py-6 text-lg font-medium text-white transition-colors group-open:rounded-b-none group-open:bg-[var(--site-soft)] group-open:text-[var(--site-text)] hover:bg-[var(--site-primary-dark)] group-open:hover:bg-[var(--site-soft)]">
-                {item.question}
+                <Rich text={item.question} strongClass="font-black" />
                 <span aria-hidden className="shrink-0 transition-transform group-open:rotate-45">
                   +
                 </span>
               </summary>
-              <p className="whitespace-pre-line px-7 py-6 text-[1.05rem] leading-relaxed opacity-80">
-                <Rich text={item.answer} />
-              </p>
+              <div className="px-7 py-6 text-[1.05rem] leading-relaxed opacity-80">
+                <RichBlocks text={item.answer} />
+              </div>
             </details>
           ))}
         </div>
@@ -1058,7 +1160,7 @@ function Contact({
           ) : null}
         </div>
         <div className="reveal" style={{ transitionDelay: "120ms" }}>
-          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">{section.title}</h2>
+          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <p className="mt-4 text-lg opacity-85">Prendre rendez-vous en ligne ou par téléphone :</p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
@@ -1078,7 +1180,11 @@ function Contact({
                   {h.label} : {h.value}
                 </p>
               ))}
-              {section.note ? <p>{section.note}</p> : null}
+              {section.note ? (
+                <p>
+                  <Rich text={section.note} />
+                </p>
+              ) : null}
             </div>
           ) : null}
           {section.infoCards?.length ? (
@@ -1091,8 +1197,12 @@ function Contact({
                   <span className="inline-flex text-[var(--site-primary-dark)]">
                     <SectionIcon name={card.icon} size={34} />
                   </span>
-                  <p className="mt-3 text-xl font-semibold">{card.title}</p>
-                  <p className="mt-1.5 text-sm opacity-75">{card.text}</p>
+                  <p className="mt-3 text-xl font-semibold">
+                    <Rich text={card.title} strongClass="text-[var(--site-primary)]" />
+                  </p>
+                  <p className="mt-1.5 text-sm opacity-75">
+                    <Rich text={card.text} />
+                  </p>
                 </div>
               ))}
             </div>
@@ -1106,7 +1216,11 @@ function Contact({
 function RichText({ section }: { section: Extract<Section, { type: "richText" }> }) {
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
-      {section.title ? <h2 className="mb-4 text-3xl font-semibold">{section.title}</h2> : null}
+      {section.title ? (
+        <h2 className="mb-4 text-3xl font-semibold">
+          <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
+        </h2>
+      ) : null}
       <Markdown content={section.body} />
     </section>
   );
@@ -1116,11 +1230,11 @@ function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx
   return (
     <section className="mx-auto max-w-5xl px-4 py-14">
       <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-16 text-center text-white shadow-xl shadow-black/10">
-        <h2 className="mx-auto max-w-2xl text-[2.2rem] font-semibold leading-[1.15] sm:text-[2.6rem]">{section.title}</h2>
+        <h2 className="mx-auto max-w-2xl text-[2.2rem] font-semibold leading-[1.15] sm:text-[2.6rem]"><Rich text={section.title} strongClass="font-black" /></h2>
         {section.body ? (
-          <p className="mx-auto mt-5 max-w-2xl whitespace-pre-line text-xl opacity-90">
-            <Rich text={section.body} />
-          </p>
+          <div className="mx-auto mt-5 max-w-2xl text-xl opacity-90 [&_ol]:inline-block [&_ol]:text-left [&_ul]:inline-block [&_ul]:text-left">
+            <RichBlocks text={section.body} />
+          </div>
         ) : null}
         <div className="mt-9">
           <RdvButton
