@@ -788,11 +788,13 @@ function textToHtml(text: string, withLists = true): string {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
+    // Une liste numérotée ne démarre qu'à « 1. » : « 3) suite » ou
+    // « 10. rue de la République » restent du texte ordinaire.
     const marker = !withLists
       ? null
       : BULLET_LINE.test(line)
         ? BULLET_LINE
-        : NUMBER_LINE.test(line)
+        : /^1[.)]\s+/.test(line)
           ? NUMBER_LINE
           : null;
     if (!marker) {
@@ -833,7 +835,8 @@ function htmlToText(root: HTMLElement): string {
         .replace(/\*/g, "%2A")
         .replace(/\s/g, "%20");
       if (label && SAFE_LINK.test(href)) return `[${label}](${href})`;
-      return label;
+      // Libellé inutilisable : on garde au moins l'adresse en texte visible
+      return label || node.textContent?.trim() || href;
     }
     const bold = node.tagName === "STRONG" || node.tagName === "B";
     const content = Array.from(node.childNodes)
@@ -1043,6 +1046,28 @@ function toggleLinkCmd(el: HTMLElement | null): boolean {
 function toggleCheckCmd(el: HTMLElement | null): boolean {
   if (!el) return false;
   if (el.children.length === 0) el.innerHTML = "<div><br></div>";
+  // Reliquat d'une liste retirée : du texte flottant à la racine — on
+  // l'enveloppe dans un <div> pour qu'il redevienne une ligne cochable
+  // (les nœuds sont déplacés, pas recréés : la sélection reste valide).
+  for (const node of Array.from(el.childNodes)) {
+    if (node.parentNode !== el) continue; // déjà absorbé par un wrapper précédent
+    const isBlock =
+      node instanceof HTMLElement && ["DIV", "P", "UL", "OL"].includes(node.tagName);
+    if (isBlock) continue;
+    const wrapper = document.createElement("div");
+    node.replaceWith(wrapper);
+    wrapper.appendChild(node);
+    // Regroupe les nœuds inline consécutifs dans la même ligne
+    while (
+      wrapper.nextSibling &&
+      !(
+        wrapper.nextSibling instanceof HTMLElement &&
+        ["DIV", "P", "UL", "OL"].includes(wrapper.nextSibling.tagName)
+      )
+    ) {
+      wrapper.appendChild(wrapper.nextSibling);
+    }
+  }
   // Une « ligne » est un enfant direct… ou un <li> à l'intérieur d'une liste :
   // insérer le ✅ dans le <li> (jamais directement dans le <ul>, que la
   // sérialisation ignorerait).

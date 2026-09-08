@@ -371,11 +371,16 @@ function RichBlocks({
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    const kind = BULLET_LINE.test(line) ? "ul" : NUMBER_LINE.test(line) ? "ol" : "text";
+    // Une liste numérotée ne démarre qu'à « 1. » : « 3) suite » ou
+    // « 10. rue de la République » restent du texte ordinaire.
+    const kind = BULLET_LINE.test(line) ? "ul" : /^1[.)]\s+/.test(line) ? "ol" : "text";
     const run: string[] = [];
     while (i < lines.length) {
       const current = lines[i] ?? "";
-      const currentKind = BULLET_LINE.test(current) ? "ul" : NUMBER_LINE.test(current) ? "ol" : "text";
+      const currentKind =
+        BULLET_LINE.test(current) ? "ul"
+        : (run.length > 0 && kind === "ol" ? NUMBER_LINE : /^1[.)]\s+/).test(current) ? "ol"
+        : "text";
       if (currentKind !== kind) break;
       run.push(current);
       i++;
