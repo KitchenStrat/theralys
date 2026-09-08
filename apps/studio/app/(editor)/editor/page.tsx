@@ -41,6 +41,7 @@ export default async function EditorPage({ searchParams }: Props) {
         logoUrl: site.theme.logoUrl ?? "",
         url: siteUrl(site),
         updatedAt: site.updatedAt.toISOString(),
+        disabledMotifs: site.theme.disabledMotifs ?? [],
       }}
       city={prospect?.city ?? ""}
       phone={homeContact?.phone ?? ""}

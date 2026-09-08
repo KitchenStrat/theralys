@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Button, Select, Spinner } from "@theralys/ui";
+import { Button, Spinner } from "@theralys/ui";
 import {
   THEME_PRESETS,
   type Section,
@@ -20,6 +20,7 @@ import {
   saveSiteSettings,
   saveSiteStyle,
   searchGoogle,
+  setMotifPageEnabled,
 } from "../../(app)/actions";
 import { SECTION_LABELS, SectionFields } from "./section-fields";
 
@@ -38,6 +39,8 @@ type Props = {
     logoUrl: string;
     url: string;
     updatedAt: string;
+    /** Slugs des pages de spécialité désactivées par le praticien */
+    disabledMotifs: string[];
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
@@ -121,6 +124,20 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
   const [active, setActive] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Activation des pages de spécialité (optimiste, persistée côté serveur)
+  const [disabledMotifs, setDisabledMotifs] = useState<string[]>(site.disabledMotifs);
+
+  async function togglePageEnabled(slug: string, enabled: boolean) {
+    setDisabledMotifs((prev) => (enabled ? prev.filter((s) => s !== slug) : [...prev, slug]));
+    const result = await setMotifPageEnabled({ slug, enabled });
+    if (result.error) {
+      // Retour arrière si le serveur a refusé
+      setDisabledMotifs((prev) => (enabled ? [...prev, slug] : prev.filter((s) => s !== slug)));
+      return;
+    }
+    setPreviewKey((k) => k + 1); // cartes de l'accueil et navigation changent
+    router.refresh();
+  }
   const [previewKey, setPreviewKey] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -219,7 +236,8 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
 
   const previewPath = useMemo(() => {
     if (!selectedPage || selectedPage.type === "home") return "";
-    if (selectedPage.type === "motif") return `/motifs/${selectedPage.slug}`;
+    // ?apercu=1 : les pages désactivées restent prévisualisables dans l'éditeur
+    if (selectedPage.type === "motif") return `/motifs/${selectedPage.slug}?apercu=1`;
     return "";
   }, [selectedPage]);
 
@@ -308,18 +326,13 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
           >
             ← Retour
           </Link>
-          <Select
-            aria-label="Page à éditer"
-            value={selectedPage?.id ?? ""}
-            onChange={(e) => router.push(`/editor?page=${e.target.value}`)}
-            className="w-56"
-          >
-            {pages.map((page) => (
-              <option key={page.id} value={page.id}>
-                {page.type === "home" ? "Page d'accueil" : page.title}
-              </option>
-            ))}
-          </Select>
+          <PagePicker
+            pages={pages}
+            selectedPage={selectedPage}
+            disabledMotifs={disabledMotifs}
+            onSelect={(id) => router.push(`/editor?page=${id}`)}
+            onToggle={togglePageEnabled}
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -783,6 +796,114 @@ function FieldBlock({ label, hint, children }: { label: string; hint?: string; c
       <p className="mb-1 text-sm font-medium">{label}</p>
       {children}
       {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Sélecteur de page : liste les pages du site et, pour chaque page de
+ * spécialité, un petit contrôle Activé/Désactivé (pastille + menu) — une page
+ * désactivée n'est plus servie sur le site public mais reste éditable ici.
+ */
+function PagePicker({
+  pages,
+  selectedPage,
+  disabledMotifs,
+  onSelect,
+  onToggle,
+}: {
+  pages: PageRef[];
+  selectedPage: { id: string } | null;
+  disabledMotifs: string[];
+  onSelect: (id: string) => void;
+  onToggle: (slug: string, enabled: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const current = pages.find((p) => p.id === selectedPage?.id);
+  const label = current ? (current.type === "home" ? "Page d'accueil" : current.title) : "Choisir une page";
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Page à éditer"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-64 items-center justify-between gap-2 rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      >
+        <span className="truncate">{label}</span>
+        <span aria-hidden className={clsx("text-ink-500 transition-transform", open && "rotate-180")}>
+          ⌄
+        </span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-cream-300 bg-white p-1 shadow-lg">
+          {pages.map((page) => {
+            const isHome = page.type === "home";
+            const enabled = !disabledMotifs.includes(page.slug);
+            return (
+              <div
+                key={page.id}
+                className={clsx(
+                  "flex items-center justify-between gap-2 rounded-lg px-2 py-1.5",
+                  page.id === selectedPage?.id ? "bg-primary-50" : "hover:bg-cream-100",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onSelect(page.id);
+                  }}
+                  className={clsx(
+                    "min-w-0 flex-1 truncate text-left text-sm",
+                    !isHome && !enabled && "text-ink-500 line-through decoration-ink-300",
+                  )}
+                >
+                  {isHome ? "Page d'accueil" : page.title}
+                </button>
+                {!isHome ? (
+                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className={clsx(
+                        "h-2 w-2 rounded-full",
+                        enabled ? "bg-[#22a06b]" : "bg-danger-500",
+                      )}
+                    />
+                    <select
+                      aria-label={`Activation de la page « ${page.title} »`}
+                      value={enabled ? "on" : "off"}
+                      onChange={(event) => onToggle(page.slug, event.target.value === "on")}
+                      className="cursor-pointer rounded-md border-0 bg-transparent py-0.5 pr-1 text-xs font-medium text-ink-700 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                    >
+                      <option value="on">Activé</option>
+                      <option value="off">Désactivé</option>
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+            );
+          })}
+          <p className="mt-1 border-t border-cream-200 px-2 pb-1 pt-2 text-xs text-ink-500">
+            Une page désactivée n'apparaît plus sur votre site (carte, menu, Google) mais reste
+            éditable ici.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

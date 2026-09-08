@@ -528,6 +528,38 @@ export async function saveSiteStyle(input: unknown): Promise<{ error?: string }>
   return {};
 }
 
+/**
+ * Active/désactive une page de spécialité : désactivée, la page n'est plus
+ * servie, sa carte d'accueil perd son lien et elle sort de la navigation.
+ * L'état vit dans le JSONB `theme` du site (pas de migration de schéma).
+ */
+export async function setMotifPageEnabled(input: {
+  slug: string;
+  enabled: boolean;
+}): Promise<{ error?: string }> {
+  const session = await requireClient();
+  const parsed = z
+    .object({ slug: z.string().trim().min(1), enabled: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide" };
+
+  const db = getDb();
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
+  if (!site) return { error: "Site introuvable" };
+  const disabled = new Set(site.theme.disabledMotifs ?? []);
+  if (parsed.data.enabled) disabled.delete(parsed.data.slug);
+  else disabled.add(parsed.data.slug);
+  await db
+    .update(sites)
+    .set({
+      theme: { ...site.theme, disabledMotifs: [...disabled] },
+      updatedAt: new Date(),
+    })
+    .where(eq(sites.id, session.siteId));
+  revalidatePath("/editor");
+  return {};
+}
+
 export async function saveSiteSettings(input: unknown): Promise<{ error?: string }> {
   const session = await requireClient();
   const parsed = z

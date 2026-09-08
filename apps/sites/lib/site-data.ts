@@ -66,14 +66,31 @@ export async function getMotifPages(site: Site): Promise<Page[]> {
     where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
     orderBy: (p, { asc }) => [asc(p.position)],
   });
+  // Pages désactivées par le praticien : retirées partout (y compris démos)
+  const disabledSlugs = new Set(site.theme.disabledMotifs ?? []);
+  const enabled = all.filter((p) => !disabledSlugs.has(p.slug));
   // Les démos présentent toujours l'offre complète
-  if (site.type === "demo") return all;
-  return all.slice(0, motifPagesAllowance(site.plan));
+  if (site.type === "demo") return enabled;
+  return enabled.slice(0, motifPagesAllowance(site.plan));
 }
 
-export async function getMotifPage(site: Site, slug: string): Promise<Page | null> {
+export async function getMotifPage(
+  site: Site,
+  slug: string,
+  options?: { includeDisabled?: boolean },
+): Promise<Page | null> {
   const allowed = await getMotifPages(site);
-  return allowed.find((p) => p.slug === slug) ?? null;
+  const found = allowed.find((p) => p.slug === slug);
+  if (found) return found;
+  if (options?.includeDisabled) {
+    // Aperçu de l'éditeur : une page désactivée reste prévisualisable
+    const db = getDb();
+    const page = await db.query.pages.findFirst({
+      where: and(eq(pages.siteId, site.id), eq(pages.type, "motif"), eq(pages.slug, slug)),
+    });
+    return page ?? null;
+  }
+  return null;
 }
 
 export async function getReviews(siteId: string) {

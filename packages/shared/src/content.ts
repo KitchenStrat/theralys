@@ -247,6 +247,13 @@ export type ThemeAmbiance = (typeof THEME_AMBIANCES)[number];
 export type SiteTheme = {
   /** Logo du praticien (remplace le nom dans l'en-tête du site) */
   logoUrl?: string;
+  /**
+   * Slugs des pages de spécialité désactivées par le praticien : la page
+   * n'est plus servie (404), la carte de l'accueil perd son lien et la page
+   * sort de la navigation et du sitemap. Stocké ici (JSONB du site) pour
+   * éviter une migration de schéma ; absent = tout est activé.
+   */
+  disabledMotifs?: string[];
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */
