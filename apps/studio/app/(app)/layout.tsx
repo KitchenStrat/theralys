@@ -54,7 +54,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
             <form action={logoutAction} className="mt-1">
               <button
                 type="submit"
-                className="flex w-full items-center gap-1.5 rounded-xl px-4 py-3 text-base font-medium text-ink-500 transition-colors hover:bg-cream-200 hover:text-ink-900"
+                className="flex w-full items-center gap-1.5 rounded-xl bg-primary-50 px-4 py-3 text-base font-medium text-primary-700 transition-colors hover:bg-primary-100 hover:text-primary-800"
               >
                 ⏻ Déconnexion
               </button>
