@@ -258,6 +258,12 @@ export type SiteTheme = {
   /** Logo du praticien (remplace le nom dans l'en-tête du site) */
   logoUrl?: string;
   /**
+   * Icône du navigateur (favicon) : "/favicons/<picto>.svg" pour une
+   * suggestion, une URL téléversée pour une icône personnalisée ;
+   * absent = logo Harmony ("/favicons/harmony.svg").
+   */
+  faviconUrl?: string;
+  /**
    * Slugs des pages de spécialité désactivées par le praticien : la page
    * n'est plus servie (404), la carte de l'accueil perd son lien et la page
    * sort de la navigation et du sitemap. Stocké ici (JSONB du site) pour

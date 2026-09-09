@@ -16,8 +16,14 @@ export async function generateMetadata({ params }: Omit<Props, "children">): Pro
   const { site: siteKey } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) return {};
+  // Icône du navigateur : choisie dans le studio, sinon logo Harmony
+  const faviconUrl =
+    site.theme.faviconUrl && /^(https?:\/\/|\/)/.test(site.theme.faviconUrl)
+      ? site.theme.faviconUrl
+      : "/favicons/harmony.svg";
   return {
     title: { default: site.name, template: `%s — ${site.name}` },
+    icons: { icon: [{ url: faviconUrl }] },
     // Les démos ne sont jamais indexées (noindex + robots.txt)
     robots: site.type === "demo" ? { index: false, follow: false } : undefined,
   };

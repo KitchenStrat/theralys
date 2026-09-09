@@ -44,6 +44,8 @@ type Props = {
     disabledMotifs: string[];
     /** Cabinets supplémentaires (multi-cabinets), saisis dans les paramètres */
     cabinets: SiteCabinet[];
+    /** Icône du navigateur ("" = logo Harmony par défaut) */
+    faviconUrl: string;
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
@@ -131,6 +133,8 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
   const [disabledMotifs, setDisabledMotifs] = useState<string[]>(site.disabledMotifs);
   // Cabinets supplémentaires (multi-cabinets), sauvegardés avec les paramètres
   const [cabinets, setCabinets] = useState<SiteCabinet[]>(site.cabinets);
+  // Icône du navigateur ("" = logo Harmony)
+  const [faviconUrl, setFaviconUrl] = useState<string>(site.faviconUrl);
 
   async function togglePageEnabled(slug: string, enabled: boolean) {
     setDisabledMotifs((prev) => (enabled ? prev.filter((s) => s !== slug) : [...prev, slug]));
@@ -299,6 +303,7 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
         logoUrl,
         phone: phoneValue,
         cabinets,
+        faviconUrl,
       });
       // Garde l'état local du panneau Contenu aligné : si la page d'accueil y
       // est chargée, sa section contact reflète le numéro fraîchement publié.
@@ -645,6 +650,20 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
                   />
                   {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
                 </FieldBlock>
+                <FieldBlock
+                  label="Icône du navigateur"
+                  hint="Choisissez une suggestion ou téléversez votre propre icône (64×64 px recommandé). Il faut parfois vider le cache du navigateur pour voir le changement — les nouveaux visiteurs verront directement la bonne icône."
+                >
+                  <FaviconPicker
+                    siteUrl={siteOrigin}
+                    siteName={siteName}
+                    value={faviconUrl}
+                    onChange={(next) => {
+                      setFaviconUrl(next);
+                      setDirty(true);
+                    }}
+                  />
+                </FieldBlock>
                 <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
                   <input
                     value={bookingUrl}
@@ -814,6 +833,144 @@ function FieldBlock({ label, hint, children }: { label: string; hint?: string; c
       <p className="mb-1 text-sm font-medium">{label}</p>
       {children}
       {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** Pictogrammes de favicon proposés (servis par l'app sites : /favicons/…). */
+const FAVICON_PICTOS = [
+  "coeur",
+  "feuille",
+  "fleur",
+  "soleil",
+  "lune",
+  "mains",
+  "etoile",
+  "bouclier",
+] as const;
+
+/**
+ * Choix de l'icône du navigateur : logo Harmony (défaut), pictogrammes
+ * proposés, ou image téléversée — avec un aperçu façon onglet de navigateur.
+ */
+function FaviconPicker({
+  siteUrl,
+  siteName,
+  value,
+  onChange,
+}: {
+  siteUrl: string;
+  siteName: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isCustom = value !== "" && !value.startsWith("/favicons/");
+  const display = (v: string) =>
+    v === "" ? `${siteUrl}/favicons/harmony.svg` : v.startsWith("/") ? `${siteUrl}${v}` : v;
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setError(data.error ?? "Téléversement impossible");
+        return;
+      }
+      onChange(data.url);
+    } catch {
+      setError("Téléversement impossible — réessayez.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  const tile = (selected: boolean) =>
+    clsx(
+      "flex h-11 w-11 items-center justify-center rounded-full border-2 bg-white p-1.5 transition",
+      selected ? "border-primary-500 ring-2 ring-primary-100" : "border-cream-300 hover:border-primary-300",
+    );
+
+  return (
+    <div>
+      {/* Aperçu façon onglet de navigateur */}
+      <div className="mb-3 rounded-xl border border-cream-300 bg-cream-100 px-3 pt-2.5">
+        <div className="flex items-end gap-3">
+          <span aria-hidden className="mb-2 flex gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
+            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
+          </span>
+          <span className="flex min-w-0 items-center gap-2 rounded-t-lg bg-white px-3.5 py-2 text-xs text-ink-700 shadow-sm">
+            <img src={display(value)} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
+            <span className="truncate">{siteName}</span>
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          title="Logo Harmony (défaut)"
+          aria-label="Logo Harmony (défaut)"
+          onClick={() => onChange("")}
+          className={tile(value === "")}
+        >
+          <img src={`${siteUrl}/favicons/harmony.svg`} alt="" className="h-full w-full rounded-full" />
+        </button>
+        {FAVICON_PICTOS.map((name) => (
+          <button
+            key={name}
+            type="button"
+            title={`Pictogramme ${name}`}
+            aria-label={`Pictogramme ${name}`}
+            onClick={() => onChange(`/favicons/${name}.svg`)}
+            className={tile(value === `/favicons/${name}.svg`)}
+          >
+            <img src={`${siteUrl}/favicons/${name}.svg`} alt="" className="h-full w-full rounded-full" />
+          </button>
+        ))}
+        {isCustom ? (
+          <button
+            type="button"
+            title="Icône personnalisée (active)"
+            aria-label="Icône personnalisée"
+            onClick={() => onChange(value)}
+            className={tile(true)}
+          >
+            <img src={value} alt="" className="h-full w-full rounded-full object-cover" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={uploading}
+          title="Téléverser une icône personnalisée"
+          aria-label="Téléverser une icône personnalisée"
+          onClick={() => inputRef.current?.click()}
+          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-lg text-ink-500 transition hover:border-primary-400 hover:text-primary-500 disabled:opacity-60"
+        >
+          {uploading ? "…" : "+"}
+        </button>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void upload(file);
+        }}
+      />
+      {error ? <p className="mt-1 text-xs text-danger-500">{error}</p> : null}
     </div>
   );
 }

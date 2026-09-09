@@ -577,6 +577,11 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .max(20)
         .regex(/^$|^\+?[0-9][0-9 .-]{5,}$/, "Numéro de téléphone invalide")
         .optional(),
+      faviconUrl: z
+        .string()
+        .trim()
+        .refine((v) => v === "" || /^(https?:\/\/|\/)/.test(v), "Icône invalide")
+        .optional(),
       // Cabinets supplémentaires (multi-cabinets) — cf. SiteCabinet
       cabinets: z
         .array(
@@ -605,12 +610,16 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
     ...c,
     photoUrl: c.photoUrl || undefined,
   }));
+  const faviconUrl =
+    parsed.data.faviconUrl !== undefined
+      ? parsed.data.faviconUrl || undefined
+      : site.theme.faviconUrl;
   await db
     .update(sites)
     .set({
       name: parsed.data.name,
       bookingUrl: parsed.data.bookingUrl || null,
-      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined, cabinets },
+      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined, cabinets, faviconUrl },
       updatedAt: new Date(),
     })
     .where(eq(sites.id, session.siteId));
