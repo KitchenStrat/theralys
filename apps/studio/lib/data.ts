@@ -6,7 +6,6 @@ import {
   editorialCalendarEntries,
   getDb,
   googleConnections,
-  onboardingTasks,
   pages,
   prospects,
   searchQueryStats,
@@ -51,13 +50,6 @@ export async function getDashboardStats(siteId: string, period: Period): Promise
   return summarizePeriod(events, from, to);
 }
 
-export async function getOnboarding(siteId: string) {
-  const db = getDb();
-  return db.query.onboardingTasks.findMany({
-    where: eq(onboardingTasks.siteId, siteId),
-    orderBy: [asc(onboardingTasks.position)],
-  });
-}
 
 export async function getGoogleConnection(siteId: string) {
   const db = getDb();

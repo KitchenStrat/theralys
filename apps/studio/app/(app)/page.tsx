@@ -6,14 +6,12 @@ import { requireClient } from "@/lib/auth";
 import {
   getDashboardStats,
   getMonthItems,
-  getOnboarding,
   getSite,
   siteUrl,
   type CalendarItem,
   type Period,
 } from "@/lib/data";
 import { StatsPanel } from "./stats-panel";
-import { TasksCard } from "./tasks-card";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +48,8 @@ export default async function HomePage({ searchParams }: Props) {
 
   const site = await getSite(session.siteId);
   const blog = site.type === "demo" || hasBlog(site.plan);
-  const [stats, tasks, upcoming] = await Promise.all([
+  const [stats, upcoming] = await Promise.all([
     getDashboardStats(site.id, period),
-    getOnboarding(site.id),
     blog ? getUpcoming(site.id) : Promise.resolve([]),
   ]);
 
@@ -106,8 +103,6 @@ export default async function HomePage({ searchParams }: Props) {
       </div>
 
       <div className="space-y-6">
-        <TasksCard tasks={tasks} />
-
         {blog ? (
           <Card className="p-6">
             <div className="flex items-baseline justify-between gap-3">
