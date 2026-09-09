@@ -17,7 +17,10 @@ const PLATFORMS = [
 ];
 
 export function Logos() {
-  const row = [...PLATFORMS, ...PLATFORMS];
+  // La boucle translate la piste de -50 % : chaque moitié doit être plus
+  // large que l'écran, sinon un vide apparaît sur les grands écrans.
+  // 6 séquences = ~4000 px par moitié, de quoi couvrir un écran 4K.
+  const row = Array.from({ length: 6 }, () => PLATFORMS).flat();
   return (
     <section className="border-y border-cream-200 bg-white/60 py-8 backdrop-blur">
       <p data-reveal className="text-center text-sm font-medium text-ink-500">
@@ -26,7 +29,7 @@ export function Logos() {
       <div
         data-reveal
         className="marquee mt-5"
-        style={{ "--marquee-speed": "30s" } as CSSProperties}
+        style={{ "--marquee-speed": "90s" } as CSSProperties}
       >
         <div className="marquee-track items-center gap-3 pr-3">
           {row.map((platform, i) => (

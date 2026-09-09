@@ -112,8 +112,11 @@ function ReviewCard({ quote }: { quote: (typeof QUOTES)[number] }) {
 }
 
 export function Temoignages() {
-  const rowA = [...QUOTES.slice(0, 4), ...QUOTES.slice(0, 4)];
-  const rowB = [...QUOTES.slice(4), ...QUOTES.slice(4)];
+  // Boucle par translation de -50 % : chaque moitié de piste doit dépasser
+  // la largeur de l'écran (sinon un vide apparaît sur les grands écrans) —
+  // 3 répétitions par moitié couvrent jusqu'au 4K.
+  const rowA = Array.from({ length: 6 }, () => QUOTES.slice(0, 4)).flat();
+  const rowB = Array.from({ length: 6 }, () => QUOTES.slice(4)).flat();
   return (
     <section id="temoignages" className="relative overflow-hidden bg-night-900 py-24 text-white">
       <div aria-hidden data-parallax="0.07" className="absolute inset-0">
@@ -147,14 +150,14 @@ export function Temoignages() {
 
         {/* Deux rangées défilant en sens opposés */}
         <div data-reveal style={{ "--rv-delay": "260ms" } as CSSProperties} className="mt-14 space-y-5">
-          <div className="marquee" style={{ "--marquee-speed": "52s" } as CSSProperties}>
+          <div className="marquee" style={{ "--marquee-speed": "156s" } as CSSProperties}>
             <div className="marquee-track gap-5 pr-5">
               {rowA.map((quote, i) => (
                 <ReviewCard key={`a-${quote.name}-${i}`} quote={quote} />
               ))}
             </div>
           </div>
-          <div className="marquee" style={{ "--marquee-speed": "60s" } as CSSProperties}>
+          <div className="marquee" style={{ "--marquee-speed": "180s" } as CSSProperties}>
             <div className="marquee-track reverse gap-5 pr-5">
               {rowB.map((quote, i) => (
                 <ReviewCard key={`b-${quote.name}-${i}`} quote={quote} />
