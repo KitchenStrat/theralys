@@ -8,6 +8,7 @@ import { Button, Spinner } from "@theralys/ui";
 import {
   THEME_PRESETS,
   type Section,
+  type SiteCabinet,
   type ThemePreset,
   type FontPreset,
   type ThemeIntensity,
@@ -41,6 +42,8 @@ type Props = {
     updatedAt: string;
     /** Slugs des pages de spécialité désactivées par le praticien */
     disabledMotifs: string[];
+    /** Cabinets supplémentaires (multi-cabinets), saisis dans les paramètres */
+    cabinets: SiteCabinet[];
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
@@ -126,6 +129,8 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
   const [saving, setSaving] = useState(false);
   // Activation des pages de spécialité (optimiste, persistée côté serveur)
   const [disabledMotifs, setDisabledMotifs] = useState<string[]>(site.disabledMotifs);
+  // Cabinets supplémentaires (multi-cabinets), sauvegardés avec les paramètres
+  const [cabinets, setCabinets] = useState<SiteCabinet[]>(site.cabinets);
 
   async function togglePageEnabled(slug: string, enabled: boolean) {
     setDisabledMotifs((prev) => (enabled ? prev.filter((s) => s !== slug) : [...prev, slug]));
@@ -293,6 +298,7 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
         city: cityValue,
         logoUrl,
         phone: phoneValue,
+        cabinets,
       });
       // Garde l'état local du panneau Contenu aligné : si la page d'accueil y
       // est chargée, sa section contact reflète le numéro fraîchement publié.
@@ -739,6 +745,18 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
                     </p>
                   ) : null}
                 </FieldBlock>
+                <FieldBlock
+                  label="Cabinets"
+                  hint="Pour les praticiens multi-cabinets : chaque cabinet ajouté apparaît sous l'en-tête du site et dans la section Contact, avec un lien vers Google Maps. La fiche Google reliée reste le cabinet principal."
+                >
+                  <CabinetsEditor
+                    cabinets={cabinets}
+                    onChange={(next) => {
+                      setCabinets(next);
+                      setDirty(true);
+                    }}
+                  />
+                </FieldBlock>
                 <p className="text-xs text-ink-500">
                   Téléphone, adresse et horaires se modifient dans la section « Contact » de la
                   page d&apos;accueil (onglet Contenu).
@@ -796,6 +814,175 @@ function FieldBlock({ label, hint, children }: { label: string; hint?: string; c
       <p className="mb-1 text-sm font-medium">{label}</p>
       {children}
       {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** Champ compact des cartes cabinet (paramètres). */
+function CabinetInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-ink-700">{label}</span>
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      />
+    </label>
+  );
+}
+
+/** Photo facultative d'un cabinet : téléversement + aperçu + retrait. */
+function CabinetPhotoButton({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setError(data.error ?? "Téléversement impossible");
+        return;
+      }
+      onChange(data.url);
+    } catch {
+      setError("Téléversement impossible — réessayez.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {value ? (
+        <img src={value} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-cream-300 object-cover" />
+      ) : null}
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+        className="rounded-full bg-cream-100 px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200 disabled:opacity-60"
+      >
+        {uploading ? "Envoi…" : value ? "Changer la photo" : "📷 Photo (facultatif)"}
+      </button>
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="text-xs text-ink-500 hover:underline"
+        >
+          Retirer
+        </button>
+      ) : null}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void upload(file);
+        }}
+      />
+      {error ? <p className="text-xs text-danger-500">{error}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Cabinets supplémentaires (multi-cabinets) : nom, adresse, code postal,
+ * ville et photo facultative — sauvegardés avec les paramètres du site.
+ */
+function CabinetsEditor({
+  cabinets,
+  onChange,
+}: {
+  cabinets: SiteCabinet[];
+  onChange: (cabinets: SiteCabinet[]) => void;
+}) {
+  const update = (index: number, patch: Partial<SiteCabinet>) =>
+    onChange(cabinets.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+
+  return (
+    <div className="space-y-3">
+      {cabinets.map((cabinet, i) => (
+        <div key={i} className="space-y-2.5 rounded-xl bg-cream-100 p-3">
+          <CabinetInput
+            label="Nom du cabinet"
+            placeholder="Cabinet du Marais"
+            value={cabinet.name}
+            onChange={(name) => update(i, { name })}
+          />
+          <CabinetInput
+            label="Adresse du cabinet"
+            placeholder="46 rue de Bretagne"
+            value={cabinet.address}
+            onChange={(address) => update(i, { address })}
+          />
+          <div className="grid grid-cols-[7rem_1fr] gap-2">
+            <CabinetInput
+              label="Code postal"
+              placeholder="75003"
+              value={cabinet.postalCode}
+              onChange={(postalCode) => update(i, { postalCode })}
+            />
+            <CabinetInput
+              label="Ville"
+              placeholder="Paris"
+              value={cabinet.city}
+              onChange={(city) => update(i, { city })}
+            />
+          </div>
+          <CabinetPhotoButton
+            value={cabinet.photoUrl ?? ""}
+            onChange={(photoUrl) => update(i, { photoUrl: photoUrl || undefined })}
+          />
+          <div className="text-right">
+            <button
+              type="button"
+              onClick={() => onChange(cabinets.filter((_, j) => j !== i))}
+              className="text-xs text-danger-500 hover:underline"
+            >
+              Supprimer ce cabinet
+            </button>
+          </div>
+        </div>
+      ))}
+      {cabinets.length < 8 ? (
+        <button
+          type="button"
+          onClick={() =>
+            onChange([...cabinets, { name: "", address: "", postalCode: "", city: "" }])
+          }
+          className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
+        >
+          + Ajouter un cabinet
+        </button>
+      ) : null}
     </div>
   );
 }

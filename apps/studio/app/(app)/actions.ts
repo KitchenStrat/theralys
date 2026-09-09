@@ -577,6 +577,23 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .max(20)
         .regex(/^$|^\+?[0-9][0-9 .-]{5,}$/, "Numéro de téléphone invalide")
         .optional(),
+      // Cabinets supplémentaires (multi-cabinets) — cf. SiteCabinet
+      cabinets: z
+        .array(
+          z.object({
+            name: z.string().trim().min(1, "Nom du cabinet manquant").max(120),
+            address: z.string().trim().min(1, "Adresse du cabinet manquante").max(200),
+            postalCode: z.string().trim().max(12),
+            city: z.string().trim().min(1, "Ville du cabinet manquante").max(80),
+            photoUrl: z
+              .string()
+              .trim()
+              .refine((v) => v === "" || /^(https?:\/\/|\/)/.test(v), "Photo invalide")
+              .optional(),
+          }),
+        )
+        .max(8, "8 cabinets au maximum")
+        .optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Réglages invalides" };
@@ -584,12 +601,16 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
   if (!site) return { error: "Site introuvable" };
+  const cabinets = (parsed.data.cabinets ?? site.theme.cabinets ?? []).map((c) => ({
+    ...c,
+    photoUrl: c.photoUrl || undefined,
+  }));
   await db
     .update(sites)
     .set({
       name: parsed.data.name,
       bookingUrl: parsed.data.bookingUrl || null,
-      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined },
+      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined, cabinets },
       updatedAt: new Date(),
     })
     .where(eq(sites.id, session.siteId));

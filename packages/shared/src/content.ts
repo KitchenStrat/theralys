@@ -244,6 +244,16 @@ export type ThemeCorners = (typeof THEME_CORNERS)[number];
 export const THEME_AMBIANCES = ["naturel", "structure"] as const;
 export type ThemeAmbiance = (typeof THEME_AMBIANCES)[number];
 
+/** Cabinet ajouté manuellement dans les paramètres du studio. */
+export type SiteCabinet = {
+  name: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  /** Photo du cabinet (téléversée), facultative */
+  photoUrl?: string;
+};
+
 export type SiteTheme = {
   /** Logo du praticien (remplace le nom dans l'en-tête du site) */
   logoUrl?: string;
@@ -254,6 +264,13 @@ export type SiteTheme = {
    * éviter une migration de schéma ; absent = tout est activé.
    */
   disabledMotifs?: string[];
+  /**
+   * Cabinets supplémentaires saisis à la main (praticiens multi-cabinets) :
+   * affichés sous le hero et dans la section Contact, avec un lien Google
+   * Maps construit sur l'adresse. La fiche Google reliée reste le cabinet
+   * « principal ». Stocké ici (JSONB du site) — pas de migration de schéma.
+   */
+  cabinets?: SiteCabinet[];
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */

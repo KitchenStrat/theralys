@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
-import { reviewDateFr, specialtyIconFor, type Section } from "@theralys/shared";
+import { reviewDateFr, specialtyIconFor, type Section, type SiteCabinet } from "@theralys/shared";
 import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
@@ -442,6 +442,23 @@ function googleMapsUrl(ctx: SectionContext, address: string | null): string | nu
   }`;
 }
 
+/** Cabinets supplémentaires saisis dans les paramètres du studio (multi-cabinets). */
+function extraCabinets(ctx: SectionContext): SiteCabinet[] {
+  return (ctx.site.theme.cabinets ?? []).filter((c) => c.name.trim() && c.address.trim());
+}
+
+function cabinetMapsUrl(cabinet: SiteCabinet): string {
+  const query = [cabinet.name, cabinet.address, `${cabinet.postalCode} ${cabinet.city}`.trim()]
+    .filter(Boolean)
+    .join(", ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+function cabinetAddressLine(cabinet: SiteCabinet): string {
+  const cityPart = `${cabinet.postalCode} ${cabinet.city}`.trim();
+  return cityPart ? `${cabinet.address}, ${cityPart}` : cabinet.address;
+}
+
 // ─── Sections ────────────────────────────────────────────────────────────────
 
 function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; ctx: SectionContext }) {
@@ -485,13 +502,40 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
       target="_blank"
       rel="noopener noreferrer"
       title="Voir la fiche sur Google Maps"
-      className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       {cardInner}
     </a>
   ) : (
-    <div className="mt-8 inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
+    <div className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
       {cardInner}
+    </div>
+  );
+  // Cabinets supplémentaires : mêmes cartes, lien Google Maps sur l'adresse
+  const cabinets = extraCabinets(ctx);
+  const cabinetCards = (
+    <div className="mt-8 flex flex-wrap items-stretch gap-3">
+      {googleCard}
+      {cabinets.map((cabinet, i) => (
+        <a
+          key={i}
+          href={cabinetMapsUrl(cabinet)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Voir sur Google Maps"
+          className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          {cabinet.photoUrl ? (
+            <img src={cabinet.photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
+          ) : null}
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">{cabinet.name}</span>
+            <span className="block max-w-56 truncate text-xs opacity-70">
+              {cabinetAddressLine(cabinet)}
+            </span>
+          </span>
+        </a>
+      ))}
     </div>
   );
 
@@ -512,7 +556,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
         <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
         {ctx.phone ? <PhoneButton phone={ctx.phone} /> : null}
       </div>
-      {googleCard}
+      {cabinetCards}
     </>
   );
 
@@ -1132,6 +1176,7 @@ function Contact({
   const placeName = ctx.googleBusinessName ?? ctx.site.name;
   const mapQuery = address ? `${placeName}, ${address}` : null;
   const mapsUrl = googleMapsUrl(ctx, address);
+  const cabinets = extraCabinets(ctx);
 
   return (
     <section
@@ -1152,7 +1197,9 @@ function Contact({
             />
           ) : null}
           <DotsRow className="mt-9 justify-start! text-[var(--site-primary)]" />
-          <p className="mt-9 text-2xl font-semibold">Le cabinet</p>
+          <p className="mt-9 text-2xl font-semibold">
+            {(mapsUrl ? 1 : 0) + cabinets.length > 1 ? "Les cabinets" : "Le cabinet"}
+          </p>
           {mapsUrl ? (
             <a
               href={mapsUrl}
@@ -1184,6 +1231,37 @@ function Contact({
               </span>
             </a>
           ) : null}
+          {cabinets.map((cabinet, i) => (
+            <a
+              key={i}
+              href={cabinetMapsUrl(cabinet)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex w-full max-w-md items-center gap-4 rounded-[var(--r-lg)] bg-[var(--site-surface)] p-4 pr-6 text-[var(--site-text)] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              {cabinet.photoUrl ? (
+                <img
+                  src={cabinet.photoUrl}
+                  alt=""
+                  className="h-16 w-16 shrink-0 rounded-[var(--r-md)] object-cover"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--r-md)] bg-[var(--site-soft)] text-[var(--site-primary-dark)]"
+                >
+                  <SectionIcon name="carte" />
+                </span>
+              )}
+              <span className="min-w-0">
+                <span className="block font-semibold text-[var(--site-primary-dark)]">{cabinet.name}</span>
+                <span className="mt-0.5 block text-sm opacity-75">{cabinetAddressLine(cabinet)}</span>
+                <span className="mt-1 block text-xs font-medium text-[var(--site-primary)]">
+                  Voir sur Google Maps ↗
+                </span>
+              </span>
+            </a>
+          ))}
         </div>
         <div className="reveal" style={{ transitionDelay: "120ms" }}>
           <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="font-black" /></h2>
