@@ -330,7 +330,7 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
             href="/"
             className="inline-flex items-center gap-1.5 rounded-full bg-cream-100 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-200"
           >
-            ← Retour
+            ← Accueil
           </Link>
           <PagePicker
             pages={pages}
