@@ -15,7 +15,6 @@ async function logoutAction() {
 export default async function StudioLayout({ children }: { children: ReactNode }) {
   const session = await requireClient();
   const site = await getSite(session.siteId);
-  const firstName = session.name.split(" ")[0] ?? session.name;
 
   return (
     <div className="min-h-screen">
@@ -52,24 +51,14 @@ export default async function StudioLayout({ children }: { children: ReactNode }
             >
               ↗ Voir mon site
             </a>
-            <div className="mt-1 flex items-center justify-between gap-2 px-1">
-              <Link
-                href="/compte"
-                className="rounded-full bg-primary-100 px-3 py-1.5 text-sm font-medium text-primary-800 transition-colors hover:bg-primary-200"
+            <form action={logoutAction} className="mt-1">
+              <button
+                type="submit"
+                className="flex w-full items-center gap-1.5 rounded-xl px-4 py-3 text-base font-medium text-ink-500 transition-colors hover:bg-cream-200 hover:text-ink-900"
               >
-                {firstName}
-              </Link>
-              <form action={logoutAction}>
-                <button
-                  type="submit"
-                  title="Déconnexion"
-                  aria-label="Déconnexion"
-                  className="rounded-full px-2 py-1.5 text-sm text-ink-500 transition-colors hover:bg-cream-200"
-                >
-                  ⏻
-                </button>
-              </form>
-            </div>
+                ⏻ Déconnexion
+              </button>
+            </form>
           </div>
         </aside>
 
