@@ -582,6 +582,14 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .trim()
         .refine((v) => v === "" || /^(https?:\/\/|\/)/.test(v), "Icône invalide")
         .optional(),
+      // Aperçu du lien : titre/description Google de l'accueil + image de partage
+      seoTitle: z.string().trim().max(120, "Titre de l'aperçu trop long").optional(),
+      seoDescription: z.string().trim().max(300, "Description de l'aperçu trop longue").optional(),
+      seoImageUrl: z
+        .string()
+        .trim()
+        .refine((v) => v === "" || /^(https?:\/\/|\/)/.test(v), "Image de partage invalide")
+        .optional(),
       // Cabinets supplémentaires (multi-cabinets) — cf. SiteCabinet
       cabinets: z
         .array(
@@ -614,12 +622,22 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
     parsed.data.faviconUrl !== undefined
       ? parsed.data.faviconUrl || undefined
       : site.theme.faviconUrl;
+  const shareImageUrl =
+    parsed.data.seoImageUrl !== undefined
+      ? parsed.data.seoImageUrl || undefined
+      : site.theme.shareImageUrl;
   await db
     .update(sites)
     .set({
       name: parsed.data.name,
       bookingUrl: parsed.data.bookingUrl || null,
-      theme: { ...site.theme, logoUrl: parsed.data.logoUrl || undefined, cabinets, faviconUrl },
+      theme: {
+        ...site.theme,
+        logoUrl: parsed.data.logoUrl || undefined,
+        cabinets,
+        faviconUrl,
+        shareImageUrl,
+      },
       updatedAt: new Date(),
     })
     .where(eq(sites.id, session.siteId));
@@ -629,19 +647,36 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
       .set({ city: parsed.data.city })
       .where(eq(prospects.id, site.prospectId));
   }
-  // Le numéro vit dans la section contact de l'accueil (source unique) —
-  // il alimente les boutons « Appeler au … » du hero et du bas de page.
-  if (parsed.data.phone !== undefined) {
+  // Vivent sur la page d'accueil : le numéro (section contact — source des
+  // boutons « Appeler au … ») et le titre/description de l'aperçu du lien
+  // (metaTitle/metaDescription, lus par le <head> du site public).
+  if (
+    parsed.data.phone !== undefined ||
+    parsed.data.seoTitle !== undefined ||
+    parsed.data.seoDescription !== undefined
+  ) {
     const home = await db.query.pages.findFirst({
       where: and(eq(pages.siteId, session.siteId), eq(pages.type, "home")),
     });
     if (home) {
-      const updated = home.sections.map((s) =>
-        s.type === "contact" ? { ...s, phone: parsed.data.phone || undefined } : s,
-      );
+      const updated =
+        parsed.data.phone !== undefined
+          ? home.sections.map((s) =>
+              s.type === "contact" ? { ...s, phone: parsed.data.phone || undefined } : s,
+            )
+          : home.sections;
       await db
         .update(pages)
-        .set({ sections: updated, updatedAt: new Date() })
+        .set({
+          sections: updated,
+          metaTitle:
+            parsed.data.seoTitle !== undefined ? parsed.data.seoTitle || null : home.metaTitle,
+          metaDescription:
+            parsed.data.seoDescription !== undefined
+              ? parsed.data.seoDescription || null
+              : home.metaDescription,
+          updatedAt: new Date(),
+        })
         .where(eq(pages.id, home.id));
     }
   }

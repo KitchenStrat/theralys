@@ -19,9 +19,14 @@ export default async function EditorPage({ searchParams }: Props) {
   const selected = pages.find((p) => p.id === pageParam) ?? pages.find((p) => p.type === "home") ?? pages[0];
 
   // Numéro affiché sur le site (source : section contact de l'accueil)
-  const homeContact = pages
-    .find((p) => p.type === "home")
-    ?.sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
+  const homePage = pages.find((p) => p.type === "home");
+  const homeContact = homePage?.sections.find(
+    (s): s is Extract<Section, { type: "contact" }> => s.type === "contact",
+  );
+  // Aperçu du lien : titre/description Google de l'accueil + photo du hero (repli d'image)
+  const homeHero = homePage?.sections.find(
+    (s): s is Extract<Section, { type: "hero" }> => s.type === "hero",
+  );
 
   return (
     <SiteEditor
@@ -44,9 +49,15 @@ export default async function EditorPage({ searchParams }: Props) {
         disabledMotifs: site.theme.disabledMotifs ?? [],
         cabinets: site.theme.cabinets ?? [],
         faviconUrl: site.theme.faviconUrl ?? "",
+        shareImageUrl: site.theme.shareImageUrl ?? "",
       }}
       city={prospect?.city ?? ""}
       phone={homeContact?.phone ?? ""}
+      seo={{
+        title: homePage?.metaTitle ?? site.name,
+        description: homePage?.metaDescription ?? "",
+        heroImageUrl: homeHero?.imageUrl ?? "",
+      }}
       googleBusiness={
         prospect?.googlePlaceId
           ? {

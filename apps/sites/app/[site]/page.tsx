@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { HeroSection } from "@theralys/shared";
 import { Sections } from "@/components/sections";
 import {
   getHomePage,
@@ -20,18 +21,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const home = await getHomePage(site.id);
   const title = home?.metaTitle ?? site.name;
   const description = home?.metaDescription ?? undefined;
+  const base = siteBaseUrl(site);
+  // Image de l'aperçu du lien : choisie dans le studio, sinon photo du hero
+  const hero = home?.sections.find((s): s is HeroSection => s.type === "hero");
+  const rawImage =
+    site.theme.shareImageUrl && /^(https?:\/\/|\/)/.test(site.theme.shareImageUrl)
+      ? site.theme.shareImageUrl
+      : hero?.imageUrl;
+  const imageUrl = rawImage ? new URL(rawImage, base).toString() : undefined;
   return {
     title: { absolute: title },
     description,
-    alternates: { canonical: siteBaseUrl(site) },
+    alternates: { canonical: base },
     openGraph: {
       title,
       description,
       type: "website",
-      url: siteBaseUrl(site),
+      url: base,
       siteName: site.name,
       locale: "fr_FR",
+      images: imageUrl ? [{ url: imageUrl }] : undefined,
     },
+    twitter: imageUrl ? { card: "summary_large_image" } : undefined,
   };
 }
 

@@ -264,6 +264,13 @@ export type SiteTheme = {
    */
   faviconUrl?: string;
   /**
+   * Image de l'aperçu du lien (og:image — résultat Google, partages
+   * WhatsApp/réseaux) ; absente = photo du hero de l'accueil. Le titre et la
+   * description de l'aperçu vivent sur la page d'accueil (metaTitle /
+   * metaDescription). Stockée ici (JSONB du site) — pas de migration.
+   */
+  shareImageUrl?: string;
+  /**
    * Slugs des pages de spécialité désactivées par le praticien : la page
    * n'est plus servie (404), la carte de l'accueil perd son lien et la page
    * sort de la navigation et du sitemap. Stocké ici (JSONB du site) pour

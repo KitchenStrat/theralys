@@ -46,10 +46,14 @@ type Props = {
     cabinets: SiteCabinet[];
     /** Icône du navigateur ("" = logo Harmony par défaut) */
     faviconUrl: string;
+    /** Image de l'aperçu du lien ("" = photo du hero de l'accueil) */
+    shareImageUrl: string;
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
   phone: string;
+  /** Aperçu du lien : titre/description Google de l'accueil + photo du hero (repli d'image) */
+  seo: { title: string; description: string; heroImageUrl: string };
   googleBusiness: {
     name: string;
     address: string;
@@ -64,14 +68,22 @@ type Panel = "contenu" | "style";
 type StyleTab = "couleur" | "typo" | "forme";
 
 /** Catégories de la fenêtre Paramètres (navigation de gauche). */
-type SettingsTab = "identite" | "logo" | "favicon" | "coordonnees" | "google" | "cabinets";
+type SettingsTab =
+  | "identite"
+  | "logo"
+  | "apercu"
+  | "favicon"
+  | "coordonnees"
+  | "google"
+  | "cabinets";
 
 const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; label: string }[] }[] = [
   { group: "Profil", items: [{ id: "identite", icon: "👤", label: "Identité" }] },
+  { group: "Apparence", items: [{ id: "logo", icon: "🖼", label: "Logo" }] },
   {
-    group: "Apparence",
+    group: "Visibilité",
     items: [
-      { id: "logo", icon: "🖼", label: "Logo" },
+      { id: "apercu", icon: "🔗", label: "Aperçu du lien" },
       { id: "favicon", icon: "🌐", label: "Icône du navigateur" },
     ],
   },
@@ -144,7 +156,7 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   lavande: "#6f5b9c",
 };
 
-export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedPage }: Props) {
+export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, selectedPage }: Props) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("contenu");
   const [sections, setSections] = useState<Section[]>(selectedPage?.sections ?? []);
@@ -157,6 +169,13 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
   const [cabinets, setCabinets] = useState<SiteCabinet[]>(site.cabinets);
   // Icône du navigateur ("" = logo Harmony)
   const [faviconUrl, setFaviconUrl] = useState<string>(site.faviconUrl);
+  // Aperçu du lien (titre/description Google + image de partage)
+  const [seoTitle, setSeoTitle] = useState(seo.title);
+  const [seoDescription, setSeoDescription] = useState(seo.description);
+  const [shareImageUrl, setShareImageUrl] = useState(site.shareImageUrl);
+  const [shareUploading, setShareUploading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const shareInputRef = useRef<HTMLInputElement>(null);
 
   // ── Fenêtre Paramètres (modale centrée) ──────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -173,6 +192,9 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
     logoUrl: string;
     faviconUrl: string;
     cabinets: SiteCabinet[];
+    seoTitle: string;
+    seoDescription: string;
+    shareImageUrl: string;
   } | null>(null);
 
   async function togglePageEnabled(slug: string, enabled: boolean) {
@@ -282,6 +304,28 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
     }
   }
 
+  async function uploadShareImage(file: File) {
+    setShareUploading(true);
+    setShareError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        setShareError(data.error ?? "Téléversement impossible");
+        return;
+      }
+      setShareImageUrl(data.url);
+      setSettingsDirty(true);
+    } catch {
+      setShareError("Téléversement impossible — réessayez.");
+    } finally {
+      setShareUploading(false);
+      if (shareInputRef.current) shareInputRef.current.value = "";
+    }
+  }
+
   function openSettings() {
     settingsSnapshot.current = {
       siteName,
@@ -291,6 +335,9 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
       logoUrl,
       faviconUrl,
       cabinets,
+      seoTitle,
+      seoDescription,
+      shareImageUrl,
     };
     setSettingsFeedback(null);
     setSettingsDirty(false);
@@ -308,6 +355,9 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
       setLogoUrl(snap.logoUrl);
       setFaviconUrl(snap.faviconUrl);
       setCabinets(snap.cabinets);
+      setSeoTitle(snap.seoTitle);
+      setSeoDescription(snap.seoDescription);
+      setShareImageUrl(snap.shareImageUrl);
     }
     setSettingsDirty(false);
     setSettingsFeedback(null);
@@ -335,6 +385,9 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
       phone: phoneValue,
       cabinets,
       faviconUrl,
+      seoTitle,
+      seoDescription,
+      seoImageUrl: shareImageUrl,
     });
     setSettingsSaving(false);
     if (result.error) {
@@ -357,6 +410,9 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
       logoUrl,
       faviconUrl,
       cabinets,
+      seoTitle,
+      seoDescription,
+      shareImageUrl,
     };
     setSettingsDirty(false);
     setSettingsFeedback("Publié ✓ — votre site est à jour.");
@@ -860,6 +916,149 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
                       />
                       {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
                     </div>
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "apercu" ? (
+                  <SettingsPane
+                    title="Aperçu du lien"
+                    description="Voici comment votre site apparaît dans les résultats de recherche Google et lors d'un partage du lien (WhatsApp, réseaux sociaux…)."
+                  >
+                    {/* Aperçu façon résultat Google */}
+                    <div className="rounded-2xl border border-cream-300 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-cream-300 bg-cream-100 p-1">
+                              <img
+                                src={
+                                  faviconUrl === ""
+                                    ? `${siteOrigin}/favicons/harmony.svg`
+                                    : faviconUrl.startsWith("/")
+                                      ? `${siteOrigin}${faviconUrl}`
+                                      : faviconUrl
+                                }
+                                alt=""
+                                className="h-full w-full rounded-full"
+                              />
+                            </span>
+                            <span className="min-w-0 text-xs leading-tight">
+                              <span className="block truncate text-ink-900">
+                                {siteOrigin.replace(/^https?:\/\//, "")}
+                              </span>
+                              <span className="block truncate text-ink-500">{site.url}</span>
+                            </span>
+                          </div>
+                          <p className="mt-1.5 truncate text-xl text-[#1a0dab]">
+                            {seoTitle || site.name}
+                          </p>
+                          <p className="mt-0.5 line-clamp-2 text-sm text-ink-700">
+                            {seoDescription || "Ajoutez une description pour ce résultat."}
+                          </p>
+                        </div>
+                        {shareImageUrl || seo.heroImageUrl ? (
+                          <img
+                            src={shareImageUrl || seo.heroImageUrl}
+                            alt=""
+                            className="h-24 w-24 shrink-0 rounded-2xl object-cover"
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <p className="text-sm font-medium">Titre du lien</p>
+                        <span
+                          className={clsx(
+                            "text-xs",
+                            seoTitle.length > 70 ? "text-danger-500" : "text-ink-500",
+                          )}
+                        >
+                          {seoTitle.length}/70
+                        </span>
+                      </div>
+                      <input
+                        value={seoTitle}
+                        maxLength={120}
+                        onChange={(e) => {
+                          setSeoTitle(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                      <p className="mt-1 text-xs text-ink-500">
+                        Le titre bleu du résultat Google. Recommandé : métier + ville, 70 caractères
+                        maximum.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <p className="text-sm font-medium">Description</p>
+                        <span
+                          className={clsx(
+                            "text-xs",
+                            seoDescription.length > 170 ? "text-danger-500" : "text-ink-500",
+                          )}
+                        >
+                          {seoDescription.length}/170
+                        </span>
+                      </div>
+                      <textarea
+                        value={seoDescription}
+                        maxLength={300}
+                        rows={3}
+                        onChange={(e) => {
+                          setSeoDescription(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                      <p className="mt-1 text-xs text-ink-500">
+                        Les deux lignes grises sous le titre. Recommandé : 170 caractères maximum,
+                        avec une invitation à prendre rendez-vous.
+                      </p>
+                    </div>
+
+                    <FieldBlock
+                      label="Image de partage"
+                      hint="Affichée à côté du résultat Google et en grand lors d'un partage du lien. Idéal : 1200×630 px. Sans image choisie, la photo d'accueil du site est utilisée."
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={shareUploading}
+                          onClick={() => shareInputRef.current?.click()}
+                          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          {shareUploading ? "Envoi en cours…" : "🖼 Téléverser une image"}
+                        </button>
+                        {shareImageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShareImageUrl("");
+                              setSettingsDirty(true);
+                            }}
+                            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
+                          >
+                            Revenir à la photo d&apos;accueil
+                          </button>
+                        ) : null}
+                      </div>
+                      <input
+                        ref={shareInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadShareImage(file);
+                        }}
+                      />
+                      {shareError ? <p className="mt-1 text-xs text-danger-500">{shareError}</p> : null}
+                    </FieldBlock>
                   </SettingsPane>
                 ) : null}
 
