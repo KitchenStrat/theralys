@@ -466,9 +466,15 @@ export function SectionFields({
           {section.title !== undefined ? (
             <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
           ) : null}
-          <Field label="Texte (markdown)">
-            <TextArea value={section.body} rows={14} mono onChange={(body) => onChange({ body })} />
-          </Field>
+          <RichField
+            label="Texte de la page"
+            multiline
+            headings
+            minHeight="min-h-96"
+            hint="💡 T : ligne en titre de section · B (Ctrl+B) : gras · 🔗 (Ctrl+K) : lien · boutons listes : puces ou numéros · ✅ : coche · une ligne vide sépare deux paragraphes"
+            value={section.body}
+            onChange={(body) => onChange({ body })}
+          />
         </SectionBox>
       );
 
@@ -724,27 +730,6 @@ function TextInput({
   );
 }
 
-function TextArea({
-  value,
-  rows,
-  mono,
-  onChange,
-}: {
-  value: string;
-  rows: number;
-  mono?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <textarea
-      value={value}
-      rows={rows}
-      onChange={(e) => onChange(e.target.value)}
-      className={`w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${mono ? "font-mono" : ""}`}
-    />
-  );
-}
-
 /** Ligne vide = nouveau paragraphe ; les retours simples restent dans le paragraphe. */
 function splitParagraphs(text: string): string[] {
   return text
@@ -782,12 +767,21 @@ function lineToHtml(line: string): string {
  * Texte stocké → HTML affiché : vrai gras, vrais liens, une div par ligne ;
  * les suites de lignes « - … » / « 1. … » deviennent de vraies listes.
  */
-function textToHtml(text: string, withLists = true): string {
+function textToHtml(text: string, withLists = true, withHeadings = false): string {
   const lines = text.split("\n");
   const html: string[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? "";
+    if (withHeadings) {
+      const heading = /^(#{2,3})\s+(.*)$/.exec(line);
+      if (heading) {
+        const tag = heading[1] === "##" ? "h2" : "h3";
+        html.push(`<${tag}>${lineToHtml(heading[2] ?? "") || "<br>"}</${tag}>`);
+        i++;
+        continue;
+      }
+    }
     // Une liste numérotée ne démarre qu'à « 1. » : « 3) suite » ou
     // « 10. rue de la République » restent du texte ordinaire.
     const marker = !withLists
@@ -912,6 +906,13 @@ function htmlToText(root: HTMLElement): string {
     if (child instanceof HTMLElement && (child.tagName === "UL" || child.tagName === "OL")) {
       pushLoose();
       lines.push(...listToLines(child, child.tagName === "OL"));
+      continue;
+    }
+    if (child instanceof HTMLElement && /^H[1-6]$/.test(child.tagName)) {
+      pushLoose();
+      const level = child.tagName === "H3" || child.tagName === "H4" ? "###" : "##";
+      const inner = inline(child, false).replace(/\n+/g, " ").trim();
+      lines.push(inner ? `${level} ${inner}` : "");
       continue;
     }
     if (child instanceof HTMLElement && (child.tagName === "DIV" || child.tagName === "P")) {
@@ -1042,6 +1043,23 @@ function toggleLinkCmd(el: HTMLElement | null): boolean {
   return true;
 }
 
+/** Transforme la ligne courante en titre de section (## …) — ou l'inverse. */
+function toggleHeadingCmd(el: HTMLElement | null): boolean {
+  if (!el || !selectionInside(el)) return false;
+  const selection = window.getSelection();
+  let node: Node | null = selection?.anchorNode ?? null;
+  let inHeading = false;
+  while (node && node !== el) {
+    if (node instanceof HTMLElement) {
+      if (/^H[1-6]$/.test(node.tagName)) inHeading = true;
+      if (node.tagName === "LI") return false; // pas de titre dans une liste
+    }
+    node = node.parentNode;
+  }
+  document.execCommand("formatBlock", false, inHeading ? "div" : "h2");
+  return true;
+}
+
 /** Préfixe/retire « ✅ » sur la ou les lignes couvertes par la sélection. */
 function toggleCheckCmd(el: HTMLElement | null): boolean {
   if (!el) return false;
@@ -1148,7 +1166,7 @@ function ListOlIcon() {
 
 /** Styles des éléments riches à l'intérieur des zones d'édition. */
 const EDITABLE_RICH_CLASSES =
-  "[&_a]:cursor-text [&_a]:text-primary-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5";
+  "[&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:text-base [&_h3]:font-bold [&_a]:cursor-text [&_a]:text-primary-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5";
 
 /**
  * Barre d'outils commune des champs riches : gras, coche ✅, lien, listes.
@@ -1160,10 +1178,12 @@ function RichToolbar({
   getEl,
   onApplied,
   lists,
+  headings,
 }: {
   getEl: () => HTMLElement | null;
   onApplied: () => void;
   lists?: boolean;
+  headings?: boolean;
 }) {
   const btn =
     "flex h-7 w-8 items-center justify-center rounded-lg border border-ink-300 bg-white text-sm text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600";
@@ -1176,6 +1196,17 @@ function RichToolbar({
     };
   return (
     <div className="flex gap-1">
+      {headings ? (
+        <button
+          type="button"
+          title="Transformer la ligne en titre de section"
+          aria-label="Transformer la ligne en titre de section"
+          onMouseDown={apply(toggleHeadingCmd)}
+          className={`${btn} font-serif font-bold`}
+        >
+          T
+        </button>
+      ) : null}
       <button
         type="button"
         title="Mettre la sélection en gras (Ctrl+B)"
@@ -1337,12 +1368,17 @@ function RichField({
   value,
   onChange,
   multiline = false,
+  headings = false,
+  hint,
   minHeight = "min-h-10",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   multiline?: boolean;
+  /** true : lignes « ## … » éditées comme de vrais titres (bouton T) */
+  headings?: boolean;
+  hint?: string;
   minHeight?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -1354,15 +1390,19 @@ function RichField({
     const el = ref.current;
     if (!el || lastEmitted.current === value) return;
     // Mono-ligne : pas de listes — « 2. Consultation » reste du texte
-    el.innerHTML = textToHtml(value, multiline);
+    el.innerHTML = textToHtml(value, multiline, headings);
     lastEmitted.current = value;
-  }, [value, multiline]);
+  }, [value, multiline, headings]);
 
   function emit() {
     const el = ref.current;
     if (!el) return;
     let text = htmlToText(el);
     if (!multiline) text = text.replace(/\s*\n+\s*/g, " ");
+    // Markdown (react-markdown) : un simple retour à la ligne dans un
+    // paragraphe doit devenir un saut dur (deux espaces finaux), sinon le
+    // site recolle les lignes que l'éditeur montre séparées.
+    if (headings) text = text.replace(/(\S)\n(?=\S)/g, "$1  \n");
     // Un champ vidé doit stocker "" (Firefox laisse un <br> résiduel qui
     // deviendrait sinon un espace) : le rendu public masque les champs vides.
     if (!text.trim()) text = "";
@@ -1405,7 +1445,7 @@ function RichField({
     <div>
       <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
         <p className="text-xs font-medium text-ink-700">{label}</p>
-        <RichToolbar getEl={() => ref.current} onApplied={emit} lists={multiline} />
+        <RichToolbar getEl={() => ref.current} onApplied={emit} lists={multiline} headings={headings} />
       </div>
       <div
         ref={ref}
@@ -1422,6 +1462,9 @@ function RichField({
         }}
         className={`${minHeight} w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${EDITABLE_RICH_CLASSES}`}
       />
+      {hint ? (
+        <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">{hint}</p>
+      ) : null}
     </div>
   );
 }
