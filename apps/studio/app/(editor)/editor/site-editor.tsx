@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Button, Spinner } from "@theralys/ui";
 import {
@@ -60,8 +60,30 @@ type Props = {
   selectedPage: { id: string; type: string; slug: string; sections: Section[] } | null;
 };
 
-type Panel = "contenu" | "style" | "parametres";
+type Panel = "contenu" | "style";
 type StyleTab = "couleur" | "typo" | "forme";
+
+/** Catégories de la fenêtre Paramètres (navigation de gauche). */
+type SettingsTab = "identite" | "logo" | "favicon" | "coordonnees" | "google" | "cabinets";
+
+const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; label: string }[] }[] = [
+  { group: "Profil", items: [{ id: "identite", icon: "👤", label: "Identité" }] },
+  {
+    group: "Apparence",
+    items: [
+      { id: "logo", icon: "🖼", label: "Logo" },
+      { id: "favicon", icon: "🌐", label: "Icône du navigateur" },
+    ],
+  },
+  { group: "Contact", items: [{ id: "coordonnees", icon: "📞", label: "Rendez-vous & téléphone" }] },
+  {
+    group: "Cabinets",
+    items: [
+      { id: "google", icon: "⭐", label: "Fiche Google" },
+      { id: "cabinets", icon: "📍", label: "Cabinets" },
+    ],
+  },
+];
 
 /** Aperçus « Typo » — mêmes polices que les sites publics (chargées au layout). */
 const FONT_CHOICES: { value: FontPreset; label: string; family: string; bodyFamily: string }[] = [
@@ -135,6 +157,23 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
   const [cabinets, setCabinets] = useState<SiteCabinet[]>(site.cabinets);
   // Icône du navigateur ("" = logo Harmony)
   const [faviconUrl, setFaviconUrl] = useState<string>(site.faviconUrl);
+
+  // ── Fenêtre Paramètres (modale centrée) ──────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("identite");
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsFeedback, setSettingsFeedback] = useState<string | null>(null);
+  // Valeurs de référence (ouverture ou dernière publication) : « Annuler » les restaure
+  const settingsSnapshot = useRef<{
+    siteName: string;
+    bookingUrl: string;
+    city: string;
+    phone: string;
+    logoUrl: string;
+    faviconUrl: string;
+    cabinets: SiteCabinet[];
+  } | null>(null);
 
   async function togglePageEnabled(slug: string, enabled: boolean) {
     setDisabledMotifs((prev) => (enabled ? prev.filter((s) => s !== slug) : [...prev, slug]));
@@ -234,7 +273,7 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
         return;
       }
       setLogoUrl(data.url);
-      setDirty(true);
+      setSettingsDirty(true);
     } catch {
       setLogoError("Téléversement impossible — réessayez.");
     } finally {
@@ -243,12 +282,97 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
     }
   }
 
+  function openSettings() {
+    settingsSnapshot.current = {
+      siteName,
+      bookingUrl,
+      city: cityValue,
+      phone: phoneValue,
+      logoUrl,
+      faviconUrl,
+      cabinets,
+    };
+    setSettingsFeedback(null);
+    setSettingsDirty(false);
+    setSettingsOpen(true);
+  }
+
+  /** Ferme la fenêtre en abandonnant les modifications non publiées. */
+  const cancelSettings = useCallback(() => {
+    const snap = settingsSnapshot.current;
+    if (snap) {
+      setSiteName(snap.siteName);
+      setBookingUrl(snap.bookingUrl);
+      setCityValue(snap.city);
+      setPhoneValue(snap.phone);
+      setLogoUrl(snap.logoUrl);
+      setFaviconUrl(snap.faviconUrl);
+      setCabinets(snap.cabinets);
+    }
+    setSettingsDirty(false);
+    setSettingsFeedback(null);
+    setSettingsOpen(false);
+  }, []);
+
+  // Échap ferme la fenêtre Paramètres (comme « Annuler »)
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") cancelSettings();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen, cancelSettings]);
+
+  async function onSaveSettings() {
+    setSettingsSaving(true);
+    setSettingsFeedback(null);
+    const result = await saveSiteSettings({
+      name: siteName,
+      bookingUrl,
+      city: cityValue,
+      logoUrl,
+      phone: phoneValue,
+      cabinets,
+      faviconUrl,
+    });
+    setSettingsSaving(false);
+    if (result.error) {
+      setSettingsFeedback(result.error);
+      return;
+    }
+    // Garde l'état local du panneau Contenu aligné : si la page d'accueil y
+    // est chargée, sa section contact reflète le numéro fraîchement publié.
+    if (selectedPage?.type === "home") {
+      setSections((prev) =>
+        prev.map((s) => (s.type === "contact" ? { ...s, phone: phoneValue.trim() || undefined } : s)),
+      );
+    }
+    // « Annuler » après publication ne doit pas revenir en deçà de la publication
+    settingsSnapshot.current = {
+      siteName,
+      bookingUrl,
+      city: cityValue,
+      phone: phoneValue,
+      logoUrl,
+      faviconUrl,
+      cabinets,
+    };
+    setSettingsDirty(false);
+    setSettingsFeedback("Publié ✓ — votre site est à jour.");
+    setPreviewKey((k) => k + 1);
+    router.refresh();
+  }
+
   const previewPath = useMemo(() => {
     if (!selectedPage || selectedPage.type === "home") return "";
     // ?apercu=1 : les pages désactivées restent prévisualisables dans l'éditeur
     if (selectedPage.type === "motif") return `/motifs/${selectedPage.slug}?apercu=1`;
     return "";
   }, [selectedPage]);
+
+  const activeSettingsLabel =
+    SETTINGS_NAV.flatMap((g) => g.items).find((i) => i.id === settingsTab)?.label ?? "";
 
   // ── Pont avec l'aperçu (EditorBridge côté site public) ────────────────────
   function announceEditor() {
@@ -295,25 +419,6 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
       result = await savePageSections({ pageId: selectedPage.id, sections });
     } else if (panel === "style") {
       result = await saveSiteStyle({ preset: themePreset, fontPreset, intensity, corners, ambiance });
-    } else {
-      result = await saveSiteSettings({
-        name: siteName,
-        bookingUrl,
-        city: cityValue,
-        logoUrl,
-        phone: phoneValue,
-        cabinets,
-        faviconUrl,
-      });
-      // Garde l'état local du panneau Contenu aligné : si la page d'accueil y
-      // est chargée, sa section contact reflète le numéro fraîchement publié.
-      if (!result.error && selectedPage?.type === "home") {
-        setSections((prev) =>
-          prev.map((s) =>
-            s.type === "contact" ? { ...s, phone: phoneValue.trim() || undefined } : s,
-          ),
-        );
-      }
     }
     setSaving(false);
     if (result.error) {
@@ -349,7 +454,7 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
         <div className="flex items-center gap-2">
           <PanelTab label="Contenu" active={panel === "contenu"} onClick={() => setPanel("contenu")} />
           <PanelTab label="🎨 Style" active={panel === "style"} onClick={() => setPanel("style")} />
-          <PanelTab label="⚙ Paramètres" active={panel === "parametres"} onClick={() => setPanel("parametres")} />
+          <PanelTab label="⚙ Paramètres" active={settingsOpen} onClick={openSettings} />
           <a
             href={site.url}
             target="_blank"
@@ -592,196 +697,6 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
                 ) : null}
               </div>
             ) : null}
-
-            {panel === "parametres" ? (
-              <div className="space-y-4">
-                <FieldBlock label="Nom du site">
-                  <input
-                    value={siteName}
-                    onChange={(e) => {
-                      setSiteName(e.target.value);
-                      setDirty(true);
-                    }}
-                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
-                  />
-                </FieldBlock>
-                <FieldBlock
-                  label="Logo"
-                  hint="Remplace le nom du site dans l'en-tête. PNG avec fond transparent recommandé."
-                >
-                  {logoUrl ? (
-                    <img
-                      src={logoUrl}
-                      alt="Logo"
-                      className="mb-2 h-14 w-auto max-w-full rounded-lg border border-cream-300 bg-white object-contain p-1"
-                    />
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={logoUploading}
-                      onClick={() => logoInputRef.current?.click()}
-                      className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
-                    >
-                      {logoUploading ? "Envoi en cours…" : "🖼 Téléverser un logo"}
-                    </button>
-                    {logoUrl ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLogoUrl("");
-                          setDirty(true);
-                        }}
-                        className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
-                      >
-                        Retirer (afficher le nom)
-                      </button>
-                    ) : null}
-                  </div>
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void uploadLogo(file);
-                    }}
-                  />
-                  {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
-                </FieldBlock>
-                <FieldBlock
-                  label="Icône du navigateur"
-                  hint="Choisissez une suggestion ou téléversez votre propre icône (64×64 px recommandé). Il faut parfois vider le cache du navigateur pour voir le changement — les nouveaux visiteurs verront directement la bonne icône."
-                >
-                  <FaviconPicker
-                    siteUrl={siteOrigin}
-                    siteName={siteName}
-                    value={faviconUrl}
-                    onChange={(next) => {
-                      setFaviconUrl(next);
-                      setDirty(true);
-                    }}
-                  />
-                </FieldBlock>
-                <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
-                  <input
-                    value={bookingUrl}
-                    onChange={(e) => {
-                      setBookingUrl(e.target.value);
-                      setDirty(true);
-                    }}
-                    placeholder="https://www.doctolib.fr/…"
-                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
-                  />
-                </FieldBlock>
-                <FieldBlock
-                  label="Numéro de téléphone"
-                  hint="Affiché sur les boutons « Appeler au … » du site. Laisser vide pour les masquer."
-                >
-                  <input
-                    type="tel"
-                    value={phoneValue}
-                    onChange={(e) => {
-                      setPhoneValue(e.target.value);
-                      setDirty(true);
-                    }}
-                    placeholder="06 12 34 56 78"
-                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
-                  />
-                </FieldBlock>
-                <FieldBlock label="Ville">
-                  <input
-                    value={cityValue}
-                    onChange={(e) => {
-                      setCityValue(e.target.value);
-                      setDirty(true);
-                    }}
-                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
-                  />
-                </FieldBlock>
-                <FieldBlock
-                  label="Fiche Google"
-                  hint="Les vrais avis Google de la fiche s'affichent sur le site."
-                >
-                  {gBusiness ? (
-                    <div className="mb-2 rounded-xl bg-cream-100 px-3 py-2 text-sm">
-                      <p className="font-medium">{gBusiness.name}</p>
-                      <p className="text-xs text-ink-500">
-                        {gBusiness.address}
-                        {gBusiness.rating ? (
-                          <>
-                            {" · ★ "}
-                            {gBusiness.rating}
-                            {gBusiness.reviewCount ? ` (${gBusiness.reviewCount} avis)` : null}
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                  ) : null}
-                  <input
-                    value={gQuery}
-                    onChange={(e) => onGoogleQueryChange(e.target.value)}
-                    placeholder={
-                      gBusiness ? "Changer de fiche : rechercher…" : "Rechercher votre cabinet sur Google…"
-                    }
-                    className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
-                  />
-                  {gSearching ? (
-                    <p className="mt-2 flex items-center gap-2 text-xs text-ink-500">
-                      <Spinner /> Recherche…
-                    </p>
-                  ) : null}
-                  {gResults.length > 0 ? (
-                    <ul className="mt-2 overflow-hidden rounded-xl border border-cream-300">
-                      {gResults.map((place) => (
-                        <li key={place.placeId}>
-                          <button
-                            type="button"
-                            onClick={() => void onConnectPlace(place)}
-                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-cream-100"
-                          >
-                            <span className="min-w-0">
-                              <span className="block truncate font-medium">{place.name}</span>
-                              <span className="block truncate text-xs text-ink-500">{place.address}</span>
-                            </span>
-                            <span className="shrink-0 text-xs text-primary-600">
-                              ★ {place.rating} · {place.reviewCount}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {gStatus ? (
-                    <p
-                      className={clsx(
-                        "mt-2 text-xs",
-                        gStatus.startsWith("Fiche reliée") ? "text-success-500" : "text-danger-500",
-                      )}
-                    >
-                      {gStatus}
-                    </p>
-                  ) : null}
-                </FieldBlock>
-                <FieldBlock
-                  label="Cabinets"
-                  hint="Pour les praticiens multi-cabinets : chaque cabinet ajouté apparaît sous l'en-tête du site et dans la section Contact, avec un lien vers Google Maps. La fiche Google reliée reste le cabinet principal."
-                >
-                  <CabinetsEditor
-                    cabinets={cabinets}
-                    onChange={(next) => {
-                      setCabinets(next);
-                      setDirty(true);
-                    }}
-                  />
-                </FieldBlock>
-                <p className="text-xs text-ink-500">
-                  Téléphone, adresse et horaires se modifient dans la section « Contact » de la
-                  page d&apos;accueil (onglet Contenu).
-                </p>
-              </div>
-            ) : null}
           </div>
 
           <div className="border-t border-cream-300 p-4">
@@ -808,7 +723,335 @@ export function SiteEditor({ site, city, phone, googleBusiness, pages, selectedP
           />
         </div>
       </div>
+
+      {/* ── Fenêtre Paramètres (modale centrée, quasi pleine page) ─────────── */}
+      {settingsOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-4 sm:p-10"
+          onMouseDown={(e) => {
+            // Clic sur le fond : ferme seulement s'il n'y a rien à perdre
+            if (e.target === e.currentTarget && !settingsDirty) cancelSettings();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Paramètres du site"
+            className="flex h-full max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
+              <p className="flex items-center gap-3 text-lg font-semibold">
+                Paramètres
+                <span aria-hidden className="h-5 w-px bg-cream-300" />
+                <span className="text-base font-normal text-ink-500">{activeSettingsLabel}</span>
+              </p>
+              <button
+                type="button"
+                onClick={cancelSettings}
+                aria-label="Fermer les paramètres"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink-500 transition-colors hover:bg-cream-100 hover:text-ink-900"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1">
+              <nav className="w-72 shrink-0 space-y-5 overflow-y-auto border-r border-cream-200 bg-cream-50 p-4">
+                {SETTINGS_NAV.map((group) => (
+                  <div key={group.group}>
+                    <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-500">
+                      {group.group}
+                    </p>
+                    <div className="space-y-1">
+                      {group.items.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSettingsTab(item.id)}
+                          className={clsx(
+                            "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors",
+                            settingsTab === item.id
+                              ? "bg-primary-500 text-white"
+                              : "text-ink-700 hover:bg-cream-100",
+                          )}
+                        >
+                          <span aria-hidden>{item.icon}</span>
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-6 sm:p-8">
+                {settingsTab === "identite" ? (
+                  <SettingsPane
+                    title="Identité"
+                    description="Le nom du site apparaît dans l'en-tête, l'onglet du navigateur et les résultats Google."
+                  >
+                    <FieldBlock label="Nom du site">
+                      <input
+                        value={siteName}
+                        onChange={(e) => {
+                          setSiteName(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                    </FieldBlock>
+                    <FieldBlock label="Ville">
+                      <input
+                        value={cityValue}
+                        onChange={(e) => {
+                          setCityValue(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full max-w-xs rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                    </FieldBlock>
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "logo" ? (
+                  <SettingsPane
+                    title="Logo"
+                    description="Remplace le nom du site dans l'en-tête. PNG avec fond transparent recommandé."
+                  >
+                    <div>
+                      {logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt="Logo"
+                          className="mb-3 h-16 w-auto max-w-full rounded-lg border border-cream-300 bg-white object-contain p-1"
+                        />
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={logoUploading}
+                          onClick={() => logoInputRef.current?.click()}
+                          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
+                        >
+                          {logoUploading ? "Envoi en cours…" : "🖼 Téléverser un logo"}
+                        </button>
+                        {logoUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLogoUrl("");
+                              setSettingsDirty(true);
+                            }}
+                            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
+                          >
+                            Retirer (afficher le nom)
+                          </button>
+                        ) : null}
+                      </div>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadLogo(file);
+                        }}
+                      />
+                      {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
+                    </div>
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "favicon" ? (
+                  <SettingsPane
+                    title="Icône du navigateur"
+                    description="Choisissez une suggestion ou téléversez votre propre icône (64×64 px recommandé). Il faut parfois vider le cache du navigateur pour voir le changement — les nouveaux visiteurs verront directement la bonne icône."
+                  >
+                    <FaviconPicker
+                      siteUrl={siteOrigin}
+                      siteName={siteName}
+                      value={faviconUrl}
+                      onChange={(next) => {
+                        setFaviconUrl(next);
+                        setSettingsDirty(true);
+                      }}
+                    />
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "coordonnees" ? (
+                  <SettingsPane
+                    title="Rendez-vous & téléphone"
+                    description="Les boutons du site (« Prendre rendez-vous », « Appeler au … ») utilisent ces coordonnées."
+                  >
+                    <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
+                      <input
+                        value={bookingUrl}
+                        onChange={(e) => {
+                          setBookingUrl(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        placeholder="https://www.doctolib.fr/…"
+                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                    </FieldBlock>
+                    <FieldBlock
+                      label="Numéro de téléphone"
+                      hint="Affiché sur les boutons « Appeler au … » du site. Laisser vide pour les masquer."
+                    >
+                      <input
+                        type="tel"
+                        value={phoneValue}
+                        onChange={(e) => {
+                          setPhoneValue(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        placeholder="06 12 34 56 78"
+                        className="w-full max-w-xs rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                    </FieldBlock>
+                    <p className="text-xs text-ink-500">
+                      Adresse et horaires se modifient dans la section « Contact » de la page
+                      d&apos;accueil (onglet Contenu).
+                    </p>
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "google" ? (
+                  <SettingsPane
+                    title="Fiche Google"
+                    description="Les vrais avis Google de la fiche reliée s'affichent sur le site."
+                  >
+                    <div>
+                      {gBusiness ? (
+                        <div className="mb-2 rounded-xl bg-cream-100 px-3 py-2 text-sm">
+                          <p className="font-medium">{gBusiness.name}</p>
+                          <p className="text-xs text-ink-500">
+                            {gBusiness.address}
+                            {gBusiness.rating ? (
+                              <>
+                                {" · ★ "}
+                                {gBusiness.rating}
+                                {gBusiness.reviewCount ? ` (${gBusiness.reviewCount} avis)` : null}
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                      ) : null}
+                      <input
+                        value={gQuery}
+                        onChange={(e) => onGoogleQueryChange(e.target.value)}
+                        placeholder={
+                          gBusiness ? "Changer de fiche : rechercher…" : "Rechercher votre cabinet sur Google…"
+                        }
+                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                      {gSearching ? (
+                        <p className="mt-2 flex items-center gap-2 text-xs text-ink-500">
+                          <Spinner /> Recherche…
+                        </p>
+                      ) : null}
+                      {gResults.length > 0 ? (
+                        <ul className="mt-2 overflow-hidden rounded-xl border border-cream-300">
+                          {gResults.map((place) => (
+                            <li key={place.placeId}>
+                              <button
+                                type="button"
+                                onClick={() => void onConnectPlace(place)}
+                                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-cream-100"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium">{place.name}</span>
+                                  <span className="block truncate text-xs text-ink-500">{place.address}</span>
+                                </span>
+                                <span className="shrink-0 text-xs text-primary-600">
+                                  ★ {place.rating} · {place.reviewCount}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {gStatus ? (
+                        <p
+                          className={clsx(
+                            "mt-2 text-xs",
+                            gStatus.startsWith("Fiche reliée") ? "text-success-500" : "text-danger-500",
+                          )}
+                        >
+                          {gStatus}
+                        </p>
+                      ) : null}
+                    </div>
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "cabinets" ? (
+                  <SettingsPane
+                    title="Cabinets"
+                    description="Pour les praticiens multi-cabinets : chaque cabinet ajouté apparaît sous l'en-tête du site et dans la section Contact, avec un lien vers Google Maps. La fiche Google reliée reste le cabinet principal."
+                  >
+                    <CabinetsEditor
+                      cabinets={cabinets}
+                      onChange={(next) => {
+                        setCabinets(next);
+                        setSettingsDirty(true);
+                      }}
+                    />
+                  </SettingsPane>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-t border-cream-200 px-6 py-4">
+              <p
+                className={clsx(
+                  "min-w-0 text-xs",
+                  settingsFeedback?.startsWith("Publié") ? "text-success-500" : "text-danger-500",
+                )}
+              >
+                {settingsFeedback}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={cancelSettings}
+                  className="rounded-full px-5 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-cream-100 hover:text-ink-900"
+                >
+                  Annuler
+                </button>
+                <Button onClick={onSaveSettings} disabled={settingsSaving}>
+                  {settingsSaving ? <Spinner className="text-white" /> : null}
+                  {settingsSaving ? "Publication…" : "Enregistrer et publier"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
+  );
+}
+
+/** Colonne de contenu d'une catégorie de la fenêtre Paramètres. */
+function SettingsPane({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div>
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="mt-1 text-sm text-ink-500">{description}</p>
+      </div>
+      {children}
+    </div>
   );
 }
 
