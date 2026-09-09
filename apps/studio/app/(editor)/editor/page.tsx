@@ -58,6 +58,13 @@ export default async function EditorPage({ searchParams }: Props) {
         description: homePage?.metaDescription ?? "",
         heroImageUrl: homeHero?.imageUrl ?? "",
       }}
+      tracking={{
+        cookieBanner: site.theme.tracking?.cookieBanner !== false,
+        googleAnalyticsId: site.theme.tracking?.googleAnalyticsId ?? "",
+        googleTagManagerId: site.theme.tracking?.googleTagManagerId ?? "",
+        googleAdsId: site.theme.tracking?.googleAdsId ?? "",
+        metaPixelId: site.theme.tracking?.metaPixelId ?? "",
+      }}
       googleBusiness={
         prospect?.googlePlaceId
           ? {

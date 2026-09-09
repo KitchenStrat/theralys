@@ -7,6 +7,7 @@ import { ScrollReveal } from "@/components/scroll-reveal";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Tracker } from "@/components/tracker";
+import { TrackingScripts } from "@/components/tracking-scripts";
 import { getMotifPages, getSiteByKey, isDemoExpired } from "@/lib/site-data";
 import { themeCssVars } from "@/lib/theme";
 
@@ -77,8 +78,10 @@ export default async function SiteLayout({ children, params }: Props) {
       <SiteHeader site={site} motifPages={motifPages} prefix={prefix} />
       {children}
       <SiteFooter site={site} />
-      <ConsentBanner />
+      {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
+      {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
       <Tracker siteId={site.id} />
+      <TrackingScripts tracking={site.theme.tracking ?? {}} />
       <EditorBridge />
       <ScrollReveal />
     </div>

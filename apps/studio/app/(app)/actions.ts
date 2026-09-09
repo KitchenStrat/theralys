@@ -33,6 +33,7 @@ import {
   THEME_INTENSITIES,
   THEME_CORNERS,
   THEME_AMBIANCES,
+  TRACKING_ID_PATTERNS,
   type Section,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
@@ -590,6 +591,40 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         .trim()
         .refine((v) => v === "" || /^(https?:\/\/|\/)/.test(v), "Image de partage invalide")
         .optional(),
+      // Suivi (bandeau cookies + identifiants GA/GTM/Ads/Meta) — cf. SiteTracking
+      tracking: z
+        .object({
+          cookieBanner: z.boolean(),
+          googleAnalyticsId: z
+            .string()
+            .trim()
+            .refine(
+              (v) => v === "" || TRACKING_ID_PATTERNS.googleAnalyticsId.test(v),
+              "Identifiant Google Analytics invalide. Exemple : G-XXXXXXXXXX.",
+            ),
+          googleTagManagerId: z
+            .string()
+            .trim()
+            .refine(
+              (v) => v === "" || TRACKING_ID_PATTERNS.googleTagManagerId.test(v),
+              "Identifiant Google Tag Manager invalide. Exemple : GTM-XXXXXXX.",
+            ),
+          googleAdsId: z
+            .string()
+            .trim()
+            .refine(
+              (v) => v === "" || TRACKING_ID_PATTERNS.googleAdsId.test(v),
+              "Identifiant Google Ads invalide. Exemple : AW-1234567890.",
+            ),
+          metaPixelId: z
+            .string()
+            .trim()
+            .refine(
+              (v) => v === "" || TRACKING_ID_PATTERNS.metaPixelId.test(v),
+              "Identifiant Meta Pixel invalide (chiffres uniquement).",
+            ),
+        })
+        .optional(),
       // Cabinets supplémentaires (multi-cabinets) — cf. SiteCabinet
       cabinets: z
         .array(
@@ -626,6 +661,16 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
     parsed.data.seoImageUrl !== undefined
       ? parsed.data.seoImageUrl || undefined
       : site.theme.shareImageUrl;
+  const tracking =
+    parsed.data.tracking !== undefined
+      ? {
+          cookieBanner: parsed.data.tracking.cookieBanner,
+          googleAnalyticsId: parsed.data.tracking.googleAnalyticsId || undefined,
+          googleTagManagerId: parsed.data.tracking.googleTagManagerId || undefined,
+          googleAdsId: parsed.data.tracking.googleAdsId || undefined,
+          metaPixelId: parsed.data.tracking.metaPixelId || undefined,
+        }
+      : site.theme.tracking;
   await db
     .update(sites)
     .set({
@@ -637,6 +682,7 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
         cabinets,
         faviconUrl,
         shareImageUrl,
+        tracking,
       },
       updatedAt: new Date(),
     })

@@ -244,6 +244,32 @@ export type ThemeCorners = (typeof THEME_CORNERS)[number];
 export const THEME_AMBIANCES = ["naturel", "structure"] as const;
 export type ThemeAmbiance = (typeof THEME_AMBIANCES)[number];
 
+/**
+ * Outils de suivi configurés dans le studio (Paramètres → Tracking).
+ * Un identifiant absent = outil désactivé. `cookieBanner: false` retire le
+ * bandeau cookies : les traceurs se chargent alors dès l'arrivée (défaut :
+ * bandeau affiché, traceurs chargés après « Accepter »).
+ */
+export type SiteTracking = {
+  cookieBanner?: boolean;
+  /** Google Analytics 4, ex. G-XXXXXXXXXX */
+  googleAnalyticsId?: string;
+  /** Google Tag Manager, ex. GTM-XXXXXXX */
+  googleTagManagerId?: string;
+  /** Google Ads (conversions/remarketing), ex. AW-1234567890 */
+  googleAdsId?: string;
+  /** Meta Pixel (identifiant numérique) */
+  metaPixelId?: string;
+};
+
+/** Formats attendus des identifiants de suivi (validation studio + serveur). */
+export const TRACKING_ID_PATTERNS = {
+  googleAnalyticsId: /^G-[A-Z0-9]{4,14}$/i,
+  googleTagManagerId: /^GTM-[A-Z0-9]{4,10}$/i,
+  googleAdsId: /^AW-\d{8,12}$/,
+  metaPixelId: /^\d{10,20}$/,
+} as const;
+
 /** Cabinet ajouté manuellement dans les paramètres du studio. */
 export type SiteCabinet = {
   name: string;
@@ -284,6 +310,11 @@ export type SiteTheme = {
    * « principal ». Stocké ici (JSONB du site) — pas de migration de schéma.
    */
   cabinets?: SiteCabinet[];
+  /**
+   * Suivi (bandeau cookies + GA/GTM/Ads/Meta) — cf. SiteTracking. Stocké ici
+   * (JSONB du site) — pas de migration de schéma.
+   */
+  tracking?: SiteTracking;
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */

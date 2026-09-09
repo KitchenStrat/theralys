@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { Button, Spinner } from "@theralys/ui";
 import {
   THEME_PRESETS,
+  TRACKING_ID_PATTERNS,
   type Section,
   type SiteCabinet,
   type ThemePreset,
@@ -54,6 +55,14 @@ type Props = {
   phone: string;
   /** Aperçu du lien : titre/description Google de l'accueil + photo du hero (repli d'image) */
   seo: { title: string; description: string; heroImageUrl: string };
+  /** Suivi : bandeau cookies + identifiants des outils ("" = désactivé) */
+  tracking: {
+    cookieBanner: boolean;
+    googleAnalyticsId: string;
+    googleTagManagerId: string;
+    googleAdsId: string;
+    metaPixelId: string;
+  };
   googleBusiness: {
     name: string;
     address: string;
@@ -75,7 +84,8 @@ type SettingsTab =
   | "favicon"
   | "coordonnees"
   | "google"
-  | "cabinets";
+  | "cabinets"
+  | "tracking";
 
 const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; label: string }[] }[] = [
   { group: "Profil", items: [{ id: "identite", icon: "👤", label: "Identité" }] },
@@ -94,6 +104,52 @@ const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; lab
       { id: "google", icon: "⭐", label: "Fiche Google" },
       { id: "cabinets", icon: "📍", label: "Cabinets" },
     ],
+  },
+  { group: "Suivi", items: [{ id: "tracking", icon: "📊", label: "Tracking" }] },
+];
+
+/** Outils de la catégorie Tracking (interrupteur + identifiant). */
+type TrackerKey = "googleAnalyticsId" | "googleTagManagerId" | "googleAdsId" | "metaPixelId";
+
+const TRACKER_CARDS: {
+  key: TrackerKey;
+  icon: string;
+  title: string;
+  description: string;
+  placeholder: string;
+  error: string;
+}[] = [
+  {
+    key: "googleAnalyticsId",
+    icon: "📈",
+    title: "Google Analytics",
+    description: "Mesure d'audience via la balise Google.",
+    placeholder: "G-XXXXXXXXXX",
+    error: "Renseignez un identifiant Google Analytics. Exemple : G-XXXXXXXXXX.",
+  },
+  {
+    key: "googleTagManagerId",
+    icon: "🏷️",
+    title: "Google Tag Manager",
+    description: "Charge votre conteneur GTM selon le mode de bandeau choisi.",
+    placeholder: "GTM-XXXXXXX",
+    error: "Renseignez un identifiant Google Tag Manager. Exemple : GTM-XXXXXXX.",
+  },
+  {
+    key: "googleAdsId",
+    icon: "📣",
+    title: "Google Ads",
+    description: "Mesure des conversions et remarketing Google Ads.",
+    placeholder: "AW-1234567890",
+    error: "Renseignez un identifiant Google Ads. Exemple : AW-1234567890.",
+  },
+  {
+    key: "metaPixelId",
+    icon: "✨",
+    title: "Meta Pixel",
+    description: "Suivi publicitaire et audiences personnalisées Meta.",
+    placeholder: "123456789012345",
+    error: "Renseignez un identifiant Meta Pixel (chiffres uniquement).",
   },
 ];
 
@@ -156,7 +212,16 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   lavande: "#6f5b9c",
 };
 
-export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, selectedPage }: Props) {
+export function SiteEditor({
+  site,
+  city,
+  phone,
+  seo,
+  tracking,
+  googleBusiness,
+  pages,
+  selectedPage,
+}: Props) {
   const router = useRouter();
   const [panel, setPanel] = useState<Panel>("contenu");
   const [sections, setSections] = useState<Section[]>(selectedPage?.sections ?? []);
@@ -176,6 +241,25 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
   const [shareUploading, setShareUploading] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const shareInputRef = useRef<HTMLInputElement>(null);
+  // Suivi : bandeau cookies + identifiants (activé = identifiant conservé à la publication)
+  const [cookieBanner, setCookieBanner] = useState(tracking.cookieBanner);
+  const [trackingIds, setTrackingIds] = useState<Record<TrackerKey, string>>({
+    googleAnalyticsId: tracking.googleAnalyticsId,
+    googleTagManagerId: tracking.googleTagManagerId,
+    googleAdsId: tracking.googleAdsId,
+    metaPixelId: tracking.metaPixelId,
+  });
+  const [trackingEnabled, setTrackingEnabled] = useState<Record<TrackerKey, boolean>>({
+    googleAnalyticsId: tracking.googleAnalyticsId !== "",
+    googleTagManagerId: tracking.googleTagManagerId !== "",
+    googleAdsId: tracking.googleAdsId !== "",
+    metaPixelId: tracking.metaPixelId !== "",
+  });
+  // Outils activés dont l'identifiant ne respecte pas le format attendu
+  const trackingErrors = TRACKER_CARDS.filter(
+    (card) =>
+      trackingEnabled[card.key] && !TRACKING_ID_PATTERNS[card.key].test(trackingIds[card.key].trim()),
+  ).map((card) => card.key);
 
   // ── Fenêtre Paramètres (modale centrée) ──────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -195,6 +279,9 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
     seoTitle: string;
     seoDescription: string;
     shareImageUrl: string;
+    cookieBanner: boolean;
+    trackingIds: Record<TrackerKey, string>;
+    trackingEnabled: Record<TrackerKey, boolean>;
   } | null>(null);
 
   async function togglePageEnabled(slug: string, enabled: boolean) {
@@ -338,6 +425,9 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
       seoTitle,
       seoDescription,
       shareImageUrl,
+      cookieBanner,
+      trackingIds,
+      trackingEnabled,
     };
     setSettingsFeedback(null);
     setSettingsDirty(false);
@@ -358,6 +448,9 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
       setSeoTitle(snap.seoTitle);
       setSeoDescription(snap.seoDescription);
       setShareImageUrl(snap.shareImageUrl);
+      setCookieBanner(snap.cookieBanner);
+      setTrackingIds(snap.trackingIds);
+      setTrackingEnabled(snap.trackingEnabled);
     }
     setSettingsDirty(false);
     setSettingsFeedback(null);
@@ -375,6 +468,11 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
   }, [settingsOpen, cancelSettings]);
 
   async function onSaveSettings() {
+    if (trackingErrors.length > 0) {
+      setSettingsTab("tracking");
+      setSettingsFeedback("Corrigez le format des identifiants de tracking avant de publier.");
+      return;
+    }
     setSettingsSaving(true);
     setSettingsFeedback(null);
     const result = await saveSiteSettings({
@@ -388,6 +486,15 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
       seoTitle,
       seoDescription,
       seoImageUrl: shareImageUrl,
+      tracking: {
+        cookieBanner,
+        googleAnalyticsId: trackingEnabled.googleAnalyticsId ? trackingIds.googleAnalyticsId.trim() : "",
+        googleTagManagerId: trackingEnabled.googleTagManagerId
+          ? trackingIds.googleTagManagerId.trim()
+          : "",
+        googleAdsId: trackingEnabled.googleAdsId ? trackingIds.googleAdsId.trim() : "",
+        metaPixelId: trackingEnabled.metaPixelId ? trackingIds.metaPixelId.trim() : "",
+      },
     });
     setSettingsSaving(false);
     if (result.error) {
@@ -413,6 +520,9 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
       seoTitle,
       seoDescription,
       shareImageUrl,
+      cookieBanner,
+      trackingIds,
+      trackingEnabled,
     };
     setSettingsDirty(false);
     setSettingsFeedback("Publié ✓ — votre site est à jour.");
@@ -798,6 +908,15 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
             <div className="flex items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
               <p className="flex items-center gap-3 text-lg font-semibold">
                 Paramètres
+                {trackingErrors.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setSettingsTab("tracking")}
+                    className="inline-flex items-center gap-1 rounded-full border border-warning-500/50 bg-warning-100 px-2.5 py-0.5 text-xs font-medium text-warning-500"
+                  >
+                    ⚠ Format à corriger
+                  </button>
+                ) : null}
                 <span aria-hidden className="h-5 w-px bg-cream-300" />
                 <span className="text-base font-normal text-ink-500">{activeSettingsLabel}</span>
               </p>
@@ -833,6 +952,15 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
                         >
                           <span aria-hidden>{item.icon}</span>
                           <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                          {item.id === "tracking" && trackingErrors.length > 0 ? (
+                            <span
+                              aria-hidden
+                              className={clsx(
+                                "h-2 w-2 shrink-0 rounded-full",
+                                settingsTab === item.id ? "bg-white" : "bg-warning-500",
+                              )}
+                            />
+                          ) : null}
                         </button>
                       ))}
                     </div>
@@ -1200,6 +1328,93 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
                     />
                   </SettingsPane>
                 ) : null}
+
+                {settingsTab === "tracking" ? (
+                  <SettingsPane
+                    title="Tracking"
+                    description="Connectez vos outils de statistiques et de marketing, puis choisissez le bandeau cookies affiché sur le site public."
+                  >
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-cream-300 bg-cream-50 p-4">
+                        <div className="flex items-center gap-3">
+                          <span aria-hidden className="text-lg">
+                            🍪
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold">Activer le bandeau cookies</p>
+                            <p className="mt-0.5 text-xs text-ink-500">
+                              {cookieBanner
+                                ? "Le bandeau est affiché : les outils ci-dessous ne se chargent qu'après « Accepter »."
+                                : "Aucun bandeau ne sera affiché. Le tracking sera actif par défaut."}
+                            </p>
+                          </div>
+                          <ToggleSwitch
+                            checked={cookieBanner}
+                            label="Activer le bandeau cookies"
+                            onChange={(next) => {
+                              setCookieBanner(next);
+                              setSettingsDirty(true);
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {TRACKER_CARDS.map((card) => {
+                        const enabled = trackingEnabled[card.key];
+                        const invalid = trackingErrors.includes(card.key);
+                        return (
+                          <div
+                            key={card.key}
+                            className={clsx(
+                              "rounded-2xl border p-4",
+                              invalid
+                                ? "border-danger-500/50 bg-danger-100/40"
+                                : "border-cream-300 bg-cream-50",
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span aria-hidden className="text-lg">
+                                {card.icon}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold">{card.title}</p>
+                                <p className="mt-0.5 text-xs text-ink-500">{card.description}</p>
+                              </div>
+                              <ToggleSwitch
+                                checked={enabled}
+                                label={`Activer ${card.title}`}
+                                onChange={(next) => {
+                                  setTrackingEnabled((prev) => ({ ...prev, [card.key]: next }));
+                                  setSettingsDirty(true);
+                                }}
+                              />
+                            </div>
+                            {enabled ? (
+                              <div className="mt-3">
+                                <input
+                                  value={trackingIds[card.key]}
+                                  placeholder={card.placeholder}
+                                  aria-label={`Identifiant ${card.title}`}
+                                  onChange={(e) => {
+                                    setTrackingIds((prev) => ({ ...prev, [card.key]: e.target.value }));
+                                    setSettingsDirty(true);
+                                  }}
+                                  className={clsx(
+                                    "w-full rounded-xl border bg-white px-3 py-2 text-sm",
+                                    invalid ? "border-danger-500" : "border-ink-300",
+                                  )}
+                                />
+                                {invalid ? (
+                                  <p className="mt-1 text-xs text-danger-500">⚠ {card.error}</p>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </SettingsPane>
+                ) : null}
               </div>
             </div>
 
@@ -1230,6 +1445,39 @@ export function SiteEditor({ site, city, phone, seo, googleBusiness, pages, sele
         </div>
       ) : null}
     </>
+  );
+}
+
+/** Interrupteur des cartes de la catégorie Tracking. */
+function ToggleSwitch({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+        checked ? "bg-primary-500" : "bg-ink-300",
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left]",
+          checked ? "left-[22px]" : "left-0.5",
+        )}
+      />
+    </button>
   );
 }
 

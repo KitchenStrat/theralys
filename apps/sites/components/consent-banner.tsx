@@ -27,6 +27,8 @@ export function ConsentBanner() {
   function choose(value: "granted" | "denied") {
     document.cookie = `${CONSENT_COOKIE}=${value}; Max-Age=${CONSENT_MAX_AGE_S}; Path=/; SameSite=Lax`;
     setVisible(false);
+    // Prévient les traceurs configurés (TrackingScripts) sans rechargement
+    window.dispatchEvent(new CustomEvent("tl:consent", { detail: value }));
   }
 
   return (
