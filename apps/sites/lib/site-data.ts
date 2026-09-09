@@ -55,7 +55,7 @@ export async function getHomePage(siteId: string): Promise<Page | null> {
 }
 
 /**
- * Pages de motifs visibles — le gating suit la formule (Starter 0, Boost 6).
+ * Pages de motifs visibles — le gating suit la formule (Starter 0, Scale 6).
  * Les pages restent en base : un passage à la formule supérieure les
  * réactive sans régénération. Les 6 spécialités restent affichées sur la
  * page d'accueil dans tous les cas (cartes non cliquables en Starter).

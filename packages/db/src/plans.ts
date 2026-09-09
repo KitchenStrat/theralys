@@ -1,21 +1,21 @@
 /**
  * Formules Harmony et gating des fonctionnalités.
- * Offre actuelle : 2 formules (Starter, Boost). Toutes les démos présentent
- * l'offre complète (équivalent Boost) — les restrictions ne s'appliquent
+ * Offre actuelle : 2 formules (Starter, Scale). Toutes les démos présentent
+ * l'offre complète (équivalent Scale) — les restrictions ne s'appliquent
  * qu'aux clients ayant choisi Starter.
- * « scale » est une ancienne formule conservée pour compatibilité (valeur
- * encore présente dans l'enum Postgres) : elle est servie comme Boost.
+ * « boost » est une ancienne formule conservée pour compatibilité (valeur
+ * encore présente dans l'enum Postgres) : elle est servie comme Scale.
  */
 
 export type PlanId = "starter" | "boost" | "scale";
 
 /** Formules réellement proposées à la vente. */
-export const OFFERED_PLANS = ["starter", "boost"] as const;
+export const OFFERED_PLANS = ["starter", "scale"] as const;
 export type OfferedPlanId = (typeof OFFERED_PLANS)[number];
 
-/** Ramène les valeurs héritées (scale) sur l'offre actuelle. */
+/** Ramène les valeurs héritées (boost) sur l'offre actuelle. */
 export function normalizePlan(plan: PlanId): OfferedPlanId {
-  return plan === "starter" ? "starter" : "boost";
+  return plan === "starter" ? "starter" : "scale";
 }
 
 export type PlanDefinition = {
@@ -35,6 +35,10 @@ export type PlanDefinition = {
   blogArticlesPerYear: number;
   /** Suivi des mots-clés Google (Search Console) */
   searchConsoleAccess: boolean;
+  /** Outil de recherche de mots-clés SEO (studio) */
+  keywordResearch: boolean;
+  /** Académie (formations du studio) */
+  academy: boolean;
   /** Toujours inclus, toutes formules */
   googleReviewsSync: true;
   advancedAnalytics: true;
@@ -51,14 +55,16 @@ const STARTER: PlanDefinition = {
   blogArticlesPerWeek: 0,
   blogArticlesPerYear: 0,
   searchConsoleAccess: false,
+  keywordResearch: false,
+  academy: false,
   googleReviewsSync: true,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };
 
-const BOOST: PlanDefinition = {
-  id: "boost",
-  label: "Boost",
+const SCALE: PlanDefinition = {
+  id: "scale",
+  label: "Scale",
   annualMonthlyPrice: 55,
   monthlyPrice: 79,
   homeSpecialties: 6,
@@ -66,6 +72,8 @@ const BOOST: PlanDefinition = {
   blogArticlesPerWeek: 4,
   blogArticlesPerYear: 208,
   searchConsoleAccess: true,
+  keywordResearch: true,
+  academy: true,
   googleReviewsSync: true,
   advancedAnalytics: true,
   hostingAndDomain: true,
@@ -73,9 +81,9 @@ const BOOST: PlanDefinition = {
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
   starter: STARTER,
-  boost: BOOST,
-  // Héritage : les anciens abonnements « Scale » sont servis comme Boost
-  scale: { ...BOOST, id: "scale" },
+  scale: SCALE,
+  // Héritage : les anciens abonnements « Boost » sont servis comme Scale
+  boost: { ...SCALE, id: "boost" },
 };
 
 export function getPlan(id: PlanId): PlanDefinition {
@@ -98,4 +106,14 @@ export function hasBlog(plan: PlanId): boolean {
 
 export function hasSearchConsole(plan: PlanId): boolean {
   return PLANS[plan].searchConsoleAccess;
+}
+
+/** Outil de recherche de mots-clés SEO (page Mots-clés du studio). */
+export function hasKeywordResearch(plan: PlanId): boolean {
+  return PLANS[plan].keywordResearch;
+}
+
+/** Académie (formations du studio). */
+export function hasAcademy(plan: PlanId): boolean {
+  return PLANS[plan].academy;
 }

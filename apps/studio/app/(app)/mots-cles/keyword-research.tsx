@@ -204,7 +204,7 @@ export function KeywordResearchCard({
             </ol>
             <p className="mt-4 text-xs text-ink-500">
               💡 Utilisez ces expressions dans vos titres de pages, vos textes et vos articles
-              de blog. Avec la formule Boost, le blog automatisé s&apos;en charge pour vous.
+              de blog. Avec la formule Scale, le blog automatisé s&apos;en charge pour vous.
             </p>
           </div>
         ) : (

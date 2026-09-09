@@ -23,7 +23,7 @@ export function GoogleVisibilityCard({
         <CardTitle />
         <p className="mt-3 text-base text-ink-500">
           Le suivi de vos mots-clés Google est disponible avec la formule{" "}
-          <strong>Boost</strong>.
+          <strong>Scale</strong>.
         </p>
       </Card>
     );

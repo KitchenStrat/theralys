@@ -68,6 +68,12 @@ export default async function AccountPage() {
                   : "— Blog automatisé non inclus"}
               </li>
               <li>{plan.searchConsoleAccess ? "✓ Suivi des mots-clés Google" : "— Suivi des mots-clés non inclus"}</li>
+              <li>
+                {plan.keywordResearch
+                  ? "✓ Outil de recherche des mots-clés SEO"
+                  : "— Outil de recherche des mots-clés non inclus"}
+              </li>
+              <li>{plan.academy ? "✓ Académie" : "— Académie non incluse"}</li>
               <li>✓ Avis Google synchronisés · statistiques · hébergement</li>
             </ul>
             <div className="mt-5">

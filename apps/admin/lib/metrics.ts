@@ -21,8 +21,8 @@ export type MrrSummary = {
 };
 
 export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
-  // Offre à 2 formules : les anciens abonnements « Scale » comptent avec Boost
-  const byPlan: Record<OfferedPlanId, number> = { starter: 0, boost: 0 };
+  // Offre à 2 formules : les anciens abonnements « Boost » comptent avec Scale
+  const byPlan: Record<OfferedPlanId, number> = { starter: 0, scale: 0 };
   let total = 0;
   let payingCount = 0;
   let pastDueCount = 0;
@@ -98,7 +98,7 @@ export type BlogHealth = {
 
 /**
  * Un blog est « en retard » si le dernier article publié est plus vieux que
- * deux intervalles de cadence (Boost 4/sem → 3,5 jours).
+ * deux intervalles de cadence (Scale 4/sem → 3,5 jours).
  */
 export function blogHealth(input: {
   plan: PlanId;

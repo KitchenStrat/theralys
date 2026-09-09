@@ -1,3 +1,4 @@
+import { motifPagesAllowance } from "@theralys/db";
 import type { Section } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getEditablePages, getProspect, getSite, siteUrl } from "@/lib/data";
@@ -15,7 +16,17 @@ export default async function EditorPage({ searchParams }: Props) {
   const { page: pageParam } = await searchParams;
 
   const site = await getSite(session.siteId);
-  const [pages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
+  const [allPages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
+  // Les pages de spécialités suivent la formule (Starter : aucune page dédiée
+  // publique — on ne propose donc pas de les éditer) ; les démos, en formule
+  // complète, gardent les leurs.
+  const allowedMotifIds = new Set(
+    allPages
+      .filter((p) => p.type === "motif")
+      .slice(0, motifPagesAllowance(site.plan))
+      .map((p) => p.id),
+  );
+  const pages = allPages.filter((p) => p.type !== "motif" || allowedMotifIds.has(p.id));
   const selected = pages.find((p) => p.id === pageParam) ?? pages.find((p) => p.type === "home") ?? pages[0];
 
   // Numéro affiché sur le site (source : section contact de l'accueil)

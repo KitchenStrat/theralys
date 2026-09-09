@@ -14,11 +14,13 @@ export type PlanCard = {
   blogArticlesPerWeek: number;
   blogArticlesPerYear: number;
   searchConsoleAccess: boolean;
+  keywordResearch: boolean;
+  academy: boolean;
 };
 
 const TAGLINES: Record<string, string> = {
   starter: "L'essentiel pour exister en ligne avec élégance.",
-  boost: "La croissance en automatique : SEO, blog et suivi complet.",
+  scale: "La croissance en automatique : SEO, blog et suivi complet.",
 };
 
 /* Icônes des caractéristiques (traits 20×20, couleur héritée du badge) */
@@ -68,6 +70,18 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M2.75 10h14.5M10 2.75c-4.5 4.5-4.5 10 0 14.5 4.5-4.5 4.5-10 0-14.5Z" strokeLinecap="round" />
     </>
   ),
+  bulb: (
+    <>
+      <path d="M10 2.75a5.25 5.25 0 0 1 3 9.55c-.8.6-1.25 1.2-1.25 2.2h-3.5c0-1-.45-1.6-1.25-2.2a5.25 5.25 0 0 1 3-9.55Z" strokeLinejoin="round" />
+      <path d="M8.25 17.25h3.5" strokeLinecap="round" />
+    </>
+  ),
+  cap: (
+    <>
+      <path d="m10 3.5 8 3.5-8 3.5-8-3.5 8-3.5Z" strokeLinejoin="round" />
+      <path d="M5.5 9.25v4C5.5 14.75 7.5 16 10 16s4.5-1.25 4.5-2.75v-4M18 7v4" strokeLinecap="round" />
+    </>
+  ),
 };
 
 type Feature = { text: string; included: boolean; highlight: boolean; icon: string };
@@ -112,6 +126,13 @@ function featureList(plan: PlanCard): Feature[] {
     },
     { text: "Avis Google synchronisés sur votre site", included: true, highlight: false, icon: "star" },
     { text: "Statistiques de visites et d'appels", included: true, highlight: false, icon: "chart" },
+    {
+      text: "Outil de recherche des mots-clefs SEO",
+      included: plan.keywordResearch,
+      highlight: plan.keywordResearch,
+      icon: "bulb",
+    },
+    { text: "Académie", included: plan.academy, highlight: plan.academy, icon: "cap" },
     { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];
 }
@@ -173,7 +194,7 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
 
       <div className="mx-auto mt-12 grid max-w-4xl gap-8 md:grid-cols-2">
         {plans.map((plan, i) => {
-          const popular = plan.id === "boost";
+          const popular = plan.id === "scale";
           const price = period === "annual" ? plan.annualMonthlyPrice : plan.monthlyPrice;
           return (
             <article

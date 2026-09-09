@@ -7,7 +7,7 @@ import { convertDemoToClient, type ConversionResult } from "../../convert-action
 
 const PLAN_LABELS = {
   starter: "Starter — 48 €/mois (annuel) · 69 €/mois",
-  boost: "Boost — 55 €/mois (annuel) · 79 €/mois",
+  scale: "Scale — 55 €/mois (annuel) · 79 €/mois",
 } as const;
 
 export function ConvertModal({
@@ -116,7 +116,7 @@ export function ConvertModal({
           </p>
           <div>
             <Label htmlFor="plan">Formule</Label>
-            <Select id="plan" name="plan" defaultValue="boost">
+            <Select id="plan" name="plan" defaultValue="scale">
               {Object.entries(PLAN_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -124,9 +124,9 @@ export function ConvertModal({
               ))}
             </Select>
             <FieldHint>
-              Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni suivi des
-              mots-clés. Boost : 6 pages de spécialités, blog (4 articles/semaine) et suivi des
-              mots-clés.
+              Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni outils SEO.
+              Scale : 6 pages de spécialités, blog (208 articles/an), suivi et recherche de
+              mots-clés, Académie.
             </FieldHint>
           </div>
           <div>

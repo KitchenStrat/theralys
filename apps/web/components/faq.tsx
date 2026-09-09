@@ -19,7 +19,7 @@ const QUESTIONS = [
   },
   {
     q: "Comment fonctionne le blog automatisé ?",
-    a: "Avec la formule Boost, jusqu'à 4 articles par semaine sont rédigés et publiés automatiquement sur les thématiques de votre pratique et les recherches locales de vos patients. Vous pouvez orienter les sujets, relire ou modifier chaque article depuis votre espace.",
+    a: "Avec la formule Scale, jusqu'à 4 articles par semaine sont rédigés et publiés automatiquement sur les thématiques de votre pratique et les recherches locales de vos patients. Vous pouvez orienter les sujets, relire ou modifier chaque article depuis votre espace.",
   },
   {
     q: "Puis-je modifier mon site moi-même ?",
@@ -35,7 +35,7 @@ const QUESTIONS = [
   },
   {
     q: "Comment suivez-vous mes résultats ?",
-    a: "Votre tableau de bord montre les visites, les appels et les demandes d'itinéraire générés par votre site. Avec la formule Boost, vous suivez aussi la position de votre cabinet sur vos mots-clés Google, semaine après semaine.",
+    a: "Votre tableau de bord montre les visites, les appels et les demandes d'itinéraire générés par votre site. Avec la formule Scale, vous suivez aussi la position de votre cabinet sur vos mots-clés Google, semaine après semaine.",
   },
 ];
 

@@ -34,6 +34,8 @@ export default function HomePage() {
       blogArticlesPerWeek: plan.blogArticlesPerWeek,
       blogArticlesPerYear: plan.blogArticlesPerYear,
       searchConsoleAccess: plan.searchConsoleAccess,
+      keywordResearch: plan.keywordResearch,
+      academy: plan.academy,
     };
   });
 

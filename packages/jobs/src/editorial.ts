@@ -2,7 +2,7 @@
  * Moteur éditorial — planification pure (sans DB, testée unitairement).
  * Le calendrier de sujets est généré automatiquement à partir des pages de
  * spécialités + la ville (maillage SEO local), à la cadence de la formule :
- * Boost 2/semaine (lun, jeu) · Scale 4/semaine (lun, mar, jeu, ven).
+ * Starter : pas de blog · Scale : 4/semaine (lun, mar, jeu, ven).
  */
 
 import type { BlogTheme, PlanId } from "@theralys/db";
@@ -19,8 +19,8 @@ export type PlannedTopic = {
 /** Jours de publication par formule (1 = lundi … 7 = dimanche). */
 export function cadenceDays(plan: PlanId): number[] {
   switch (plan) {
-    case "boost":
-    case "scale": // héritage : servie comme Boost
+    case "scale":
+    case "boost": // héritage : servie comme Scale
       return [1, 2, 4, 5];
     default:
       return [];

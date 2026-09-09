@@ -8,7 +8,7 @@ const MOTIFS = [
 ];
 
 describe("cadence par formule", () => {
-  it("Boost : 2/semaine (lundi, jeudi)", () => {
+  it("Scale : 4/semaine (lun, mar, jeu, ven)", () => {
     expect(cadenceDays("boost")).toEqual([1, 2, 4, 5]);
   });
   it("Scale : 4/semaine (lundi, mardi, jeudi, vendredi)", () => {
@@ -37,7 +37,7 @@ describe("planEditorialTopics", () => {
     }
   });
 
-  it("Boost : 4 sujets par semaine", () => {
+  it("Scale : 4 sujets par semaine", () => {
     const topics = planEditorialTopics({ ...base, plan: "boost" });
     expect(topics.length).toBe(16);
   });
