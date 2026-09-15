@@ -1,5 +1,5 @@
 import { motifPagesAllowance } from "@theralys/db";
-import type { Section } from "@theralys/shared";
+import { signSitePreviewToken, type Section } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getEditablePages, getProspect, getSite, siteUrl } from "@/lib/data";
 import { SiteEditor } from "./site-editor";
@@ -17,6 +17,11 @@ export default async function EditorPage({ searchParams }: Props) {
 
   const site = await getSite(session.siteId);
   const [allPages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
+  // Jeton signé pour l'aperçu : le site public affiche la démo même expirée et
+  // les pages désactivées à l'éditeur seul (vérifié par le middleware des sites)
+  const previewToken = process.env.AUTH_SECRET
+    ? await signSitePreviewToken({ siteId: site.id }, process.env.AUTH_SECRET)
+    : "";
   // Les pages de spécialités suivent la formule (Starter : aucune page dédiée
   // publique — on ne propose donc pas de les éditer) ; les démos, en formule
   // complète, gardent les leurs.
@@ -62,6 +67,7 @@ export default async function EditorPage({ searchParams }: Props) {
         cabinets: site.theme.cabinets ?? [],
         faviconUrl: site.theme.faviconUrl ?? "",
         shareImageUrl: site.theme.shareImageUrl ?? "",
+        previewToken,
       }}
       city={prospect?.city ?? ""}
       phone={homeContact?.phone ?? ""}

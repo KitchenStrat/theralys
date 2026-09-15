@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { signPreviewToken, verifyPreviewToken } from "./preview-token";
+import {
+  signPreviewToken,
+  signSitePreviewToken,
+  verifyPreviewToken,
+  verifySitePreviewToken,
+} from "./preview-token";
 import { readingTimeMinutes, relativeTimeFr, reviewDateFr } from "./dates";
 import { slugify, uniqueSlug } from "./slug";
 
@@ -39,6 +44,27 @@ describe("preview token", () => {
   it("rejette un token altéré", async () => {
     const token = await signPreviewToken({ articleId: "a1", siteId: "s1" }, secret);
     expect(await verifyPreviewToken(token.slice(0, -4) + "AAAA", secret)).toBeNull();
+  });
+});
+
+describe("site preview token (aperçu éditeur)", () => {
+  const secret = "test-secret-for-preview-tokens";
+
+  it("signe et vérifie un jeton de site", async () => {
+    const token = await signSitePreviewToken({ siteId: "s1" }, secret);
+    expect(await verifySitePreviewToken(token, secret)).toEqual({ siteId: "s1" });
+  });
+
+  it("rejette un jeton expiré ou d'un autre secret", async () => {
+    expect(await verifySitePreviewToken(await signSitePreviewToken({ siteId: "s1" }, secret, -60), secret)).toBeNull();
+    expect(await verifySitePreviewToken(await signSitePreviewToken({ siteId: "s1" }, "autre"), secret)).toBeNull();
+  });
+
+  it("n'accepte pas un jeton d'article à la place d'un jeton de site (et inversement)", async () => {
+    const article = await signPreviewToken({ articleId: "a1", siteId: "s1" }, secret);
+    expect(await verifySitePreviewToken(article, secret)).toBeNull();
+    const site = await signSitePreviewToken({ siteId: "s1" }, secret);
+    expect(await verifyPreviewToken(site, secret)).toBeNull();
   });
 });
 

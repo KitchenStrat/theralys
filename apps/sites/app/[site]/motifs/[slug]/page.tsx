@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { Section } from "@theralys/shared";
 import { Sections } from "@/components/sections";
@@ -11,10 +12,7 @@ import {
   siteBaseUrl,
 } from "@/lib/site-data";
 
-type Props = {
-  params: Promise<{ site: string; slug: string }>;
-  searchParams?: Promise<{ apercu?: string }>;
-};
+type Props = { params: Promise<{ site: string; slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { site: siteKey, slug } = await params;
@@ -35,12 +33,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function MotifPage({ params, searchParams }: Props) {
+export default async function MotifPage({ params }: Props) {
   const { site: siteKey, slug } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
-  // ?apercu=1 : l'éditeur du studio prévisualise aussi les pages désactivées
-  const preview = (await searchParams)?.apercu === "1";
+  // Aperçu depuis l'éditeur du studio (jeton signé `?apercu=`, vérifié par le
+  // middleware) : les pages désactivées restent prévisualisables
+  const preview = (await headers()).get("x-hy-preview") === site.id;
   const page = await getMotifPage(site, slug, { includeDisabled: preview });
   if (!page) notFound();
 

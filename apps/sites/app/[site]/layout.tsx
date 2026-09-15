@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ConsentBanner } from "@/components/consent-banner";
@@ -50,7 +51,10 @@ export default async function SiteLayout({ children, params }: Props) {
     );
   }
 
-  if (isDemoExpired(site)) {
+  // Aperçu depuis l'éditeur du studio (jeton signé vérifié par le middleware) :
+  // la démo reste affichée même expirée — le public, lui, voit le message.
+  const editorPreview = (await headers()).get("x-hy-preview") === site.id;
+  if (isDemoExpired(site) && !editorPreview) {
     return (
       <main className="flex min-h-screen items-center justify-center p-8 text-center">
         <div className="max-w-md">

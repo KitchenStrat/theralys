@@ -309,6 +309,8 @@ export async function regenerateDemo(siteId: string): Promise<void> {
       status: "generating",
       generationError: null,
       generationProgress: { home: false, motifs: false, reviews: false, articles: false },
+      // Une démo régénérée est une démo qu'on va présenter : validité relancée
+      demoExpiresAt: new Date(Date.now() + 30 * 86_400_000),
       updatedAt: new Date(),
     })
     .where(eq(sites.id, siteId));

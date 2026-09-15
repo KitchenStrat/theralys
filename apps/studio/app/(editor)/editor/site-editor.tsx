@@ -53,6 +53,8 @@ type Props = {
     faviconUrl: string;
     /** Image de l'aperçu du lien ("" = photo du hero de l'accueil) */
     shareImageUrl: string;
+    /** Jeton signé d'aperçu (`?apercu=`) — vide si AUTH_SECRET est absente */
+    previewToken: string;
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
@@ -537,11 +539,12 @@ export function SiteEditor({
   }
 
   const previewPath = useMemo(() => {
-    if (!selectedPage || selectedPage.type === "home") return "";
-    // ?apercu=1 : les pages désactivées restent prévisualisables dans l'éditeur
-    if (selectedPage.type === "motif") return `/motifs/${selectedPage.slug}?apercu=1`;
-    return "";
-  }, [selectedPage]);
+    const path =
+      selectedPage && selectedPage.type === "motif" ? `/motifs/${selectedPage.slug}` : "";
+    // ?apercu=<jeton signé> : l'aperçu affiche la démo même expirée et les
+    // pages désactivées (vérifié côté sites par le middleware)
+    return site.previewToken ? `${path}?apercu=${encodeURIComponent(site.previewToken)}` : path;
+  }, [selectedPage, site.previewToken]);
 
   const activeSettingsLabel =
     SETTINGS_NAV.flatMap((g) => g.items).find((i) => i.id === settingsTab)?.label ?? "";
