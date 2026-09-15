@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { SECTION_ICONS, SECTION_ICON_LABELS, specialtyIconFor, type Section } from "@theralys/shared";
+import { SECTION_ICONS, SECTION_ICON_LABELS, futureBodyText, specialtyIconFor, type Section } from "@theralys/shared";
 import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
 
@@ -208,40 +208,13 @@ export function SectionFields({
             onChange={(title) => onChange({ title })}
           />
           <RichField
-            label="Phrase d'introduction"
-            minHeight="min-h-16"
-            value={section.intro ?? ""}
-            onChange={(intro) => onChange({ intro })}
+            label="Texte (introduction + liste à puces)"
+            multiline
+            minHeight="min-h-48"
+            value={futureBodyText(section)}
+            onChange={(body) => onChange({ body })}
+            hint="💡 Une ligne par bénéfice via le bouton liste à puces · B : le début de ligne en gras · la première ligne sert d'introduction"
           />
-          {section.bullets.map((bullet, i) => (
-            <div key={i}>
-              <RichField
-                label={`Bénéfice ✅ ${i + 1}`}
-                multiline
-                minHeight="min-h-16"
-                value={bullet}
-                onChange={(text) =>
-                  onChange({ bullets: section.bullets.map((b, j) => (j === i ? text : b)) })
-                }
-              />
-              {section.bullets.length > 1 ? (
-                <div className="mt-1">
-                  <RemoveButton
-                    label="Supprimer ce bénéfice"
-                    onClick={() => onChange({ bullets: section.bullets.filter((_, j) => j !== i) })}
-                  />
-                </div>
-              ) : null}
-            </div>
-          ))}
-          <AddButton
-            label="+ Ajouter un bénéfice"
-            onClick={() => onChange({ bullets: [...section.bullets, ""] })}
-          />
-          <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-            💡 Sélectionnez un passage puis <strong>B</strong> (ou Ctrl+B) : il passe en gras
-            directement — mettez le bénéfice clé en gras en début de ligne
-          </p>
           <ImageField
             label="Photo (séance avec un(e) patient(e)…)"
             value={section.imageUrl ?? ""}

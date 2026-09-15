@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
-import { reviewDateFr, specialtyIconFor, type Section, type SiteCabinet } from "@theralys/shared";
+import { futureBodyText, reviewDateFr, specialtyIconFor, type Section, type SiteCabinet } from "@theralys/shared";
 import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
@@ -807,7 +807,7 @@ function Specialties({
   );
 }
 
-/** Projection positive : bénéfices ✅ à gauche, photo de séance fondue à droite. */
+/** Projection positive : liste à puces à gauche, photo de séance fondue à droite. */
 function Future({ section, ctx }: { section: Extract<Section, { type: "future" }>; ctx: SectionContext }) {
   return (
     <section className="relative scroll-mt-20 overflow-hidden">
@@ -856,27 +856,9 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
           <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
             <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
           </h2>
-          {section.intro ? (
-            <p className="mt-6 text-xl opacity-85">
-              <Rich text={section.intro} />
-            </p>
-          ) : null}
-          <ul className="mt-6 space-y-3.5">
-            {section.bullets.map((bullet, i) => (
-              <li
-                key={i}
-                style={{ transitionDelay: `${Math.min(i, 5) * 70}ms` }}
-                className="reveal flex items-start gap-2.5 text-[1.1rem] leading-relaxed"
-              >
-                <span aria-hidden className="mt-0.5 shrink-0">
-                  ✅
-                </span>
-                <div className="min-w-0 opacity-90">
-                  <RichBlocks text={bullet} />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="mt-6 text-[1.1rem] leading-relaxed opacity-90 [&_ul]:my-4 [&_ul]:space-y-3 [&_ol]:my-4 [&_ol]:space-y-3">
+            <RichBlocks text={futureBodyText(section)} />
+          </div>
           <div className="mt-9">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} label={section.ctaLabel} />
           </div>

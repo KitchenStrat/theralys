@@ -137,20 +137,38 @@ export type AboutSection = {
   infoCards?: { icon?: string; title: string; text: string }[];
 };
 
-/** Projection positive vers l'avenir : bénéfices ✅ + photo de séance. */
+/** Projection positive vers l'avenir : liste à puces + photo de séance. */
 export type FutureSection = {
   type: "future";
   /** Badge pilule, ex. « Santé & Équilibre » */
   badge?: string;
   /** Titre projectif, ex. « Et si vous retrouviez enfin … ? » */
   title: string;
-  /** Phrase d'introduction de la liste, avec **gras** */
+  /**
+   * Zone de texte unique : phrase d'introduction, lignes « - » en puces,
+   * **gras**… Remplace intro + bullets (conservés en lecture pour les
+   * contenus existants — cf. futureBodyText).
+   */
+  body?: string;
+  /** Héritage : phrase d'introduction de l'ancienne liste de bénéfices */
   intro?: string;
-  /** Lignes de bénéfices (rendues avec une coche ✅) */
+  /** Héritage : lignes de bénéfices (converties en puces à l'affichage) */
   bullets: string[];
   ctaLabel?: string;
   imageUrl?: string;
 };
+
+/**
+ * Texte unique de la section « avenir » : `body`, sinon conversion de
+ * l'ancien format (intro + bénéfices transformés en lignes à puces).
+ */
+export function futureBodyText(section: FutureSection): string {
+  if (section.body !== undefined) return section.body;
+  const bullets = section.bullets.map((b) =>
+    /^([-•]|✅|\d{1,2}[.)])\s/.test(b) ? b : `- ${b}`,
+  );
+  return [section.intro, ...bullets].filter((s): s is string => Boolean(s)).join("\n");
+}
 
 /** Les avis eux-mêmes viennent de la table google_reviews (synchronisés). */
 export type ReviewsSection = {
