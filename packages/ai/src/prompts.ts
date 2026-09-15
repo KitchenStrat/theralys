@@ -5,8 +5,11 @@ Ton professionnel, chaleureux et sobre. Public visé : particuliers stressés ou
 cherchant un accompagnement bien-être près de chez eux. Vouvoiement systématique.
 
 MISE EN FORME (impact) :
-- Mets en **gras** (double astérisque) les 2 à 4 passages clés de chaque bloc de texte :
-  bénéfices concrets, mots forts, éléments différenciants.
+- Mets en **gras** (double astérisque) 1 à 3 passages clés de CHAQUE texte descriptif :
+  bénéfices concrets, mots forts, éléments différenciants. Cela vaut pour tous les champs
+  de texte du JSON (paragraphs, excerpt, text, answer, description, intro, note, body), pas
+  seulement ceux où c'est rappelé. Un passage = 2 à 6 mots, jamais une phrase entière ;
+  jamais de gras dans les titres, badges, boutons, questions de FAQ ni valeurs chiffrées.
 - Paragraphes courts : 1 à 3 phrases maximum, jamais de pavé.
 - Pour énumérer des points forts, formations ou bénéfices : des lignes commençant par
   « ✅ » (une par point, séparées par des retours à la ligne).`;
@@ -42,14 +45,14 @@ Produis un JSON avec cette forme exacte :
   "metaDescription": "…",       // ≤ 155 caractères
   "sections": [
     { "type": "hero", "badge": "Métier à Ville", "title": "H1 orienté bénéfice, ≤ 90 caractères", "paragraphs": ["2 à 3 paragraphes courts, avec des passages **gras**"], "showGoogleRating": ${Boolean(input.googleEnrichment?.rating)}, "ctaLabel": "Prendre Rendez-Vous", "stats": [ { "icon": "…", "value": "…", "label": "…" } ] },  // exactement 2 badges de preuve sociale, chiffres plausibles pour ce métier (le praticien les ajustera) : ex. « +1000 / Patients accompagnés », « 8 ans / D'expérience »${input.googleEnrichment?.rating ? " — utilise la note Google du contexte pour l'un des deux (ex. « 5/5 / Basé sur N avis Google », icon « etoile »)" : ""}
-    { "type": "highlights", "items": [ { "icon": "…", "title": "2 à 4 mots", "text": "1 phrase courte" } ] },  // exactement 4 points forts concrets (approche, personnalisation, cadre, accès/praticité)
-    { "type": "specialties", "title": "…", "intro": "…", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "2 phrases, 25 à 35 mots : le motif et pour qui, puis l'approche ou le bénéfice attendu", "icon": "…" } ] },  // exactement ${input.motifPageCount} items — icône DIFFÉRENTE par carte, la plus évocatrice du motif (dos → colonne, sommeil → lune, périnatalité → bebe…)
+    { "type": "highlights", "items": [ { "icon": "…", "title": "2 à 4 mots", "text": "1 phrase courte avec 1 passage **gras**" } ] },  // exactement 4 points forts concrets (approche, personnalisation, cadre, accès/praticité)
+    { "type": "specialties", "title": "…", "intro": "1 phrase avec **gras**", "items": [ { "slug": "slug-url", "title": "…", "excerpt": "2 phrases, 25 à 35 mots, avec 1 ou 2 passages **gras** (le motif concret, le bénéfice) : le motif et pour qui, puis l'approche ou le bénéfice attendu", "icon": "…" } ] },  // exactement ${input.motifPageCount} items — icône DIFFÉRENTE par carte, la plus évocatrice du motif (dos → colonne, sommeil → lune, périnatalité → bebe…)
     { "type": "future", "badge": "2-3 mots (ex. « Santé & Équilibre »)", "title": "question projective ≤ 75 caractères (ex. « Et si vous retrouviez enfin un sommeil paisible ? »)", "intro": "1 phrase avec **gras** qui introduit la liste, se terminant par « il devient possible de : »", "bullets": ["exactement 5 lignes ; chaque ligne commence par un passage **gras** (le bénéfice) suivi d'un complément concret — possibilités et mieux-être, jamais de promesse de résultat"], "ctaLabel": "Prendre Rendez-Vous" },
     { "type": "about", "title": "…", "paragraphs": ["3 à 4 paragraphes courts avec **gras** ; le dernier est une liste de lignes ✅ (parcours, formations, points forts) séparées par des retours à la ligne"], "infoCards": [ { "icon": "…", "title": "…", "text": "avec **gras**" } ] },  // exactement 3 cartes infos pratiques : durée de la séance, tarification avec des montants réalistes pour ce métier (ex. « Consultation **60 €** — séance sportive **90 €** », CB/chèque/espèces — le praticien ajustera), remboursement/mutuelles (ex. « prise en charge par de nombreuses mutuelles »)
     { "type": "reviews", "title": "…" },
     { "type": "process", "title": "Le déroulement d'une séance", "steps": [ { "title": "…", "description": "3 phrases, 50 à 70 mots, avec 2 ou 3 passages **gras** sur les mots importants : ce qui se passe concrètement, comment le praticien procède, ce que la personne ressent ou en retire" } ] },  // exactement 4 étapes (ex. : échange, séance, retour au calme, suivi)
-    { "type": "faq", "title": "Questions fréquentes", "items": [ { "question": "…", "answer": "…" } ] },  // exactement 7 questions (déroulement, préparation, durée, tarif/règlement, nombre de séances, public concerné, complémentarité avec un suivi médical)
-    { "type": "contact", "title": "Informations", "address": "…", "phone": "06 39 98 01 23", "note": "…", "infoCards": [ { "icon": "medaille", "title": "6 années d'expérience", "text": "métier" }, { "icon": "carte", "title": "Cabinet facile d'accès", "text": "parking, horaires…" } ] }  // exactement 2 cartes ; le téléphone est un numéro fictif (plage réservée), le praticien mettra le sien
+    { "type": "faq", "title": "Questions fréquentes", "items": [ { "question": "…", "answer": "2 à 3 phrases avec 1 ou 2 passages **gras**" } ] },  // exactement 7 questions (déroulement, préparation, durée, tarif/règlement, nombre de séances, public concerné, complémentarité avec un suivi médical)
+    { "type": "contact", "title": "Informations", "address": "…", "phone": "06 39 98 01 23", "note": "1 phrase pratique avec **gras** (accès, parking, horaires…)", "infoCards": [ { "icon": "medaille", "title": "6 années d'expérience", "text": "métier" }, { "icon": "carte", "title": "Cabinet facile d'accès", "text": "parking, horaires…" } ] }  // exactement 2 cartes ; le téléphone est un numéro fictif (plage réservée), le praticien mettra le sien
   ],
   "motifsPlan": [ { "slug": "…", "title": "…", "excerpt": "…" } ]  // les mêmes ${input.motifPageCount} spécialités que la section specialties
 }
@@ -87,9 +90,9 @@ Produis un JSON avec cette forme exacte :
   "metaDescription": "…",  // ≤ 155 caractères
   "imageQuery": "…",       // 3-5 mots ANGLAIS pour trouver une photo de banque d'images adaptée au motif (ex. "peaceful sleep bedroom rest") — concret et visuel, jamais de nom propre
   "sections": [
-    { "type": "hero", "badge": "…", "title": "…", "paragraphs": ["1 paragraphe d'intro"], "ctaLabel": "Prendre Rendez-Vous" },
-    { "type": "richText", "body": "corps markdown ~500 mots avec des titres ## et une liste de bienfaits" },
-    { "type": "faq", "title": "…", "items": [ { "question": "…", "answer": "…" } ] }  // 3 questions spécifiques — PAS de section cta : les avis Google et le contact suivent automatiquement
+    { "type": "hero", "badge": "…", "title": "…", "paragraphs": ["1 paragraphe d'intro, 2 à 3 phrases, avec 2 passages **gras**"], "ctaLabel": "Prendre Rendez-Vous" },
+    { "type": "richText", "body": "corps markdown ~500 mots avec des titres ##, 1 à 3 passages **gras** par paragraphe, et une liste de bienfaits dont chaque puce commence par un passage **gras**" },
+    { "type": "faq", "title": "…", "items": [ { "question": "…", "answer": "2 à 3 phrases avec 1 ou 2 passages **gras**" } ] }  // 3 questions spécifiques — PAS de section cta : les avis Google et le contact suivent automatiquement
   ]
 }`;
 }
@@ -121,7 +124,8 @@ export const ARTICLE_STRUCTURE = `STRUCTURE OBLIGATOIRE du "content" markdown (i
 4. Un « ## » sur ce que la pratique peut apporter (titre libre) : 1-2 paragraphes, puis une liste numérotée de 4-5 apports concrets (début en **gras**) — des possibilités, jamais de promesse de résultat.
 5. « ### Un exercice à essayer maintenant » : 1 phrase d'introduction puis une liste numérotée de 5 à 7 étapes simples réalisables chez soi.
 6. « ## Quand consulter ? » : 3-4 puces de situations où une consultation peut aider, puis 1 paragraphe rappelant que la pratique ne se substitue pas à un avis médical et qu'une douleur intense ou persistante relève d'un professionnel de santé.
-7. « ## Questions fréquentes » : exactement 3 questions ; chaque question seule sur sa ligne en **gras** (ex. **Le stress peut-il causer des douleurs ?**), suivie d'un paragraphe de réponse.`;
+7. « ## Questions fréquentes » : exactement 3 questions ; chaque question seule sur sa ligne en **gras** (ex. **Le stress peut-il causer des douleurs ?**), suivie d'un paragraphe de réponse.
+Dans chaque paragraphe, 1 à 2 passages **gras** (2 à 6 mots) sur les mots pertinents — jamais une phrase entière.`;
 
 export function articlesUserPrompt(input: GenerationInput, motifs: MotifPlan[]): string {
   return `${buildContext(input)}

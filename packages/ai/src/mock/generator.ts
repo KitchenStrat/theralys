@@ -6,6 +6,7 @@
 import { slugify, specialtyIconFor, type PageSections } from "@theralys/shared";
 import { mockVoicedArticle } from "../article";
 import { stockQueryFor } from "../stock";
+import { emphasizeLead } from "../emphasis";
 import { COMMON_FAQ, resolveProfession, type ProfessionSeed, type SpecialtySeed } from "./catalog";
 import type {
   GeneratedArticle,
@@ -100,22 +101,22 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
         {
           icon: "medaille",
           title: acc(input, "Praticien diplômé", "Praticienne diplômée"),
-          text: `${acc(input, "Formé", "Formée")} et ${acc(input, "certifié", "certifiée")} en ${seed.practiceName}`,
+          text: `**${acc(input, "Formé", "Formée")} et ${acc(input, "certifié", "certifiée")}** en ${seed.practiceName}`,
         },
         {
           icon: "mains",
           title: "Séance personnalisée",
-          text: "Chaque séance adaptée à vos besoins",
+          text: "Chaque séance **adaptée à vos besoins**",
         },
         {
           icon: "fleur",
           title: "Cadre apaisant",
-          text: "Un espace calme, propice au lâcher-prise",
+          text: "Un espace calme, **propice au lâcher-prise**",
         },
         {
           icon: "carte",
           title: "Cabinet facile d'accès",
-          text: `Au cœur de ${input.city}, parking à proximité`,
+          text: `Au cœur de ${input.city}, **parking à proximité**`,
         },
       ],
     },
@@ -236,7 +237,7 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
       address: input.googleEnrichment?.address ?? `${input.city}`,
       // Numéro fictif (plage réservée 06 39 98 XX XX) — remplacé par le praticien
       phone: "06 39 98 01 23",
-      note: "Parking facile et gratuit",
+      note: "**Parking facile et gratuit** à proximité du cabinet",
       infoCards: [
         { icon: "medaille", title: "6 années d'expérience", text: capitalize(input.profession) },
         {
@@ -252,7 +253,7 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
     siteName,
     metaTitle: `${input.profession} à ${input.city} — ${name}`,
     metaDescription: `${name}, ${practitioner} à ${input.city}. ${seed.heroTagline}. Prise de rendez-vous en ligne.`,
-    sections,
+    sections: emphasizeSections(sections),
     motifsPlan: motifs.map(({ slug, title, excerpt }) => ({ slug, title, excerpt })),
     theme: { preset: seed.themePreset, fontPreset: "chaleureux" },
   };
@@ -310,7 +311,7 @@ export function mockGenerateMotifPage(
     metaTitle: `${spec.title} à ${input.city} — ${fullName(input)}`,
     // La description doublée dépasse les ~155 caractères SEO : première phrase seule
     metaDescription: (spec.excerpt.split(". ")[0] ?? spec.excerpt).slice(0, 155),
-    sections,
+    sections: emphasizeSections(sections),
     imageQuery: stockQueryFor(spec.title, input.profession),
   };
 }
@@ -404,6 +405,37 @@ export function mockGenerateArticles(
       motifSlug: motif.slug,
       imageQuery: stockQueryFor(motif.title, input.profession),
     };
+  });
+}
+
+/**
+ * Même mise en forme que la génération réelle : des passages en gras dans
+ * chaque texte descriptif (attaque de paragraphe, résumé, réponse de FAQ…).
+ * Les textes déjà mis en forme et les listes ✅ sont laissés tels quels.
+ */
+function emphasizeSections(sections: PageSections): PageSections {
+  return sections.map((s) => {
+    switch (s.type) {
+      case "hero":
+      case "about":
+        return { ...s, paragraphs: s.paragraphs.map(emphasizeLead) };
+      case "specialties":
+        return {
+          ...s,
+          ...(s.intro ? { intro: emphasizeLead(s.intro) } : {}),
+          items: s.items.map((it) => ({ ...it, excerpt: emphasizeLead(it.excerpt) })),
+        };
+      case "faq":
+        return { ...s, items: s.items.map((it) => ({ ...it, answer: emphasizeLead(it.answer) })) };
+      case "process":
+        return { ...s, steps: s.steps.map((st) => ({ ...st, description: emphasizeLead(st.description) })) };
+      case "contact":
+        return { ...s, ...(s.note ? { note: emphasizeLead(s.note) } : {}) };
+      case "richText":
+        return { ...s, body: emphasizeLead(s.body) };
+      default:
+        return s;
+    }
   });
 }
 

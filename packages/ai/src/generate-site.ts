@@ -68,7 +68,7 @@ export function createSiteGenerator(env: NodeJS.ProcessEnv = process.env): SiteG
     mode,
     async generateHome(input) {
       const result = await completeStructured(
-        opts,
+        { ...opts, emphasis: true },
         HOME_SYSTEM,
         homeUserPrompt(input),
         generatedHomeSchema,
@@ -81,7 +81,12 @@ export function createSiteGenerator(env: NodeJS.ProcessEnv = process.env): SiteG
       };
     },
     generateMotifPage(input, motif) {
-      return completeStructured(opts, MOTIF_SYSTEM, motifUserPrompt(input, motif), generatedMotifPageSchema);
+      return completeStructured(
+        { ...opts, emphasis: true },
+        MOTIF_SYSTEM,
+        motifUserPrompt(input, motif),
+        generatedMotifPageSchema,
+      );
     },
     generateReviews(input) {
       return completeStructured(opts, REVIEWS_SYSTEM, reviewsUserPrompt(input), generatedReviewsSchema);

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
+import { emphasisFeedback, findEmphasisGaps, needsEmphasisRetry } from "./emphasis";
 import { ETHICAL_PROMPT_RULES, checkEthicalComplianceDeep } from "./guardrails";
 
 const DEFAULT_MODEL = "claude-opus-5";
@@ -11,6 +12,11 @@ export type AnthropicClientOptions = {
   model?: string;
   /** Profondeur de réflexion (défaut : ANTHROPIC_EFFORT, sinon « high ») */
   effort?: Effort;
+  /**
+   * Exige des passages **gras** dans chaque texte descriptif (pages du site) :
+   * une relance avec le détail des oublis si le modèle les a omis en masse.
+   */
+  emphasis?: boolean;
 };
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -90,6 +96,14 @@ export async function completeStructured<T>(
           `Contenu non conforme au marketing éthique : ${compliance.violations[0]?.rule}`,
         );
         continue;
+      }
+      // Mise en forme : un oubli massif du gras vaut une relance (une seule)
+      if (opts.emphasis && attempt === 0) {
+        const report = findEmphasisGaps(parsed);
+        if (needsEmphasisRetry(report)) {
+          feedback = emphasisFeedback(report);
+          continue;
+        }
       }
       return parsed;
     } catch (err) {
