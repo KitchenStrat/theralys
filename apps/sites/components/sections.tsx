@@ -666,8 +666,11 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           ) : null}
         </div>
       ) : null}
-      <div className="relative mx-auto flex max-w-7xl px-4 pb-14 pt-2 lg:min-h-[40rem] lg:items-center lg:justify-end lg:py-24">
-        <div className="hy-rise lg:w-[57%] lg:pl-8">{content}</div>
+      {/* Le texte démarre après la photo (47 % de la largeur) + une gouttière :
+          la colonne suit la largeur de l'écran, pas un conteneur centré, sinon
+          les deux se chevauchent entre 1024 et 1600 px. */}
+      <div className="relative flex px-4 pb-14 pt-2 lg:min-h-[40rem] lg:items-center lg:py-24 lg:pl-[calc(47%+3rem)] lg:pr-6 xl:pl-[calc(47%+4rem)] xl:pr-10">
+        <div className="hy-rise w-full lg:max-w-[46rem]">{content}</div>
       </div>
       <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
     </section>
