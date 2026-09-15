@@ -37,21 +37,38 @@ export function Sections({ sections, ctx }: { sections: Section[]; ctx: SectionC
       {sections.map((section, i) => (
         // data-hy-section : repère utilisé par l'éditeur du studio (EditorBridge)
         <div key={`${section.type}-${i}`} data-hy-section={i}>
-          <SectionRenderer section={section} ctx={enriched} />
+          <SectionRenderer
+            section={section}
+            ctx={enriched}
+            prevType={sections[i - 1]?.type}
+            nextType={sections[i + 1]?.type}
+          />
         </div>
       ))}
     </>
   );
 }
 
-function SectionRenderer({ section, ctx }: { section: Section; ctx: SectionContext }) {
+function SectionRenderer({
+  section,
+  ctx,
+  prevType,
+  nextType,
+}: {
+  section: Section;
+  ctx: SectionContext;
+  prevType?: Section["type"];
+  nextType?: Section["type"];
+}) {
   switch (section.type) {
     case "hero":
       return <Hero section={section} ctx={ctx} />;
     case "highlights":
-      return <Highlights section={section} />;
+      // Suivie de la bande sombre des spécialités : fondu direct, sans
+      // repasser par le fond clair (évite le « flash » entre deux sections foncées)
+      return <Highlights section={section} mergeBottom={nextType === "specialties"} />;
     case "specialties":
-      return <Specialties section={section} ctx={ctx} />;
+      return <Specialties section={section} ctx={ctx} mergedTop={prevType === "highlights"} />;
     case "future":
       return <Future section={section} ctx={ctx} />;
     case "about":
@@ -606,9 +623,9 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           className="hy-kenburns h-full w-full object-cover"
           style={{
             maskImage:
-              "linear-gradient(to right, black 72%, transparent 99%), linear-gradient(to bottom, black 88%, transparent 100%)",
+              "linear-gradient(to right, black 72%, transparent 99%), linear-gradient(to bottom, black 80%, transparent 97%)",
             WebkitMaskImage:
-              "linear-gradient(to right, black 72%, transparent 99%), linear-gradient(to bottom, black 88%, transparent 100%)",
+              "linear-gradient(to right, black 72%, transparent 99%), linear-gradient(to bottom, black 80%, transparent 97%)",
             maskComposite: "intersect",
             WebkitMaskComposite: "source-in",
           }}
@@ -620,8 +637,8 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           alt=""
           className="max-h-[44vh] w-full object-cover object-top"
           style={{
-            maskImage: "linear-gradient(to bottom, black 82%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 82%, transparent 100%)",
+            maskImage: "linear-gradient(to bottom, black 80%, transparent 97%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 80%, transparent 97%)",
           }}
         />
         {stats[0] ? (
@@ -658,7 +675,13 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
 }
 
 /** Bandeau de points forts sur fond coloré, entre le hero et les spécialités. */
-function Highlights({ section }: { section: Extract<Section, { type: "highlights" }> }) {
+function Highlights({
+  section,
+  mergeBottom = false,
+}: {
+  section: Extract<Section, { type: "highlights" }>;
+  mergeBottom?: boolean;
+}) {
   if (section.items.length === 0) return null;
   const cols =
     section.items.length >= 4
@@ -670,7 +693,9 @@ function Highlights({ section }: { section: Extract<Section, { type: "highlights
     <section
       className="relative overflow-hidden pb-14 pt-24 lg:pb-16"
       style={{
-        background: "linear-gradient(to bottom, var(--site-bg), var(--site-primary) 2.5rem)",
+        background: mergeBottom
+          ? "linear-gradient(to bottom, var(--site-bg), var(--site-primary) 1.25rem, var(--site-primary) calc(100% - 3rem), var(--site-deep))"
+          : "linear-gradient(to bottom, var(--site-bg), var(--site-primary) 1.25rem, var(--site-primary) calc(100% - 1.25rem), var(--site-bg))",
       }}
     >
       <div aria-hidden className="wave-bg-light absolute inset-0" />
@@ -702,9 +727,11 @@ function Highlights({ section }: { section: Extract<Section, { type: "highlights
 function Specialties({
   section,
   ctx,
+  mergedTop = false,
 }: {
   section: Extract<Section, { type: "specialties" }>;
   ctx: SectionContext;
+  mergedTop?: boolean;
 }) {
   // Toutes les spécialités restent affichées quelle que soit la formule ;
   // seules les cartes dont la page secondaire est accessible sont cliquables
@@ -716,7 +743,7 @@ function Specialties({
   return (
     <section
       id="specialites"
-      className="fade-deep-both relative scroll-mt-20 py-20 text-[var(--site-on-deep)] lg:py-24"
+      className={`${mergedTop ? "fade-deep-bottom" : "fade-deep-both"} relative scroll-mt-20 py-20 text-[var(--site-on-deep)] lg:py-24`}
     >
       <div aria-hidden className="wave-bg-light stage-light absolute inset-0" />
       <div className="relative mx-auto max-w-7xl px-4">
