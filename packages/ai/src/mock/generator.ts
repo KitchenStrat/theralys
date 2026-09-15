@@ -185,21 +185,21 @@ export function mockGenerateHome(input: GenerationInput): GeneratedHome {
         {
           title: "Un temps d'échange",
           description:
-            "Nous faisons le point ensemble : votre quotidien, vos attentes, ce qui vous amène aujourd'hui. Ce moment oriente toute la séance.",
+            "Nous faisons le point ensemble : votre quotidien, vos attentes et **ce qui vous amène aujourd'hui**. Je vous pose quelques questions sur votre rythme de vie, votre sommeil, vos tensions ou vos objectifs, dans un **climat de confiance** et sans jugement. Ce moment d'écoute me permet d'**adapter la séance** à votre situation réelle plutôt que d'appliquer un protocole tout fait.",
         },
         {
           title: "La séance",
-          description: `Installé(e) confortablement, vous profitez d'un accompagnement centré sur ${motifs[0]?.seed.focus ?? "votre détente"}, ajusté en continu à votre confort.`,
+          description: `Installé(e) confortablement, vous profitez d'un accompagnement centré sur **${motifs[0]?.seed.focus ?? "votre détente"}**, ajusté en continu à votre confort. Je vous guide **pas à pas**, en vous expliquant ce que je fais et pourquoi, pour que vous restiez acteur de la séance. Vous n'avez rien à réussir ni à forcer : l'objectif est de laisser votre corps et votre esprit **retrouver leur propre équilibre**, à votre rythme.`,
         },
         {
           title: "Le retour au calme",
           description:
-            "La séance se termine en douceur. Nous prenons un moment pour échanger sur votre ressenti, sans jamais rien forcer.",
+            "La séance se termine **en douceur**, avec quelques minutes pour revenir à vous et à l'instant présent. Nous prenons ensuite un moment pour échanger sur **votre ressenti** : ce que vous avez perçu, ce qui vous a surpris ou apaisé, sans jamais rien forcer. Ces observations sont précieuses : elles me permettent d'**affiner les séances suivantes** et de suivre votre évolution.",
         },
         {
           title: "Des repères pour la suite",
           description:
-            "Vous repartez avec des repères simples à refaire chez vous. Si vous le souhaitez, nous définissons ensemble le rythme qui vous convient.",
+            "Vous repartez avec des **repères simples à refaire chez vous** : une respiration, un geste, une attention à porter au quotidien pour prolonger les effets de la séance. Si vous le souhaitez, nous définissons ensemble **le rythme qui vous convient**, sans engagement ni pression. Chaque parcours est unique : certains viennent pour quelques séances ciblées, d'autres pour un **accompagnement plus régulier**.",
         },
       ],
     },
