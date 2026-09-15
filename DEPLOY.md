@@ -5,7 +5,7 @@ managée (Neon). Durée totale : ~45 minutes. Aucune ligne de commande n'est
 nécessaire, sauf pour les migrations (étape 2.3).
 
 > **Plan Vercel** : le plan **Pro (20 $/mois)** est nécessaire en production —
-> la génération IA d'une démo dure ~4-5 min (fonctions jusqu'à 300 s, configuré
+> la génération IA d'une démo dure ~4-5 min (fonctions jusqu'à 800 s — plan Pro avec Fluid compute, configuré
 > dans le code) et le cron des jobs doit tourner **toutes les heures** (le plan
 > gratuit Hobby limite les fonctions à 60 s et les crons à 1/jour). Vous pouvez
 > faire tous les tests en Hobby avec le mode mock, puis passer Pro au moment de
@@ -94,7 +94,7 @@ En plus, sur **harmony-admin** :
 |---|---|
 | `ANTHROPIC_API_KEY` | votre clé `sk-ant-…` |
 | `ANTHROPIC_MODEL` | `claude-opus-5` (défaut ; repli automatique sur `claude-opus-4-8` si une requête est déclinée par les garde-fous) |
-| `ANTHROPIC_EFFORT` | Profondeur de réflexion du modèle : `low` / `medium` (défaut) / `high` / `xhigh` / `max` — plus c'est haut, plus c'est lent et coûteux |
+| `ANTHROPIC_EFFORT` | Profondeur de réflexion du modèle : `low` / `medium` / `high` (défaut) / `xhigh` / `max` — plus c'est haut, plus c'est lent et coûteux |
 | `CRON_SECRET` | votre second secret |
 | `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer |
 

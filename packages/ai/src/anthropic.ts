@@ -9,7 +9,7 @@ const FALLBACK_MODEL = "claude-opus-4-8";
 export type AnthropicClientOptions = {
   apiKey: string;
   model?: string;
-  /** Profondeur de réflexion (défaut : ANTHROPIC_EFFORT, sinon « medium ») */
+  /** Profondeur de réflexion (défaut : ANTHROPIC_EFFORT, sinon « high ») */
   effort?: Effort;
 };
 
@@ -17,13 +17,13 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 type Effort = (typeof EFFORTS)[number];
 
 /**
- * « medium » : rédaction structurée de qualité Opus tout en tenant dans le
- * budget d'exécution Vercel (une génération de démo enchaîne ~4 appels dans
- * une même fonction de 300 s). Surchargable sans code via ANTHROPIC_EFFORT.
+ * « high » : le meilleur rendu rédactionnel d'Opus 5. Une génération de démo
+ * enchaîne ~4 appels dans une même fonction Vercel : surveiller la durée et
+ * redescendre à « medium » via ANTHROPIC_EFFORT (sans code) si nécessaire.
  */
 function resolveEffort(requested?: Effort): Effort {
   const candidate = requested ?? process.env.ANTHROPIC_EFFORT;
-  return (EFFORTS as readonly string[]).includes(candidate ?? "") ? (candidate as Effort) : "medium";
+  return (EFFORTS as readonly string[]).includes(candidate ?? "") ? (candidate as Effort) : "high";
 }
 
 /**

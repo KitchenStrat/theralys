@@ -5,7 +5,7 @@ import { EditDemoForm } from "./edit-demo-form";
 export const metadata = { title: "Éditer la démo" };
 export const dynamic = "force-dynamic";
 // « Régénérer le contenu » relance le job IA complet (cf. demos/page.tsx)
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 type Props = { params: Promise<{ id: string }> };
 

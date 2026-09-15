@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { runAllTicks } from "@theralys/jobs";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 /**
  * Point d'entrée des jobs planifiés (calendrier éditorial, rédaction J-7,
