@@ -8,8 +8,10 @@ import { Button, Spinner } from "@theralys/ui";
 import {
   THEME_PRESETS,
   TRACKING_ID_PATTERNS,
+  themeCssVars,
   type Section,
   type SiteCabinet,
+  type SiteTheme,
   type ThemePreset,
   type FontPreset,
   type ThemeIntensity,
@@ -39,6 +41,8 @@ type Props = {
     corners: ThemeCorners;
     ambiance: ThemeAmbiance;
     logoUrl: string;
+    /** Surcharges ponctuelles de la palette (conservées dans la prévisualisation) */
+    palette?: SiteTheme["palette"];
     url: string;
     updatedAt: string;
     /** Slugs des pages de spécialité désactivées par le praticien */
@@ -207,9 +211,11 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   prune: "#8a5273",
   sauge: "#587c5e",
   olive: "#75793f",
+  turquoise: "#3c8b83",
   ocean: "#33658a",
   marine: "#3f5873",
   lavande: "#6f5b9c",
+  taupe: "#8c7767",
 };
 
 export function SiteEditor({
@@ -541,10 +547,38 @@ export function SiteEditor({
     SETTINGS_NAV.flatMap((g) => g.items).find((i) => i.id === settingsTab)?.label ?? "";
 
   // ── Pont avec l'aperçu (EditorBridge côté site public) ────────────────────
+  // Style en cours de prévisualisation (non publié) : réappliqué à chaque
+  // rechargement de l'iframe pour que l'aperçu reste fidèle aux choix.
+  const pendingThemeMsg = useRef<Record<string, unknown> | null>(null);
+
+  /** Applique immédiatement un choix de style dans l'aperçu (avant publication). */
+  function previewTheme(
+    patch: Partial<{
+      preset: ThemePreset;
+      fontPreset: FontPreset;
+      intensity: ThemeIntensity;
+      corners: ThemeCorners;
+      ambiance: ThemeAmbiance;
+    }>,
+  ) {
+    const next = { preset: themePreset, fontPreset, intensity, corners, ambiance, ...patch };
+    const message = {
+      type: "hy:theme",
+      vars: themeCssVars({ ...next, palette: site.palette }),
+      ambiance: next.ambiance,
+    };
+    pendingThemeMsg.current = message;
+    iframeRef.current?.contentWindow?.postMessage(message, siteOrigin);
+  }
+
   function announceEditor() {
     // Plusieurs annonces : l'hydratation du site peut suivre l'événement load
-    const send = () =>
+    const send = () => {
       iframeRef.current?.contentWindow?.postMessage({ type: "hy:hello" }, siteOrigin);
+      if (pendingThemeMsg.current) {
+        iframeRef.current?.contentWindow?.postMessage(pendingThemeMsg.current, siteOrigin);
+      }
+    };
     send();
     let tries = 0;
     const interval = setInterval(() => {
@@ -591,6 +625,8 @@ export function SiteEditor({
       setFeedback(result.error);
       return;
     }
+    // Style publié : la prévisualisation devient l'état réel du site
+    if (panel === "style") pendingThemeMsg.current = null;
     setDirty(false);
     setFeedback("Publié ✓ — votre site est à jour.");
     setPreviewKey((k) => k + 1);
@@ -712,7 +748,7 @@ export function SiteEditor({
                   <>
                     <div>
                       <p className="text-sm font-semibold">Couleur du site</p>
-                      <div className="mt-2 grid grid-cols-5 gap-2">
+                      <div className="mt-2 grid grid-cols-6 gap-2">
                         {THEME_PRESETS.map((preset) => (
                           <button
                             key={preset}
@@ -722,6 +758,7 @@ export function SiteEditor({
                             onClick={() => {
                               setThemePreset(preset);
                               setDirty(true);
+                              previewTheme({ preset });
                             }}
                             className={clsx(
                               "h-10 w-10 rounded-xl border-2 transition-transform",
@@ -744,6 +781,7 @@ export function SiteEditor({
                             onClick={() => {
                               setIntensity(choice.value);
                               setDirty(true);
+                              previewTheme({ intensity: choice.value });
                             }}
                             className={clsx(
                               "flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-xs font-medium",
@@ -779,6 +817,7 @@ export function SiteEditor({
                         onClick={() => {
                           setFontPreset(choice.value);
                           setDirty(true);
+                          previewTheme({ fontPreset: choice.value });
                         }}
                         className={clsx(
                           "rounded-2xl border p-4 text-center",
@@ -816,6 +855,7 @@ export function SiteEditor({
                             onClick={() => {
                               setCorners(choice.value);
                               setDirty(true);
+                              previewTheme({ corners: choice.value });
                             }}
                             className={clsx(
                               "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 text-[10px] font-medium leading-tight",
@@ -845,6 +885,7 @@ export function SiteEditor({
                             onClick={() => {
                               setAmbiance(choice.value);
                               setDirty(true);
+                              previewTheme({ ambiance: choice.value });
                             }}
                             className={clsx(
                               "rounded-2xl border p-3 text-left",

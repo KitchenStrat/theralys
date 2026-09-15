@@ -55,6 +55,7 @@ export default async function EditorPage({ searchParams }: Props) {
         corners: site.theme.corners ?? "rond",
         ambiance: site.theme.ambiance ?? "naturel",
         logoUrl: site.theme.logoUrl ?? "",
+        palette: site.theme.palette,
         url: siteUrl(site),
         updatedAt: site.updatedAt.toISOString(),
         disabledMotifs: site.theme.disabledMotifs ?? [],

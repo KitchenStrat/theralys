@@ -226,6 +226,8 @@ export const THEME_PRESETS = [
   "caramel",
   "marine",
   "olive",
+  "turquoise",
+  "taupe",
 ] as const;
 export type ThemePreset = (typeof THEME_PRESETS)[number];
 

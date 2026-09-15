@@ -11,6 +11,8 @@ import { useEffect } from "react";
  *  - reçu  `hy:hello`            → active le mode édition (surbrillance)
  *  - émis  `hy:select {index}`   → clic du praticien sur une section
  *  - reçu  `hy:focus {index}`    → défilement vers une section
+ *  - reçu  `hy:theme {vars}`     → prévisualise un style (variables CSS du
+ *                                  thème) avant publication
  */
 export function EditorBridge() {
   useEffect(() => {
@@ -44,7 +46,12 @@ export function EditorBridge() {
     `;
 
     function onMessage(event: MessageEvent) {
-      const data = event.data as { type?: string; index?: number } | null;
+      const data = event.data as {
+        type?: string;
+        index?: number;
+        vars?: Record<string, string>;
+        ambiance?: string;
+      } | null;
       if (!data || typeof data.type !== "string") return;
       if (data.type === "hy:hello") {
         editorOrigin = event.origin;
@@ -58,6 +65,18 @@ export function EditorBridge() {
         document
           .querySelector(`[data-hy-section="${data.index}"]`)
           ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      // Prévisualisation du panneau Style : applique les variables du thème
+      // sur le conteneur du site sans attendre la publication
+      if (data.type === "hy:theme" && data.vars && typeof data.vars === "object") {
+        const root = document.querySelector<HTMLElement>("[data-ambiance]");
+        if (!root) return;
+        for (const [key, value] of Object.entries(data.vars)) {
+          if (key.startsWith("--") && typeof value === "string") {
+            root.style.setProperty(key, value);
+          }
+        }
+        if (typeof data.ambiance === "string") root.dataset.ambiance = data.ambiance;
       }
     }
 

@@ -41,6 +41,8 @@ const THEME_LABELS = {
   caramel: "Caramel",
   marine: "Marine",
   olive: "Olive",
+  turquoise: "Turquoise",
+  taupe: "Taupe",
 } as const;
 
 export function EditDemoForm({ demo }: { demo: DemoData }) {

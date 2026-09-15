@@ -334,6 +334,8 @@ const PRESET_COLORS: Record<ThemePreset, string> = {
   caramel: "#9a6b3f",
   marine: "#3f5873",
   olive: "#75793f",
+  turquoise: "#3c8b83",
+  taupe: "#8c7767",
 };
 
 /** Génère une image d'ambiance ; en cas d'échec la démo continue sans image. */
