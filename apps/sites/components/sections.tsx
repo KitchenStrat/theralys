@@ -623,9 +623,9 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           className="hy-kenburns h-full w-full object-cover"
           style={{
             maskImage:
-              "linear-gradient(to right, black 88%, transparent 99%), linear-gradient(to bottom, black 90%, transparent 98%)",
+              "linear-gradient(to right, black 96%, transparent 99%), linear-gradient(to bottom, black 96%, transparent 98.5%)",
             WebkitMaskImage:
-              "linear-gradient(to right, black 88%, transparent 99%), linear-gradient(to bottom, black 90%, transparent 98%)",
+              "linear-gradient(to right, black 96%, transparent 99%), linear-gradient(to bottom, black 96%, transparent 98.5%)",
             maskComposite: "intersect",
             WebkitMaskComposite: "source-in",
           }}
@@ -637,8 +637,8 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           alt=""
           className="max-h-[44vh] w-full object-cover object-top"
           style={{
-            maskImage: "linear-gradient(to bottom, black 90%, transparent 98%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 90%, transparent 98%)",
+            maskImage: "linear-gradient(to bottom, black 96%, transparent 98.5%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 96%, transparent 98.5%)",
           }}
         />
         {stats[0] ? (
@@ -828,8 +828,8 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
               alt=""
               className="max-h-[44vh] w-full object-cover"
               style={{
-                maskImage: "linear-gradient(to bottom, black 88%, transparent 99%)",
-                WebkitMaskImage: "linear-gradient(to bottom, black 88%, transparent 99%)",
+                maskImage: "linear-gradient(to bottom, black 96%, transparent 99%)",
+                WebkitMaskImage: "linear-gradient(to bottom, black 96%, transparent 99%)",
               }}
             />
           </div>
@@ -840,9 +840,9 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
               className="h-full w-full object-cover"
               style={{
                 maskImage:
-                  "linear-gradient(to left, black 88%, transparent 99%), linear-gradient(to bottom, black 93%, transparent 99%), linear-gradient(to top, black 93%, transparent 99%)",
+                  "linear-gradient(to left, black 96%, transparent 99%), linear-gradient(to bottom, black 97%, transparent 99%), linear-gradient(to top, black 97%, transparent 99%)",
                 WebkitMaskImage:
-                  "linear-gradient(to left, black 88%, transparent 99%), linear-gradient(to bottom, black 93%, transparent 99%), linear-gradient(to top, black 93%, transparent 99%)",
+                  "linear-gradient(to left, black 96%, transparent 99%), linear-gradient(to bottom, black 97%, transparent 99%), linear-gradient(to top, black 97%, transparent 99%)",
                 maskComposite: "intersect",
                 WebkitMaskComposite: "source-in",
               }}
@@ -888,8 +888,8 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
             alt=""
             className="max-h-[44vh] w-full object-cover object-top"
             style={{
-              maskImage: "linear-gradient(to bottom, black 88%, transparent 99%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black 88%, transparent 99%)",
+              maskImage: "linear-gradient(to bottom, black 96%, transparent 99%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 96%, transparent 99%)",
             }}
           />
         </div>
@@ -900,9 +900,9 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
             className="h-full w-full object-cover"
             style={{
               maskImage:
-                "linear-gradient(to right, black 88%, transparent 99%), linear-gradient(to bottom, black 93%, transparent 99%), linear-gradient(to top, black 93%, transparent 99%)",
+                "linear-gradient(to right, black 96%, transparent 99%), linear-gradient(to bottom, black 97%, transparent 99%), linear-gradient(to top, black 97%, transparent 99%)",
               WebkitMaskImage:
-                "linear-gradient(to right, black 88%, transparent 99%), linear-gradient(to bottom, black 93%, transparent 99%), linear-gradient(to top, black 93%, transparent 99%)",
+                "linear-gradient(to right, black 96%, transparent 99%), linear-gradient(to bottom, black 97%, transparent 99%), linear-gradient(to top, black 97%, transparent 99%)",
               maskComposite: "intersect",
               WebkitMaskComposite: "source-in",
             }}
