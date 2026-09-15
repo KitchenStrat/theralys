@@ -9,7 +9,22 @@ const FALLBACK_MODEL = "claude-opus-4-8";
 export type AnthropicClientOptions = {
   apiKey: string;
   model?: string;
+  /** Profondeur de réflexion (défaut : ANTHROPIC_EFFORT, sinon « medium ») */
+  effort?: Effort;
 };
+
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+type Effort = (typeof EFFORTS)[number];
+
+/**
+ * « medium » : rédaction structurée de qualité Opus tout en tenant dans le
+ * budget d'exécution Vercel (une génération de démo enchaîne ~4 appels dans
+ * une même fonction de 300 s). Surchargable sans code via ANTHROPIC_EFFORT.
+ */
+function resolveEffort(requested?: Effort): Effort {
+  const candidate = requested ?? process.env.ANTHROPIC_EFFORT;
+  return (EFFORTS as readonly string[]).includes(candidate ?? "") ? (candidate as Effort) : "medium";
+}
 
 /**
  * Appelle Claude en demandant un JSON strict, valide avec zod, vérifie les
@@ -23,23 +38,29 @@ export async function completeStructured<T>(
 ): Promise<T> {
   const client = new Anthropic({ apiKey: opts.apiKey });
   const model = opts.model ?? process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL;
+  const effort = resolveEffort(opts.effort);
 
   let feedback = "";
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const response = await client.beta.messages.create({
-      model,
-      // Opus 5 réfléchit par défaut (adaptatif) et cette réflexion compte dans
-      // max_tokens : large marge pour ne jamais tronquer le JSON généré.
-      max_tokens: 32000,
-      // Repli serveur : si un classificateur de sécurité décline la requête,
-      // l'API la rejoue sur le modèle de repli dans le même appel.
-      betas: ["server-side-fallback-2026-06-01"],
-      fallbacks: [{ model: FALLBACK_MODEL }],
-      system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
-      messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
-    });
+    // Streaming obligatoire pour une sortie longue : sans lui, le SDK refuse
+    // un appel dont la durée estimée dépasse 10 min (max_tokens élevé).
+    const response = await client.beta.messages
+      .stream({
+        model,
+        // Opus 5 réfléchit par défaut (adaptatif) et cette réflexion compte dans
+        // max_tokens : large marge pour ne jamais tronquer le JSON généré.
+        max_tokens: 32000,
+        output_config: { effort },
+        // Repli serveur : si un classificateur de sécurité décline la requête,
+        // l'API la rejoue sur le modèle de repli dans le même appel.
+        betas: ["server-side-fallback-2026-06-01"],
+        fallbacks: [{ model: FALLBACK_MODEL }],
+        system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
+        messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
+      })
+      .finalMessage();
 
     // Toute la chaîne (modèle + repli) a décliné : inutile de retenter le même prompt
     if (response.stop_reason === "refusal") {

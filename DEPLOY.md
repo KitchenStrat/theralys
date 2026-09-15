@@ -94,6 +94,7 @@ En plus, sur **harmony-admin** :
 |---|---|
 | `ANTHROPIC_API_KEY` | votre clé `sk-ant-…` |
 | `ANTHROPIC_MODEL` | `claude-opus-5` (défaut ; repli automatique sur `claude-opus-4-8` si une requête est déclinée par les garde-fous) |
+| `ANTHROPIC_EFFORT` | Profondeur de réflexion du modèle : `low` / `medium` (défaut) / `high` / `xhigh` / `max` — plus c'est haut, plus c'est lent et coûteux |
 | `CRON_SECRET` | votre second secret |
 | `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer |
 
