@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Polices des sites publics — pour les aperçus « Typo » de l'éditeur */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Fraunces:opsz,wght@9..144,600&family=Inter:wght@400;500;600&family=Cormorant+Garamond:wght@600&family=Playfair+Display:wght@600&family=Space+Grotesk:wght@600&family=Nunito:wght@400;600&family=Source+Sans+3:wght@400&family=EB+Garamond:wght@400&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Inter:wght@400;500;600&family=Lora:wght@600&family=Playfair+Display:wght@600&family=Figtree:wght@600&family=Libre+Baskerville:wght@700&family=Open+Sans:wght@400&family=Lato:wght@400&family=Source+Sans+3:wght@400&display=swap"
           rel="stylesheet"
         />
       </head>

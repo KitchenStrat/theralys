@@ -123,10 +123,10 @@ const PALETTES: Record<ThemePreset, Palette> = {
 /**
  * Paires de polices par preset — chaque preset change les TITRES ET le CORPS
  * de texte pour un rendu immédiatement différenciable :
- * - chaleureux : serif généreuse + sans arrondie douce
- * - classique  : didone traditionnelle + sans humaniste sobre
- * - moderne    : grotesque géométrique resserrée + Inter
- * - élégant    : garalde fine + corps en serif (esprit magazine)
+ * - chaleureux : serif contemporaine douce (Lora) + Open Sans
+ * - classique  : serif traditionnelle à empattements (Libre Baskerville) + Source Sans
+ * - moderne    : sans géométrique chaleureuse (Figtree) + Inter
+ * - élégant    : didone élancée (Playfair Display) + Lato
  */
 export const FONTS: Record<
   FontPreset,
@@ -134,27 +134,27 @@ export const FONTS: Record<
 > = {
   chaleureux: {
     label: "Chaleureux",
-    heading: "'Fraunces', Georgia, 'Times New Roman', serif",
-    body: "'Nunito', 'Trebuchet MS', ui-sans-serif, system-ui, sans-serif",
+    heading: "'Lora', Georgia, 'Times New Roman', serif",
+    body: "'Open Sans', 'Segoe UI', ui-sans-serif, system-ui, sans-serif",
     headingTracking: "-0.01em",
   },
   classique: {
     label: "Classique",
-    heading: "'Playfair Display', Georgia, 'Times New Roman', serif",
+    heading: "'Libre Baskerville', Georgia, 'Times New Roman', serif",
     body: "'Source Sans 3', 'Segoe UI', ui-sans-serif, system-ui, sans-serif",
     headingTracking: "0",
   },
   moderne: {
     label: "Moderne",
-    heading: "'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif",
+    heading: "'Figtree', ui-sans-serif, system-ui, -apple-system, sans-serif",
     body: "'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif",
-    headingTracking: "-0.03em",
+    headingTracking: "-0.02em",
   },
   elegant: {
     label: "Élégant",
-    heading: "'Cormorant Garamond', 'Palatino Linotype', Palatino, serif",
-    body: "'EB Garamond', 'Palatino Linotype', Georgia, serif",
-    headingTracking: "0.015em",
+    heading: "'Playfair Display', Georgia, 'Times New Roman', serif",
+    body: "'Lato', 'Segoe UI', ui-sans-serif, system-ui, sans-serif",
+    headingTracking: "0.01em",
   },
 };
 

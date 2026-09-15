@@ -158,25 +158,25 @@ const FONT_CHOICES: { value: FontPreset; label: string; family: string; bodyFami
   {
     value: "chaleureux",
     label: "Chaleureux",
-    family: "'Fraunces', Georgia, serif",
-    bodyFamily: "'Nunito', 'Trebuchet MS', sans-serif",
+    family: "'Lora', Georgia, serif",
+    bodyFamily: "'Open Sans', 'Segoe UI', sans-serif",
   },
   {
     value: "elegant",
     label: "Élégant",
-    family: "'Cormorant Garamond', Palatino, serif",
-    bodyFamily: "'EB Garamond', Palatino, serif",
+    family: "'Playfair Display', Georgia, serif",
+    bodyFamily: "'Lato', 'Segoe UI', sans-serif",
   },
   {
     value: "moderne",
     label: "Moderne",
-    family: "'Space Grotesk', system-ui, sans-serif",
+    family: "'Figtree', system-ui, sans-serif",
     bodyFamily: "'Inter', system-ui, sans-serif",
   },
   {
     value: "classique",
     label: "Classique",
-    family: "'Playfair Display', Georgia, serif",
+    family: "'Libre Baskerville', Georgia, serif",
     bodyFamily: "'Source Sans 3', 'Segoe UI', sans-serif",
   },
 ];

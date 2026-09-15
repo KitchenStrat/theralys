@@ -12,7 +12,7 @@
   100% { background-position: -150% 0; }
 }
 .brand-word {
-  font-family: "Comfortaa", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Comfortaa", ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
   background-image: linear-gradient(
