@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@theralys/shared": "workspace:*",
     "zod": "^3.24.1"
   },

@@ -29,18 +29,18 @@ describe("estimateAiCosts", () => {
       imagesGenerated: 100,
       demosGenerated: 10,
     });
-    expect(estimate.totalEur).toBe(3 + 0.25 + 3);
+    expect(estimate.totalEur).toBe(8 + 0.25 + 8);
     expect(estimate.details).toHaveLength(3);
   });
 
-  it("un client Scale sur un an reste marginal (~7 €)", () => {
+  it("un client Scale sur un an reste marginal (~17 €)", () => {
     const estimate = estimateAiCosts({
       articlesGenerated: 208,
       imagesGenerated: 208,
       demosGenerated: 0,
     });
-    expect(estimate.totalEur).toBeGreaterThan(5);
-    expect(estimate.totalEur).toBeLessThan(10);
+    expect(estimate.totalEur).toBeGreaterThan(15);
+    expect(estimate.totalEur).toBeLessThan(20);
   });
 });
 

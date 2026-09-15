@@ -44,14 +44,15 @@ export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
 
 /**
  * Coûts unitaires estimés en euros :
- * - article : claude-sonnet-5 (~1 k tokens in / ~1,5 k out par article)
+ * - article : claude-opus-5 (~1 k tokens in / ~2,5 k out réflexion comprise
+ *   par article, à 5 $ / 25 $ le million)
  * - image : fal.ai FLUX.1 schnell facturé au mégapixel (1024×768 ≈ 0,79 MP)
  * - démo : ~10 appels Claude (accueil, 6 motifs, avis, articles)
  */
 export const UNIT_COSTS_EUR = {
-  article: 0.03,
+  article: 0.08,
   image: 0.0025,
-  demoGeneration: 0.3,
+  demoGeneration: 0.8,
 } as const;
 
 export type AiUsage = {

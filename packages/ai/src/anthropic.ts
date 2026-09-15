@@ -2,7 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
 import { ETHICAL_PROMPT_RULES, checkEthicalComplianceDeep } from "./guardrails";
 
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-opus-5";
+/** Modèle de repli quand un classificateur de sécurité décline la requête. */
+const FALLBACK_MODEL = "claude-opus-4-8";
 
 export type AnthropicClientOptions = {
   apiKey: string;
@@ -26,17 +28,31 @@ export async function completeStructured<T>(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const response = await client.messages.create({
+    const response = await client.beta.messages.create({
       model,
-      // Opus 5+ réfléchit par défaut et cette réflexion compte dans max_tokens :
-      // on garde une marge pour ne jamais tronquer le JSON généré.
-      max_tokens: 16000,
+      // Opus 5 réfléchit par défaut (adaptatif) et cette réflexion compte dans
+      // max_tokens : large marge pour ne jamais tronquer le JSON généré.
+      max_tokens: 32000,
+      // Repli serveur : si un classificateur de sécurité décline la requête,
+      // l'API la rejoue sur le modèle de repli dans le même appel.
+      betas: ["server-side-fallback-2026-06-01"],
+      fallbacks: [{ model: FALLBACK_MODEL }],
       system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
       messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
     });
 
+    // Toute la chaîne (modèle + repli) a décliné : inutile de retenter le même prompt
+    if (response.stop_reason === "refusal") {
+      const why =
+        response.stop_details?.explanation ?? response.stop_details?.category ?? "raison inconnue";
+      throw new Error(`Requête déclinée par les garde-fous du modèle : ${why}`);
+    }
+    if (response.stop_reason === "max_tokens") {
+      throw new Error("Réponse tronquée (max_tokens atteint) : JSON incomplet");
+    }
+
     const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
       .map((b) => b.text)
       .join("");
 

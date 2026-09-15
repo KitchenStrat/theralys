@@ -21,7 +21,7 @@ apps/
   studio/     Back office client (dashboard, blog, éditeur de site)  — port 3002
 packages/
   db/         Schéma PostgreSQL (Drizzle ORM), formules & gating, migrations
-  ai/         Génération de contenu (Anthropic claude-sonnet-5 + mode mock),
+  ai/         Génération de contenu (Anthropic claude-opus-5 + mode mock),
               articles avec « voix » du client, images (fal.ai FLUX.1 + mock),
               garde-fous « marketing éthique »
   jobs/       Moteur éditorial + ticks planifiés (rédaction J-7, publication
@@ -71,7 +71,7 @@ Le code est prêt : la génération bascule sur l&apos;API dès qu&apos;une clé
    `admin` (jobs du blog) et `apps/admin`/`apps/sites` si la génération y tourne :
    `ANTHROPIC_API_KEY=sk-ant-…` — et laisser `AI_MOCK` **vide**.
 3. Vérifier dans l&apos;admin → Vue d&apos;ensemble : le badge « Jobs IA » doit passer de
-   « Rédaction : mode mock » à « Rédaction : API Anthropic (claude-sonnet-5) ».
+   « Rédaction : mode mock » à « Rédaction : API Anthropic (claude-opus-5) ».
 4. Créer une démo de test : le contenu est généré par Claude, validé par zod et
    passé aux garde-fous marketing éthique (retry automatique en cas d&apos;écart,
    statut « Erreur » relançable sinon).
@@ -85,7 +85,7 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
 
 - **IA rédaction** : sans `ANTHROPIC_API_KEY` (ou avec `AI_MOCK=1`), le pipeline génère un
   contenu français crédible et déterministe à partir d'un catalogue de spécialités par métier.
-  Avec une clé, chaque étape appelle Claude (`ANTHROPIC_MODEL`, défaut `claude-sonnet-5`)
+  Avec une clé, chaque étape appelle Claude (`ANTHROPIC_MODEL`, défaut `claude-opus-5`)
   avec validation zod + retry.
 - **IA images** : provider retenu **fal.ai** (FLUX.1 schnell, ~0,0024 $/image d'article,
   vs 0,003 $ chez Replicate ; ≈ 50 $/an pour 100 clients Scale). Sans `FAL_API_KEY`,

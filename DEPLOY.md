@@ -93,7 +93,7 @@ En plus, sur **harmony-admin** :
 | Nom | Valeur |
 |---|---|
 | `ANTHROPIC_API_KEY` | votre clé `sk-ant-…` |
-| `ANTHROPIC_MODEL` | `claude-opus-4-8` (recommandé pour la qualité rédactionnelle ; défaut : `claude-sonnet-5`) |
+| `ANTHROPIC_MODEL` | `claude-opus-5` (défaut ; repli automatique sur `claude-opus-4-8` si une requête est déclinée par les garde-fous) |
 | `CRON_SECRET` | votre second secret |
 | `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer |
 
@@ -114,7 +114,7 @@ Cliquez **Deploy** pour chaque projet (2-3 min de build chacun).
 
 1. `https://harmony-admin.vercel.app` → connexion avec votre email/mot de
    passe admin → **Vue d'ensemble** : badge vert
-   « Rédaction : API Anthropic (claude-sonnet-5) ».
+   « Rédaction : API Anthropic (claude-opus-5) ».
 2. Onglet **Démos** → la démo d'exemple est là → œil 👁 : elle s'ouvre sur
    `harmony-sites.vercel.app`.
 3. Créez une démo de test réelle (~4 min, ~0,35 €) pour valider la génération
