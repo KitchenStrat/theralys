@@ -41,6 +41,8 @@ export type PlanDefinition = {
   academy: boolean;
   /** Toujours inclus, toutes formules */
   googleReviewsSync: true;
+  /** Section « Réseaux sociaux » du studio (contenus prêts à poster) */
+  socialMedia: true;
   advancedAnalytics: true;
   hostingAndDomain: true;
 };
@@ -58,6 +60,7 @@ const STARTER: PlanDefinition = {
   keywordResearch: false,
   academy: false,
   googleReviewsSync: true,
+  socialMedia: true,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };
@@ -75,6 +78,7 @@ const SCALE: PlanDefinition = {
   keywordResearch: true,
   academy: true,
   googleReviewsSync: true,
+  socialMedia: true,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };
@@ -116,4 +120,9 @@ export function hasKeywordResearch(plan: PlanId): boolean {
 /** Académie (formations du studio). */
 export function hasAcademy(plan: PlanId): boolean {
   return PLANS[plan].academy;
+}
+
+/** Section « Réseaux sociaux » du studio (incluse dans toutes les formules). */
+export function hasSocialMedia(plan: PlanId): boolean {
+  return getPlan(plan).socialMedia;
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Button } from "@theralys/ui";
+import { Button, Segmented } from "@theralys/ui";
 import { saveBlogSettings } from "../actions";
 
 export type BlogTheme = { label: string; perMonth: number };
@@ -393,36 +393,6 @@ function WizardRow({ label, children }: { label: string; children: ReactNode }) 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-ink-700">{label}</p>
       {children}
-    </div>
-  );
-}
-
-function Segmented({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="flex rounded-full bg-cream-100 p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={clsx(
-            "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-            option.value === value
-              ? "bg-white text-ink-900 shadow-sm ring-1 ring-cream-300"
-              : "text-ink-500 hover:text-ink-900",
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   );
 }

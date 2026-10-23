@@ -12,20 +12,16 @@ import { checkEthicalComplianceDeep } from "./guardrails";
 import { resolveProfession } from "./mock/catalog";
 import { ARTICLE_STRUCTURE } from "./prompts";
 import { stockQueryFor } from "./stock";
+import {
+  TONE_LABEL,
+  designationLabel,
+  readerLabel,
+  voiceBricks,
+  type BlogVoice,
+} from "./voice";
 
-export type BlogVoice = {
-  designation: "nous" | "je" | "on";
-  accord: "feminin" | "masculin";
-  reader: "vous" | "tu";
-  tone: "chaleureux" | "rassurant" | "pose" | "direct" | "pedagogue";
-};
-
-export const DEFAULT_VOICE: BlogVoice = {
-  designation: "je",
-  accord: "feminin",
-  reader: "vous",
-  tone: "chaleureux",
-};
+// Type et défaut de la voix : définis dans voice.ts, ré-exportés ici (compatibilité)
+export { DEFAULT_VOICE, type BlogVoice } from "./voice";
 
 export type ArticleBrief = {
   topic: string;
@@ -52,14 +48,6 @@ const voicedArticleSchema = z.object({
   content: z.string().min(300),
   imageQuery: z.string().optional(),
 });
-
-const TONE_LABEL: Record<BlogVoice["tone"], string> = {
-  chaleureux: "chaleureux et accueillant",
-  rassurant: "rassurant et apaisant",
-  pose: "posé et sobre",
-  direct: "direct et concret",
-  pedagogue: "pédagogue et explicatif",
-};
 
 export type ArticleGenerator = {
   mode: "anthropic" | "mock";
@@ -96,8 +84,8 @@ function articleSystemPrompt(voice: BlogVoice): string {
 Markdown, maillage naturel avec la spécialité et la ville.
 
 VOIX IMPOSÉE (réglages du client, à respecter strictement) :
-- Désignation du praticien : « ${voice.designation} » (${voice.designation === "je" ? "première personne du singulier" : voice.designation === "nous" ? "première personne du pluriel" : "pronom « on »"}), accords au ${voice.accord}.
-- Adresse au lecteur : ${voice.reader === "vous" ? "vouvoiement" : "tutoiement"}.
+- Désignation du praticien : « ${voice.designation} » (${designationLabel(voice)}), accords au ${voice.accord}.
+- Adresse au lecteur : ${readerLabel(voice)}.
 - Ton : ${TONE_LABEL[voice.tone]}.
 
 ${ARTICLE_STRUCTURE}`;
@@ -118,15 +106,8 @@ Produis un JSON de la forme :
 
 export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): VoicedArticle {
   const practice = resolveProfession(brief.profession).practiceName;
-  const you = voice.reader === "vous" ? "vous" : "tu";
-
-  // Petites briques accordées à la voix
-  const subj = (je: string, nous: string, on: string) =>
-    voice.designation === "je" ? je : voice.designation === "nous" ? nous : on;
-  const yourAdj = voice.reader === "vous" ? "votre" : "ton";
-  const yourPl = voice.reader === "vous" ? "vos" : "tes";
-  const canYou = voice.reader === "vous" ? "vous pouvez" : "tu peux";
-  const feelYou = voice.reader === "vous" ? "vous ressentez" : "tu ressens";
+  // Petites briques accordées à la voix (voice.ts)
+  const { you, subj, yourAdj, yourPl, canYou, feelYou } = voiceBricks(voice);
 
   const toneIntro: Record<BlogVoice["tone"], string> = {
     chaleureux: `Si ${you} ${voice.reader === "vous" ? "lisez" : "lis"} ces lignes, c'est sans doute que ${yourAdj} corps ${you} envoie des signaux. Bonne nouvelle : il existe des réponses douces, et cet article est là pour ${voice.reader === "vous" ? "vous" : "te"} guider.`,

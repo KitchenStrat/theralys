@@ -1,0 +1,222 @@
+/**
+ * Prompts du générateur de contenus réseaux sociaux (conception §3.5 à §3.7)
+ * et rotation déterministe des piliers, partagée par le prompt du mois et le
+ * mock (`mock/social.ts`).
+ */
+
+import {
+  camelHashtag,
+  type SocialFormat,
+  type SocialPillar,
+  type SocialSiteBrief,
+  type SocialSlot,
+} from "@theralys/shared";
+import { TONE_LABEL, designationLabel, readerLabel } from "./voice";
+
+// ─── Aides affichées dans les prompts ────────────────────────────────────────
+
+export const PILLAR_HELP: Record<SocialPillar, string> = {
+  specialite: "présenter un motif de consultation avec la photo de sa page",
+  conseil:
+    "un exercice concret issu d'un article (exerciseSteps) condensé en 3 à 5 étapes, ou le déroulé d'une séance",
+  article: "3 idées clés d'un article (signs, contributions, whenToConsult) en carrousel",
+  idee_recue: "une question fréquente et sa réponse courte",
+  coulisses: "comment se passe une séance, le cadre, le parcours",
+  infos_pratiques: "durée, tarif, prise en charge, adresse — uniquement ce qui est sur le site",
+  projection: "la section « avenir » ou le titre du site, en affirmation ou en liste",
+  avis: "un avis Google cité à l'identique",
+  nouvel_article: "annoncer l'article paru la veille",
+};
+
+export const FORMAT_HELP: Record<SocialFormat, string> = {
+  static: "(1 visuel)",
+  carousel: "(couverture + 2 à 5 pages ; la page finale est ajoutée automatiquement)",
+  story: "(1 visuel vertical, template story-rappel ou affirmation)",
+};
+
+// ─── Rotation des piliers ────────────────────────────────────────────────────
+
+/**
+ * Ordre éditorial d'un mois (avant rotation) : les carrousels (conseil,
+ * article) et la story tombent ainsi à distance l'un de l'autre. Le pilier
+ * `nouvel_article` n'en fait pas partie : il est imposé par ses créneaux.
+ */
+export const MONTH_PILLAR_ORDER: readonly SocialPillar[] = [
+  "specialite",
+  "conseil",
+  "idee_recue",
+  "infos_pratiques",
+  "projection",
+  "article",
+  "coulisses",
+  "avis",
+];
+
+/** Hachage entier déterministe (même principe que `dateSeed` d'editorial.ts). */
+export function hash31(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(hash);
+}
+
+/** Graine d'un site et d'un mois (« YYYY-MM ») : rotation des piliers, choix du mock. */
+export function socialSeed(brief: SocialSiteBrief, month: string): number {
+  return hash31(`${brief.practitioner.city}|${brief.siteName}|${month}`);
+}
+
+/** Piliers exploitables pour ce site (avis : clients avec avis ; article : ≥ 1 article). */
+export function availablePillars(brief: SocialSiteBrief): SocialPillar[] {
+  return MONTH_PILLAR_ORDER.filter((pillar) => {
+    switch (pillar) {
+      case "article":
+        return brief.articles.length > 0;
+      case "avis":
+        return brief.siteType === "client" && brief.reviews.length > 0;
+      case "specialite":
+        return brief.home.specialties.length > 0;
+      case "idee_recue":
+        return (
+          brief.home.faq.length > 0 ||
+          brief.motifPages.some((p) => p.faq.length > 0) ||
+          brief.articles.some((a) => a.faq.length > 0)
+        );
+      default:
+        return true;
+    }
+  });
+}
+
+/** Piliers disponibles, décalés de `socialSeed % n` (rotation déterministe par mois). */
+export function rotatePillars(brief: SocialSiteBrief, month: string): SocialPillar[] {
+  const list = availablePillars(brief);
+  if (list.length === 0) return ["projection"];
+  const offset = socialSeed(brief, month) % list.length;
+  return [...list.slice(offset), ...list.slice(0, offset)];
+}
+
+/** Id de source d'un article de créneau (`articleId` brut ou déjà préfixé). */
+export function articleRefId(articleId: string): string {
+  return articleId.startsWith("article:") ? articleId : `article:${articleId}`;
+}
+
+// ─── Prompt système (§3.5) ───────────────────────────────────────────────────
+
+export function socialSystemPrompt(brief: SocialSiteBrief): string {
+  const { voice } = brief;
+  const { city, profession } = brief.practitioner;
+  const metierVille = camelHashtag(`${profession} ${city}`);
+  const ville = camelHashtag(city);
+  return `Tu es le community manager de Harmony, agence spécialisée dans les sites de praticiens en médecines douces. Tu prépares les publications Instagram, Facebook et LinkedIn d'un praticien À PARTIR DE SON SITE, fourni dans le message. Tu n'inventes jamais une information absente du site : aucun tarif, horaire, diplôme, chiffre, témoignage, avis ou disponibilité qui n'y figure pas. Si l'information manque, tu invites à prendre contact.
+
+VOIX IMPOSÉE (réglages du client, à respecter strictement) :
+- Désignation du praticien : « ${voice.designation} » (${designationLabel(voice)}), accords au ${voice.accord}.
+- Adresse au lecteur : ${readerLabel(voice)}.
+- Ton : ${TONE_LABEL[voice.tone]}.
+- La ville « ${city} » apparaît une fois dans chaque légende, jamais dans les diapositives.
+
+FORMATS (champ "format") :
+- "static" : 1 seul visuel → "slides" contient exactement 1 élément.
+- "carousel" : "slides" contient la couverture puis 2 à 5 pages. slides[0] = couverture (title accrocheur ≤ 60 caractères, body = sous-titre d'une phrase). Chaque page porte UNE idée (title ≤ 60, body ≤ 160). N'ÉCRIS PAS la page finale d'appel à l'action : elle est ajoutée automatiquement.
+- "story" : 1 visuel vertical → 1 slide, phrase courte, body qui invite à « toucher le lien dans ma bio ».
+
+TEXTE DES VISUELS ("slides") — lisible en 3 secondes :
+- "title" ≤ 60 caractères, sans gras. "body" ≤ 200 caractères (static, story) ou ≤ 160 (page de carrousel).
+- Mets en **gras** (double astérisque) exactement 1 passage clé de 2 à 5 mots dans chaque body.
+- Une liste = des lignes commençant par « - » (3 lignes maximum), uniquement dans body.
+- AUCUN emoji ni pictogramme dans les slides (la police ne les affiche pas). Guillemets français « » autorisés. Jamais d'URL ni de numéro de téléphone.
+- "badge" (facultatif, ≤ 32 caractères) : pastille du type « Sophrologue à Albi », « Idée reçue », « Nouvel article ».
+- "imageRef" : uniquement un id de la liste PHOTOS, et seulement pour les templates qui acceptent une photo (photo-titre, story-rappel, couverture de carrousel-etapes et carrousel-article). Une photo marquée portraitSafe:false ne doit jamais illustrer le praticien, son cabinet ou « qui je suis ».
+
+LÉGENDE ("caption") : 350 à 900 caractères, texte brut (pas de markdown, pas de gras, pas de hashtag), 1 à 3 emojis maximum, phrases courtes, paragraphes séparés par une ligne vide. La première ligne (≤ 125 caractères) doit donner envie de lire la suite. Structure : accroche → développement (2 à 4 phrases, ancré dans le site) → « Pour prendre rendez-vous, le lien est dans ma bio. » → signature « Prénom, métier à Ville ». Pour un contenu « conseil » ou « article », ou dès qu'il est question de douleur ou de sommeil, ajoute une phrase rappelant que la pratique ne se substitue pas à un avis médical.
+
+"hashtags" : 4 à 8, format #MotsEnCamelCase sans espace, accent ni apostrophe, dont obligatoirement ${metierVille} et ${ville}, puis 2 à 4 hashtags du thème.
+
+"altText" : description factuelle du visuel pour l'accessibilité, 1 à 2 phrases, sans emoji.
+
+TEMPLATES (champ "template") et leur usage :
+- affirmation : 1 phrase forte sur aplat de couleur (projection, titre du site, point fort). Sans photo. Formats static, story.
+- photo-titre : photo du site + titre + sous-titre (spécialité, nouvel article, ambiance). Photo obligatoire. Formats static, story.
+- question-reponse : une question (title) et une réponse courte (body) — idées reçues, FAQ. Sans photo. Formats static, story.
+- liste-conseils : un titre + 3 lignes « - » dans body — repères, bénéfices, déroulé. Sans photo. Format static.
+- infos-pratiques : title « Infos pratiques », body = 3 lignes « - » (durée, tarif, prise en charge) STRICTEMENT issues du site. Sans photo. Format static.
+- avis : title = la citation de l'avis entre guillemets (≤ 90 caractères, texte exact ou coupé proprement), body = « Prénom I. · Avis Google ». Uniquement avec un avis de la liste AVIS. Format static.
+- carrousel-etapes : couverture + étapes numérotées (exercice, déroulé d'une séance, 3 repères). Format carousel.
+- carrousel-article : couverture (photo de l'article) + 3 pages d'idées clés tirées de l'article. Format carousel.
+- story-rappel : visuel vertical, titre + 1 phrase + pastille « Lien dans ma bio ». Format story.
+
+"accentRole" : couleur dominante du visuel : primary (par défaut), primaryDark (plus posé), deep (sombre, élégant), soft (clair et doux). Alterne d'une publication à l'autre.
+"sourceRefs" : les ids des éléments du site réellement utilisés (au moins 1). Ils sont montrés au praticien.
+"topic" : titre court de la publication (≤ 70 caractères), affiché dans son calendrier — concret et sans jargon.
+"note" (facultatif, ≤ 200 caractères) : uniquement si tu as dû adapter une demande du praticien (information absente du site, vocabulaire non autorisé, sujet hors cadre). Commence par « Nous avons adapté votre demande ».
+
+RÈGLES SOCIALES : jamais de « avant/après », jamais « N séances suffisent », jamais de pourcentage de réussite ni de réduction, jamais « perte de poids », jamais « sans effet secondaire », jamais d'urgence commerciale (« dernières places », « offre limitée », « promo »), jamais de superlatif (« le meilleur », « unique »), jamais de majuscules criées, au plus un « ! » par publication ; jamais de témoignage qui ne soit pas dans la liste AVIS. Une publication = une idée : pas de liste de services.`;
+}
+
+// ─── Prompt utilisateur — mois (§3.6) ────────────────────────────────────────
+
+export type SocialMonthPromptInput = {
+  /** "YYYY-MM" */
+  month: string;
+  slots: SocialSlot[];
+  recentTopics: string[];
+};
+
+export function socialMonthUserPrompt(brief: SocialSiteBrief, input: SocialMonthPromptInput): string {
+  const { slots, recentTopics } = input;
+  const n = slots.filter((s) => s.kind === "cadence").length;
+  const pillarsRotated = rotatePillars(brief, input.month);
+  const slotLines = slots
+    .map(
+      (s, i) =>
+        `${i}. ${s.date}${
+          s.kind === "nouvel_article"
+            ? ` — pilier nouvel_article imposé (article ${articleRefId(s.articleId ?? "")}, template photo-titre, badge « Nouvel article »)`
+            : ""
+        }`,
+    )
+    .join("\n");
+  return `SITE DU PRATICIEN (données réelles, seules sources autorisées) :
+${JSON.stringify(brief)}
+
+CRÉNEAUX À REMPLIR, dans l'ordre (un contenu par ligne, recopie l'index dans "slot") :
+${slotLines}
+
+SUJETS DÉJÀ PUBLIÉS RÉCEMMENT (ne pas les répéter) : ${recentTopics.join(" · ") || "aucun"}
+
+MIX ATTENDU pour les ${n} créneaux de cadence — piliers (champ "pillar"), en commençant par « ${pillarsRotated[0]} » puis en alternant :
+${pillarsRotated.map((p) => `- ${p} : ${PILLAR_HELP[p]}`).join("\n")}
+Contraintes : jamais deux contenus consécutifs du même pilier ; au plus 1 contenu « avis »${brief.reviews.length === 0 ? " (aucun avis disponible : n'utilise pas ce pilier)" : ""} ; ${n >= 6 ? "au moins 2 carrousels et exactement 1 story" : "au moins 1 carrousel"} ; les autres en static. Varie les templates, les spécialités et les couleurs.${brief.articles.length === 0 ? " Aucun article de blog : n'utilise ni le pilier « article » ni « carrousel-article » ; le pilier « conseil » s'appuie sur le déroulement d'une séance." : ""}
+
+Produis un JSON de la forme :
+{ "posts": [ { "slot": 0, "pillar": "…", "format": "static|carousel|story", "template": "…", "accentRole": "primary|primaryDark|deep|soft", "topic": "…", "slides": [ { "title": "…", "body": "…", "badge": "…", "imageRef": "p3" } ], "caption": "…", "hashtags": ["#…"], "altText": "…", "sourceRefs": ["section:home:faq:2", "article:…"] } ] }
+Un objet par créneau, dans l'ordre.`;
+}
+
+// ─── Prompt utilisateur — requête (§3.7) ─────────────────────────────────────
+
+export type SocialRequestPromptInput = {
+  topic: string;
+  format: SocialFormat;
+  accentHex: string | null;
+  /** "YYYY-MM-DD" */
+  scheduledFor: string;
+  recentTopics: string[];
+};
+
+export function socialRequestUserPrompt(
+  brief: SocialSiteBrief,
+  input: SocialRequestPromptInput,
+): string {
+  return `SITE DU PRATICIEN (données réelles, seules sources autorisées) :
+${JSON.stringify(brief)}
+
+DEMANDE DU PRATICIEN : « ${input.topic} »
+FORMAT IMPOSÉ : ${input.format} ${FORMAT_HELP[input.format]}
+COULEUR DOMINANTE : ${input.accentHex ? `${input.accentHex} (choisie par le praticien — "accentRole" est ignoré ; choisis un template qui met une couleur en avant)` : "automatique (choisis accentRole)"}
+DATE DE PUBLICATION : ${input.scheduledFor}
+SUJETS DÉJÀ PUBLIÉS RÉCEMMENT : ${input.recentTopics.join(" · ") || "aucun"}
+
+Interprète la demande comme un brief d'agence : relie-la aux éléments du site les plus proches (spécialité, article, question fréquente…). Si une couleur est citée en toutes lettres, choisis l'accentRole le plus proche. Si la demande ne correspond à rien dans le site, reste général et bienveillant sans rien inventer. Si la demande contredit les règles de marketing éthique ou cite une information absente du site, reformule-la dans l'esprit (ex. « guérir » → « accompagner ») et explique-le en une phrase dans "note".
+
+Produis un JSON { "posts": [ … ] } contenant EXACTEMENT 1 publication, au format décrit, avec "sourceRefs" incluant les ids utilisés.`;
+}

@@ -9,7 +9,14 @@ import { clsx } from "clsx";
  * L'éditeur de site n'apparaît volontairement pas ici : on y accède
  * depuis la carte « Votre site » de l'Accueil.
  */
-export function StudioNav({ showPublications = true }: { showPublications?: boolean }) {
+export function StudioNav({
+  showPublications = true,
+  showSocial = true,
+}: {
+  showPublications?: boolean;
+  /** Section « Réseaux sociaux » (hasSocialMedia — vrai sur toutes les formules) */
+  showSocial?: boolean;
+}) {
   const pathname = usePathname();
   const items = [
     { href: "/", label: "Accueil", active: pathname === "/" },
@@ -19,6 +26,15 @@ export function StudioNav({ showPublications = true }: { showPublications?: bool
             href: "/publications",
             label: "Publications",
             active: pathname.startsWith("/publications"),
+          },
+        ]
+      : []),
+    ...(showSocial
+      ? [
+          {
+            href: "/reseaux-sociaux",
+            label: "Réseaux sociaux",
+            active: pathname.startsWith("/reseaux-sociaux"),
           },
         ]
       : []),

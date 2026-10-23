@@ -29,6 +29,12 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Routes d'API (rendu des visuels, téléversement) : réponse 401 lisible par
+  // un client HTTP plutôt qu'une redirection vers la page de connexion.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Non connecté" }, { status: 401 });
+  }
+
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = "/login";
   loginUrl.search = "";

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { Button } from "@theralys/ui";
+import { buildMonthGrid } from "@/lib/calendar";
 import type { CalendarItem } from "@/lib/data";
 import { ArticleModal } from "./article-modal";
 import { BlogSettingsModal, type BlogSettingsValue } from "./blog-settings-modal";
@@ -187,21 +188,4 @@ function LegendSwatch({ className, label }: { className: string; label: string }
       <span className={clsx("inline-block h-3 w-6 rounded", className)} /> {label}
     </span>
   );
-}
-
-/** Grille du mois : semaines lundi→dimanche, null hors du mois. */
-function buildMonthGrid(year: number, month: number): (string | null)[][] {
-  const first = new Date(Date.UTC(year, month - 1, 1));
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const firstWeekday = (first.getUTCDay() + 6) % 7; // 0 = lundi
-
-  const cells: (string | null)[] = Array(firstWeekday).fill(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push(`${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const weeks: (string | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  return weeks;
 }

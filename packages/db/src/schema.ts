@@ -13,7 +13,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import type { PageSections, SiteTheme } from "@theralys/shared";
+import type { PageSections, SiteTheme, SocialPostAssets, SocialPostContent } from "@theralys/shared";
 import type { PlanId } from "./plans";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -79,6 +79,9 @@ export const googleConnectionStatusEnum = pgEnum("google_connection_status", [
   "revoked",
   "error",
 ]);
+export const socialPostFormatEnum = pgEnum("social_post_format", ["static", "carousel", "story"]);
+export const socialPostSourceEnum = pgEnum("social_post_source", ["calendar", "request"]);
+export const socialPostStatusEnum = pgEnum("social_post_status", ["ready", "published", "archived"]);
 
 // ─── Utilisateurs (admin agence / client praticien) ──────────────────────────
 
@@ -131,7 +134,7 @@ export const sites = pgTable(
     slug: text("slug").notNull().unique(),
     domain: text("domain").unique(), // domaine custom (Phase 3)
     name: text("name").notNull(), // ex. « Séverine Salesa, massages bien-être »
-    plan: planEnum("plan").notNull().default("boost"),
+    plan: planEnum("plan").notNull().default("scale"),
     language: text("language").notNull().default("fr"),
     bookingUrl: text("booking_url"), // lien RDV externe (Calendly, Crenolib, tel:…)
     theme: jsonb("theme").$type<SiteTheme>().notNull(),
@@ -372,6 +375,40 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Réseaux sociaux (contenus prêts à poster, studio) ───────────────────────
+
+export const socialPosts = pgTable(
+  "social_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Toujours le site (sessions « agence »), jamais users.id
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scheduledFor: date("scheduled_for").notNull(),
+    format: socialPostFormatEnum("format").notNull(),
+    source: socialPostSourceEnum("source").notNull().default("calendar"),
+    status: socialPostStatusEnum("status").notNull().default("ready"),
+    topic: text("topic").notNull(),
+    // Texte saisi dans la barre « sur mesure » (source = request)
+    request: text("request"),
+    // SocialTemplate (packages/shared)
+    template: text("template").notNull(),
+    // Hex #rrggbb choisi par le client ; null = content.accentRole
+    accentColor: text("accent_color"),
+    content: jsonb("content").$type<SocialPostContent>().notNull(),
+    assets: jsonb("assets")
+      .$type<SocialPostAssets>()
+      .notNull()
+      .default({ version: 1, renders: {} }),
+    downloadedAt: timestamp("downloaded_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("social_posts_site_date_idx").on(t.siteId, t.scheduledFor)],
+);
+
 // ─── Types dérivés ───────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -390,4 +427,6 @@ export type OnboardingTask = typeof onboardingTasks.$inferSelect;
 export type Subscription = typeof subscriptions.$inferSelect;
 export type Domain = typeof domains.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
+export type SocialPost = typeof socialPosts.$inferSelect;
+export type NewSocialPost = typeof socialPosts.$inferInsert;
 export type SitePlan = PlanId;

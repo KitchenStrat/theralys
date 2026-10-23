@@ -3,16 +3,28 @@
 import { clsx } from "clsx";
 import { useEffect, type ReactNode } from "react";
 
+export type ModalSize = "md" | "lg" | "xl";
+
 export type ModalProps = {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** Largeur : md (max-w-lg, défaut), lg (max-w-2xl), xl (max-w-4xl) */
+  size?: ModalSize;
+  /** Hérité : équivalent de `size="lg"` */
   wide?: boolean;
 };
 
-export function Modal({ open, onClose, title, children, footer, wide }: ModalProps) {
+const SIZES: Record<ModalSize, string> = {
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+};
+
+export function Modal({ open, onClose, title, children, footer, size, wide }: ModalProps) {
+  const resolvedSize: ModalSize = size ?? (wide ? "lg" : "md");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -37,7 +49,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: ModalPro
         aria-label={title}
         className={clsx(
           "max-h-[90vh] w-full overflow-y-auto rounded-card bg-white shadow-pop",
-          wide ? "max-w-2xl" : "max-w-lg",
+          SIZES[resolvedSize],
         )}
       >
         <div className="flex items-center justify-between border-b border-cream-200 px-6 py-4">

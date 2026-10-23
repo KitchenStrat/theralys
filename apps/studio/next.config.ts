@@ -9,7 +9,13 @@ const nextConfig: NextConfig = {
     "@theralys/analytics",
     "@theralys/jobs",
   ],
-  serverExternalPackages: ["pg"],
+  // sharp : binaire natif (rendu des visuels réseaux sociaux), jamais bundlé
+  serverExternalPackages: ["pg", "sharp"],
+  // Polices TTF lues par fs.readFile dans les routes /api/social/* : à embarquer
+  // dans le bundle serverless (elles ne sont pas détectées par le traçage).
+  outputFileTracingIncludes: {
+    "/api/social/**": ["./assets/fonts/**"],
+  },
   experimental: {
     serverActions: {
       // « Enregistrer et publier » peut porter une photo en data-URI quand le

@@ -74,6 +74,7 @@ export default async function AccountPage() {
                   : "— Outil de recherche des mots-clés non inclus"}
               </li>
               <li>{plan.academy ? "✓ Académie" : "— Académie non incluse"}</li>
+              <li>✓ Contenus réseaux sociaux prêts à poster (visuels et légendes)</li>
               <li>✓ Avis Google synchronisés · statistiques · hébergement</li>
             </ul>
             <div className="mt-5">

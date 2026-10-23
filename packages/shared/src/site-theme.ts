@@ -1,6 +1,6 @@
 import type { SiteTheme, ThemePreset, FontPreset } from "./content";
 
-type Palette = {
+export type Palette = {
   primary: string;
   primaryDark: string;
   background: string;
@@ -13,7 +13,7 @@ type Palette = {
   onDeep: string;
 };
 
-const PALETTES: Record<ThemePreset, Palette> = {
+export const PALETTES: Record<ThemePreset, Palette> = {
   terracotta: {
     primary: "#b05038",
     primaryDark: "#8a3d2a",
@@ -225,6 +225,18 @@ function applyIntensity(palette: Palette, intensity: SiteTheme["intensity"]): Pa
     };
   }
   return palette;
+}
+
+/**
+ * Palette effective d'un site : preset décliné par l'intensité, puis overrides
+ * ponctuels (`theme.palette`). Même composition que `themeCssVars`, en hex —
+ * pour les rendus hors CSS (visuels réseaux sociaux).
+ */
+export function resolvePalette(theme: SiteTheme): Palette {
+  return {
+    ...applyIntensity(PALETTES[theme.preset] ?? PALETTES.terracotta, theme.intensity ?? "naturel"),
+    ...theme.palette,
+  };
 }
 
 /** Variables CSS injectées sur le conteneur du site (thème par site). */

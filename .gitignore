@@ -22,3 +22,6 @@ packages/db/drizzle/meta/_journal.json.bak
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Script de fumée du rendu réseaux sociaux (images générées)
+apps/studio/.smoke/

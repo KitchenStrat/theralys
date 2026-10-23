@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { hasBlog } from "@theralys/db";
+import { hasBlog, hasSocialMedia } from "@theralys/db";
 import { destroySession, requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { StudioNav } from "./studio-nav";
@@ -40,7 +40,10 @@ export default async function StudioLayout({ children }: { children: ReactNode }
             </Link>
           </div>
 
-          <StudioNav showPublications={site.type === "demo" || hasBlog(site.plan)} />
+          <StudioNav
+            showPublications={site.type === "demo" || hasBlog(site.plan)}
+            showSocial={hasSocialMedia(site.plan)}
+          />
 
           <div className="border-t border-cream-200 p-4 md:mt-auto">
             <a
