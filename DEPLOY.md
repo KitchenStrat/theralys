@@ -2,7 +2,8 @@
 
 Cible : 3 projets Vercel (sites publics, admin, studio) + une base PostgreSQL
 managée (Neon). Durée totale : ~45 minutes. Aucune ligne de commande n'est
-nécessaire, sauf pour les migrations (étape 2.3).
+nécessaire, sauf pour les migrations (étape 2.3, puis la section « Mettre à
+jour le schéma en production » à chaque nouvelle migration).
 
 > **Plan Vercel** : le plan **Pro (20 $/mois)** est nécessaire en production —
 > la génération IA d'une démo dure ~4-5 min (fonctions jusqu'à 800 s — plan Pro avec Fluid compute, configuré
@@ -22,15 +23,15 @@ nécessaire, sauf pour les migrations (étape 2.3).
 3. **Neon** (base de données) : [neon.tech](https://neon.tech) → « Sign up with
    GitHub ».
 
-## Étape 1 — Décider de la branche de production (2 min)
+## Étape 1 — La branche de production : `main` (1 min)
 
-Le code vit sur la branche `claude/phase-1-startup-bkubgy`. Deux options :
-
-- **Option simple** : fusionner cette branche dans `main` (recommandé —
-  demandez à Claude « fusionne sur main » ou faites-le depuis GitHub :
-  la page du dépôt propose « Compare & pull request » → « Merge »).
-- **Option sans fusion** : dans chaque projet Vercel (étape 3), Settings → Git
-  → **Production Branch** → saisir `claude/phase-1-startup-bkubgy`.
+Le code de production vit sur la branche `main` (branche par défaut du dépôt) :
+Vercel la prend automatiquement comme **Production Branch**, rien à régler.
+Les évolutions se préparent sur des branches de travail (`claude/…`) fusionnées
+dans `main` par pull request GitHub (« Compare & pull request » → « Merge ») —
+c'est le push sur `main` qui déclenche les déploiements. Avant de fusionner une
+branche qui contient une migration, lisez « Mettre à jour le schéma en
+production » plus bas.
 
 ## Étape 2 — Créer la base de données (10 min)
 
@@ -45,9 +46,9 @@ Le code vit sur la branche `claude/phase-1-startup-bkubgy`. Deux options :
 
    ```bash
    git clone https://github.com/KitchenStrat/theralys.git && cd theralys
-   git checkout claude/phase-1-startup-bkubgy   # (ou main après fusion)
+   git checkout main
    pnpm install
-   DATABASE_URL="<URL Neon>" pnpm db:migrate
+   DATABASE_URL="<URL Neon directe>" pnpm db:migrate   # URL sans « -pooler », voir plus bas
    DATABASE_URL="<URL Neon>" \
      SEED_ADMIN_EMAIL="contact@kitchenstrategy.fr" \
      SEED_ADMIN_PASSWORD="<votre vrai mot de passe admin>" \
@@ -171,6 +172,63 @@ répondre `{"ok":true,…}`.
 
 Après chaque ajout de variable : **Redeploy**.
 
+## Mettre à jour le schéma en production (à chaque migration)
+
+Les trois projets se redéploient à chaque push sur `main`, mais **personne
+n'applique les migrations à votre place** : ni Vercel, ni la CI. Une migration
+(`packages/db/drizzle/00NN_*.sql`, générée par `pnpm db:generate` et commitée
+avec son journal `meta/_journal.json`) s'applique à la main, depuis un poste.
+
+**Ordre à respecter : 1. migration, 2. déploiement.** Pour une branche qui
+ajoute une migration : appliquez-la sur Neon depuis cette branche (elle contient
+le SQL), vérifiez, puis fusionnez dans `main`. Les migrations sont additives et
+rejouables : le code déjà en production continue de fonctionner avec le schéma
+étendu. Si le déploiement devait malgré tout précéder la migration, la page
+**Réseaux sociaux** du studio affiche « Cette section est en cours d'activation,
+revenez dans quelques minutes. » (pas d'erreur) tant que `0001_social_posts`
+n'est pas appliquée — appliquez-la alors sans attendre.
+
+1. **Point de restauration** — sur Neon, projet `theralys` → **Branches** →
+   **Create branch** depuis la branche de production : copie instantanée du
+   schéma et des données, à restaurer en cas de problème (le point-in-time
+   recovery, s'il est activé, joue le même rôle). Les migrations ne suppriment
+   rien, mais le réflexe reste bon.
+2. **Appliquer** — depuis un poste à jour de `main` (ou de la branche qui porte
+   la migration), avec l'URL de connexion **directe** de Neon : encart
+   Connection string, case **Pooled connection décochée** (l'hôte ne contient
+   pas `-pooler`) — le DDL s'exécute dans une transaction, qu'on ne fait pas
+   transiter par le pooler :
+
+   ```bash
+   git checkout main && git pull && pnpm install
+   DATABASE_URL="<URL Neon directe>" pnpm db:migrate
+   # → « ✔ Migrations appliquées »
+   ```
+
+3. **Vérifier** — dans l'éditeur SQL de Neon (ou `psql "<URL Neon directe>"`) :
+
+   ```sql
+   select id, created_at from drizzle.__drizzle_migrations order by id;
+   -- 2 lignes : 1784128836899 (0000_soft_scrambler), 1792775462436 (0001_social_posts)
+   select count(*) from social_posts;
+   -- 0 juste après la migration : la table existe, les contenus arrivent avec les praticiens
+   ```
+
+   Une ligne par entrée du journal (`created_at` = champ `when` de
+   `packages/db/drizzle/meta/_journal.json`). Fusionnez/déployez ensuite, puis
+   ouvrez `https://app.harmony-web.fr/reseaux-sociaux` : le calendrier s'affiche.
+
+**Base poussée sans journal** (`drizzle-kit push` autrefois : table
+`drizzle.__drizzle_migrations` absente ou vide, cas d'une base où des colonnes
+ont été poussées à la main) : rien de particulier à faire. La migration `0000`
+est rejouable — chaque instruction est gardée par `IF NOT EXISTS` ou
+`DO $$ … EXCEPTION WHEN duplicate_object` — donc `pnpm db:migrate` passe sur les
+objets existants sans les toucher, applique ce qui manque (`0001`) et inscrit
+les deux lignes du journal. Relancer `pnpm db:migrate` est toujours sans effet
+(no-op). Ne lancez jamais `drizzle-kit push` contre la base de production : elle
+a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQL
+(gardes conservées) → commit → `pnpm db:migrate`.
+
 ## Dépannage rapide
 
 | Symptôme | Cause probable |
@@ -179,4 +237,5 @@ Après chaque ajout de variable : **Redeploy**.
 | Badge « mode mock » malgré la clé | Variable absente de l'environnement **Production**, ou pas de redéploiement après ajout |
 | Démo bloquée « En préparation » puis « Erreur … timeout » | Plan Hobby (60 s max) — passer Pro, ou tester en mock |
 | Connexion admin/studio en boucle | `AUTH_SECRET` différent entre projets |
+| Page Réseaux sociaux « Cette section est en cours d'activation » | Migration `0001_social_posts` non appliquée sur Neon → section « Mettre à jour le schéma en production » |
 | Sites clients 404 sur leur domaine | Domaine non ajouté au projet **harmony-sites** |

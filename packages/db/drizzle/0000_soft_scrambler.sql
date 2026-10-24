@@ -1,22 +1,27 @@
-CREATE TYPE "public"."analytics_event_type" AS ENUM('pageview', 'rdv_click');--> statement-breakpoint
-CREATE TYPE "public"."article_status" AS ENUM('draft', 'scheduled', 'published', 'withdrawn');--> statement-breakpoint
-CREATE TYPE "public"."billing_period" AS ENUM('monthly', 'annual');--> statement-breakpoint
-CREATE TYPE "public"."blog_publication_mode" AS ENUM('auto', 'manual');--> statement-breakpoint
-CREATE TYPE "public"."calendar_entry_status" AS ENUM('planned', 'generated', 'skipped');--> statement-breakpoint
-CREATE TYPE "public"."domain_status" AS ENUM('pending', 'registered', 'configured', 'error');--> statement-breakpoint
-CREATE TYPE "public"."gender" AS ENUM('feminin', 'masculin');--> statement-breakpoint
-CREATE TYPE "public"."google_connection_status" AS ENUM('connected', 'revoked', 'error');--> statement-breakpoint
-CREATE TYPE "public"."lead_status" AS ENUM('new', 'demo_sent', 'meeting', 'won', 'lost');--> statement-breakpoint
-CREATE TYPE "public"."page_type" AS ENUM('home', 'motif', 'about', 'blog', 'legal');--> statement-breakpoint
-CREATE TYPE "public"."plan" AS ENUM('starter', 'boost', 'scale');--> statement-breakpoint
-CREATE TYPE "public"."site_status" AS ENUM('generating', 'ready', 'error', 'published', 'archived');--> statement-breakpoint
-CREATE TYPE "public"."site_type" AS ENUM('demo', 'client');--> statement-breakpoint
-CREATE TYPE "public"."subscription_status" AS ENUM('active', 'past_due', 'canceled', 'trialing');--> statement-breakpoint
-CREATE TYPE "public"."user_role" AS ENUM('admin', 'client');--> statement-breakpoint
-CREATE TYPE "public"."voice_designation" AS ENUM('nous', 'je', 'on');--> statement-breakpoint
-CREATE TYPE "public"."voice_reader" AS ENUM('vous', 'tu');--> statement-breakpoint
-CREATE TYPE "public"."voice_tone" AS ENUM('chaleureux', 'rassurant', 'pose', 'direct', 'pedagogue');--> statement-breakpoint
-CREATE TABLE "analytics_events" (
+-- Schéma initial (généré par drizzle-kit, rendu rejouable à la main).
+-- Chaque instruction est gardée (DO $$ … EXCEPTION WHEN duplicate_object, IF NOT EXISTS)
+-- pour que `pnpm db:migrate` passe aussi sur une base déjà créée par `drizzle-kit push`
+-- sans journal (drizzle.__drizzle_migrations vide) : les objets existants sont ignorés.
+-- Ordre des instructions et séparateurs de statements inchangés ; meta/ non modifié.
+DO $$ BEGIN CREATE TYPE "public"."analytics_event_type" AS ENUM('pageview', 'rdv_click'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."article_status" AS ENUM('draft', 'scheduled', 'published', 'withdrawn'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."billing_period" AS ENUM('monthly', 'annual'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."blog_publication_mode" AS ENUM('auto', 'manual'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."calendar_entry_status" AS ENUM('planned', 'generated', 'skipped'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."domain_status" AS ENUM('pending', 'registered', 'configured', 'error'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."gender" AS ENUM('feminin', 'masculin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."google_connection_status" AS ENUM('connected', 'revoked', 'error'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."lead_status" AS ENUM('new', 'demo_sent', 'meeting', 'won', 'lost'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."page_type" AS ENUM('home', 'motif', 'about', 'blog', 'legal'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."plan" AS ENUM('starter', 'boost', 'scale'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."site_status" AS ENUM('generating', 'ready', 'error', 'published', 'archived'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."site_type" AS ENUM('demo', 'client'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."subscription_status" AS ENUM('active', 'past_due', 'canceled', 'trialing'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."user_role" AS ENUM('admin', 'client'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."voice_designation" AS ENUM('nous', 'je', 'on'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."voice_reader" AS ENUM('vous', 'tu'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN CREATE TYPE "public"."voice_tone" AS ENUM('chaleureux', 'rassurant', 'pose', 'direct', 'pedagogue'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "analytics_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"type" "analytics_event_type" NOT NULL,
@@ -25,7 +30,7 @@ CREATE TABLE "analytics_events" (
 	"occurred_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "blog_articles" (
+CREATE TABLE IF NOT EXISTS "blog_articles" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"title" text NOT NULL,
@@ -44,7 +49,7 @@ CREATE TABLE "blog_articles" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "blog_settings" (
+CREATE TABLE IF NOT EXISTS "blog_settings" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"publication_mode" "blog_publication_mode" DEFAULT 'auto' NOT NULL,
@@ -56,7 +61,7 @@ CREATE TABLE "blog_settings" (
 	CONSTRAINT "blog_settings_site_id_unique" UNIQUE("site_id")
 );
 --> statement-breakpoint
-CREATE TABLE "domains" (
+CREATE TABLE IF NOT EXISTS "domains" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"name" text NOT NULL,
@@ -67,7 +72,7 @@ CREATE TABLE "domains" (
 	CONSTRAINT "domains_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
-CREATE TABLE "editorial_calendar_entries" (
+CREATE TABLE IF NOT EXISTS "editorial_calendar_entries" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"scheduled_for" date NOT NULL,
@@ -78,7 +83,7 @@ CREATE TABLE "editorial_calendar_entries" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "google_connections" (
+CREATE TABLE IF NOT EXISTS "google_connections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"status" "google_connection_status" DEFAULT 'connected' NOT NULL,
@@ -91,7 +96,7 @@ CREATE TABLE "google_connections" (
 	CONSTRAINT "google_connections_site_id_unique" UNIQUE("site_id")
 );
 --> statement-breakpoint
-CREATE TABLE "google_reviews" (
+CREATE TABLE IF NOT EXISTS "google_reviews" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"source_review_id" text,
@@ -102,7 +107,7 @@ CREATE TABLE "google_reviews" (
 	"synced_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "leads" (
+CREATE TABLE IF NOT EXISTS "leads" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"email" text,
@@ -114,7 +119,7 @@ CREATE TABLE "leads" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "onboarding_tasks" (
+CREATE TABLE IF NOT EXISTS "onboarding_tasks" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"key" text NOT NULL,
@@ -123,7 +128,7 @@ CREATE TABLE "onboarding_tasks" (
 	"position" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "pages" (
+CREATE TABLE IF NOT EXISTS "pages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"type" "page_type" NOT NULL,
@@ -137,7 +142,7 @@ CREATE TABLE "pages" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "prospects" (
+CREATE TABLE IF NOT EXISTS "prospects" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"first_name" text NOT NULL,
 	"last_name" text NOT NULL,
@@ -152,7 +157,7 @@ CREATE TABLE "prospects" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "search_query_stats" (
+CREATE TABLE IF NOT EXISTS "search_query_stats" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"day" date NOT NULL,
@@ -161,7 +166,7 @@ CREATE TABLE "search_query_stats" (
 	"clicks" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "sites" (
+CREATE TABLE IF NOT EXISTS "sites" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"type" "site_type" DEFAULT 'demo' NOT NULL,
 	"status" "site_status" DEFAULT 'generating' NOT NULL,
@@ -183,7 +188,7 @@ CREATE TABLE "sites" (
 	CONSTRAINT "sites_domain_unique" UNIQUE("domain")
 );
 --> statement-breakpoint
-CREATE TABLE "subscriptions" (
+CREATE TABLE IF NOT EXISTS "subscriptions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"site_id" uuid NOT NULL,
 	"plan" "plan" NOT NULL,
@@ -196,7 +201,7 @@ CREATE TABLE "subscriptions" (
 	CONSTRAINT "subscriptions_site_id_unique" UNIQUE("site_id")
 );
 --> statement-breakpoint
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" text NOT NULL,
 	"password_hash" text NOT NULL,
@@ -207,27 +212,27 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "blog_articles" ADD CONSTRAINT "blog_articles_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "blog_settings" ADD CONSTRAINT "blog_settings_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "domains" ADD CONSTRAINT "domains_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "editorial_calendar_entries" ADD CONSTRAINT "editorial_calendar_entries_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "editorial_calendar_entries" ADD CONSTRAINT "editorial_calendar_entries_article_id_blog_articles_id_fk" FOREIGN KEY ("article_id") REFERENCES "public"."blog_articles"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "google_connections" ADD CONSTRAINT "google_connections_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "google_reviews" ADD CONSTRAINT "google_reviews_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "leads" ADD CONSTRAINT "leads_prospect_id_prospects_id_fk" FOREIGN KEY ("prospect_id") REFERENCES "public"."prospects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "onboarding_tasks" ADD CONSTRAINT "onboarding_tasks_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "pages" ADD CONSTRAINT "pages_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "search_query_stats" ADD CONSTRAINT "search_query_stats_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "sites" ADD CONSTRAINT "sites_prospect_id_prospects_id_fk" FOREIGN KEY ("prospect_id") REFERENCES "public"."prospects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "users" ADD CONSTRAINT "users_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "analytics_site_type_time_idx" ON "analytics_events" USING btree ("site_id","type","occurred_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "blog_articles_site_slug_idx" ON "blog_articles" USING btree ("site_id","slug");--> statement-breakpoint
-CREATE INDEX "blog_articles_site_status_idx" ON "blog_articles" USING btree ("site_id","status","publish_at");--> statement-breakpoint
-CREATE INDEX "editorial_entries_site_date_idx" ON "editorial_calendar_entries" USING btree ("site_id","scheduled_for");--> statement-breakpoint
-CREATE INDEX "google_reviews_site_idx" ON "google_reviews" USING btree ("site_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "onboarding_site_key_idx" ON "onboarding_tasks" USING btree ("site_id","key");--> statement-breakpoint
-CREATE UNIQUE INDEX "pages_site_slug_idx" ON "pages" USING btree ("site_id","type","slug");--> statement-breakpoint
-CREATE UNIQUE INDEX "search_stats_site_day_query_idx" ON "search_query_stats" USING btree ("site_id","day","query");--> statement-breakpoint
-CREATE INDEX "sites_type_created_idx" ON "sites" USING btree ("type","created_at");
+DO $$ BEGIN ALTER TABLE "analytics_events" ADD CONSTRAINT "analytics_events_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "blog_articles" ADD CONSTRAINT "blog_articles_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "blog_settings" ADD CONSTRAINT "blog_settings_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "domains" ADD CONSTRAINT "domains_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "editorial_calendar_entries" ADD CONSTRAINT "editorial_calendar_entries_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "editorial_calendar_entries" ADD CONSTRAINT "editorial_calendar_entries_article_id_blog_articles_id_fk" FOREIGN KEY ("article_id") REFERENCES "public"."blog_articles"("id") ON DELETE set null ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "google_connections" ADD CONSTRAINT "google_connections_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "google_reviews" ADD CONSTRAINT "google_reviews_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "leads" ADD CONSTRAINT "leads_prospect_id_prospects_id_fk" FOREIGN KEY ("prospect_id") REFERENCES "public"."prospects"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "onboarding_tasks" ADD CONSTRAINT "onboarding_tasks_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "pages" ADD CONSTRAINT "pages_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "search_query_stats" ADD CONSTRAINT "search_query_stats_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "sites" ADD CONSTRAINT "sites_prospect_id_prospects_id_fk" FOREIGN KEY ("prospect_id") REFERENCES "public"."prospects"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "users" ADD CONSTRAINT "users_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "analytics_site_type_time_idx" ON "analytics_events" USING btree ("site_id","type","occurred_at");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "blog_articles_site_slug_idx" ON "blog_articles" USING btree ("site_id","slug");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "blog_articles_site_status_idx" ON "blog_articles" USING btree ("site_id","status","publish_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "editorial_entries_site_date_idx" ON "editorial_calendar_entries" USING btree ("site_id","scheduled_for");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "google_reviews_site_idx" ON "google_reviews" USING btree ("site_id");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "onboarding_site_key_idx" ON "onboarding_tasks" USING btree ("site_id","key");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "pages_site_slug_idx" ON "pages" USING btree ("site_id","type","slug");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "search_stats_site_day_query_idx" ON "search_query_stats" USING btree ("site_id","day","query");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "sites_type_created_idx" ON "sites" USING btree ("type","created_at");

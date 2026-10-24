@@ -12,6 +12,7 @@
 
 import {
   camelHashtag,
+  truncateAtSentence,
   truncateAtWord,
   singleEmphasis,
   type SocialFormat,
@@ -32,6 +33,10 @@ import {
 import {
   SOCIAL_BIO_LINE,
   SOCIAL_NEW_ARTICLE_BADGE,
+  checkSocialCompliance,
+  numberWord,
+  reviewSlide,
+  socialAltText,
   type SocialPlan,
   type SocialPostDraft,
   type SocialSlideDraft,
@@ -107,41 +112,114 @@ function sentences(text: string): string[] {
     .filter((s) => s !== "");
 }
 
+/**
+ * Phrases complètes d'un texte : un fragment final tronqué par le brief
+ * (« … ») est écarté dès qu'il reste au moins une phrase entière.
+ */
+function wholeSentences(text: string): string[] {
+  const all = sentences(text);
+  return all.length > 1 && /…$/.test(all[all.length - 1] ?? "") ? all.slice(0, -1) : all;
+}
+
+/** Texte recopié dans une légende : phrases entières seulement (jamais de « … » en pleine phrase). */
+function wholeText(text: string): string {
+  return wholeSentences(text).join(" ");
+}
+
 /** Première phrase, terminée par un point. */
 function firstSentence(text: string): string {
   const s = (sentences(text)[0] ?? inline(text)).replace(/\s*[:;,]$/, "");
   return /[.!?…]$/.test(s) ? s : `${s}.`;
 }
 
-/** Exactement un passage **gras** (attaque du texte, sinon ses deux premiers mots). */
-function ensureBold(text: string): string {
-  const once = singleEmphasis(emphasizeLead(text));
-  if (/\*\*[^*\n]+\*\*/.test(once)) return once;
-  const lead = /^(\S+\s+\S+)/.exec(once)?.[1];
-  return lead ? `**${lead}**${once.slice(lead.length)}` : once;
-}
-
-/** Body d'une diapositive : une ligne tronquée à `max` (marqueurs compris), 1 gras. */
-function body(text: string, max: number): string {
-  const clean = inline(text).replace(/\s*:$/, ".");
-  return ensureBold(truncateAtWord(clean, max - 4));
+/** Gras sur les premiers mots porteurs (3 au plus, mots-outils de fin exclus). */
+function boldLead(text: string): string {
+  const words = [...text.matchAll(/\S+/g)];
+  if (words.length < 2) return text;
+  let n = Math.min(3, words.length);
+  while (n > 2 && TAIL_STOP.test(words[n - 1]![0].replace(/[.,;:!?]$/, ""))) n -= 1;
+  const last = words[n - 1]!;
+  const lead = text.slice(0, last.index + last[0].length).replace(/[.,;:!?]+$/, "");
+  return `**${lead}**${text.slice(lead.length)}`;
 }
 
 /**
- * Ligne ramenée sous `perLine` : le plus long préfixe coupé à un séparateur
- * (« : », « — », « · ») qui tient, sinon troncature au mot.
+ * Exactement un passage **gras** de quelques mots : l'attaque du texte
+ * (emphasizeLead) ; si elle couvre tout le texte, seulement ses premiers mots
+ * porteurs ; sans attaque trouvée, les premiers mots.
+ */
+function ensureBold(text: string): string {
+  const once = singleEmphasis(emphasizeLead(text));
+  const m = /\*\*([^*\n]+)\*\*/.exec(once);
+  if (!m) return boldLead(once);
+  const plain = once.replace(/\*\*/g, "");
+  const trimPunct = (t: string) => t.replace(/[\s.,;:!?]+$/, "");
+  const whole = trimPunct(plain) === trimPunct(m[1] ?? "");
+  return whole && plain.split(/\s+/).length > 3 ? boldLead(plain) : once;
+}
+
+/**
+ * Body d'une diapositive : phrases entières qui tiennent dans `max` (marqueurs
+ * compris), sinon troncature au mot ; 1 gras.
+ */
+function body(text: string, max: number): string {
+  const clean = wholeText(inline(text)).replace(/\s*:$/, ".");
+  return ensureBold(truncateAtSentence(clean, max - 4, 0.25));
+}
+
+/** Mots qui ouvrent une proposition : une ligne peut s'arrêter juste avant. */
+const CLAUSE_BREAK_RE =
+  /\s(?=(?:et|ou|mais|puis|qui|que|dont|où|pour|dans|avec|sans|malgré|afin|lorsque|quand|comme|chez|vers|sur|sous|entre|par|selon|grâce|à|en|de|des|du|au|aux)\s)/giu;
+
+/** Dernière coupure possible (début du motif) dans [min, max], ou -1. */
+function lastCut(text: string, re: RegExp, max: number, min: number): number {
+  let best = -1;
+  re.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > max) break;
+    if (m.index >= min) best = m.index;
+  }
+  return best;
+}
+
+/**
+ * Ligne ramenée sous `perLine` sans « … » quand c'est possible : coupée à la
+ * dernière fin de phrase, sinon à un séparateur (« : », « — », « · »), sinon à
+ * une virgule ou devant une conjonction / préposition (ces deux dernières en
+ * gardant au moins la moitié du budget) ; en dernier recours, troncature au mot.
  * « Les épaules et la nuque : la zone classique… » → « Les épaules et la nuque ».
  */
 function shortLine(line: string, perLine: number): string {
   const clean = inline(line).replace(/[.;,]\s*$/, "");
   if (clean.length <= perLine) return clean;
-  let best = "";
-  const re = /\s[:—–·]\s/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(clean)) !== null) {
-    if (m.index <= perLine && m.index > best.length) best = clean.slice(0, m.index);
+  const half = Math.ceil(perLine / 2);
+  const strategies: [RegExp, number][] = [
+    [/[.!?…](?=\s)/g, 8],
+    [/\s[:—–·]\s/g, 8],
+    [/,(?=\s)/g, half],
+    [CLAUSE_BREAK_RE, half],
+  ];
+  for (const [re, min] of strategies) {
+    const cut = lastCut(clean, re, perLine, min);
+    if (cut > 0) return clean.slice(0, cut).replace(/[\s,;:.]+$/, "");
   }
-  return best !== "" ? best : truncateAtWord(clean, perLine);
+  return truncateAtWord(clean, perLine);
+}
+
+/**
+ * Titre d'article ramené sous `max` : la question qui suit « : » quand elle
+ * tient (« Gestion du stress à Albi : à quoi s'attendre lors d'une première
+ * séance ? » → « À quoi s'attendre lors d'une première séance ? »), sinon une
+ * coupure de proposition (shortLine), jamais un mot coupé en « … » si possible.
+ */
+function articleTitle(text: string, max = 60): string {
+  const clean = inline(text).replace(/[.:]\s*$/, "");
+  if (clean.length <= max) return clean;
+  const parts = clean.split(/\s:\s/);
+  const question = parts.length === 2 ? capitalize(parts[1]!.trim()) : "";
+  if (question.length >= 20 && question.length <= max) return question;
+  return shortLine(clean, max);
 }
 
 /**
@@ -163,8 +241,17 @@ function bulletBody(lines: string[], max: number, perLine = 70): string {
   return out.join("\n");
 }
 
-/** Choix stable d'un élément : d'abord ceux absents des sujets récents, puis par graine. */
-function pick<T>(ctx: Ctx, items: readonly T[], k: number, labelOf: (item: T) => string): T | undefined {
+/** Texte du site citable tel quel : aucune règle sociale ni éthique enfreinte. */
+function compliant(text: string): boolean {
+  return checkSocialCompliance(text).ok;
+}
+
+/**
+ * Choix stable d'un élément : seuls les éléments citables (texte conforme),
+ * d'abord ceux absents des sujets récents, puis par graine.
+ */
+function pick<T>(ctx: Ctx, candidates: readonly T[], k: number, labelOf: (item: T) => string, textOf: (item: T) => string = labelOf): T | undefined {
+  const items = candidates.filter((item) => compliant(textOf(item)));
   if (items.length === 0) return undefined;
   const fresh = items.filter((item) => {
     const label = labelOf(item).toLowerCase();
@@ -189,12 +276,6 @@ function heroTitle(brief: SocialSiteBrief): string {
 /** « la sophrologie » → « #Sophrologie » ; « cette pratique de bien-être » → « #BienEtre ». */
 function practiceTag(practice: string): string {
   return camelHashtag(practice.replace(/^(cette pratique de|les|la|le|l['’])\s*/i, ""));
-}
-
-const NUMBER_WORDS = ["", "une", "deux", "trois", "quatre", "cinq", "six", "sept"];
-
-function numberWord(n: number): string {
-  return NUMBER_WORDS[n] ?? String(n);
 }
 
 // ─── Légende ─────────────────────────────────────────────────────────────────
@@ -236,29 +317,15 @@ function hashtags(ctx: Ctx, extra: string[]): string[] {
 
 // ─── Texte alternatif ────────────────────────────────────────────────────────
 
-function altText(ctx: Ctx, template: SocialTemplate, slides: SocialSlideDraft[]): string {
-  const first = slides[0]?.title ?? "";
-  const brand = `${ctx.first}, ${ctx.professionLower}`;
-  switch (template) {
-    case "photo-titre":
-      return `Photo d'ambiance avec, en surimpression, le titre « ${first} » et la signature ${brand}.`;
-    case "affirmation":
-      return `Texte « ${first} » sur un fond de couleur dégradé, signé ${brand}.`;
-    case "question-reponse":
-      return `Question « ${first} » suivie de sa réponse courte, sur fond clair.`;
-    case "liste-conseils":
-      return `Titre « ${first} » et une liste de trois points numérotés, signée ${brand}.`;
-    case "infos-pratiques":
-      return `Encadré « ${first} » listant les informations pratiques du cabinet de ${brand}.`;
-    case "avis":
-      return `Avis Google cinq étoiles cité entre guillemets, suivi du prénom de son auteur.`;
-    case "carrousel-etapes":
-      return `Carrousel de ${slides.length + 1} pages : couverture « ${first} », étapes numérotées, puis invitation à prendre rendez-vous.`;
-    case "carrousel-article":
-      return `Carrousel de ${slides.length + 1} pages résumant l'article « ${first} », avec sa photo de couverture.`;
-    case "story-rappel":
-      return `Story verticale : photo en haut, titre « ${first} » et pastille « Lien dans ma bio ».`;
-  }
+/** Texte alternatif du brouillon : `socialAltText` sur les diapositives (photo = imageRef présent). */
+function altText(ctx: Ctx, parts: DraftParts, slides: SocialSlideDraft[]): string {
+  const total = parts.format === "carousel" ? slides.length + 1 : slides.length;
+  return socialAltText(
+    parts.template,
+    slides.map((s) => ({ title: s.title, body: s.body, hasPhoto: Boolean(s.imageRef) })),
+    ctx.brief.practitioner,
+    { total, ...(parts.review ? { reviewRating: parts.review.rating } : {}) },
+  );
 }
 
 // ─── Assemblage d'un brouillon ───────────────────────────────────────────────
@@ -273,6 +340,8 @@ type DraftParts = {
   development: string[];
   tags: string[];
   sourceRefs: string[];
+  /** Avis cité (template « avis ») : sa note réelle entre dans le texte alternatif */
+  review?: { rating: number };
   k: number;
 };
 
@@ -293,7 +362,7 @@ function draft(ctx: Ctx, parts: DraftParts): SocialPostDraft {
     slides,
     caption: caption(ctx, parts.hook, parts.development, parts.pillar),
     hashtags: hashtags(ctx, parts.tags),
-    altText: truncateAtWord(altText(ctx, parts.template, slides), 300),
+    altText: truncateAtWord(altText(ctx, parts, slides), 300),
     sourceRefs: [...new Set(parts.sourceRefs)].slice(0, 6),
   };
 }
@@ -308,25 +377,36 @@ function slide(t: string, bodyText: string, extra: { badge?: string; imageRef?: 
 }
 
 const TAIL_STOP = /^(de|des|du|la|le|les|et|à|en|par|pour|un|une|sur|dans|vos|votre|tes|ton|ta|\d+)$/i;
+/** Mot élidé (« l'air », « d'un ») : pas une attaque de passage gras. */
+const ELIDED = /^[ld]['’]/i;
 
 /** Gras sur les derniers mots porteurs d'une phrase (« … pendant **4 secondes**. »). */
 function boldTail(text: string): string {
   const clean = inline(text);
   const words = [...clean.matchAll(/\S+/g)];
   if (words.length < 4) return ensureBold(clean);
-  // Trois derniers mots, en sautant les mots-outils de tête tant qu'il en reste deux
+  // Trois derniers mots, en sautant les mots-outils et élidés de tête tant qu'il en reste deux
   let from = Math.max(1, words.length - 3);
-  while (from < words.length - 2 && TAIL_STOP.test(words[from]![0].replace(/[.,;:!?]$/, ""))) from += 1;
+  while (from < words.length - 2) {
+    const word = words[from]![0].replace(/[.,;:!?]$/, "");
+    if (!TAIL_STOP.test(word) && !ELIDED.test(word)) break;
+    from += 1;
+  }
   const start = words[from]!.index;
   const tail = clean.slice(start).replace(/[.!?]$/, "");
   const end = start + tail.length;
   return `${clean.slice(0, start)}**${tail}**${clean.slice(end)}`;
 }
 
+/** Conjonction en tête d'un reste d'étape (« et posez vos mains » → « Posez vos mains »). */
+const LEAD_CONJUNCTION = /^(?:et|puis|ou|ensuite|enfin)\s+/i;
+
 /**
  * Page d'un carrousel d'étapes : « Asseyez-vous confortablement, pieds à plat »
- * → titre « Asseyez-vous confortablement » / body « Pieds à plat… » ; sans
- * proposition détachable, titre = impératif court et body = l'étape entière.
+ * → titre « Asseyez-vous confortablement » / body « Pieds à plat… ». Sans
+ * proposition détachable, le titre reprend l'attaque de l'étape (« Retenez
+ * l'air ») et le body n'en garde que la suite (« 2 secondes. ») — jamais les
+ * mêmes mots deux fois ; étape trop courte pour être scindée → « Étape n ».
  */
 function stepSlide(step: string, index: number): SocialSlideDraft {
   const clean = inline(step).replace(/[.!]$/, "");
@@ -338,8 +418,11 @@ function stepSlide(step: string, index: number): SocialSlideDraft {
   let n = Math.min(3, words.length - 1);
   while (n > 1 && TAIL_STOP.test(words[n - 1] ?? "")) n -= 1;
   const short = words.slice(0, n).join(" ").replace(/[,;:]$/, "");
-  const heading = short.length >= 6 ? short : `Étape ${index + 1}`;
-  return slide(title(heading, 60), truncateAtWord(boldTail(`${clean}.`), 160));
+  const rest = words.slice(n).join(" ").replace(LEAD_CONJUNCTION, "");
+  if (short.length >= 6 && rest.split(/\s+/).filter(Boolean).length >= 2) {
+    return slide(title(short, 60), truncateAtWord(boldTail(`${capitalize(rest)}.`), 160));
+  }
+  return slide(`Étape ${index + 1}`, truncateAtWord(boldTail(`${clean}.`), 160));
 }
 
 // ─── Contenus par pilier ─────────────────────────────────────────────────────
@@ -368,18 +451,18 @@ function fallbackProcess(ctx: Ctx): { title: string; description: string }[] {
 
 function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft | undefined {
   const { brief, b } = ctx;
-  const spec = pick(ctx, brief.home.specialties, k, (s) => s.title);
+  const spec = pick(ctx, brief.home.specialties, k, (s) => s.title, (s) => `${s.title}\n${s.excerpt}`);
   if (!spec) return undefined;
   const page = brief.motifPages.find((p) => p.slug === spec.slug);
   const photo = spec.photoId ?? page?.photoId;
   const badge = `${ctx.profession} à ${ctx.city}`;
-  const excerptSentences = sentences(spec.excerpt);
+  const excerptSentences = wholeSentences(spec.excerpt);
   const refs = [spec.id, ...(spec.pageId ? [spec.pageId] : [])];
   const lower = lowerFirst(spec.title);
   const toi = b.reader("vous", "toi");
   const hook = `Un temps pour ${toi}, rien que pour ${toi} : parlons ${de(lower)}. 🌿`;
   const development = [
-    spec.excerpt,
+    wholeText(spec.excerpt),
     `En séance, ${b.subj(b.reader("je vous accompagne", "je t'accompagne"), b.reader("nous vous accompagnons", "nous t'accompagnons"), b.reader("on vous accompagne", "on t'accompagne"))} pas à pas, à ${b.yourAdj} rythme, pour installer des repères simples à réutiliser au quotidien.`,
   ];
   const tags = [camelHashtag(spec.title)];
@@ -387,6 +470,12 @@ function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
 
   if (format === "carousel") {
     const process = processSteps(ctx)[0] ?? fallbackProcess(ctx)[0]!;
+    // Deuxième phrase de l'extrait ; sinon le résumé de la page s'il ne répète pas la couverture ; sinon une phrase générique
+    const cover = firstSentence(spec.excerpt);
+    const concrete =
+      excerptSentences.slice(1).find((s) => s.length >= 30) ??
+      (page?.summary && firstSentence(page.summary) !== cover ? page.summary : undefined) ??
+      `Des exercices simples, guidés pas à pas, à refaire chez ${toi} entre les séances.`;
     const forWho =
       [...(page?.faq ?? []), ...brief.home.faq].find((f) => /qui s['’]adresse|pour qui/i.test(f.question))?.answer ??
       page?.summary ??
@@ -397,7 +486,7 @@ function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
       template: "carrousel-etapes",
       slides: [
         slide(title(spec.title), body(firstSentence(spec.excerpt), 160), { badge, imageRef: photo }),
-        slide("Concrètement", body(excerptSentences[1] ?? page?.summary ?? spec.excerpt, 160)),
+        slide("Concrètement", body(concrete, 160)),
         slide("Comment se passe une séance ?", body(process.description, 160)),
         slide("Pour qui ?", body(forWho, 160)),
       ],
@@ -419,6 +508,7 @@ function conseilPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
     brief.articles.filter((a) => a.exerciseSteps.length >= 2),
     k,
     (a) => a.title,
+    (a) => [a.title, a.exerciseIntro ?? "", ...a.exerciseSteps].join("\n"),
   );
   const steps = (article?.exerciseSteps ?? []).slice(0, 5);
   const fromArticle = article !== undefined && steps.length >= 2;
@@ -427,7 +517,7 @@ function conseilPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
   const site = b.subj("mon site", "notre site", "le site");
 
   const hook = fromArticle
-    ? `Trois minutes, les yeux fermés : un exercice simple à glisser dans ${b.yourAdj} journée. 🧘`
+    ? `Trois minutes, les yeux fermés : un exercice simple à glisser dans ${b.yourAdjF} journée. 🧘`
     : `Comment se passe une séance ? ${capitalize(b.subj(b.reader("Je vous emmène", "Je t'emmène"), b.reader("Nous vous emmenons", "Nous t'emmenons"), b.reader("On vous emmène", "On t'emmène")))} dans les coulisses. ✨`;
   const development = fromArticle
     ? [
@@ -477,17 +567,17 @@ function conseilPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
 
 function articlePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft | undefined {
   const { brief, b } = ctx;
-  const article = pick(ctx, brief.articles, k + 1, (a) => a.title);
+  const article = pick(ctx, brief.articles, k + 1, (a) => a.title, (a) => [a.title, a.lead, a.excerpt, ...a.signs, ...a.contributions, ...a.whenToConsult].join("\n"));
   if (!article) return undefined;
   const site = b.subj("mon site", "notre site", "le site");
   const blog = b.subj("mon blog", "notre blog", "le blog");
   const hook = `${truncateAtWord(article.title, 110)} 📖`;
   const development = [
-    article.lead || article.excerpt,
+    wholeText(article.lead || article.excerpt),
     `${capitalize(b.reader("Vous y trouverez", "Tu y trouveras"))} ce qui se joue, ce que ${ctx.practice} peut apporter et quand consulter. L'article complet est sur ${site}.`,
   ];
   const tags = ["#ArticleDuBlog", "#Lecture"];
-  const base = { pillar: "article" as const, topic: `Article : ${title(article.title, 58)}`, hook, development, tags, sourceRefs: [article.id], k };
+  const base = { pillar: "article" as const, topic: `Article — ${articleTitle(article.title, 58)}`, hook, development, tags, sourceRefs: [article.id], k };
   const badge = "Article du blog";
 
   if (format === "carousel") {
@@ -496,20 +586,21 @@ function articlePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
     if (article.contributions.length > 0) {
       pages.push(slide(title(`Ce que ${ctx.practice} peut apporter`), bulletBody(article.contributions, 160, 52)));
     }
-    if (article.whenToConsult.length > 0) pages.push(slide("Quand consulter ?", bulletBody(article.whenToConsult, 160, 52)));
+    // Situations rédigées en phrases : un budget plus large évite de les couper
+    if (article.whenToConsult.length > 0) pages.push(slide("Quand consulter ?", bulletBody(article.whenToConsult, 160, 60)));
     if (pages.length === 0) pages.push(slide("En quelques mots", body(article.lead || article.excerpt, 160)));
     return draft(ctx, {
       ...base,
       format,
       template: "carrousel-article",
-      slides: [slide(title(article.title), body(firstSentence(article.excerpt || article.lead), 160), { badge, imageRef: article.photoId }), ...pages],
+      slides: [slide(articleTitle(article.title), body(firstSentence(article.excerpt || article.lead), 160), { badge, imageRef: article.photoId }), ...pages],
     });
   }
   return draft(ctx, {
     ...base,
     format,
     template: article.photoId ? "photo-titre" : "affirmation",
-    slides: [slide(title(article.title), body(firstSentence(article.excerpt || article.lead), 200), { badge: `Sur ${blog}`, imageRef: article.photoId })],
+    slides: [slide(articleTitle(article.title), body(firstSentence(article.excerpt || article.lead), 200), { badge: `Sur ${blog}`, imageRef: article.photoId })],
   });
 }
 
@@ -520,19 +611,27 @@ function ideeRecuePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
     ...brief.motifPages.flatMap((p) => p.faq),
     ...brief.articles.flatMap((a) => a.faq.map((f, i) => ({ id: a.id, question: f.question, answer: f.answer, i }))),
   ];
-  const faq = pick(ctx, pool, k, (f) => f.question);
+  const faq = pick(ctx, pool, k, (f) => f.question, (f) => `${f.question}\n${f.answer}`);
   if (!faq) return undefined;
   const hook = `« ${title(faq.question, 90)} » : c'est une question qui revient souvent. 💬`;
   const development = [
-    faq.answer,
-    `${capitalize(b.subj("Je prends", "Nous prenons", "On prend"))} toujours le temps d'y répondre en séance, simplement et sans jargon. ${b.reader("N'hésitez pas", "N'hésite pas")} à ${b.subj("me", "nous", "nous")} poser ${b.yourPl} questions avant ${b.yourAdj} première séance.`,
+    wholeText(faq.answer),
+    `${capitalize(b.subj("Je prends", "Nous prenons", "On prend"))} toujours le temps d'y répondre en séance, simplement et sans jargon. ${b.reader("N'hésitez pas", "N'hésite pas")} à ${b.subj("me", "nous", "nous")} poser ${b.yourPl} questions avant ${b.yourAdjF} première séance.`,
   ];
   const tags = ["#IdeeRecue", "#QuestionFrequente"];
-  const base = { pillar: "idee_recue" as const, topic: `Question fréquente : ${title(faq.question, 48)}`, hook, development, tags, sourceRefs: [faq.id], k };
+  // Sujet du calendrier (≤ 70) : la question entière prime sur son préfixe
+  const question = title(faq.question, 160);
+  const topic =
+    question.length <= 49
+      ? `Question fréquente : ${question}`
+      : question.length <= 59
+        ? `Question : ${question}`
+        : title(question, 70);
+  const base = { pillar: "idee_recue" as const, topic, hook, development, tags, sourceRefs: [faq.id], k };
   const badge = "Question fréquente";
 
   if (format === "carousel") {
-    const parts = sentences(faq.answer).slice(0, 4);
+    const parts = wholeSentences(faq.answer).slice(0, 4);
     const titles = ["En clair", "Concrètement", "À retenir", "Et ensuite"];
     const pages = parts.map((s, i) => slide(titles[i] ?? `Point ${i + 1}`, body(s, 160)));
     if (pages.length < 2) {
@@ -566,7 +665,9 @@ function coulissesPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
   const hook = `Comment se passe une séance ? Petit tour en coulisses. ✨`;
   const development = [
     `${capitalize(process.map((s) => lowerFirst(s.title)).join(", "))} : ${numberWord(process.length)} temps pour ${b.reader("vous poser", "te poser")}, à ${b.yourAdj} rythme.`,
-    about?.paragraphs[0] ?? `${capitalize(b.subj(b.reader("Je vous explique", "Je t'explique"), b.reader("Nous vous expliquons", "Nous t'expliquons"), b.reader("On vous explique", "On t'explique")))} chaque étape, et rien n'est jamais forcé.`,
+    about?.paragraphs[0]
+      ? wholeText(about.paragraphs[0])
+      : `${capitalize(b.subj(b.reader("Je vous explique", "Je t'explique"), b.reader("Nous vous expliquons", "Nous t'expliquons"), b.reader("On vous explique", "On t'explique")))} chaque étape, et rien n'est jamais forcé.`,
   ];
   const tags = ["#Coulisses", "#Seance"];
   const base = { pillar: "coulisses" as const, topic: "Comment se passe une séance ?", hook, development, tags, sourceRefs: refs, k };
@@ -695,7 +796,7 @@ function projectionPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
       `Un pas après l'autre, **avec bienveillance**.`,
       `Pour retrouver, durablement, **un peu de légèreté**.`,
     ];
-    const pages = pageLines.slice(0, 5).map((l, i) => slide(title(l), hints[i] ?? hints[0]!));
+    const pages = pageLines.slice(0, 5).map((l, i) => slide(shortLine(l, 60), hints[i] ?? hints[0]!));
     if (pages.length < 1) pages.push(slide("Pas à pas", heroBody));
     return draft(ctx, {
       ...base,
@@ -725,7 +826,7 @@ function projectionPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
 
 function avisPost(ctx: Ctx, k: number): SocialPostDraft | undefined {
   const { brief, b } = ctx;
-  const review = pick(ctx, brief.reviews, k, (r) => r.authorName);
+  const review = pick(ctx, brief.reviews, k, (r) => r.authorName, (r) => r.text);
   if (!review) return undefined;
   const hook = `Merci ${review.authorName} pour ce retour qui ${b.subj("me", "nous", "nous")} touche. 💛`;
   const development = [
@@ -737,12 +838,13 @@ function avisPost(ctx: Ctx, k: number): SocialPostDraft | undefined {
     topic: `Avis Google de ${review.authorName}`,
     format: "static",
     template: "avis",
-    // Template rendu en texte simple : pas de marqueur de gras ici
-    slides: [slide(`« ${truncateAtWord(review.text, 84)} »`, `${review.authorName} · Avis Google`)],
+    // Template rendu en texte simple : pas de marqueur de gras ; citation par phrases entières
+    slides: [reviewSlide(review)],
     hook,
     development,
     tags: ["#AvisClient", "#Merci"],
     sourceRefs: [review.id],
+    review: { rating: review.rating },
     k,
   });
 }
@@ -750,20 +852,24 @@ function avisPost(ctx: Ctx, k: number): SocialPostDraft | undefined {
 function newArticlePost(ctx: Ctx, slot: SocialSlot, k: number): SocialPostDraft | undefined {
   const { brief, b } = ctx;
   const id = articleRefId(slot.articleId ?? "");
-  const article = brief.articles.find((a) => a.id === id) ?? brief.articles[0];
+  // Article absent du brief : le créneau reste libre (annoncer un autre article serait faux)
+  const article = brief.articles.find((a) => a.id === id);
   if (!article) return undefined;
   const site = b.subj("mon site", "notre site", "le site");
-  const hook = `Nouvel article sur ${site} : « ${truncateAtWord(article.title, 80)} » 📝`;
+  // Le titre dispose de tout ce que la première ligne (125 caractères) laisse au-delà du préfixe et du suffixe
+  const prefix = `Nouvel article sur ${site} : « `;
+  const suffix = " » 📝";
+  const hook = `${prefix}${truncateAtWord(article.title, 125 - prefix.length - suffix.length)}${suffix}`;
   const development = [
-    article.excerpt || article.lead,
+    wholeText(article.excerpt || article.lead),
     `Bonne lecture ! ${capitalize(b.yourPl)} retours sont toujours les bienvenus.`,
   ];
   return draft(ctx, {
     pillar: "nouvel_article",
-    topic: `Nouvel article : ${title(article.title, 50)}`,
+    topic: `Nouvel article — ${articleTitle(article.title, 52)}`,
     format: "static",
     template: "photo-titre",
-    slides: [slide(title(article.title), body(article.excerpt || article.lead, 160), { badge: SOCIAL_NEW_ARTICLE_BADGE, imageRef: article.photoId })],
+    slides: [slide(articleTitle(article.title), body(article.excerpt || article.lead, 160), { badge: SOCIAL_NEW_ARTICLE_BADGE, imageRef: article.photoId })],
     hook,
     development,
     tags: ["#NouvelArticle", "#Blog"],
@@ -976,6 +1082,8 @@ export function mockSocialRequest(brief: SocialSiteBrief, input: MockSocialReque
   const { format } = input;
 
   let post: SocialPostDraft | undefined;
+  /** Demande « avis » adaptée : aucun avis exploitable, ou format sans template « avis » */
+  let avisNote: string | undefined;
   if (match?.kind === "specialty") {
     post = specialitePost({ ...ctx, seed: match.index, recent: [] }, 0, format);
   } else if (match?.kind === "article") {
@@ -987,8 +1095,15 @@ export function mockSocialRequest(brief: SocialSiteBrief, input: MockSocialReque
         : conseilPost({ ...scoped, seed: match.index }, 0, format);
   } else if (match?.kind === "faq") {
     post = ideeRecuePost({ ...ctx, seed: match.index, recent: [] }, 0, format);
-  } else if (keyword === "avis" && format === "static" && brief.siteType === "client") {
-    post = avisPost(ctx, 0);
+  } else if (keyword === "avis") {
+    if (brief.siteType !== "client" || brief.reviews.length === 0) {
+      avisNote =
+        "Nous avons adapté votre demande : aucun avis Google exploitable n'est relié à votre site, le contenu met donc en avant votre accompagnement.";
+    } else if (format !== "static") {
+      avisNote = `Nous avons adapté votre demande : les avis Google se présentent en visuel unique, ${format === "story" ? "cette story" : "ce carrousel"} met donc en avant votre accompagnement.`;
+    } else {
+      post = avisPost(ctx, 0);
+    }
   } else if (keyword === "infos_pratiques") {
     post = infosPost(ctx, 0, format, { invite: true });
   } else if (keyword === "coulisses") {
@@ -996,7 +1111,7 @@ export function mockSocialRequest(brief: SocialSiteBrief, input: MockSocialReque
   }
   post ??= projectionPost(ctx, 0, format);
 
-  const note = noteFor(brief, input.topic);
+  const note = avisNote ?? noteFor(brief, input.topic);
   return {
     posts: [
       {

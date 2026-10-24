@@ -148,6 +148,36 @@ export const STRESS_SLIDE: SocialSlide = {
   body: "- **Un endormissement plus serein** grâce à des rituels simples à mettre en place\n- Des réveils nocturnes moins fréquents et moins longs\n- Une énergie retrouvée au matin, sans effort",
 };
 
+/**
+ * Hors bornes de `finalizePlan` (titre 300 caractères, corps 700, badge 120) :
+ * les troncatures `lineClamp` et le rognage des mots-spans doivent suffire à
+ * garder le texte dans l'image, sans chevauchement.
+ */
+export const LONG_SLIDE: SocialSlide = {
+  role: "single",
+  badge:
+    "Un badge beaucoup trop long qui devrait être coupé par une ellipse avant de déborder du visuel carré ou portrait",
+  title:
+    "Et si vous retrouviez un sommeil paisible dès les prochaines nuits, sans médicament, grâce à des exercices simples de respiration et de relâchement musculaire que vous pourrez reproduire seul, chez vous, à n'importe quelle heure, même les soirs où les pensées tournent en boucle et que le corps refuse de lâcher prise ?",
+  body: [
+    "Quand tout s'accélère, le souffle se raccourcit et le corps se met en alerte : les épaules montent, la mâchoire se serre, le sommeil se fragmente. **Trois respirations lentes** suffisent souvent à reprendre la main, à condition de les pratiquer régulièrement.",
+    "Nous travaillerons ensemble des rituels du soir, des exercices de détente musculaire progressive et des visualisations positives, adaptés à votre rythme et à vos contraintes du quotidien, pour que l'endormissement redevienne un moment simple.",
+    "Les réveils nocturnes deviennent moins fréquents et moins longs ; l'énergie du matin revient sans effort, et avec elle la confiance de pouvoir traverser une journée chargée sans s'épuiser. Chaque séance dure une heure et se déroule sur rendez-vous, au cabinet ou à distance.",
+  ].join("\n"),
+};
+
+/**
+ * Symboles hors des 12 polices embarquées (flèches, coches, puces, maths,
+ * cerclés, grec, espaces fines) : nettoyés avant rendu, sinon satori tenterait
+ * de charger une police de secours sur le réseau.
+ */
+export const SYMBOL_SLIDE: SocialSlide = {
+  role: "single",
+  badge: "Étape ➜ suivante ✓",
+  title: "Respirer → relâcher ✓ puis ▸ recommencer ⟶ chaque jour ★",
+  body: "✓ **Inspirer** 4 secondes → tenir 2 secondes\n✔ Expirer 6 secondes ⇒ relâcher les épaules\n➜ Recommencer ① ② ③ fois, Ω ≤ 3 min\u2009; ⌚ 20 h ✗ jamais après minuit",
+};
+
 export function smokePost(
   template: SocialTemplate,
   slides: SocialSlide[] = SMOKE_SLIDES[template],

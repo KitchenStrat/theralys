@@ -12,7 +12,7 @@
 import type { Section, SiteTheme } from "./content";
 import { futureBodyText } from "./content";
 import { DEFAULT_SOCIAL_VOICE, type SocialSourceRef, type SocialVoice } from "./social";
-import { plainText, stripEmoji, truncateAtWord } from "./social-text";
+import { plainText, stripEmoji, truncateAtSentence, truncateAtWord } from "./social-text";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -168,9 +168,14 @@ export const REQUEST_SOURCE_REF: SocialSourceRef = {
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────────
 
-/** Texte brut tronqué au mot (+ « … »). */
+/**
+ * Texte brut ramené sous `max` : coupé à la dernière fin de phrase qui tient
+ * (dès qu'elle garde la moitié du budget), sinon au mot avec « … ». Les textes
+ * du brief sont recopiés tels quels dans les légendes du mock : une phrase
+ * entière vaut mieux qu'un fragment.
+ */
 export function clip(text: string | null | undefined, max: number): string {
-  return truncateAtWord(plainText(text).replace(/\n+/g, " "), max);
+  return truncateAtSentence(plainText(text).replace(/\n+/g, " "), max);
 }
 
 function clipLines(text: string | null | undefined, max: number, count: number): string[] {
@@ -205,8 +210,37 @@ export function photoOrientation(url: string): SocialPhoto["orientation"] {
   return "landscape";
 }
 
+/** Hôtes https des photos de site (Pexels, fal.ai, Blob Vercel) — les mêmes que le rendu des visuels. */
+export const SOCIAL_PHOTO_HOSTS: readonly string[] = ["images.pexels.com", "fal.media"];
+export const SOCIAL_PHOTO_HOST_SUFFIXES: readonly string[] = [".fal.media", ".public.blob.vercel-storage.com"];
+/**
+ * Taille maximale (en caractères) d'une photo en data:URI : au-delà, elle n'est
+ * ni proposée au modèle ni recopiée dans `content.slides[].imageUrl` de chaque
+ * publication — une photo téléversée sans Blob peut peser 2,5 Mo.
+ */
+export const SOCIAL_PHOTO_DATA_URI_MAX_CHARS = 200 * 1024;
+
+/**
+ * URL acceptable comme photo d'un visuel : https sur un hôte connu, ou petit
+ * data:URI d'image (illustrations du mode démo, favicons). Tout le reste
+ * (http, hôte inconnu, data:URI volumineux ou non image) est écarté du brief.
+ */
+export function isSocialPhotoUrl(url: string): boolean {
+  if (url.startsWith("data:")) {
+    return /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(url) && url.length <= SOCIAL_PHOTO_DATA_URI_MAX_CHARS;
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    return SOCIAL_PHOTO_HOSTS.includes(host) || SOCIAL_PHOTO_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  } catch {
+    return false;
+  }
+}
+
 export type PhotoCatalog = {
-  /** Enregistre une photo (dédoublonnée par URL) et renvoie son id, ou undefined si absente/pleine. */
+  /** Enregistre une photo (dédoublonnée par URL) et renvoie son id, ou undefined si absente, refusée ou catalogue plein. */
   add(url: string | null | undefined, kind: SocialPhotoKind, hint: string): string | undefined;
   readonly photos: SocialPhoto[];
   readonly byId: Record<string, string>;
@@ -221,7 +255,7 @@ export function photoCatalog(max = SOCIAL_BRIEF_MAX_PHOTOS): PhotoCatalog {
     photos,
     byId,
     add(url, kind, hint) {
-      if (!url) return undefined;
+      if (!url || !isSocialPhotoUrl(url)) return undefined;
       const known = byUrl.get(url);
       if (known) return known;
       if (photos.length >= max) return undefined;

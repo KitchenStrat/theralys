@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config lib/social/render/vitest.config.ts && vitest run --config lib/vitest.config.ts"
   },
   "dependencies": {
     "@theralys/ai": "workspace:*",

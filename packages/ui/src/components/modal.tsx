@@ -1,7 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export type ModalSize = "md" | "lg" | "xl";
 
@@ -23,12 +23,63 @@ const SIZES: Record<ModalSize, string> = {
   xl: "max-w-4xl",
 };
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+/** Éléments focalisables rendus (les `sr-only` en font partie, pas les `display: none`). */
+function focusablesIn(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => el.getClientRects().length > 0,
+  );
+}
+
+/**
+ * Boîte de dialogue modale : focus placé dans la boîte à l'ouverture, Tab et
+ * Maj+Tab bouclent sur ses éléments, Échap et le clic hors ferment, le focus
+ * revient à l'élément déclencheur à la fermeture.
+ */
 export function Modal({ open, onClose, title, children, footer, size, wide }: ModalProps) {
   const resolvedSize: ModalSize = size ?? (wide ? "lg" : "md");
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Focus initial et restitution : indépendants de `onClose` (souvent une fonction fléchée recréée à chaque rendu)
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      const dialog = dialogRef.current;
+      if (e.key !== "Tab" || !dialog) return;
+      const items = focusablesIn(dialog);
+      const active = document.activeElement;
+      if (items.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (!(active instanceof Node) || !dialog.contains(active)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -44,11 +95,13 @@ export function Modal({ open, onClose, title, children, footer, size, wide }: Mo
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         className={clsx(
-          "max-h-[90vh] w-full overflow-y-auto rounded-card bg-white shadow-pop",
+          "max-h-[90vh] w-full overflow-y-auto rounded-card bg-white shadow-pop focus:outline-none",
           SIZES[resolvedSize],
         )}
       >

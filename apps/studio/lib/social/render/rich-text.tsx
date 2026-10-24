@@ -1,8 +1,10 @@
 /**
  * Texte des visuels (§4.1). Contraintes satori rappelées : `display:"flex"`
  * sur tout parent à plusieurs enfants, pas de flux inline (le gras se rend en
- * mots-spans dans une rangée `flexWrap`), `lineClamp` uniquement sur un nœud
- * texte unique, aucun emoji (retiré avant rendu).
+ * mots-spans dans une rangée `flexWrap`), `lineClamp` honoré uniquement sur un
+ * nœud texte unique en `display:"block"` (ignoré en `flex`), aucun emoji ni
+ * symbole hors des 12 polices embarquées (retirés avant rendu : un glyphe
+ * manquant déclencherait un chargement réseau de police par satori).
  */
 
 import type { CSSProperties } from "react";
@@ -10,17 +12,51 @@ import { bulletLines, parseEmphasis, plainText, stripEmoji } from "@theralys/sha
 
 const BULLET_RE = /^\s*(?:[-•*]|✅|\d{1,2}[.)])\s+/u;
 
-/** Texte prêt pour satori : sans emoji, U+202F → U+00A0, espaces normalisés. */
+/** Puce symbolique en tête de ligne (✓ → ▸ ► ✅ ① •…) → « - » : la pastille est dessinée par `RichBody`. */
+const LEADING_SYMBOL_BULLET_RE =
+  /^[ \t]*[\u2022\u2023\u2043\u25e6\u2190-\u21ff\u2300-\u23ff\u2460-\u24ff\u25a0-\u27bf\u2900-\u2bff\u{1f000}-\u{1faff}]+\ufe0f?[ \t]+/gmu;
+/** Flèches (→ ⟶ ➜ ⇒ ➔…) → tiret demi-cadratin, présent dans toutes les polices. */
+const ARROW_RE = /[\u2190-\u21ff\u27f0-\u27ff\u2794-\u27bf\u2900-\u297f\u2b00-\u2b11\u2b30-\u2b4c]+/gu;
+/** Blocs de symboles absents des polices : techniques, cerclés, formes géométriques, symboles divers, dingbats, maths, pictogrammes. */
+const SYMBOL_BLOCK_RE = /[\u2300-\u23ff\u2460-\u24ff\u25a0-\u2bff\u{1f000}-\u{1faff}]/gu;
+/**
+ * Dernier recours : tout symbole hors de ceux que les 12 polices couvrent,
+ * lettre hors alphabet latin, chiffre spécial, caractère de format, privé ou
+ * non assigné.
+ */
+const UNSAFE_RE =
+  /(?![€$£¥¢+<>=|~^°©®´¨`¬×÷−≠™])\p{S}|(?!\p{Script=Latin})\p{L}|(?![¹²³¼½¾])\p{No}|\p{Nl}|\p{Cf}|\p{Co}|\p{Cn}|\p{Cs}/gu;
+
+/**
+ * Texte prêt pour satori : puces symboliques → « - », flèches → « – », primes
+ * → apostrophe/guillemet droit, emojis et symboles hors polices retirés,
+ * espaces typographiques → espace (insécable pour U+202F), tirets rares
+ * normalisés, espaces resserrées.
+ */
 export function cleanText(text: string | null | undefined): string {
-  return stripEmoji(text ?? "")
+  const bulleted = (text ?? "").replace(LEADING_SYMBOL_BULLET_RE, "- ");
+  return stripEmoji(bulleted)
+    .replace(ARROW_RE, "–")
+    .replace(/[′‵]/g, "'")
+    .replace(/[″‶]/g, '"')
+    .replace(SYMBOL_BLOCK_RE, "")
+    .replace(UNSAFE_RE, "")
     .replace(/\u202f/g, "\u00a0")
+    .replace(/[\u2000-\u200a\u205f\u3000]/g, " ")
+    .replace(/\u00ad/g, "")
+    .replace(/[‐-‒]/g, "-")
+    .replace(/―/g, "—")
+    .replace(/[∙⋅]/g, "·")
     .replace(/[ \t]+/g, " ")
+    .replace(/ ([,.])/g, "$1")
+    .replace(/ +(\n|$)/g, "$1")
+    .replace(/(^|\n) +/g, "$1")
     .trim();
 }
 
-/** Titre d'une diapositive : texte brut (sans `**`), sur une seule ligne logique. */
+/** Titre d'une diapositive : texte brut (sans `**`), sur une seule ligne logique, sans puce en tête. */
 export function cleanTitle(text: string | null | undefined): string {
-  return cleanText(plainText(text).replace(/\s*\n+\s*/g, " "));
+  return cleanText(plainText(text).replace(/\s*\n+\s*/g, " ")).replace(/^-\s+/, "");
 }
 
 type Word = { word: string; bold: boolean };
@@ -55,13 +91,17 @@ type LineProps = {
   style?: CSSProperties;
 };
 
-/** Une ligne : nœud texte unique (clamp) ou mots-spans quand elle porte du gras. */
+/**
+ * Une ligne : nœud texte unique en `display:"block"` (seul mode où satori
+ * applique `lineClamp` et l'ellipse), ou mots-spans quand elle porte du gras —
+ * la rangée est alors bornée en hauteur (`maxLines` lignes) et rognée.
+ */
 function Line({ line, size, color, strong, lineHeight, maxLines, style }: LineProps) {
   const words = mergePunctuation(parseEmphasis(line));
   const hasBold = words.some((w) => w.bold);
   if (!hasBold) {
     return (
-      <div style={{ display: "flex", fontSize: size, lineHeight, color, lineClamp: maxLines, ...style }}>
+      <div style={{ display: "block", fontSize: size, lineHeight, color, lineClamp: maxLines, ...style }}>
         {words.map((w) => w.word).join(" ")}
       </div>
     );
@@ -75,6 +115,8 @@ function Line({ line, size, color, strong, lineHeight, maxLines, style }: LinePr
         fontSize: size,
         lineHeight,
         color,
+        maxHeight: Math.ceil(maxLines * size * lineHeight),
+        overflow: "hidden",
         ...style,
       }}
     >
@@ -182,12 +224,12 @@ export type TitleProps = {
   style?: CSSProperties;
 };
 
-/** Titre en police « Heading » 700, nœud texte unique avec clamp. */
+/** Titre en police « Heading » 700 : nœud texte unique en `display:"block"`, clamp avec ellipse. */
 export function Title({ text, size, color, maxLines = 3, lineHeight = 1.08, style }: TitleProps) {
   return (
     <div
       style={{
-        display: "flex",
+        display: "block",
         fontFamily: "Heading",
         fontWeight: 700,
         fontSize: size,

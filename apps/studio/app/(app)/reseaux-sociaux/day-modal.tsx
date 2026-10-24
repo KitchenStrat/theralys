@@ -10,6 +10,13 @@ export const FORMAT_LABEL: Record<SocialCalendarItem["format"], string> = {
   story: "Story",
 };
 
+/** Glyphe du format dans les puces du calendrier (« 1 », « ≡ », « ▯ »). */
+export const FORMAT_GLYPH: Record<SocialCalendarItem["format"], string> = {
+  static: "1",
+  carousel: "≡",
+  story: "▯",
+};
+
 /** Statut affiché : « Publié » / « Téléchargé » / « À télécharger ». */
 export function statusOf(item: SocialCalendarItem): {
   label: string;
@@ -18,6 +25,11 @@ export function statusOf(item: SocialCalendarItem): {
   if (item.status === "published") return { label: "Publié", tone: "success" };
   if (item.downloadedAt) return { label: "Téléchargé", tone: "info" };
   return { label: "À télécharger", tone: "info" };
+}
+
+/** Nom accessible d'un contenu : « Carrousel — Un exercice simple (sur mesure) ». */
+export function itemLabel(item: SocialCalendarItem): string {
+  return `${FORMAT_LABEL[item.format]} — ${item.topic}${item.source === "request" ? " (sur mesure)" : ""}`;
 }
 
 /**
@@ -46,6 +58,7 @@ export function DayModal({
               <button
                 type="button"
                 onClick={() => onSelect(item)}
+                aria-label={`${itemLabel(item)} — ${status.label}`}
                 className="flex w-full items-center gap-3 py-3 text-left hover:text-primary-600"
               >
                 <span
@@ -56,7 +69,7 @@ export function DayModal({
                 <Badge tone="neutral">{FORMAT_LABEL[item.format]}</Badge>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">
                   {item.source === "request" ? (
-                    <span className="mr-1 text-primary-600" aria-label="Sur mesure">
+                    <span className="mr-1 text-primary-600" aria-hidden>
                       ✦
                     </span>
                   ) : null}

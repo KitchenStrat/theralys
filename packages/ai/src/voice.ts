@@ -53,8 +53,10 @@ export function readerLabel(voice: BlogVoice): string {
 export type VoiceBricks = {
   /** « vous » / « tu » */
   you: string;
-  /** « votre » / « ton » */
+  /** « votre » / « ton » — devant un nom masculin (« ton rythme ») */
   yourAdj: string;
+  /** « votre » / « ta » — devant un nom féminin (« ta journée », « ta première séance ») */
+  yourAdjF: string;
   /** « vos » / « tes » */
   yourPl: string;
   /** « vous pouvez » / « tu peux » */
@@ -73,6 +75,7 @@ export function voiceBricks(voice: BlogVoice): VoiceBricks {
   return {
     you: vous ? "vous" : "tu",
     yourAdj: vous ? "votre" : "ton",
+    yourAdjF: vous ? "votre" : "ta",
     yourPl: vous ? "vos" : "tes",
     canYou: vous ? "vous pouvez" : "tu peux",
     feelYou: vous ? "vous ressentez" : "tu ressens",

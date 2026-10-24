@@ -83,6 +83,29 @@ export function truncateAtWord(text: string, max: number): string {
   return `${base}…`;
 }
 
+/** Fin de phrase : ponctuation finale, guillemet fermant éventuel (« fini. »), puis espace ou fin de texte. */
+const SENTENCE_END_RE = /[.!?…]+(?:\s?[»"”)])?(?=\s|$)/g;
+
+/**
+ * Tronque à la dernière fin de phrase qui tient dans `max` — sans « … », le
+ * texte rendu se termine proprement — à condition de conserver au moins
+ * `minRatio` × `max` caractères ; sinon retombe sur `truncateAtWord`. Un texte
+ * qui tient déjà est rendu tel quel (espaces extérieurs retirés).
+ */
+export function truncateAtSentence(text: string, max: number, minRatio = 0.5): string {
+  const s = text.trim();
+  if (s.length <= max) return s;
+  let cut = -1;
+  SENTENCE_END_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SENTENCE_END_RE.exec(s)) !== null) {
+    const end = m.index + m[0].length;
+    if (end > max) break;
+    cut = end;
+  }
+  return cut >= max * minRatio ? s.slice(0, cut).trim() : truncateAtWord(s, max);
+}
+
 // ─── Gras des diapositives ───────────────────────────────────────────────────
 
 /**

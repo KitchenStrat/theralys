@@ -148,14 +148,22 @@ describe("socialAssetKeyPayload", () => {
     theme: { "--site-primary": "#6f5b9c", "--site-bg": "#f7f5fa" },
     logo: null,
     slide: { role: "single", title: "Respirer avant de réagir", body: "**Trois respirations** suffisent." },
+    total: 1,
     brand: { firstName: "Claire", lastName: "Dupont", profession: "Sophrologue", city: "Albi" },
     domain: "demo.harmony-web.fr/claire",
+    google: { rating: 4.8, reviewCount: 27 },
+    address: "14 rue de la Berbie, 81000 Albi",
+    reviewRating: 5,
   };
 
   it("est stable, indépendante de l'ordre des clés", () => {
     const shuffled = {
+      reviewRating: 5,
+      address: base.address,
+      google: { reviewCount: 27, rating: 4.8 },
       domain: base.domain,
       brand: { city: "Albi", profession: "Sophrologue", lastName: "Dupont", firstName: "Claire" },
+      total: 1,
       slide: { body: base.slide.body, title: base.slide.title, role: "single" as const },
       logo: null,
       theme: { "--site-bg": "#f7f5fa", "--site-primary": "#6f5b9c" },
@@ -182,8 +190,17 @@ describe("socialAssetKeyPayload", () => {
       { ...base, theme: { ...base.theme, "--site-bg": "#ffffff" } },
       { ...base, logo: "https://x/logo.svg" },
       { ...base, slide: { ...base.slide, title: "Autre titre" } },
+      { ...base, total: 7 },
       { ...base, brand: { ...base.brand, city: "Toulouse" } },
       { ...base, domain: "autre" },
+      // Dessinés par les templates « avis » et « infos-pratiques » : la clé doit les suivre
+      { ...base, google: { rating: 3.9, reviewCount: 41 } },
+      { ...base, google: { rating: 4.8, reviewCount: 28 } },
+      { ...base, google: null },
+      { ...base, address: "2 place du Vigan, 81000 Albi" },
+      { ...base, address: null },
+      { ...base, reviewRating: 4 },
+      { ...base, reviewRating: null },
     ];
     const payloads = new Set(variants.map(socialAssetKeyPayload));
     expect(payloads.size).toBe(variants.length);

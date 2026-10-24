@@ -290,8 +290,16 @@ export type SocialAssetKeyInput = {
   theme: Record<string, string>;
   logo: string | null;
   slide: SocialSlide;
+  /** Nombre de diapositives du contenu (fil « n / N », points de pagination) */
+  total: number;
   brand: { firstName: string; lastName: string; profession: string; city: string };
   domain: string;
+  /** Note Google de la fiche (pastille du template « avis ») */
+  google: { rating: number; reviewCount: number } | null;
+  /** Adresse du cabinet (template « infos-pratiques ») */
+  address: string | null;
+  /** Note de l'avis cité (étoiles du template « avis ») */
+  reviewRating: number | null;
 };
 
 /** JSON canonique : clés triées à tous les niveaux, `undefined` omis. */

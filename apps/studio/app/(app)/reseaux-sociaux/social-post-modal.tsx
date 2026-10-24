@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, FieldHint, Input, Modal, Segmented, Spinner } from "@theralys/ui";
 import { SOCIAL_SIZES, type SocialSize } from "@theralys/shared";
@@ -69,9 +68,14 @@ function PostModalBody({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   const isCarousel = item.format === "carousel";
   const published = item.status === "published";
+  // Chaque bascule démonte le bouton cliqué : le focus suit l'élément qui le remplace
+  useFocusAfterToggle(dateOpen, actionsRef, (open) => (open ? "new-date" : "change-date"));
+  useFocusAfterToggle(confirmRemove, actionsRef, (confirm) => (confirm ? "keep" : "remove"));
+  useFocusAfterToggle(published, actionsRef, (isPublished) => (isPublished ? "unpublish" : "publish"));
   const previewUrl = `/api/social/${item.id}/render?size=${size}&slide=${slide}&preview=1${retry ? `&r=${retry}` : ""}`;
   const loading = loadedUrl !== previewUrl && errorUrl !== previewUrl;
   const failed = errorUrl === previewUrl;
@@ -139,9 +143,10 @@ function PostModalBody({
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-6 md:grid-cols-[1fr_380px]">
+      {/* minmax(0, 1fr) + min-w-0 : la bande de vignettes défile au lieu d'élargir la colonne */}
+      <div className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
         {/* Aperçu */}
-        <section aria-label="Aperçu">
+        <section aria-label="Aperçu" className="min-w-0">
           {item.sizes.length > 1 ? (
             <Segmented
               aria-label="Taille du visuel"
@@ -208,7 +213,7 @@ function PostModalBody({
                   ›
                 </button>
               </div>
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              <div className="mt-2 flex min-w-0 gap-2 overflow-x-auto pb-1">
                 {item.slides.map((s, i) => (
                   <button
                     key={i}
@@ -236,7 +241,7 @@ function PostModalBody({
         </section>
 
         {/* Prêt à poster */}
-        <section aria-label="Prêt à poster" className="space-y-5">
+        <section aria-label="Prêt à poster" className="min-w-0 space-y-5">
           <div>
             <h3 className="text-sm font-semibold text-ink-900">Légende</h3>
             <textarea
@@ -314,14 +319,20 @@ function PostModalBody({
             </div>
           ) : null}
 
-          <div className="divide-y divide-cream-200 border-t border-cream-200">
+          <div ref={actionsRef} className="divide-y divide-cream-200 border-t border-cream-200">
             <div className="flex items-center justify-between gap-3 py-3 text-sm">
               {published ? (
                 <>
                   <span className="font-medium text-success-500">
                     Publié le {formatDayFr(item.publishedAt ?? item.date)}
                   </span>
-                  <Button variant="ghost" size="sm" disabled={pending} onClick={() => run(() => markSocialPostPublished(item.id, false))}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    data-focus="unpublish"
+                    onClick={() => run(() => markSocialPostPublished(item.id, false))}
+                  >
                     Annuler
                   </Button>
                 </>
@@ -329,6 +340,7 @@ function PostModalBody({
                 <Button
                   className="w-full"
                   disabled={pending}
+                  data-focus="publish"
                   onClick={() => run(() => markSocialPostPublished(item.id, true))}
                 >
                   {pending ? <Spinner className="text-white" /> : null} Marquer comme publié
@@ -352,6 +364,7 @@ function PostModalBody({
                     <Input
                       type="date"
                       aria-label="Nouvelle date"
+                      data-focus="new-date"
                       value={newDate}
                       min={todayIso}
                       onChange={(e) => setNewDate(e.target.value)}
@@ -368,6 +381,7 @@ function PostModalBody({
                 ) : (
                   <button
                     type="button"
+                    data-focus="change-date"
                     onClick={() => setDateOpen(true)}
                     className="flex w-full items-center justify-between text-left font-medium hover:text-primary-600"
                   >
@@ -384,13 +398,14 @@ function PostModalBody({
                   <Button variant="danger" size="sm" disabled={pending} onClick={() => run(() => archiveSocialPost(item.id), onClose)}>
                     {pending ? <Spinner className="text-white" /> : null} Retirer
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(false)}>
+                  <Button variant="ghost" size="sm" data-focus="keep" onClick={() => setConfirmRemove(false)}>
                     Garder
                   </Button>
                 </div>
               ) : (
                 <button
                   type="button"
+                  data-focus="remove"
                   onClick={() => setConfirmRemove(true)}
                   className="flex w-full items-center justify-between text-left font-medium text-ink-700 hover:text-danger-500"
                 >
@@ -409,6 +424,24 @@ function PostModalBody({
       </div>
     </Modal>
   );
+}
+
+/**
+ * Après un basculement d'affichage (`value` change), place le focus sur
+ * l'élément `[data-focus=<cible>]` qui remplace le bouton cliqué. Rien au
+ * premier rendu : le focus initial appartient à la modale.
+ */
+function useFocusAfterToggle<T>(
+  value: T,
+  root: RefObject<HTMLElement | null>,
+  targetFor: (value: T) => string,
+) {
+  const previous = useRef(value);
+  useEffect(() => {
+    if (previous.current === value) return;
+    previous.current = value;
+    root.current?.querySelector<HTMLElement>(`[data-focus="${targetFor(value)}"]`)?.focus();
+  }, [value, root, targetFor]);
 }
 
 const LINK_VARIANTS = {
@@ -444,19 +477,13 @@ function DownloadLink({
   );
 }
 
+/** Source du contenu (page, article, avis) : toujours dans un nouvel onglet, la modale reste ouverte. */
 function SourceBadge({ href, label }: { href?: string; label: string }) {
   if (!href) return <Badge tone="neutral">{label}</Badge>;
-  const className = "hover:bg-cream-300";
-  return href.startsWith("/") ? (
-    <Link href={href}>
-      <Badge tone="neutral" className={className}>
-        {label} ↗
-      </Badge>
-    </Link>
-  ) : (
+  return (
     <a href={href} target="_blank" rel="noopener noreferrer">
-      <Badge tone="neutral" className={className}>
-        {label} ↗
+      <Badge tone="neutral" className="hover:bg-cream-300">
+        {label} ↗<span className="sr-only"> (nouvel onglet)</span>
       </Badge>
     </a>
   );

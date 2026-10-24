@@ -24,16 +24,34 @@ comprises.
 - **Calendrier** : 2 contenus par semaine (mardi, vendredi) + jusqu'à 2
   annonces « Nouvel article » le lendemain d'une parution
   (`socialSlotsForMonth`, `@theralys/shared`). « Préparer mon mois de
-  contenus » = 1 appel IA pour les créneaux libres (`planSocialMonth`, verrou
-  `pg_advisory_xact_lock` par site et mois) ; si le modèle n'a pas rempli tous
-  les créneaux, la carte propose « Compléter le mois ».
+  contenus » = 1 appel IA pour les créneaux à pourvoir (`planSocialMonth`) :
+  transaction courte sous `pg_try_advisory_xact_lock` par site et mois (lecture
+  des créneaux), appel IA **hors** transaction, puis seconde transaction sous le
+  même verrou qui n'insère que les créneaux encore libres. Les « manquants »
+  valent créneaux − contenus du calendrier créés pour le mois (archivés
+  inclus) : déplacer ou retirer un contenu ne relance jamais de génération.
+  Horizon : un mois ne se prépare que dans les 120 jours (`SOCIAL_HORIZON_DAYS`).
 - **Sur mesure** : 20 demandes par site et mois civil UTC
   (`SOCIAL_REQUESTS_PER_MONTH`, comptées sur `source = 'request'`, archivage
-  compris) ; le sujet passe par `checkEthicalCompliance` avant tout appel.
+  compris) ; le sujet passe par `checkEthicalCompliance` avant tout appel ; le
+  quota est vérifié avant l'appel IA (message immédiat) et recompté sous
+  `pg_advisory_xact_lock(site:social-request)` juste avant l'insertion
+  (garantie). Une demande identique (sujet, format, date, couleur) dans la
+  minute renvoie le contenu déjà créé.
 - **Données** : table `social_posts` (`content` = `SocialPostContent`,
-  `assets` = rendus mis en cache) ; lecture dans `lib/social/data.ts`, brief
-  de site dans `lib/social/brief.ts` (`buildSocialBrief`), accès par site dans
-  `lib/social/post-access.ts`.
+  `assets` = rendus mis en cache) ; lecture dans `lib/social/data.ts` (une
+  seule requête par page, `computeSocialMonthState` pure), brief de site dans
+  `lib/social/brief.ts` (`buildSocialBrief`, articles des créneaux « nouvel
+  article » inclus d'office), accès par site dans `lib/social/post-access.ts`.
+  Tant que la migration `0001_social_posts` n'est pas appliquée, la page
+  affiche « Cette section est en cours d'activation » au lieu d'une erreur
+  (`isMissingSchemaError`) ; `error.tsx` couvre le reste du segment.
+- **Dates** : bornes de mois et créneaux en UTC ; « aujourd'hui », les bornes
+  des formulaires et « Publié le / Téléchargé le » suivent le jour civil
+  Europe/Paris (`parisDay`, `formatDayFr` dans `lib/calendar.ts`).
+- **Tests** : `pnpm --filter @theralys/studio exec vitest run --config lib/vitest.config.ts`
+  (helpers calendrier, état du mois, brief) et
+  `… --config lib/social/render/vitest.config.ts` (rendu des visuels).
 - **Visuels** : rendus à la demande par `/api/social/[postId]/render`
   (aperçu 540 px) et `/api/social/[postId]/download` (JPG, ZIP, PDF, légende)
   — satori + sharp, polices OFL dans `assets/fonts/`, cache mémoire puis
@@ -48,9 +66,8 @@ Depuis la **racine** du monorepo (pnpm ne trouve pas les workspaces ailleurs) :
 ```bash
 service postgresql start                  # Postgres local (peut s'arrêter entre deux sessions)
 cp .env.example .env                      # DATABASE_URL + AUTH_SECRET
-cd packages/db && DATABASE_URL=postgresql://postgres:postgres@localhost:5432/theralys \
-  pnpm exec drizzle-kit push --force      # le dossier drizzle/ est en retard sur le schéma
-cd ../.. && pnpm db:seed
+pnpm db:migrate                           # applique packages/db/drizzle (rejouable, même sur une base déjà poussée)
+pnpm db:seed
 pnpm --filter @theralys/studio dev        # http://localhost:3002
 ```
 

@@ -14,9 +14,19 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FONT_PRESETS, SOCIAL_TEMPLATES, sizesFor, type SocialSize, type ThemePreset } from "@theralys/shared";
-import { SMOKE_SLIDES, STRESS_SLIDE, fixturePhoto, formatOf, singleSlide, smokeContext, smokePost } from "./fixtures";
+import {
+  LONG_SLIDE,
+  SMOKE_SLIDES,
+  STRESS_SLIDE,
+  SYMBOL_SLIDE,
+  fixturePhoto,
+  formatOf,
+  singleSlide,
+  smokeContext,
+  smokePost,
+} from "./fixtures";
 import { renderSlide, type RenderContext, type RenderablePost } from "./render";
 
 export const SMOKE_MAX_MS = 1_500;
@@ -57,6 +67,27 @@ export function smokeCases(): SmokeCase[] {
       cases.push({ name: `stress-${template}-${size}-0`, post: smokePost(template, [slide]), ctx, size, slideIndex: 0 });
     }
   }
+  // Textes hors bornes (titre 300, corps 700) : clamp et rognage, aucun débordement
+  for (const template of ["affirmation", "question-reponse", "liste-conseils", "infos-pratiques", "avis", "photo-titre", "story-rappel"] as const) {
+    const slide = template === "photo-titre" || template === "story-rappel" ? { ...LONG_SLIDE, imageUrl: fixturePhoto(12) } : LONG_SLIDE;
+    for (const size of sizesFor(formatOf(template), template)) {
+      cases.push({ name: `long-${template}-${size}-0`, post: smokePost(template, [slide]), ctx, size, slideIndex: 0 });
+    }
+  }
+  // Symboles hors polices : nettoyés, aucun trou dans le texte
+  FONT_PRESETS.forEach((fontPreset) => {
+    cases.push({ name: `symboles-${fontPreset}-question-reponse-square-0`, post: smokePost("question-reponse", [SYMBOL_SLIDE]), ctx: smokeContext(fontPreset), size: "square", slideIndex: 0 });
+  });
+  // Logo sombre sur fond sombre (deep, accent) : plaque claire derrière le logo
+  const logoCtx = smokeContext("classique", "terracotta", true);
+  cases.push({ name: "variante-logo-sombre-avis-square-0", post: { ...smokePost("avis"), content: { ...smokePost("avis").content, accentRole: "deep" } }, ctx: logoCtx, size: "square", slideIndex: 0 });
+  cases.push({ name: "variante-logo-sombre-affirmation-square-0", post: { ...smokePost("affirmation"), content: { ...smokePost("affirmation").content, accentRole: "deep" } }, ctx: logoCtx, size: "square", slideIndex: 0 });
+  cases.push({ name: "variante-logo-sombre-carrousel-etapes-square-3", post: smokePost("carrousel-etapes"), ctx: logoCtx, size: "square", slideIndex: 3 });
+  cases.push({ name: "variante-logo-sombre-photo-titre-portrait-0", post: smokePost("photo-titre"), ctx: logoCtx, size: "portrait", slideIndex: 0 });
+  // Accent clair (soft, pastille « Claire ») sans photo : le dégradé de repli garde du contraste
+  const noPhotoStory = singleSlide({ ...SMOKE_SLIDES["story-rappel"][0]!, imageUrl: undefined });
+  cases.push({ name: "variante-accent-soft-story-rappel-sans-photo-story-0", post: { ...smokePost("story-rappel", noPhotoStory), content: { ...smokePost("story-rappel", noPhotoStory).content, accentRole: "soft" } }, ctx, size: "story", slideIndex: 0 });
+  cases.push({ name: "variante-accent-claire-story-rappel-sans-photo-story-0", post: { ...smokePost("story-rappel", noPhotoStory), accentColor: "#f6f3ee" }, ctx, size: "story", slideIndex: 0 });
   return cases;
 }
 
@@ -79,9 +110,21 @@ export async function runSmoke(outDir: string): Promise<SmokeResult[]> {
 }
 
 describe.skipIf(!process.env.SOCIAL_SMOKE)("script de fumée du rendu", () => {
-  it("rend la matrice sous 1,5 s et 250 Ko par image", async () => {
+  it("rend la matrice sous 1,5 s et 250 Ko par image, sans aucun appel réseau", async () => {
     const outDir = process.env.SOCIAL_SMOKE_DIR ?? path.join(process.cwd(), ".smoke");
-    const results = await runSmoke(outDir);
+    // Polices embarquées, symboles nettoyés, images en data:URI : satori ne doit jamais toucher le réseau
+    const realFetch = globalThis.fetch;
+    const forbidden = vi.fn<typeof fetch>(async () => {
+      throw new Error("réseau interdit pendant le rendu");
+    });
+    globalThis.fetch = forbidden;
+    let results: SmokeResult[];
+    try {
+      results = await runSmoke(outDir);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(forbidden, "appels réseau pendant le rendu").not.toHaveBeenCalled();
     const lines = results.map((r) => `${r.name.padEnd(56)} ${String(r.ms).padStart(5)} ms ${String(Math.round(r.bytes / 1024)).padStart(4)} Ko ${r.width}x${r.height}`);
     await writeFile(path.join(outDir, "rapport.txt"), `${lines.join("\n")}\n`);
     console.info(`[smoke] ${results.length} images dans ${outDir}\n${lines.join("\n")}`);

@@ -13,6 +13,7 @@ import {
   singleEmphasis,
   splitParagraphs,
   stripEmoji,
+  truncateAtSentence,
   truncateAtWord,
 } from "./social-text";
 
@@ -68,6 +69,34 @@ describe("truncateAtWord", () => {
   it("retire la ponctuation pendante avant « … » et coupe net un mot trop long", () => {
     expect(truncateAtWord("Respirer, relâcher, retrouver", 20)).toBe("Respirer, relâcher…");
     expect(truncateAtWord("Supercalifragilisticexpialidocious", 10)).toBe("Supercali…");
+  });
+});
+
+describe("truncateAtSentence", () => {
+  const text = "Nous faisons le point ensemble : votre quotidien, vos attentes. Je vous pose quelques questions sur votre rythme de vie. Le tout dans un climat de confiance.";
+
+  it("garde le plus long préfixe de phrases entières qui tient, sans « … »", () => {
+    expect(truncateAtSentence(text, 130)).toBe("Nous faisons le point ensemble : votre quotidien, vos attentes. Je vous pose quelques questions sur votre rythme de vie.");
+    expect(truncateAtSentence(text, 70)).toBe("Nous faisons le point ensemble : votre quotidien, vos attentes.");
+    expect(truncateAtSentence(" court. ", 40)).toBe("court.");
+  });
+
+  it("retombe sur truncateAtWord quand aucune phrase ne garde la part minimale du budget", () => {
+    // Première phrase = 63 caractères, la suivante déborde : moins de la moitié de 160 → coupure au mot
+    const long = `${text.slice(0, 63)} ${"Encore une phrase qui déborde très largement le budget restant du texte, et qui continue encore un peu pour être certaine de déborder. ".repeat(2)}`;
+    expect(truncateAtSentence(long, 160)).toBe(truncateAtWord(long, 160));
+    expect(truncateAtSentence(long, 160).endsWith("…")).toBe(true);
+    // … sauf si l'appelant abaisse le seuil
+    expect(truncateAtSentence(long, 160, 0.25)).toBe("Nous faisons le point ensemble : votre quotidien, vos attentes.");
+    // Trois phrases qui tiennent : rendues entières
+    expect(truncateAtSentence(`${text} ${"Encore une phrase qui déborde très largement le budget restant. ".repeat(3)}`, 200)).toBe(text);
+    expect(truncateAtSentence("Une seule phrase sans la moindre fin avant très longtemps vraiment", 30)).toBe("Une seule phrase sans la…");
+  });
+
+  it("reconnaît « ? », « ! », « … » et un guillemet fermant, pas un point décimal ni une abréviation suivie d'un chiffre", () => {
+    expect(truncateAtSentence("Prêt ? On commence ! Puis la suite arrive doucement.", 24)).toBe("Prêt ? On commence !");
+    expect(truncateAtSentence("Elle dit « c'est fini. » Puis repart pour une longue journée.", 30)).toBe("Elle dit « c'est fini. »");
+    expect(truncateAtSentence("Note 4.9/5 sur 27 avis vérifiés par Google cette année. Une phrase de plus ici.", 60)).toBe("Note 4.9/5 sur 27 avis vérifiés par Google cette année.");
   });
 });
 

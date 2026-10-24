@@ -68,9 +68,12 @@ body {
   }
 }
 
+/* `backwards` et non `both` : un transform conservé après l'animation ferait de
+   la racine de page le bloc conteneur des éléments `position: fixed` (modales
+   positionnées dans la page au lieu de la fenêtre). */
 @media (prefers-reduced-motion: no-preference) {
   main > * > * {
-    animation: studio-rise 0.55s cubic-bezier(0.22, 0.8, 0.35, 1) both;
+    animation: studio-rise 0.55s cubic-bezier(0.22, 0.8, 0.35, 1) backwards;
   }
   main > * > *:nth-child(2) {
     animation-delay: 90ms;

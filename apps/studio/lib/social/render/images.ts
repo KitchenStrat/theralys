@@ -1,14 +1,33 @@
 /**
  * Photos et logos des visuels (§4.1). Satori n'accepte que des data:URI : on
- * télécharge (hôtes autorisés, 4 s, 8 Mo max) ou on décode le data:URI, puis
- * sharp recadre à la taille exacte (`position: "attention"`) en JPEG — ou en
- * PNG `contain` pour un logo (transparence conservée). LRU mémoire de 40
- * entrées ; tout échec → `null` (variante sans photo), jamais mis en cache.
+ * télécharge (hôtes autorisés, 4 s, 8 Mo max, redirections jamais suivies) ou
+ * on décode le data:URI (JPEG/PNG/WebP/AVIF ≤ 4 Mo décodés ; SVG ≤ 200 Ko, le
+ * format des photos du mode démo — `MockImageProvider` — et des favicons),
+ * puis sharp recadre à la taille exacte (`position: "attention"`) en JPEG — ou
+ * en PNG `contain` pour un logo (transparence conservée). LRU mémoire de 40
+ * entrées, alimenté uniquement par les succès.
+ *
+ * Issue d'une préparation (`loadImage`) :
+ * - `ok`      : data:URI prêt pour satori ;
+ * - `refused` : pas d'URL, URL hors liste blanche, data:URI refusé (type ou
+ *               taille) ou indécodable — définitif : la variante sans photo
+ *               est le rendu final, mis en cache normalement ;
+ * - `failed`  : téléchargement ou décodage d'une URL distante en échec (délai,
+ *               5xx, redirection, fichier corrompu) — transitoire : le rendu
+ *               est « dégradé » et ne doit être mis en cache nulle part.
  */
 
 import sharp from "sharp";
 
 export type ImageFit = "cover" | "contain";
+
+export type ImageOutcome =
+  | { status: "ok"; dataUri: string }
+  | { status: "refused" }
+  | { status: "failed" };
+
+const REFUSED: ImageOutcome = { status: "refused" };
+const FAILED: ImageOutcome = { status: "failed" };
 
 const FETCH_TIMEOUT_MS = 4_000;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -17,9 +36,46 @@ const LRU_MAX = 40;
 const ALLOWED_HOSTS = ["images.pexels.com", "fal.media"];
 const ALLOWED_HOST_SUFFIXES = [".fal.media", ".public.blob.vercel-storage.com"];
 
-/** Hôte autorisé pour une photo (liste blanche) ; les data:URI sont acceptés. */
+/**
+ * Types acceptés en data:URI et plafond d'octets décodés : les formats
+ * produits par `/api/upload` (4 Mo), et le SVG — rasterisé par librsvg côté
+ * serveur — seulement pour de petites illustrations (200 Ko : photos du mode
+ * démo ≈ 1 Ko, favicons).
+ */
+export const DATA_URI_MAX_BYTES: Readonly<Record<string, number>> = {
+  "image/jpeg": 4 * 1024 * 1024,
+  "image/png": 4 * 1024 * 1024,
+  "image/webp": 4 * 1024 * 1024,
+  "image/avif": 4 * 1024 * 1024,
+  "image/svg+xml": 200 * 1024,
+};
+
+type DataUri = { mime: string; base64: boolean; payload: string; maxBytes: number };
+
+/** Découpe un data:URI image de type accepté ; null si la forme ou le type est refusé. */
+function parseDataUri(url: string): DataUri | null {
+  const match = /^data:(image\/[a-z0-9.+-]+)(;charset=[^;,]+)?(;base64)?,(.*)$/is.exec(url);
+  if (!match) return null;
+  const mime = match[1]!.toLowerCase();
+  const maxBytes = DATA_URI_MAX_BYTES[mime];
+  if (maxBytes === undefined) return null;
+  return { mime, base64: match[3] !== undefined, payload: match[4] ?? "", maxBytes };
+}
+
+/** Borne haute de la taille décodée, sans décoder (base64 → ¾ de la charge ; percent-encoding → sa longueur). */
+function decodedUpperBound(uri: DataUri): number {
+  return uri.base64 ? Math.floor((uri.payload.length * 3) / 4) : uri.payload.length;
+}
+
+/** data:URI image acceptable : type dans `DATA_URI_MAX_BYTES` et taille sous le plafond du type. */
+export function isAllowedDataUri(url: string): boolean {
+  const uri = parseDataUri(url);
+  return uri !== null && decodedUpperBound(uri) <= uri.maxBytes;
+}
+
+/** Hôte autorisé pour une photo (liste blanche, https seulement) ; data:URI selon `isAllowedDataUri`. */
 export function isAllowedImageUrl(url: string): boolean {
-  if (url.startsWith("data:image/")) return true;
+  if (url.startsWith("data:")) return isAllowedDataUri(url);
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
@@ -48,24 +104,30 @@ export function rewritePexelsUrl(url: string, w: number, h: number): string {
   }
 }
 
-/** Décode un data:URI image (base64 ou percent-encoded). */
+/**
+ * Décode un data:URI image (base64 ou percent-encoded) de type accepté ;
+ * null si le type est refusé ou si le décodé dépasse le plafond du type.
+ */
 export function decodeDataUri(url: string): Buffer | null {
-  const match = /^data:(image\/[a-z0-9.+-]+)(;charset=[^;,]+)?(;base64)?,(.*)$/is.exec(url);
-  if (!match) return null;
-  const payload = match[4] ?? "";
+  const uri = parseDataUri(url);
+  if (!uri || decodedUpperBound(uri) > uri.maxBytes) return null;
   try {
-    return match[3]
-      ? Buffer.from(payload, "base64")
-      : Buffer.from(decodeURIComponent(payload), "utf8");
+    const buffer = uri.base64
+      ? Buffer.from(uri.payload, "base64")
+      : Buffer.from(decodeURIComponent(uri.payload), "utf8");
+    return buffer.length > uri.maxBytes ? null : buffer;
   } catch {
     return null;
   }
 }
 
 async function fetchImage(url: string): Promise<Buffer | null> {
+  // `redirect: "manual"` : la liste blanche ne vaut que pour l'URL d'origine,
+  // une 3xx n'est donc jamais suivie — elle n'est pas `ok` et vaut échec.
   const response = await fetch(url, {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     headers: { Accept: "image/*" },
+    redirect: "manual",
   });
   if (!response.ok) return null;
   const type = response.headers.get("content-type") ?? "";
@@ -75,11 +137,6 @@ async function fetchImage(url: string): Promise<Buffer | null> {
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.length > MAX_BYTES) return null;
   return buffer;
-}
-
-async function loadSource(url: string, w: number, h: number): Promise<Buffer | null> {
-  if (url.startsWith("data:")) return decodeDataUri(url);
-  return fetchImage(rewritePexelsUrl(url, w, h));
 }
 
 const lru = new Map<string, string>();
@@ -101,26 +158,27 @@ export function clearImageCache(): void {
 
 /**
  * Image prête pour satori : data:URI JPEG (`cover`, recadrage « attention »)
- * ou PNG (`contain`, fond transparent — logos). `null` si l'URL n'est pas
- * autorisée, si le téléchargement échoue ou si le fichier n'est pas une image.
+ * ou PNG (`contain`, fond transparent — logos), avec l'issue détaillée (voir
+ * l'en-tête du module) qui permet au cache de ne pas retenir un rendu dégradé.
  */
-export async function prepareImage(
+export async function loadImage(
   url: string | null | undefined,
   w: number,
   h: number,
   fit: ImageFit = "cover",
-): Promise<string | null> {
-  if (!url || !isAllowedImageUrl(url)) return null;
+): Promise<ImageOutcome> {
+  if (!url || !isAllowedImageUrl(url)) return REFUSED;
   const key = `${fit}:${w}x${h}:${url}`;
   const hit = lru.get(key);
   if (hit) {
     remember(key, hit);
-    return hit;
+    return { status: "ok", dataUri: hit };
   }
+  const remote = !url.startsWith("data:");
   try {
-    const source = await loadSource(url, w, h);
-    if (!source || source.length === 0) return null;
-    // SVG (favicons, couvertures mock) : rasterisation à densité élevée
+    const source = remote ? await fetchImage(rewritePexelsUrl(url, w, h)) : decodeDataUri(url);
+    if (!source || source.length === 0) return remote ? FAILED : REFUSED;
+    // SVG (favicons, photos du mode démo) : rasterisation à densité élevée
     const pipeline = sharp(source, { density: 150, limitInputPixels: 40_000_000 });
     const out =
       fit === "contain"
@@ -134,9 +192,20 @@ export async function prepareImage(
             .toBuffer();
     const dataUri = `data:image/${fit === "contain" ? "png" : "jpeg"};base64,${out.toString("base64")}`;
     remember(key, dataUri);
-    return dataUri;
+    return { status: "ok", dataUri };
   } catch (err) {
     console.warn("[social] image ignorée :", err instanceof Error ? err.message : err);
-    return null;
+    return remote ? FAILED : REFUSED;
   }
+}
+
+/** `loadImage` réduit au data:URI (null si refusée ou en échec). */
+export async function prepareImage(
+  url: string | null | undefined,
+  w: number,
+  h: number,
+  fit: ImageFit = "cover",
+): Promise<string | null> {
+  const outcome = await loadImage(url, w, h, fit);
+  return outcome.status === "ok" ? outcome.dataUri : null;
 }

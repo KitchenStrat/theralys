@@ -1,6 +1,7 @@
 import { hasBlog, PLANS } from "@theralys/db";
 import { Card } from "@theralys/ui";
 import { requireClient } from "@/lib/auth";
+import { parseMonthParam } from "@/lib/calendar";
 import { getBlogSettings, getEditablePages, getMonthItems, getSite } from "@/lib/data";
 import { PublicationsClient } from "./publications-client";
 
@@ -30,10 +31,8 @@ export default async function PublicationsPage({ searchParams }: Props) {
   }
 
   const { mois } = await searchParams;
-  const now = new Date();
-  const [yearStr, monthStr] = (mois ?? "").split("-");
-  const year = Number(yearStr) || now.getUTCFullYear();
-  const month = Number(monthStr) || now.getUTCMonth() + 1;
+  // Année 2000..2100 et mois 1..12, sinon mois courant (helper partagé avec Réseaux sociaux)
+  const { year, month } = parseMonthParam(mois, new Date());
 
   const [items, settings, editablePages] = await Promise.all([
     getMonthItems(site.id, year, month),

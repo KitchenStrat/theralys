@@ -6,7 +6,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import { clsx } from "clsx";
 import { Button, Card, FieldHint, Input, Label, Select, Spinner } from "@theralys/ui";
 import { SOCIAL_REQUESTS_PER_MONTH, type SocialFormat } from "@theralys/shared";
-import { formatDayFr, monthNameFr } from "@/lib/calendar";
+import { formatDayFr, monthNameFr, ofMonthFr } from "@/lib/calendar";
 import type { SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import { requestSocialPost } from "./actions";
@@ -30,10 +30,11 @@ export function RequestBar({
 }: {
   swatches: SocialSwatch[];
   usage: SocialRequestUsage;
-  /** Date par défaut (prochain créneau libre), bornes min (demain) et max (+120 j) */
+  /** Date par défaut (prochain créneau à pourvoir, bornée), bornes min (demain) et max (+120 j) */
   dates: { default: string; min: string; max: string };
   /** « YYYY-MM » du mois affiché (lien « Voir le … → » si la date en sort) */
   monthParam: string;
+  /** Jour civil Europe/Paris */
   todayIso: string;
   onCreated: (postId: string, date: string) => void;
 }) {
@@ -49,9 +50,12 @@ export function RequestBar({
 
   const exhausted = usage.remaining === 0;
   const disabled = exhausted || pending;
+  // Message métier plutôt que l'info-bulle native du navigateur
+  const dateOutOfRange = date !== "" && (date < dates.min || date > dates.max);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (dateOutOfRange) return;
     setError(null);
     setCreated(null);
     const accentColor = choice === "auto" ? null : choice === "other" ? customHex : choice;
@@ -87,9 +91,9 @@ export function RequestBar({
 
       {exhausted ? (
         <p className="mt-4 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
-          Vous avez utilisé vos {SOCIAL_REQUESTS_PER_MONTH} demandes de {monthNameFr(todayIso)}.
-          Elles se renouvellent le 1er {monthNameFr(usage.resetsOn)}. Vos contenus du calendrier
-          restent disponibles.
+          Vous avez utilisé vos {SOCIAL_REQUESTS_PER_MONTH} demandes {ofMonthFr(todayIso)}. Elles se
+          renouvellent le 1er {monthNameFr(usage.resetsOn)}. Vos contenus du calendrier restent
+          disponibles.
         </p>
       ) : null}
 
@@ -136,52 +140,68 @@ export function RequestBar({
             onChange={(e) => setDate(e.target.value)}
             required
             disabled={disabled}
+            aria-invalid={dateOutOfRange || undefined}
+            aria-describedby="social-date-hint"
           />
-          <FieldHint>Vous pourrez le changer ensuite.</FieldHint>
+          <p
+            id="social-date-hint"
+            className={clsx("mt-1 text-xs", dateOutOfRange ? "text-danger-500" : "text-ink-500")}
+          >
+            {dateOutOfRange
+              ? `Choisissez une date entre le ${formatDayFr(dates.min, "day")} et le ${formatDayFr(dates.max, "day")}.`
+              : "Vous pourrez le changer ensuite."}
+          </p>
         </div>
 
         <div className="sm:col-span-2">
-          <Label id="social-color-label">Couleur dominante</Label>
-          <div role="radiogroup" aria-labelledby="social-color-label" className="flex flex-wrap items-center gap-2">
-            <ColorOption
-              label="Automatique"
-              selected={choice === "auto"}
-              disabled={disabled}
-              onSelect={() => setChoice("auto")}
-              hatched
-            />
-            {swatches.map((swatch) => (
+          <fieldset disabled={disabled}>
+            <legend className="mb-1 block text-sm font-medium text-ink-700">Couleur dominante</legend>
+            <div className="flex flex-wrap items-center gap-2">
               <ColorOption
-                key={swatch.label}
-                label={swatch.label}
-                hex={swatch.hex}
-                selected={choice === swatch.hex}
-                disabled={disabled}
-                onSelect={() => setChoice(swatch.hex as `#${string}`)}
+                label="Automatique"
+                value="auto"
+                checked={choice === "auto"}
+                onSelect={() => setChoice("auto")}
+                hatched
               />
-            ))}
-            <ColorOption
-              label="Autre"
-              selected={choice === "other"}
-              disabled={disabled}
-              onSelect={() => setChoice("other")}
-              text
-            />
-            {choice === "other" ? (
+              {swatches.map((swatch) => (
+                <ColorOption
+                  key={swatch.label}
+                  label={swatch.label}
+                  value={swatch.hex}
+                  hex={swatch.hex}
+                  checked={choice === swatch.hex}
+                  onSelect={() => setChoice(swatch.hex as `#${string}`)}
+                />
+              ))}
+              <ColorOption
+                label="Autre"
+                value="other"
+                checked={choice === "other"}
+                onSelect={() => setChoice("other")}
+                text
+              />
+            </div>
+          </fieldset>
+          {choice === "other" ? (
+            <div className="mt-2 flex items-center gap-2">
+              <Label htmlFor="social-color-custom" className="mb-0">
+                Couleur personnalisée
+              </Label>
               <input
+                id="social-color-custom"
                 type="color"
-                aria-label="Couleur personnalisée"
                 value={customHex}
                 onChange={(e) => setCustomHex(e.target.value)}
                 disabled={disabled}
                 className="h-8 w-12 cursor-pointer rounded-lg border border-ink-300 bg-white p-0.5"
               />
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-          <Button type="submit" disabled={disabled || topic.trim().length < 3}>
+          <Button type="submit" disabled={disabled || dateOutOfRange || topic.trim().length < 3}>
             {pending ? (
               <>
                 <Spinner className="text-white" /> Création en cours… (10 à 30 secondes)
@@ -210,7 +230,7 @@ export function RequestBar({
               href={`/reseaux-sociaux?mois=${created.date.slice(0, 7)}`}
               className="font-medium text-primary-600 hover:underline"
             >
-              Voir le {formatDayFr(created.date, "short").replace(/\.$/, "")} →
+              Voir le {formatDayFr(created.date, "day")} →
             </Link>
           </p>
         ) : null}
@@ -219,19 +239,23 @@ export function RequestBar({
   );
 }
 
+/**
+ * Pastille de couleur : vrai bouton radio (clavier et lecteur d'écran natifs,
+ * flèches pour changer d'option) rendu `sr-only` sous une étiquette stylée.
+ */
 function ColorOption({
   label,
+  value,
   hex,
-  selected,
-  disabled,
+  checked,
   onSelect,
   hatched,
   text,
 }: {
   label: string;
+  value: string;
   hex?: string;
-  selected: boolean;
-  disabled: boolean;
+  checked: boolean;
   onSelect: () => void;
   /** Pastille hachurée (« Automatique ») */
   hatched?: boolean;
@@ -239,18 +263,14 @@ function ColorOption({
   text?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      aria-label={label}
+    <label
       title={label}
-      disabled={disabled}
-      onClick={onSelect}
       className={clsx(
-        "flex items-center justify-center rounded-full border border-cream-300 transition-shadow disabled:cursor-not-allowed disabled:opacity-50",
+        "relative flex cursor-pointer items-center justify-center rounded-full border border-cream-300 transition-shadow",
+        "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50",
+        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary-500",
         text ? "h-8 px-3 text-sm font-medium text-ink-700" : "h-8 w-8",
-        selected && "ring-2 ring-primary-400 ring-offset-1",
+        checked && "ring-2 ring-primary-400 ring-offset-1",
       )}
       style={
         hex
@@ -263,7 +283,15 @@ function ColorOption({
             : undefined
       }
     >
-      {text ? label : null}
-    </button>
+      <input
+        type="radio"
+        name="social-color"
+        value={value}
+        checked={checked}
+        onChange={onSelect}
+        className="sr-only"
+      />
+      {text ? label : <span className="sr-only">{label}</span>}
+    </label>
   );
 }

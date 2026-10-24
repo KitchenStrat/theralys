@@ -5,21 +5,18 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, FieldHint, Spinner } from "@theralys/ui";
-import { WEEKDAYS, buildMonthGrid, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
+import { WEEKDAYS, buildMonthGrid, formatDayFr, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
 import type { SocialCalendarItem, SocialMonthState, SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import { planSocialMonth } from "./actions";
-import { DayModal } from "./day-modal";
+import { DayModal, FORMAT_GLYPH, itemLabel, statusOf } from "./day-modal";
 import { RequestBar } from "./request-bar";
 import { SocialPostModal } from "./social-post-modal";
 
 /** Puces affichées par jour avant « +N autres ». */
 const CHIP_MAX = 3;
-const FORMAT_GLYPH: Record<SocialCalendarItem["format"], string> = {
-  static: "1",
-  carousel: "≡",
-  story: "▯",
-};
+/** Au-delà, la liste des contenus de la carte A défile. */
+const LIST_SCROLL_FROM = 8;
 const WAITING_MESSAGES = [
   "Lecture de votre site…",
   "Rédaction des légendes…",
@@ -45,6 +42,7 @@ export function SocialClient({
   usage: SocialRequestUsage;
   swatches: SocialSwatch[];
   siteName: string;
+  /** Jour civil Europe/Paris */
   todayIso: string;
   requestDates: { default: string; min: string; max: string };
 }) {
@@ -75,10 +73,17 @@ export function SocialClient({
 
   const isPast = monthParam < todayIso.slice(0, 7);
   const isCurrent = monthParam === todayIso.slice(0, 7);
+  // Mois au-delà de l'horizon des demandes et des planifications
+  const tooFar = `${monthParam}-01` > requestDates.max;
 
   function openFromDay(item: SocialCalendarItem) {
     setFromDay(dayOpen);
     setDayOpen(null);
+    setSelectedId(item.id);
+  }
+
+  function openItem(item: SocialCalendarItem) {
+    setFromDay(null);
     setSelectedId(item.id);
   }
 
@@ -108,17 +113,21 @@ export function SocialClient({
         <QuotaBadge usage={usage} />
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      {/* grid-cols-1 = minmax(0,1fr) : la liste en nowrap de la carte A ne doit pas élargir la colonne sur mobile */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <MonthCard
           monthParam={monthParam}
           state={state}
-          itemCount={items.length}
+          items={items}
           isPast={isPast}
           isCurrent={isCurrent}
+          tooFar={tooFar}
           nextMonthParam={shiftMonthParam(year, month, 1)}
           siteName={siteName}
+          onSelect={openItem}
         />
         <RequestBar
+          key={monthParam}
           swatches={swatches}
           usage={usage}
           dates={requestDates}
@@ -148,10 +157,7 @@ export function SocialClient({
                   iso={day}
                   isToday={day === todayIso}
                   items={byDate.get(day) ?? []}
-                  onSelect={(item) => {
-                    setFromDay(null);
-                    setSelectedId(item.id);
-                  }}
+                  onSelect={openItem}
                   onMore={() => setDayOpen(day)}
                 />
               ),
@@ -216,23 +222,36 @@ function QuotaBadge({ usage }: { usage: SocialRequestUsage }) {
   );
 }
 
-/** Carte A — « Vos contenus du mois » : états exclusifs (§6.2). */
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count > 1 ? "s" : ""}`;
+}
+
+/** « 3 téléchargés · 1 publié · 4 à télécharger » */
+function progressLine(state: SocialMonthState): string {
+  return `${plural(state.downloaded, "téléchargé")} · ${plural(state.published, "publié")} · ${state.toDownload} à télécharger`;
+}
+
+/** Carte A — « Vos contenus du mois » : états exclusifs (§6.2) + liste des contenus. */
 function MonthCard({
   monthParam,
   state,
-  itemCount,
+  items,
   isPast,
   isCurrent,
+  tooFar,
   nextMonthParam,
   siteName,
+  onSelect,
 }: {
   monthParam: string;
   state: SocialMonthState;
-  itemCount: number;
+  items: SocialCalendarItem[];
   isPast: boolean;
   isCurrent: boolean;
+  tooFar: boolean;
   nextMonthParam: string;
   siteName: string;
+  onSelect: (item: SocialCalendarItem) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -260,10 +279,17 @@ function MonthCard({
 
   const free = state.freeSlots.length;
   const prepared = state.calendarCount > 0;
+  const canPlan = free > 0 && !tooFar;
   let body: ReactNode;
 
   if (isPast) {
     body = <p className="mt-2 text-sm text-ink-500">Historique de vos contenus.</p>;
+  } else if (tooFar && !prepared) {
+    body = (
+      <p className="mt-2 text-sm text-ink-700">
+        Ce mois est encore loin — vous pourrez le préparer 4 mois à l&apos;avance.
+      </p>
+    );
   } else if (isCurrent && state.slots.length < 2 && !prepared) {
     body = (
       <p className="mt-2 text-sm text-ink-700">
@@ -273,7 +299,7 @@ function MonthCard({
         </Link>
       </p>
     );
-  } else if (free > 0 && !prepared) {
+  } else if (canPlan && !prepared) {
     body = (
       <>
         <p className="mt-2 font-medium text-ink-900">Préparez votre mois en un clic</p>
@@ -290,17 +316,16 @@ function MonthCard({
         </div>
       </>
     );
-  } else if (free > 0) {
+  } else if (canPlan) {
     body = (
       <>
         <p className="mt-2 text-sm text-ink-700">
-          {state.calendarCount} contenu{state.calendarCount > 1 ? "s" : ""} déjà prêt
-          {state.calendarCount > 1 ? "s" : ""} · {state.downloaded} téléchargé
-          {state.downloaded > 1 ? "s" : ""} · {state.published} publié{state.published > 1 ? "s" : ""}
+          {plural(state.calendarCount, "contenu")} déjà prêt{state.calendarCount > 1 ? "s" : ""} ·{" "}
+          {progressLine(state)}
         </p>
         <div className="mt-4">
           <Button variant="secondary" onClick={plan} disabled={pending}>
-            {pending ? <Spinner /> : null} Compléter le mois ({free} contenu{free > 1 ? "s" : ""} manquant
+            {pending ? <Spinner /> : null} Compléter le mois ({plural(free, "contenu")} manquant
             {free > 1 ? "s" : ""})
           </Button>
         </div>
@@ -310,12 +335,10 @@ function MonthCard({
     body = (
       <>
         <p className="mt-2 font-medium text-ink-900">
-          Votre mois est prêt : {itemCount} contenu{itemCount > 1 ? "s" : ""} à télécharger.
+          Votre mois est prêt : {plural(state.calendarCount, "contenu")}
+          {state.requestCount > 0 ? ` + ${state.requestCount} sur mesure` : ""}
         </p>
-        <p className="mt-1 text-sm text-ink-500">
-          {state.downloaded} téléchargé{state.downloaded > 1 ? "s" : ""} · {state.published} publié
-          {state.published > 1 ? "s" : ""}
-        </p>
+        <p className="mt-1 text-sm text-ink-500">{progressLine(state)}</p>
       </>
     );
   } else {
@@ -344,7 +367,66 @@ function MonthCard({
           {error}
         </p>
       ) : null}
+      <MonthList items={items} onSelect={onSelect} />
     </Card>
+  );
+}
+
+/** Liste compacte des contenus du mois (date, format, sujet, statut) ; défilable au-delà de 8. */
+function MonthList({
+  items,
+  onSelect,
+}: {
+  items: SocialCalendarItem[];
+  onSelect: (item: SocialCalendarItem) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <ul
+      aria-label="Contenus du mois"
+      className={clsx(
+        "mt-4 divide-y divide-cream-200 border-t border-cream-200 text-sm",
+        items.length > LIST_SCROLL_FROM && "max-h-72 overflow-y-auto pr-1",
+      )}
+    >
+      {items.map((item) => {
+        const status = statusOf(item);
+        return (
+          <li key={item.id} className="min-w-0">
+            <button
+              type="button"
+              onClick={() => onSelect(item)}
+              aria-label={`${formatDayFr(item.date, "day")} — ${itemLabel(item)} — ${status.label}`}
+              className="flex w-full min-w-0 items-center gap-2.5 py-2 text-left hover:text-primary-600"
+            >
+              <span className="w-12 shrink-0 text-xs text-ink-500">{formatDayFr(item.date)}</span>
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink-900/15"
+                style={{ backgroundColor: item.accentColor }}
+              />
+              <span
+                aria-hidden
+                className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-cream-200 text-[10px] font-bold text-ink-700"
+              >
+                {FORMAT_GLYPH[item.format]}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium text-ink-900">
+                {item.source === "request" ? (
+                  <span className="text-primary-600" aria-hidden>
+                    ✦{" "}
+                  </span>
+                ) : null}
+                {item.topic}
+              </span>
+              <Badge tone={status.tone} className="shrink-0">
+                {status.label}
+              </Badge>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -364,7 +446,7 @@ function CalendarCell({
   const dayNumber = Number(iso.slice(8, 10));
   if (items.length === 0) {
     return (
-      <div className="min-h-28 rounded-2xl border border-cream-300 bg-cream-50 p-2 text-sm text-ink-500">
+      <div className="min-h-28 rounded-2xl border border-cream-300 bg-cream-50 p-1.5 text-sm text-ink-500 sm:p-2">
         <DayNumber value={dayNumber} isToday={isToday} />
       </div>
     );
@@ -372,7 +454,7 @@ function CalendarCell({
   const shown = items.length > CHIP_MAX ? items.slice(0, CHIP_MAX - 1) : items;
   const more = items.length - shown.length;
   return (
-    <div className="min-h-28 rounded-2xl border border-cream-300 bg-white p-2">
+    <div className="min-h-28 rounded-2xl border border-cream-300 bg-white p-1.5 sm:p-2">
       <DayNumber value={dayNumber} isToday={isToday} />
       <div className="mt-1 space-y-1">
         {shown.map((item) => (
@@ -382,7 +464,8 @@ function CalendarCell({
           <button
             type="button"
             onClick={onMore}
-            className="w-full rounded-lg px-1.5 py-1 text-left text-xs font-medium text-primary-600 hover:bg-cream-100"
+            aria-label={`${more} autre${more > 1 ? "s" : ""} contenu${more > 1 ? "s" : ""} ce jour`}
+            className="w-full rounded-lg px-1 py-1 text-left text-xs font-medium text-primary-600 hover:bg-cream-100 sm:px-1.5"
           >
             +{more}
             <span className="hidden sm:inline"> autre{more > 1 ? "s" : ""}</span>
@@ -399,35 +482,37 @@ function chipBorder(item: SocialCalendarItem): string {
   return "border border-dashed border-info-500";
 }
 
+/**
+ * Puce d'un contenu : mobile = pastille et glyphe empilés (cible ≥ 36 px),
+ * dès `sm:` = pastille, glyphe et sujet en ligne. Nom accessible complet.
+ */
 function Chip({ item, onClick }: { item: SocialCalendarItem; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={item.topic}
+      aria-label={itemLabel(item)}
       className={clsx(
-        "flex w-full items-start gap-1.5 rounded-lg px-1.5 py-1 text-left text-xs leading-snug hover:bg-cream-100",
+        "flex w-full min-w-0 flex-col items-center gap-0.5 rounded-lg px-0.5 py-1 text-left text-xs leading-snug hover:bg-cream-100",
+        "min-h-9 sm:min-h-0 sm:flex-row sm:items-start sm:gap-1.5 sm:px-1.5",
         chipBorder(item),
       )}
     >
       <span
         aria-hidden
-        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink-900/15"
+        className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink-900/15 sm:mt-1"
         style={{ backgroundColor: item.accentColor }}
       />
       <span
-        aria-label={item.format}
+        aria-hidden
         className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-cream-200 text-[10px] font-bold text-ink-700"
       >
         {FORMAT_GLYPH[item.format]}
       </span>
-      <span className="hidden min-w-0 flex-1 sm:block">
+      <span aria-hidden className="hidden min-w-0 flex-1 sm:block">
         <span className="line-clamp-2 font-medium text-ink-900">
-          {item.source === "request" ? (
-            <span className="text-primary-600" aria-label="Sur mesure">
-              ✦{" "}
-            </span>
-          ) : null}
+          {item.source === "request" ? <span className="text-primary-600">✦ </span> : null}
           {item.topic}
         </span>
       </span>

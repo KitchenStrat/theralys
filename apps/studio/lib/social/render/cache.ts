@@ -1,14 +1,20 @@
 /**
  * Cache des rendus (§5.4) : clé = sha256 de la charge utile canonique
- * (`socialAssetKeyPayload`, packages/shared) tronquée à 20 caractères ;
- * lecture dans `post.assets.renders` (Blob) puis LRU mémoire (globalThis,
- * 40 entrées) ; écriture sur Vercel Blob quand `BLOB_READ_WRITE_TOKEN` est
- * présent, avec mise à jour de `assets` (≤ 12 entrées). Les URLs Blob ne
- * sortent jamais d'ici : le client passe toujours par `/api/social/*`.
+ * (`socialAssetKeyPayload`, packages/shared — tout ce que le visuel affiche :
+ * thème, accent, logo, diapositive, marque, domaine, note Google, adresse,
+ * note de l'avis) tronquée à 20 caractères ; lecture dans `post.assets.renders`
+ * (Blob) puis LRU mémoire (globalThis, 40 entrées) ; écriture sur Vercel Blob
+ * quand `BLOB_READ_WRITE_TOKEN` est présent : un objet par slot au chemin
+ * déterministe `social/<siteId>/<postId>/<slot>.jpg` (écrasé en place), mise à
+ * jour atomique de `assets` en SQL (`jsonb_set`, ≤ 28 entrées), jamais sur un
+ * contenu archivé, suppression best-effort des objets devenus orphelins. Un
+ * rendu dégradé (photo ou logo demandé mais non chargé) n'est mis en cache
+ * nulle part. Les URLs Blob ne sortent jamais d'ici : le client passe toujours
+ * par `/api/social/*`.
  */
 
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { getDb, socialPosts } from "@theralys/db";
 import {
   SOCIAL_TEMPLATE_VERSION,
@@ -23,7 +29,8 @@ import { renderSlide, slideAt, type RenderContext, type RenderablePost } from ".
 import { resolveSocialTheme } from "./theme";
 
 export const RENDER_LRU_MAX = 40;
-export const ASSETS_MAX_ENTRIES = 12;
+/** 7 diapositives × 2 tailles × 2 variantes : un carrousel complet tient sans éviction. */
+export const ASSETS_MAX_ENTRIES = 28;
 
 type LruEntry = { key: string; data: Buffer };
 
@@ -61,13 +68,18 @@ export function clearRenderCache(): void {
   lru().clear();
 }
 
-export type CachedRenderInput = {
-  post: RenderablePost & { id: string; siteId: string; assets: SocialPostAssets };
+export type RenderKeyInput = {
+  post: RenderablePost;
   ctx: RenderContext;
   size: SocialSize;
   slideIndex: number;
   preview: boolean;
-  reviewRating?: number | null;
+  /** Note de l'avis cité (template « avis ») — chargée AVANT le calcul de la clé, qu'elle fait varier */
+  reviewRating: number | null;
+};
+
+export type CachedRenderInput = RenderKeyInput & {
+  post: RenderablePost & { id: string; siteId: string; assets: SocialPostAssets };
 };
 
 /** Clé des entrées `assets.renders` : `${size}:${slide}:${variant}`. */
@@ -75,13 +87,10 @@ export function assetSlot(size: SocialSize, slideIndex: number, preview: boolean
   return `${size}:${slideIndex}:${preview ? "preview" : "full"}`;
 }
 
-export type RenderKeyInput = {
-  post: RenderablePost;
-  ctx: RenderContext;
-  size: SocialSize;
-  slideIndex: number;
-  preview: boolean;
-};
+/** Chemin Blob d'un slot : déterministe, un seul objet par slot, écrasé en place. */
+export function blobPathname(siteId: string, postId: string, slot: string): string {
+  return `social/${siteId}/${postId}/${slot.replace(/:/g, "-")}.jpg`;
+}
 
 /** Clé de cache (sha256 tronquée) d'un rendu : change dès qu'un ingrédient visuel change. */
 export function renderKey(input: RenderKeyInput): string {
@@ -97,23 +106,37 @@ export function renderKey(input: RenderKeyInput): string {
     theme: themeCssVars(ctx.siteTheme),
     logo: ctx.siteTheme.logoUrl ?? null,
     slide: slideAt(post.content, slideIndex),
+    total: post.content.slides.length,
     brand: ctx.brand,
     domain: ctx.domain,
+    google: ctx.google,
+    address: ctx.address,
+    reviewRating: input.reviewRating,
   });
   return createHash("sha256").update(payload).digest("hex").slice(0, 20);
 }
 
-/** Conserve les `max` rendus les plus récents. */
-export function pruneRenders(renders: Record<string, SocialRender>, max = ASSETS_MAX_ENTRIES) {
+/** Sépare les `max` rendus les plus récents (`kept`) des entrées à évincer (`evicted`). */
+export function pruneRenders(
+  renders: Record<string, SocialRender>,
+  max = ASSETS_MAX_ENTRIES,
+): { kept: Record<string, SocialRender>; evicted: Record<string, SocialRender> } {
   const entries = Object.entries(renders).sort(([, a], [, b]) =>
     b.renderedAt.localeCompare(a.renderedAt),
   );
-  return Object.fromEntries(entries.slice(0, max));
+  return { kept: Object.fromEntries(entries.slice(0, max)), evicted: Object.fromEntries(entries.slice(max)) };
 }
 
-async function fetchBlob(url: string): Promise<Buffer | null> {
+/**
+ * Lit un rendu Blob. Le chemin étant stable par slot, la clé est ajoutée en
+ * paramètre de requête pour que le CDN ne resserve pas l'objet précédent après
+ * un écrasement.
+ */
+async function fetchBlob(url: string, key: string): Promise<Buffer | null> {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(4_000) });
+    const target = new URL(url);
+    target.searchParams.set("k", key);
+    const response = await fetch(target, { signal: AbortSignal.timeout(4_000) });
     if (!response.ok) return null;
     return Buffer.from(await response.arrayBuffer());
   } catch {
@@ -121,64 +144,110 @@ async function fetchBlob(url: string): Promise<Buffer | null> {
   }
 }
 
-/** Lecture-modification-écriture de `assets` (≤ 12 entrées, les plus anciennes purgées). */
-async function recordRender(postId: string, slot: string, render: SocialRender): Promise<void> {
+type RecordOutcome = { stored: boolean; evicted: SocialRender[] };
+
+/**
+ * Inscrit le rendu d'un slot dans `assets` en une seule instruction SQL
+ * (`jsonb_set` : PostgreSQL relit la colonne sous verrou de ligne, deux rendus
+ * concurrents ne s'écrasent plus), jamais sur un contenu archivé. Au-delà de
+ * `ASSETS_MAX_ENTRIES`, les entrées les plus anciennes sont retirées, chacune
+ * à condition d'être encore celle observée.
+ */
+async function recordRender(postId: string, slot: string, render: SocialRender): Promise<RecordOutcome> {
   const db = getDb();
-  const current = await db.query.socialPosts.findFirst({
-    where: eq(socialPosts.id, postId),
-    columns: { assets: true },
-  });
-  if (!current) return;
-  const renders = pruneRenders({ ...current.assets.renders, [slot]: render });
-  await db
+  const [row] = await db
     .update(socialPosts)
-    .set({ assets: { version: current.assets.version ?? 1, renders } })
-    .where(eq(socialPosts.id, postId));
+    .set({
+      assets: sql`jsonb_set(
+        jsonb_build_object(
+          'version', coalesce(${socialPosts.assets} -> 'version', '1'::jsonb),
+          'renders', coalesce(${socialPosts.assets} -> 'renders', '{}'::jsonb)
+        ),
+        array['renders'::text, ${slot}::text],
+        ${JSON.stringify(render)}::jsonb,
+        true
+      )`,
+    })
+    .where(and(eq(socialPosts.id, postId), ne(socialPosts.status, "archived")))
+    .returning({ assets: socialPosts.assets });
+  if (!row) return { stored: false, evicted: [] };
+
+  const { evicted } = pruneRenders(row.assets.renders);
+  for (const [evictedSlot, entry] of Object.entries(evicted)) {
+    await db
+      .update(socialPosts)
+      .set({ assets: sql`${socialPosts.assets} #- array['renders'::text, ${evictedSlot}::text]` })
+      .where(
+        and(
+          eq(socialPosts.id, postId),
+          sql`${socialPosts.assets} -> 'renders' -> ${evictedSlot}::text ->> 'key' = ${entry.key}`,
+        ),
+      );
+  }
+  return { stored: true, evicted: Object.values(evicted) };
 }
 
-async function storeOnBlob(
-  input: CachedRenderInput,
-  key: string,
-  data: Buffer,
-): Promise<void> {
+async function storeOnBlob(input: CachedRenderInput, key: string, slot: string, data: Buffer): Promise<void> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return;
   try {
-    const { put } = await import("@vercel/blob");
-    const blob = await put(`social/${input.post.siteId}/${input.post.id}/${key}.jpg`, data, {
+    const { put, del } = await import("@vercel/blob");
+    const blob = await put(blobPathname(input.post.siteId, input.post.id, slot), data, {
       access: "public",
       contentType: "image/jpeg",
-      addRandomSuffix: true,
+      addRandomSuffix: false,
+      allowOverwrite: true,
     });
-    await recordRender(input.post.id, assetSlot(input.size, input.slideIndex, input.preview), {
+    const outcome = await recordRender(input.post.id, slot, {
       key,
       url: blob.url,
       bytes: data.length,
       renderedAt: new Date().toISOString(),
     });
+    // Objets que plus rien ne référence : rendu d'un contenu archivé entre-temps,
+    // entrées évincées, ancienne URL du slot (suffixe aléatoire d'avant) — jamais
+    // l'objet du slot courant, qui est désormais écrasé en place.
+    const previous = input.post.assets.renders[slot]?.url;
+    const orphans = outcome.stored
+      ? [...outcome.evicted.map((entry) => entry.url), previous].filter(
+          (url): url is string => typeof url === "string" && url !== "" && url !== blob.url,
+        )
+      : [blob.url];
+    if (orphans.length > 0) {
+      await del([...new Set(orphans)]).catch((err: unknown) =>
+        console.warn("[social] suppression des rendus Blob orphelins impossible :", err),
+      );
+    }
   } catch (err) {
     console.warn("[social] cache Blob indisponible :", err);
   }
 }
 
-export type CachedRender = { data: Buffer; key: string; cached: "blob" | "memory" | false };
+export type CachedRender = {
+  data: Buffer;
+  key: string;
+  cached: "blob" | "memory" | false;
+  /** Rendu de repli après un échec transitoire d'image : non mis en cache, à servir sans ETag ni cache navigateur */
+  degraded: boolean;
+};
 
 /**
  * Rendu d'une diapositive via le cache : `assets.renders` (Blob) → LRU
- * mémoire → rendu, puis mise en cache (mémoire, et Blob si configuré).
+ * mémoire → rendu, puis mise en cache (mémoire, et Blob si configuré) sauf
+ * si le rendu est dégradé.
  */
 export async function renderSlideCached(input: CachedRenderInput): Promise<CachedRender> {
   const key = renderKey(input);
   const slot = assetSlot(input.size, input.slideIndex, input.preview);
 
   const fromMemory = lruGet(key);
-  if (fromMemory) return { data: fromMemory, key, cached: "memory" };
+  if (fromMemory) return { data: fromMemory, key, cached: "memory", degraded: false };
 
   const known = input.post.assets.renders[slot];
   if (known && known.key === key && known.url) {
-    const data = await fetchBlob(known.url);
+    const data = await fetchBlob(known.url, key);
     if (data && data.length > 0) {
       lruSet(key, data);
-      return { data, key, cached: "blob" };
+      return { data, key, cached: "blob", degraded: false };
     }
   }
 
@@ -188,9 +257,10 @@ export async function renderSlideCached(input: CachedRenderInput): Promise<Cache
     size: input.size,
     slideIndex: input.slideIndex,
     preview: input.preview,
-    reviewRating: input.reviewRating ?? null,
+    reviewRating: input.reviewRating,
   });
+  if (rendered.degraded) return { data: rendered.data, key, cached: false, degraded: true };
   lruSet(key, rendered.data);
-  await storeOnBlob(input, key, rendered.data);
-  return { data: rendered.data, key, cached: false };
+  await storeOnBlob(input, key, slot, rendered.data);
+  return { data: rendered.data, key, cached: false, degraded: false };
 }

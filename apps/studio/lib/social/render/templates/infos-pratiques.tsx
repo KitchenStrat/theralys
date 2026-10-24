@@ -56,7 +56,8 @@ export function InfosPratiques({ frame, theme, slide, logo, brand, address }: Te
         {address ? (
           <div
             style={{
-              display: "flex",
+              // Nœud texte unique en block : seul mode où satori honore lineClamp
+              display: "block",
               fontSize: frame.label,
               opacity: 0.8,
               marginTop: 8,

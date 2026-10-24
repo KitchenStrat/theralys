@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, socialPosts } from "@theralys/db";
 import { SOCIAL_SIZES, sizesFor, type SocialFormat, type SocialSize, type SocialTemplate } from "@theralys/shared";
 import { getSession } from "@/lib/auth";
-import { ownedSocialPost } from "@/lib/social/post-access";
+import { ownedActiveSocialPost } from "@/lib/social/post-access";
 import {
   SIZE_SUFFIX,
   buildPdf,
@@ -46,14 +46,15 @@ function file(data: Uint8Array, contentType: string, filename: string): NextResp
 /**
  * GET /api/social/[postId]/download?kind=image|zip|pdf|caption|all&size=…
  * Rendus séquentiels via le cache ; marque le contenu comme téléchargé
- * (`downloaded_at = coalesce(downloaded_at, now())`).
+ * (`downloaded_at = coalesce(downloaded_at, now())`). Un contenu archivé est
+ * introuvable (404) et n'est jamais marqué.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ postId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
 
   const { postId } = await context.params;
-  const post = await ownedSocialPost(session.siteId, postId);
+  const post = await ownedActiveSocialPost(session.siteId, postId);
   if (!post) return NextResponse.json({ error: "Contenu introuvable." }, { status: 404 });
 
   const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
@@ -81,11 +82,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
   const ctx = await loadRenderContext(session.siteId);
   const reviewRating = post.template === "avis" ? await loadReviewRating(session.siteId, post.content) : null;
   const started = Date.now();
+  let degraded = false;
   // Rendus séquentiels (jamais Promise.all) : satori + sharp sont gourmands
   const renderAll = async (indices: number[]) => {
     const out: Buffer[] = [];
     for (const slideIndex of indices) {
       const r = await renderSlideCached({ post, ctx, size, slideIndex, preview: false, reviewRating });
+      degraded ||= r.degraded;
       out.push(r.data);
     }
     return out;
@@ -134,6 +137,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
       size,
       slides: isCarousel ? slides.length : 1,
       ms: Date.now() - started,
+      degraded,
     });
     await markDownloaded(post.id);
     return response;
@@ -143,10 +147,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
   }
 }
 
+/** Pose `downloaded_at` (première fois seulement) — jamais sur un contenu archivé entre-temps. */
 async function markDownloaded(postId: string): Promise<void> {
   const db = getDb();
   await db
     .update(socialPosts)
     .set({ downloadedAt: sql`coalesce(${socialPosts.downloadedAt}, now())`, updatedAt: new Date() })
-    .where(eq(socialPosts.id, postId));
+    .where(and(eq(socialPosts.id, postId), ne(socialPosts.status, "archived")));
 }

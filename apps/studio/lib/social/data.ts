@@ -1,10 +1,12 @@
 /**
  * Lecture des contenus réseaux sociaux (§5.1). Chaque requête est filtrée par
  * site et par plage de dates : on ne charge jamais tout l'historique d'un site.
+ * L'état du mois (créneaux à pourvoir, compteurs) est une fonction pure des
+ * contenus déjà chargés : une seule lecture de `social_posts` par rendu de page.
  */
 
-import { and, asc, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
-import { blogArticles, getDb, sites, socialPosts, type SocialPost } from "@theralys/db";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { blogArticles, getDb, sites, socialPosts, type Database, type SocialPost } from "@theralys/db";
 import {
   isoDay,
   monthRange,
@@ -19,6 +21,14 @@ import {
   type SocialTemplate,
 } from "@theralys/shared";
 import { resolveSocialTheme } from "@/lib/social/render/theme";
+
+/** Transaction drizzle en cours (`tx` du callback de `db.transaction`). */
+export type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+/** Exécuteur : le client partagé ou la transaction en cours — toute lecture sous transaction passe par `tx`. */
+export type DbExecutor = Database | DbTransaction;
+
+/** Horizon des demandes « sur mesure » et des planifications de mois (jours). */
+export const SOCIAL_HORIZON_DAYS = 120;
 
 export type SocialCalendarItem = {
   id: string;
@@ -46,17 +56,40 @@ export type SocialCalendarItem = {
 };
 
 export type SocialMonthState = {
-  /** Créneaux restants du mois (cadence + nouvel article), strictement après `now` */
+  /** Créneaux restants du mois (cadence + nouvel article), strictement après `now` (UTC) */
   slots: SocialSlot[];
-  /** Créneaux non encore occupés par un contenu du calendrier */
+  /**
+   * Créneaux à pourvoir : les N premiers créneaux sans contenu du calendrier
+   * visible, N = créneaux − contenus du calendrier créés pour le mois (archivés
+   * inclus). Déplacer ou retirer un contenu ne libère donc aucun créneau.
+   */
   freeSlots: SocialSlot[];
-  /** Contenus du calendrier (source = calendar) non archivés dans le mois */
+  /** Contenus du calendrier (source = calendar) visibles (non archivés) */
   calendarCount: number;
-  /** Contenus du mois (toutes sources) déjà téléchargés */
-  downloaded: number;
-  /** Contenus du mois marqués comme publiés */
+  /** Contenus « sur mesure » visibles (non archivés) */
+  requestCount: number;
+  /** Contenus visibles marqués comme publiés */
   published: number;
+  /** Contenus visibles téléchargés mais pas encore publiés */
+  downloaded: number;
+  /** Contenus visibles ni téléchargés ni publiés */
+  toDownload: number;
 };
+
+/** Contenus du mois affichés et état dérivé, issus de la même lecture. */
+export type SocialMonthData = { items: SocialCalendarItem[]; state: SocialMonthState };
+
+/** Projection d'un contenu suffisante pour calculer l'état du mois. */
+export type SocialMonthPostLite = {
+  /** "YYYY-MM-DD" */
+  scheduledFor: string;
+  source: "calendar" | "request";
+  status: "ready" | "published" | "archived";
+  downloadedAt: Date | string | null;
+};
+
+/** Article du mois (`scheduled`/`published`) pour les créneaux « nouvel article ». */
+export type SocialMonthArticle = { id: string; publishAt: Date | string | null };
 
 export type SocialRequestUsage = {
   used: number;
@@ -65,7 +98,10 @@ export type SocialRequestUsage = {
   resetsOn: string;
 };
 
-function toCalendarItem(post: SocialPost, accentColor: string): SocialCalendarItem {
+/** Ligne de `social_posts` sans `assets` (inutile au calendrier). */
+type CalendarRow = Omit<SocialPost, "assets">;
+
+function toCalendarItem(post: CalendarRow, accentColor: string): SocialCalendarItem {
   const format = post.format as SocialFormat;
   const template = post.template as SocialTemplate;
   return {
@@ -96,38 +132,47 @@ function toCalendarItem(post: SocialPost, accentColor: string): SocialCalendarIt
   };
 }
 
-/** Contenus non archivés du mois, triés par date puis création. */
-export async function getSocialMonth(
-  siteId: string,
-  year: number,
-  month: number,
-): Promise<SocialCalendarItem[]> {
-  const db = getDb();
-  const { startIso, endIso } = monthRange(year, month);
-  const [site, posts] = await Promise.all([
-    db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { theme: true } }),
-    db.query.socialPosts.findMany({
-      where: and(
-        eq(socialPosts.siteId, siteId),
-        ne(socialPosts.status, "archived"),
-        gte(socialPosts.scheduledFor, startIso),
-        lt(socialPosts.scheduledFor, endIso),
-      ),
-      orderBy: [asc(socialPosts.scheduledFor), asc(socialPosts.createdAt)],
-    }),
-  ]);
-  if (!site) return [];
-  return posts.map((post) =>
-    toCalendarItem(
-      post,
-      resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent,
-    ),
-  );
+/**
+ * État du mois (fonction pure) à partir des contenus du mois — archivés
+ * inclus — et des articles du mois.
+ */
+export function computeSocialMonthState(input: {
+  year: number;
+  month: number;
+  now: Date;
+  posts: SocialMonthPostLite[];
+  articles: SocialMonthArticle[];
+}): SocialMonthState {
+  const slots = socialSlotsForMonth({
+    year: input.year,
+    month: input.month,
+    today: input.now,
+    articles: input.articles,
+  });
+  const visible = input.posts.filter((p) => p.status !== "archived");
+  const calendarAll = input.posts.filter((p) => p.source === "calendar").length;
+  const missing = Math.max(0, slots.length - calendarAll);
+  const occupied = new Set(visible.filter((p) => p.source === "calendar").map((p) => p.scheduledFor));
+  const published = visible.filter((p) => p.status === "published").length;
+  const downloaded = visible.filter((p) => p.status !== "published" && p.downloadedAt !== null).length;
+  return {
+    slots,
+    freeSlots: slots.filter((slot) => !occupied.has(slot.date)).slice(0, missing),
+    calendarCount: visible.filter((p) => p.source === "calendar").length,
+    requestCount: visible.filter((p) => p.source === "request").length,
+    published,
+    downloaded,
+    toDownload: visible.length - published - downloaded,
+  };
 }
 
 /** Articles du mois (en ligne ou planifiés) pour les créneaux « nouvel article ». */
-async function monthArticles(siteId: string, year: number, month: number) {
-  const db = getDb();
+function monthArticles(
+  db: DbExecutor,
+  siteId: string,
+  year: number,
+  month: number,
+): Promise<SocialMonthArticle[]> {
   const { start, end } = monthRange(year, month);
   return db.query.blogArticles.findMany({
     where: and(
@@ -140,44 +185,78 @@ async function monthArticles(siteId: string, year: number, month: number) {
   });
 }
 
-/** Créneaux du mois (`socialSlotsForMonth`) moins les dates déjà occupées, et compteurs. */
-export async function getSocialMonthState(
+/**
+ * Contenus du mois pour la page : contenus non archivés (triés par date puis
+ * création) et état du mois, en une seule lecture de `social_posts`.
+ */
+export async function getSocialMonth(
+  siteId: string,
+  year: number,
+  month: number,
+  now: Date,
+): Promise<SocialMonthData> {
+  const db = getDb();
+  const { startIso, endIso } = monthRange(year, month);
+  const [site, posts, articles] = await Promise.all([
+    db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { theme: true } }),
+    // Archivés inclus : ils comptent dans les créneaux pourvus (jamais réaffichés)
+    db.query.socialPosts.findMany({
+      where: and(
+        eq(socialPosts.siteId, siteId),
+        gte(socialPosts.scheduledFor, startIso),
+        lt(socialPosts.scheduledFor, endIso),
+      ),
+      columns: { assets: false },
+      orderBy: [asc(socialPosts.scheduledFor), asc(socialPosts.createdAt)],
+    }),
+    monthArticles(db, siteId, year, month),
+  ]);
+  const state = computeSocialMonthState({ year, month, now, posts, articles });
+  if (!site) return { items: [], state };
+  const items = posts
+    .filter((post) => post.status !== "archived")
+    .map((post) =>
+      toCalendarItem(post, resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent),
+    );
+  return { items, state };
+}
+
+/**
+ * État du mois seul (projection minimale), pour la planification sous
+ * transaction : `db` est alors la transaction en cours.
+ */
+export async function loadSocialMonthState(
+  db: DbExecutor,
   siteId: string,
   year: number,
   month: number,
   now: Date,
 ): Promise<SocialMonthState> {
-  const db = getDb();
   const { startIso, endIso } = monthRange(year, month);
   const [articles, posts] = await Promise.all([
-    monthArticles(siteId, year, month),
+    monthArticles(db, siteId, year, month),
     db.query.socialPosts.findMany({
       where: and(
         eq(socialPosts.siteId, siteId),
-        ne(socialPosts.status, "archived"),
         gte(socialPosts.scheduledFor, startIso),
         lt(socialPosts.scheduledFor, endIso),
       ),
       columns: { scheduledFor: true, source: true, status: true, downloadedAt: true },
     }),
   ]);
-  const slots = socialSlotsForMonth({ year, month, today: now, articles });
-  const occupied = new Set(posts.filter((p) => p.source === "calendar").map((p) => p.scheduledFor));
-  return {
-    slots,
-    freeSlots: slots.filter((slot) => !occupied.has(slot.date)),
-    calendarCount: posts.filter((p) => p.source === "calendar").length,
-    downloaded: posts.filter((p) => p.downloadedAt !== null).length,
-    published: posts.filter((p) => p.status === "published").length,
-  };
+  return computeSocialMonthState({ year, month, now, posts, articles });
 }
 
 /**
  * Demandes « sur mesure » du mois civil UTC en cours : comptées sur
  * `source = 'request'`, tous statuts confondus (archiver ne rembourse pas).
+ * Sous transaction (quota garanti à l'insertion), passer `tx` en `db`.
  */
-export async function getSocialRequestUsage(siteId: string, now: Date): Promise<SocialRequestUsage> {
-  const db = getDb();
+export async function getSocialRequestUsage(
+  siteId: string,
+  now: Date,
+  db: DbExecutor = getDb(),
+): Promise<SocialRequestUsage> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   const [row] = await db
@@ -231,4 +310,21 @@ export async function recentSocialTopics(siteId: string, now: Date): Promise<str
     }
   }
   return topics;
+}
+
+/** Codes Postgres d'un schéma incomplet : table, colonne ou type (enum) absents. */
+const MISSING_SCHEMA_CODES = new Set(["42P01", "42703", "42704"]);
+
+/**
+ * Vrai si l'erreur (ou une de ses causes, drizzle enveloppant celle du pilote)
+ * signale que la migration `social_posts` n'est pas appliquée.
+ */
+export function isMissingSchemaError(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
+    const code = (current as Error & { code?: unknown }).code;
+    if (typeof code === "string" && MISSING_SCHEMA_CODES.has(code)) return true;
+    current = current.cause;
+  }
+  return false;
 }

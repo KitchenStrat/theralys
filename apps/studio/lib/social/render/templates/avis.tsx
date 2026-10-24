@@ -38,7 +38,8 @@ export function Avis({ frame, theme, slide, logo, brand, google, reviewRating }:
         {author ? (
           <div
             style={{
-              display: "flex",
+              // Nœud texte unique en block : seul mode où satori honore lineClamp
+              display: "block",
               marginTop: 32,
               fontWeight: 700,
               fontSize: frame.body,

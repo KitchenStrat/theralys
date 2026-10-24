@@ -18,7 +18,7 @@ import {
 import type { BrandInfo } from "./chrome";
 import { loadFonts } from "./fonts";
 import { FRAMES } from "./frames";
-import { prepareImage } from "./images";
+import { loadImage } from "./images";
 import { photoGeometry, renderElement } from "./templates";
 import { resolveSocialTheme } from "./theme";
 
@@ -56,6 +56,12 @@ export type RenderedImage = {
   data: Buffer;
   width: number;
   height: number;
+  /**
+   * Photo ou logo demandé mais non chargé (échec transitoire : délai, 5xx…) :
+   * la variante de repli a été rendue, mais ce résultat ne doit être mis en
+   * cache nulle part (LRU, Blob, `assets`, navigateur).
+   */
+  degraded: boolean;
 };
 
 /** Diapositive demandée, ou erreur explicite. */
@@ -80,11 +86,16 @@ export async function renderSlide(input: RenderSlideInput): Promise<RenderedImag
   const fonts = await loadFonts(ctx.siteTheme.fontPreset);
 
   const geometry = photoGeometry(template, size, slide.role);
-  const photo =
+  const photoOutcome =
     geometry && slide.imageUrl && TEMPLATE_ACCEPTS_PHOTO[template]
-      ? await prepareImage(slide.imageUrl, geometry.w, geometry.h, "cover")
+      ? await loadImage(slide.imageUrl, geometry.w, geometry.h, "cover")
       : null;
-  const logo = theme.logoUrl ? await prepareImage(theme.logoUrl, LOGO_BOX.w, LOGO_BOX.h, "contain") : null;
+  const logoOutcome = theme.logoUrl ? await loadImage(theme.logoUrl, LOGO_BOX.w, LOGO_BOX.h, "contain") : null;
+  const photo = photoOutcome?.status === "ok" ? photoOutcome.dataUri : null;
+  const logo = logoOutcome?.status === "ok" ? logoOutcome.dataUri : null;
+  // Une URL refusée (hors liste blanche, data:URI invalide) est définitive : la
+  // variante sans photo est alors le rendu final ; seul un échec transitoire dégrade.
+  const degraded = photoOutcome?.status === "failed" || logoOutcome?.status === "failed";
 
   const element = renderElement(template, {
     frame,
@@ -105,9 +116,9 @@ export async function renderSlide(input: RenderSlideInput): Promise<RenderedImag
   const response = new ImageResponse(element, { width: frame.w, height: frame.h, fonts });
   const png = Buffer.from(await response.arrayBuffer());
   const full = await sharp(png).jpeg({ quality: 85, mozjpeg: true }).toBuffer();
-  if (!preview) return { data: full, width: frame.w, height: frame.h };
+  if (!preview) return { data: full, width: frame.w, height: frame.h, degraded };
   const data = await previewOf(full);
-  return { data, width: PREVIEW_WIDTH, height: Math.round((frame.h * PREVIEW_WIDTH) / frame.w) };
+  return { data, width: PREVIEW_WIDTH, height: Math.round((frame.h * PREVIEW_WIDTH) / frame.w), degraded };
 }
 
 /** Dimensions d'une taille (utilitaire pour les routes et le PDF). */

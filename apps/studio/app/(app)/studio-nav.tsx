@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { clsx } from "clsx";
 
 /**
- * Navigation latérale du studio (horizontale et défilable sur mobile).
- * L'éditeur de site n'apparaît volontairement pas ici : on y accède
- * depuis la carte « Votre site » de l'Accueil.
+ * Navigation latérale du studio (horizontale et défilable sur mobile, l'onglet
+ * actif ramené en vue). L'éditeur de site n'apparaît volontairement pas ici :
+ * on y accède depuis la carte « Votre site » de l'Accueil.
  */
 export function StudioNav({
   showPublications = true,
@@ -18,6 +19,17 @@ export function StudioNav({
   showSocial?: boolean;
 }) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  // Mobile : la barre déborde (6 entrées) — centrer l'onglet actif au chargement et à chaque navigation
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return;
+    const active = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!active) return;
+    nav.scrollLeft = Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2);
+  }, [pathname]);
+
   const items = [
     { href: "/", label: "Accueil", active: pathname === "/" },
     ...(showPublications
@@ -45,8 +57,9 @@ export function StudioNav({
 
   return (
     <nav
+      ref={navRef}
       aria-label="Navigation"
-      className="flex items-center gap-1 overflow-x-auto px-4 pb-3 md:flex-col md:items-stretch md:overflow-visible md:px-3 md:pb-0"
+      className="relative flex items-center gap-1 overflow-x-auto px-4 pb-3 md:flex-col md:items-stretch md:overflow-visible md:px-3 md:pb-0"
     >
       {items.map((item) => (
         <Link

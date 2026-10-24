@@ -20,6 +20,7 @@ import {
   plainText,
   singleEmphasis,
   stripEmoji,
+  truncateAtSentence,
   truncateAtWord,
   type SocialAccentRole,
   type SocialFormat,
@@ -105,10 +106,16 @@ export type SocialGenerator = {
 
 // ─── Schéma zod de la sortie du modèle (§3.3) ────────────────────────────────
 
+/**
+ * Bornes volontairement plus larges que les consignes du prompt (badge ≤ 32,
+ * topic ≤ 70, altText ≤ 250, note ≤ 200, 2 à 5 pages, 1 à 6 sources) :
+ * `finalizePlan` ramène tout aux limites éditoriales, on ne relance pas le
+ * modèle pour quelques caractères de trop.
+ */
 const slideSchema = z.object({
   title: z.string().trim().min(2).max(90),
   body: z.string().trim().max(260).default(""),
-  badge: z.string().trim().max(32).optional(),
+  badge: z.string().trim().max(60).optional(),
   imageRef: z
     .string()
     .regex(/^p\d{1,2}$/)
@@ -145,19 +152,18 @@ export const socialPostSchema = z.object({
   format: z.enum(SOCIAL_FORMATS),
   template: z.enum(SOCIAL_TEMPLATES),
   accentRole: z.enum(SOCIAL_ACCENT_ROLES).default("primary"),
-  topic: z.string().trim().min(5).max(70),
-  /** Carrousel : couverture + ≤ 5 pages, la CTA est ajoutée par le code */
-  slides: z.array(slideSchema).min(1).max(6),
+  topic: z.string().trim().min(5).max(120),
+  /** Carrousel : couverture + pages (finalizePlan garde 5 pages au plus), la CTA est ajoutée par le code */
+  slides: z.array(slideSchema).min(1).max(8),
   caption: z.string().trim().min(120).max(2200),
   hashtags: z.array(z.string().trim().min(2).max(42)).min(3).max(10),
-  altText: z.string().trim().min(10).max(300),
-  sourceRefs: z.array(z.string().trim().min(3).max(120)).min(1).max(6),
-  note: z.string().trim().max(200).optional(),
+  altText: z.string().trim().min(10).max(500),
+  sourceRefs: z.array(z.string().trim().min(3).max(120)).min(1).max(12),
+  note: z.string().trim().max(300).optional(),
 });
 
 /**
- * Les bornes sont plus larges que les consignes du prompt (robustesse) :
- * `finalizePlan` tronque. L'échec du `superRefine` fait échouer `schema.parse`
+ * L'échec du `superRefine` (marketing interdit) fait échouer `schema.parse`
  * → `completeStructured` relance une fois avec le message en feedback.
  */
 export const socialPlanSchema = z
@@ -243,7 +249,69 @@ export function checkSocialCompliance(value: unknown): {
   return { ok: violations.length === 0, violations };
 }
 
+/**
+ * Brief prêt pour la génération : les avis dont le texte enfreint une règle
+ * sociale ou éthique (« le meilleur », majuscules criées, « traitement »…)
+ * sont écartés — cités mot pour mot, ils feraient échouer la vérification du
+ * mois entier. Le pilier « avis » n'est alors proposé que s'il en reste
+ * (`availablePillars` lit `brief.reviews`), et un `review:` écarté n'est plus
+ * un avis valide pour `finalizePlan`.
+ */
+export function sanitizeSocialBrief(brief: SocialSiteBrief): SocialSiteBrief {
+  const reviews = brief.reviews.filter((r) => checkSocialCompliance(r.text).ok);
+  return reviews.length === brief.reviews.length ? brief : { ...brief, reviews };
+}
+
 // ─── Textes écrits par le code ───────────────────────────────────────────────
+
+const NUMBER_WORDS = ["", "une", "deux", "trois", "quatre", "cinq", "six", "sept"];
+
+/** « 3 » → « trois » (au-delà de sept : le chiffre). */
+export function numberWord(n: number): string {
+  return NUMBER_WORDS[n] ?? String(n);
+}
+
+export type SocialAltTextSlide = { title: string; body: string; hasPhoto: boolean };
+
+/**
+ * Texte alternatif écrit par le code à partir des diapositives finales : il ne
+ * décrit que ce qui est réellement rendu (photo présente ou non, nombre de
+ * points d'une liste, note réelle de l'avis cité). Employé par le mock et par
+ * `finalizePlan` dès que le template, la photo ou la citation d'un brouillon
+ * ont changé — le texte du modèle décrirait alors un visuel qui n'existe plus.
+ */
+export function socialAltText(
+  template: SocialTemplate,
+  slides: SocialAltTextSlide[],
+  brand: { firstName: string; profession: string },
+  opts: { reviewRating?: number; total?: number } = {},
+): string {
+  const first = slides[0];
+  const title = first?.title ?? "";
+  const signature = `${brand.firstName}, ${brand.profession.toLowerCase()}`;
+  const total = opts.total ?? slides.length;
+  const bullets = (first?.body ?? "").split("\n").filter((l) => /^- /.test(l)).length;
+  switch (template) {
+    case "photo-titre":
+      return `Photo d'ambiance avec, en surimpression, le titre « ${title} » et la signature ${signature}.`;
+    case "affirmation":
+      return `Texte « ${title} » sur un fond de couleur dégradé, signé ${signature}.`;
+    case "question-reponse":
+      return `Question « ${title} » suivie de sa réponse courte, sur fond clair.`;
+    case "liste-conseils":
+      return `Titre « ${title} » et une liste de ${bullets >= 2 ? `${numberWord(bullets)} points numérotés` : "repères"}, signée ${signature}.`;
+    case "infos-pratiques":
+      return `Encadré « ${title} » listant les informations pratiques du cabinet de ${signature}.`;
+    case "avis":
+      return `Avis Google ${opts.reviewRating ? `${numberWord(opts.reviewRating)} étoiles ` : ""}cité entre guillemets, suivi du prénom de son auteur.`;
+    case "carrousel-etapes":
+      return `Carrousel de ${total} pages : couverture « ${title} »${first?.hasPhoto ? " sur photo" : ""}, étapes numérotées, puis invitation à prendre rendez-vous.`;
+    case "carrousel-article":
+      return `Carrousel de ${total} pages résumant l'article « ${title} »${first?.hasPhoto ? ", avec sa photo de couverture" : ""}.`;
+    case "story-rappel":
+      return `Story verticale : ${first?.hasPhoto ? "photo" : "dégradé de couleur"} en haut, titre « ${title} » et pastille « Lien dans ma bio ».`;
+  }
+}
 
 /** Body de la diapositive CTA : « Je vous accueille sur rendez-vous à Albi. », accordé à la voix. */
 export function socialWelcomeLine(voice: BlogVoice, city: string): string {
@@ -269,6 +337,8 @@ export type FinalizeInput = (
 /** Limites appliquées aux textes (les bornes zod sont plus larges). */
 const TITLE_MAX = 60;
 const AVIS_TITLE_MAX = 90;
+/** Citation entre « » dans un titre « avis » (AVIS_TITLE_MAX − 4) */
+const AVIS_QUOTE_MAX = 86;
 const BODY_MAX = 200;
 const CAROUSEL_BODY_MAX = 160;
 const BADGE_MAX = 32;
@@ -528,16 +598,58 @@ type PostFrame = {
   forceProjection: boolean;
 };
 
-function hasValidReview(draft: SocialPostDraft, brief: SocialSiteBrief): boolean {
-  return draft.sourceRefs.some((id) => id.startsWith("review:") && brief.reviews.some((r) => r.id === id));
+/** Avis du brief référencé par le brouillon (`review:<id>` dans sourceRefs), s'il existe. */
+function reviewOf(draft: SocialPostDraft, brief: SocialSiteBrief): SocialSiteBrief["reviews"][number] | undefined {
+  for (const id of draft.sourceRefs) {
+    if (!id.startsWith("review:")) continue;
+    const review = brief.reviews.find((r) => r.id === id);
+    if (review) return review;
+  }
+  return undefined;
 }
 
-/** Pilier effectif après les règles « avis » (évalué avant le mix). */
+function isAvisDraft(draft: SocialPostDraft): boolean {
+  return draft.pillar === "avis" || draft.template === "avis";
+}
+
+/**
+ * Pilier effectif après les règles « avis » (évalué avant le mix) : un
+ * brouillon qui cite un avis valide est un « avis » quel que soit le pilier
+ * déclaré (la citation n'est jamais perdue) ; sans avis valide (démo, avis
+ * inconnu ou écarté, second avis du mois) il devient « projection ».
+ */
 function effectivePillar(draft: SocialPostDraft, frame: PostFrame, brief: SocialSiteBrief): SocialPillar {
   if (frame.newArticleId) return "nouvel_article";
   if (frame.forceProjection) return "projection";
-  if ((draft.pillar === "avis" || draft.template === "avis") && !hasValidReview(draft, brief)) return "projection";
+  if (isAvisDraft(draft)) return reviewOf(draft, brief) ? "avis" : "projection";
   return draft.pillar;
+}
+
+/** Apostrophes, espaces insécables et espaces multiples normalisés (comparaison d'une citation à son avis). */
+function normalizeQuote(text: string): string {
+  return text.replace(/[’‘]/g, "'").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Citation d'un titre « avis », sans guillemets ni « … » final. */
+function quoteCore(title: string): string {
+  return normalizeQuote(
+    cleanInline(title)
+      .replace(/^[«"“]\s*/, "")
+      .replace(/\s*[»"”]$/, "")
+      .replace(/…$/, ""),
+  );
+}
+
+/**
+ * Diapositive du template « avis » écrite par le code : citation par phrases
+ * entières (≤ 86 caractères, jamais coupée en pleine phrase quand une phrase
+ * tient) et signature « Prénom I. · Avis Google ».
+ */
+export function reviewSlide(review: { authorName: string; text: string }): SocialSlideDraft {
+  return {
+    title: `« ${truncateAtSentence(review.text, AVIS_QUOTE_MAX, 0.3)} »`,
+    body: `${review.authorName} · Avis Google`,
+  };
 }
 
 function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext): FinalizedPost {
@@ -547,13 +659,26 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
   let template: SocialTemplate = draft.template;
   let slidesIn: SocialSlideDraft[] = draft.slides;
   let refIds: string[] = draft.sourceRefs;
+  // Le texte alternatif du modèle n'est gardé que si le visuel qu'il décrit est bien celui rendu
+  let altFromCode = false;
 
-  // Avis non exploitable (démo, avis inconnu, second avis du mois) → projection
-  const projection = pillar === "projection" && (draft.pillar === "avis" || draft.template === "avis");
+  // Avis non exploitable (démo, avis inconnu ou écarté, second avis du mois) → projection sur le titre du site
+  const avisDraft = isAvisDraft(draft);
+  const review = avisDraft ? reviewOf(draft, brief) : undefined;
+  const projection = avisDraft && pillar === "projection";
   if (projection) {
     template = SOCIAL_DEFAULT_TEMPLATE[format];
     slidesIn = heroDrafts(brief, format);
     refIds = ["section:home:hero"];
+    altFromCode = true;
+  } else if (template === "avis" && review && format === "static") {
+    // La citation doit être un passage exact de l'avis ; sinon le code la réécrit depuis l'avis lui-même
+    const first = slidesIn[0];
+    const core = first ? quoteCore(first.title) : "";
+    const faithful = first !== undefined && core.length >= 10 && normalizeQuote(review.text).includes(core);
+    slidesIn = [faithful ? { ...first, body: `${review.authorName} · Avis Google` } : reviewSlide(review)];
+    refIds = [...new Set([review.id, ...refIds])];
+    altFromCode = true;
   }
   if (frame.newArticleId) {
     pillar = "nouvel_article";
@@ -567,6 +692,7 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
   const slideCtx: SlideContext = { brief, photosById: ctx.photosById, template, pillar };
   const titleMax = template === "avis" ? AVIS_TITLE_MAX : TITLE_MAX;
   let slides: SocialSlide[];
+  let fallbackRef: string | undefined;
   if (format === "carousel") {
     if (slidesIn.length < 2) throw new Error(CAROUSEL_INCOMPLETE);
     const [cover, ...pages] = slidesIn.slice(0, 1 + CAROUSEL_PAGES_MAX);
@@ -582,7 +708,7 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
   } else {
     const first = slidesIn[0];
     if (!first) throw new Error("diapositive manquante");
-    const fallbackRef = template === "photo-titre" && !first.imageRef
+    fallbackRef = template === "photo-titre" && !first.imageRef
       ? refIds.map((id) => photoOfRef(brief, id)).find((id): id is string => id !== undefined)
       : undefined;
     slides = [
@@ -598,12 +724,28 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
   // Template photo sans photo résolue → variante sans photo
   if (template === "photo-titre" && !slides[0]?.imageUrl) template = "affirmation";
 
+  // Texte alternatif : template rétrogradé, photo retirée (ou ajoutée en repli), citation réécrite → écrit par le code
+  const draftHadPhoto = TEMPLATE_ACCEPTS_PHOTO[draft.template] && Boolean(slidesIn[0]?.imageRef ?? fallbackRef);
+  const hasPhoto = Boolean(slides[0]?.imageUrl);
+  if (template !== draft.template || draftHadPhoto !== hasPhoto) altFromCode = true;
+  const altText = cleanTitle(
+    altFromCode
+      ? socialAltText(
+          template,
+          slides.map((s) => ({ title: s.title, body: s.body, hasPhoto: Boolean(s.imageUrl) })),
+          brief.practitioner,
+          review ? { reviewRating: review.rating } : {},
+        )
+      : draft.altText,
+    ALT_MAX,
+  );
+
   // Légende, hashtags, textes courts
   const { caption, hashtags: moved } = cleanCaption(draft.caption);
   const { profession, city } = brief.practitioner;
   const hashtags = normalizeHashtags([...draft.hashtags, ...moved], { profession, city });
-  const topic = cleanTitle(draft.topic, TOPIC_MAX) || slides[0]?.title || "Publication";
-  const altText = cleanTitle(draft.altText, ALT_MAX);
+  // Repli projection : le sujet du calendrier suit le contenu réellement rendu, pas l'avis abandonné
+  const topic = (projection ? slides[0]?.title : cleanTitle(draft.topic, TOPIC_MAX)) || slides[0]?.title || "Publication";
   const note = draft.note ? cleanTitle(draft.note, NOTE_MAX) : "";
 
   // Sources : ids inconnus retirés, vide → accueil, enrichis, requête → « Votre demande »
@@ -705,8 +847,10 @@ function applyMix(items: Assigned[], brief: SocialSiteBrief): void {
  *    nouvel_article → pilier/template forcés ; requête : `scheduledFor` et
  *    `format` imposés) ;
  * 2. template incompatible avec le format → SOCIAL_DEFAULT_TEMPLATE ; `avis`
- *    sans `review:` valide → `affirmation` ; template photo sans photo → variante
- *    sans photo ;
+ *    sans `review:` valide → projection/`affirmation` (un avis valide impose le
+ *    pilier avis) ; citation d'avis qui n'est pas un passage exact de l'avis →
+ *    réécrite par le code (phrases entières) ; template photo sans photo →
+ *    variante sans photo ;
  * 3. diapositives : rôles (single / cover + page… / cta ajoutée par le code
  *    avec SOCIAL_CTA_TITLE ou SOCIAL_ARTICLE_CTA_TITLE), < 2 reçues pour un
  *    carrousel → erreur « carrousel incomplet » (requête) ou post écarté (mois) ;
@@ -715,7 +859,8 @@ function applyMix(items: Assigned[], brief: SocialSiteBrief): void {
  * 5. légende : markdown retiré, ≤ 2 000 car., ≤ 3 emojis, première ligne ≤ 125,
  *    hashtags déplacés vers `hashtags` ;
  * 6. normalizeHashtags ; 7. photos (imageRef → imageUrl via photosById,
- *    portraitSafe) ; 8. sourceRefs (ids inconnus retirés, vide → section:home:hero,
+ *    portraitSafe) ; altText réécrit par le code (socialAltText) dès que le
+ *    template, la photo ou la citation ont changé ; 8. sourceRefs (ids inconnus retirés, vide → section:home:hero,
  *    enrichis via refsById, requête → REQUEST_SOURCE_REF) ; 9. mix (piliers
  *    consécutifs, ≤ 1 avis) ; 10. accentRole conservé ; 11. `generator` recopié.
  */
@@ -760,30 +905,43 @@ export function finalizePlan(
 
 // ─── createSocialGenerator (§3.2, §3.9, §3.10) ───────────────────────────────
 
-function assertCompliant(posts: FinalizedPost[]): FinalizedPost[] {
-  const { ok, violations } = checkSocialCompliance(posts);
-  if (!ok) throw new Error(`Contenu social mock non conforme : [${violations[0]?.rule}] ${violations[0]?.excerpt}`);
-  return posts;
+/**
+ * Mode mock : une publication non conforme (texte du site cité tel quel qui
+ * enfreint une règle) est écartée — son créneau reste libre — plutôt que de
+ * perdre tout le mois ; erreur seulement s'il ne reste rien.
+ */
+function keepCompliant(posts: FinalizedPost[]): FinalizedPost[] {
+  const kept = posts.filter((post) => checkSocialCompliance(post).ok);
+  if (kept.length === 0) {
+    const { violations } = checkSocialCompliance(posts);
+    throw new Error(`Contenu social mock non conforme : [${violations[0]?.rule}] ${violations[0]?.excerpt}`);
+  }
+  return kept;
 }
 
 /**
  * Générateur de contenus réseaux sociaux : mode choisi par `resolveAiMode(env)`.
- * Mode live : completeStructured({ apiKey, model, effort: "medium" },
- * socialSystemPrompt(brief), socialMonthUserPrompt / socialRequestUserPrompt,
- * socialPlanSchema) puis finalizePlan. Mode mock : mock/social.ts puis
- * finalizePlan puis checkSocialCompliance (throw si non conforme).
+ * Dans les deux modes, le brief est d'abord assaini (`sanitizeSocialBrief` :
+ * avis non conformes écartés). Mode live : completeStructured({ apiKey, model,
+ * effort: "medium" }, socialSystemPrompt(brief), socialMonthUserPrompt /
+ * socialRequestUserPrompt, socialPlanSchema) puis finalizePlan. Mode mock :
+ * mock/social.ts puis finalizePlan puis checkSocialCompliance post par post
+ * (publication fautive écartée, throw seulement si aucune ne reste).
  */
 export function createSocialGenerator(env: NodeJS.ProcessEnv = process.env): SocialGenerator {
   const mode = resolveAiMode(env);
   if (mode === "mock") {
     return {
       mode,
-      planMonth: async (brief, input) =>
-        assertCompliant(
+      planMonth: async (rawBrief, input) => {
+        const brief = sanitizeSocialBrief(rawBrief);
+        return keepCompliant(
           finalizePlan(mockSocialMonth(brief, input), brief, { kind: "month", ...input, generator: "mock" }),
-        ),
-      generateRequest: async (brief, input) => {
-        const [post] = assertCompliant(
+        );
+      },
+      generateRequest: async (rawBrief, input) => {
+        const brief = sanitizeSocialBrief(rawBrief);
+        const [post] = keepCompliant(
           finalizePlan(mockSocialRequest(brief, input), brief, { kind: "request", ...input, generator: "mock" }),
         );
         return post!;
@@ -797,11 +955,13 @@ export function createSocialGenerator(env: NodeJS.ProcessEnv = process.env): Soc
   };
   return {
     mode,
-    planMonth: async (brief, input) => {
+    planMonth: async (rawBrief, input) => {
+      const brief = sanitizeSocialBrief(rawBrief);
       const plan = await completeSocialPlan(options, brief, socialMonthUserPrompt(brief, input));
       return finalizePlan(plan, brief, { kind: "month", ...input, generator: "anthropic" });
     },
-    generateRequest: async (brief, input) => {
+    generateRequest: async (rawBrief, input) => {
+      const brief = sanitizeSocialBrief(rawBrief);
       const plan = await completeSocialPlan(options, brief, socialRequestUserPrompt(brief, input));
       const [post] = finalizePlan(plan, brief, { kind: "request", ...input, generator: "anthropic" });
       return post!;

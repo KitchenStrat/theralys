@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Section } from "./content";
 import {
   SOCIAL_BRIEF_MAX_CHARS,
+  SOCIAL_PHOTO_DATA_URI_MAX_CHARS,
   buildSocialBrief,
+  clip,
   describeSourceRef,
+  isSocialPhotoUrl,
   parseArticleOutline,
   photoCatalog,
   photoOrientation,
@@ -411,6 +414,7 @@ describe("buildSocialBrief — accueil", () => {
     expect(stress.pageId).toBe("page:22222222-2222-4222-8222-222222222222");
     expect(stress.photoId).toBeDefined();
     expect(stress.excerpt.length).toBeLessThanOrEqual(200);
+    // Première phrase (93 caractères) sous la moitié du budget → coupure au mot
     expect(stress.excerpt.endsWith("…")).toBe(true);
     expect(stress.excerpt).not.toContain("**");
     expect(refsById[stress.id]?.label).toBe("Spécialité « Gestion du stress »");
@@ -450,7 +454,9 @@ describe("buildSocialBrief — accueil", () => {
       expect(step.id).toBe("section:home:process");
       expect(step.description.length).toBeLessThanOrEqual(160);
     }
-    expect(home.process[0]?.description.endsWith("…")).toBe(true);
+    // Coupé à la phrase : « … ce qui vous amène aujourd'hui. », pas « … votre rythme de vie, votre… »
+    expect(home.process[0]?.description).toBe("Nous faisons le point ensemble : votre quotidien, vos attentes et ce qui vous amène aujourd'hui.");
+    expect(home.faq[0]!.answer.endsWith(".")).toBe(true);
     expect(home.faq).toHaveLength(7);
     expect(home.faq[2]).toEqual({ id: "section:home:faq:2", question: "La sophrologie, c'est de l'hypnose ?", answer: "Pas tout à fait : vous restez pleinement actif, guidé par ma voix, les yeux fermés ou ouverts." });
     expect(home.faq[0]!.answer.length).toBeLessThanOrEqual(220);
@@ -557,12 +563,43 @@ describe("buildSocialBrief — pages de motifs, articles, avis, photos", () => {
   it("photoCatalog : dédoublonne, plafonne, ignore les URLs vides", () => {
     const catalog = photoCatalog(2);
     expect(catalog.add(null, "hero", "x")).toBeUndefined();
-    expect(catalog.add("https://a/1.jpg", "hero", "Un")).toBe("p1");
-    expect(catalog.add("https://a/1.jpg", "motif", "Encore")).toBe("p1");
-    expect(catalog.add("https://a/2.jpg", "motif", "Deux")).toBe("p2");
-    expect(catalog.add("https://a/3.jpg", "motif", "Trois")).toBeUndefined();
+    expect(catalog.add("https://images.pexels.com/a/1.jpg", "hero", "Un")).toBe("p1");
+    expect(catalog.add("https://images.pexels.com/a/1.jpg", "motif", "Encore")).toBe("p1");
+    expect(catalog.add("https://fal.media/a/2.jpg", "motif", "Deux")).toBe("p2");
+    expect(catalog.add("https://v3.fal.media/a/3.jpg", "motif", "Trois")).toBeUndefined();
     expect(catalog.photos).toHaveLength(2);
-    expect(catalog.byId).toEqual({ p1: "https://a/1.jpg", p2: "https://a/2.jpg" });
+    expect(catalog.byId).toEqual({ p1: "https://images.pexels.com/a/1.jpg", p2: "https://fal.media/a/2.jpg" });
+  });
+
+  it("photoCatalog refuse hôte inconnu, http, data:URI volumineux ou non image (jamais recopiés dans les contenus)", () => {
+    const big = `data:image/jpeg;base64,${"A".repeat(SOCIAL_PHOTO_DATA_URI_MAX_CHARS)}`;
+    expect(isSocialPhotoUrl(big)).toBe(false);
+    expect(isSocialPhotoUrl(DATA_URI)).toBe(true);
+    expect(isSocialPhotoUrl("data:text/html,<b>")).toBe(false);
+    expect(isSocialPhotoUrl("https://example.com/x.jpg")).toBe(false);
+    expect(isSocialPhotoUrl("http://images.pexels.com/x.jpg")).toBe(false);
+    expect(isSocialPhotoUrl("https://evil.fal.media.example.com/x.jpg")).toBe(false);
+    expect(isSocialPhotoUrl(BLOB)).toBe(true);
+    expect(isSocialPhotoUrl("pas une url")).toBe(false);
+    const catalog = photoCatalog();
+    expect(catalog.add(big, "hero", "Trop lourd")).toBeUndefined();
+    expect(catalog.add("https://example.com/x.jpg", "hero", "Hôte inconnu")).toBeUndefined();
+    expect(catalog.add(DATA_URI, "hero", "Petit SVG")).toBe("p1");
+    expect(catalog.photos).toHaveLength(1);
+    // Dans un brief : la photo « avenir » en data:URI de 2,5 Mo disparaît, les autres restent
+    const heavy = `data:image/png;base64,${"B".repeat(2_500_000)}`;
+    const sections = HOME_SECTIONS.map((s) => (s.type === "future" ? { ...s, imageUrl: heavy } : s));
+    const { brief, photosById } = buildSocialBrief(fixture({ pages: [{ id: "home-1", type: "home", slug: "", title: "Accueil", metaDescription: null, sections }, ...fixture().pages.slice(1)] }));
+    expect(brief.photos.some((p) => p.kind === "future")).toBe(false);
+    expect(Object.values(photosById).every((url) => url.length <= SOCIAL_PHOTO_DATA_URI_MAX_CHARS)).toBe(true);
+    expect(brief.photos.some((p) => p.kind === "hero")).toBe(true);
+  });
+
+  it("clip : coupe à la phrase quand elle garde la moitié du budget, sinon au mot", () => {
+    const two = "Première phrase assez longue pour compter dans le budget imparti ici. Seconde phrase qui déborde largement le budget restant du texte.";
+    expect(clip(two, 100)).toBe("Première phrase assez longue pour compter dans le budget imparti ici.");
+    expect(clip("Court. Puis un long développement qui ne tient pas du tout dans le budget prévu", 60).endsWith("…")).toBe(true);
+    expect(clip("Avec **gras**\nsur deux lignes.", 80)).toBe("Avec gras sur deux lignes.");
   });
 });
 

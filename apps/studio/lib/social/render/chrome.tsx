@@ -66,6 +66,7 @@ export function Pill({
       style={{
         display: "flex",
         alignSelf: "flex-start",
+        maxWidth: "100%",
         backgroundColor: bg,
         color: fg,
         borderRadius: 999,
@@ -78,18 +79,23 @@ export function Pill({
         lineHeight: 1,
         letterSpacing: uppercase ? 1.5 : 0,
         textTransform: uppercase ? "uppercase" : "none",
-        lineClamp: 1,
         ...style,
       }}
     >
-      {text}
+      {/* Nœud texte unique en block : seul mode où satori honore lineClamp */}
+      <div style={{ display: "block", lineClamp: 1 }}>{text}</div>
     </div>
   );
 }
 
 export type BrandTone = "light" | "onDeep" | "onAccent";
 
-/** Rangée de marque : logo (PNG data:URI) ou disque avec l'initiale, nom, « métier · Ville ». */
+/**
+ * Rangée de marque : logo (PNG data:URI) ou disque avec l'initiale, nom,
+ * « métier · Ville ». Hors fond clair, le logo — conçu pour l'en-tête clair du
+ * site, donc en général sombre sur transparent — est posé sur une plaque
+ * blanche arrondie pour rester lisible sur `deep` et sur l'accent.
+ */
 export function Brand({
   brand,
   frame,
@@ -118,9 +124,22 @@ export function Brand({
   const mark = compact ? 48 : 56;
   const label = compact ? frame.label - 2 : frame.label;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 18, color, flexShrink: 0 }}>
-      {logo ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 18, color, flexShrink: 0, minWidth: 0 }}>
+      {logo && tone === "light" ? (
         <img src={logo} style={{ height: mark, maxWidth: 260, objectFit: "contain" }} />
+      ) : logo ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            backgroundColor: "#ffffff",
+            borderRadius: 16,
+            padding: 8,
+            flexShrink: 0,
+          }}
+        >
+          <img src={logo} style={{ height: mark, maxWidth: 260, objectFit: "contain" }} />
+        </div>
       ) : (
         <div
           style={{
@@ -141,12 +160,13 @@ export function Brand({
           {initial}
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", fontWeight: 700, fontSize: label, lineHeight: 1.2, lineClamp: 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {/* Nœuds texte uniques en block : seul mode où satori honore lineClamp */}
+        <div style={{ display: "block", fontWeight: 700, fontSize: label, lineHeight: 1.2, lineClamp: 1 }}>
           {name}
         </div>
         {sub ? (
-          <div style={{ display: "flex", fontSize: label - 2, lineHeight: 1.2, opacity: 0.8, lineClamp: 1 }}>
+          <div style={{ display: "block", fontSize: label - 2, lineHeight: 1.2, opacity: 0.8, lineClamp: 1 }}>
             {sub}
           </div>
         ) : null}
@@ -243,8 +263,22 @@ export function accentGradient(theme: SocialTheme): string {
 }
 
 /**
- * Bloc de même géométrie qu'une photo, sans photo : dégradé d'accent et deux
- * disques `soft` translucides positionnés par le hachage du titre.
+ * Dégradé du bloc « sans photo » : celui de l'accent, sauf quand l'accent se
+ * confond avec le fond du visuel (rôle `soft`, pastille « Claire ») — un
+ * dégradé presque blanc en haut d'une story serait invisible : on le tire
+ * alors vers `primaryDark` et `deep`.
+ */
+export function photoGradient(theme: SocialTheme): string {
+  if (contrastRatio(theme.accent, theme.background) >= 1.5) return accentGradient(theme);
+  const from = mix(theme.accent, theme.primaryDark, 0.55);
+  const to = mix(theme.accent, theme.deep, 0.7);
+  return `linear-gradient(160deg, ${from} 0%, ${to} 100%)`;
+}
+
+/**
+ * Bloc de même géométrie qu'une photo, sans photo : dégradé d'accent
+ * (`photoGradient`) et deux disques `soft` translucides positionnés par le
+ * hachage du titre.
  */
 export function PhotoOrGradient({
   w,
@@ -274,7 +308,7 @@ export function PhotoOrGradient({
         width: w,
         height: h,
         overflow: "hidden",
-        backgroundImage: accentGradient(theme),
+        backgroundImage: photoGradient(theme),
       }}
     >
       <div
