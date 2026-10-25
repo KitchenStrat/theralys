@@ -13,23 +13,33 @@ const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 /** Mots de passe de développement de `.env.example` : connus de tous (dépôt public). */
 export const PUBLIC_DEFAULT_PASSWORDS = ["admin-change-me", "client-demo"] as const;
 
-/**
- * Hôte d'une URL Postgres. Lecture par expression régulière plutôt que
- * `new URL` : un mot de passe contenant « @ » ou « / » non encodés ferait
- * prendre un morceau du mot de passe pour l'hôte (le dernier « @ » avant le
- * chemin sépare l'authentification de l'hôte).
- */
-export function databaseHost(url: string | undefined): string {
-  if (!url) return "";
-  const match = /^[a-z][a-z0-9+.-]*:\/\/(?:[^?#]*@)?(\[[^\]]*\]|[^/:?#@]+)/i.exec(url.trim());
-  return (match?.[1] ?? "").toLowerCase();
+/** Erreur du garde-fou : message destiné à l'utilisateur, sans pile d'appels. */
+export class SeedGuardError extends Error {
+  override readonly name = "SeedGuardError";
 }
 
 /**
- * Base locale : localhost, boucle locale, `*.local`, ou nom de service sans
- * domaine (docker). Une IPv6 littérale n'est locale que si c'est `::1`. Limite
- * connue : un tunnel (port local redirigé vers Neon) n'est pas détecté —
- * passez alors les deux `SEED_*_PASSWORD` explicitement.
+ * Hôte d'une URL Postgres. Lecture par expression régulière plutôt que
+ * `new URL` : un mot de passe contenant « @ » ou « / » non encodés ferait
+ * prendre un morceau du mot de passe pour l'hôte (le dernier « @ » sépare
+ * l'authentification de l'hôte). Une URL illisible (« ? » ou « # » bruts
+ * dans le mot de passe, forme libpq `host=…`) donne "" : traitée comme
+ * distante, jamais comme locale.
+ */
+export function databaseHost(url: string | undefined): string {
+  if (!url) return "";
+  const match = /^[a-z][a-z0-9+.-]*:\/\/(?:(.*)@)?(\[[^\]]*\]|[^/:?#@]+)(?::\d+)?(?:[/?#]|$)/i.exec(url.trim());
+  if (!match) return "";
+  const [, auth = "", host = ""] = match;
+  if (/[?#]/.test(auth)) return "";
+  return host.toLowerCase();
+}
+
+/**
+ * Base locale : localhost, 127.0.0.1, ::1, `*.local`, `*.localhost`, ou nom de
+ * service sans point (docker). Une IPv6 littérale n'est locale que si c'est
+ * `::1`. Limite connue : un tunnel (port local redirigé vers Neon) n'est pas
+ * détecté — passez alors les deux `SEED_*_PASSWORD` explicitement.
  */
 export function isLocalDatabaseUrl(url: string | undefined): boolean {
   const host = databaseHost(url);
@@ -67,6 +77,8 @@ export type SeedPasswordInput = {
   /** Défaut de développement (celui de `.env.example`) */
   fallback: string;
   databaseUrl: string | undefined;
+  /** La valeur vient d'un fichier `.env` (pas de la ligne de commande) : ignorée hors base locale */
+  fromDotenv?: boolean;
 };
 
 /**
@@ -76,15 +88,25 @@ export type SeedPasswordInput = {
  * de créer le compte).
  */
 export function seedPassword(input: SeedPasswordInput): string {
-  const value = input.value?.trim() ?? "";
   const local = isLocalDatabaseUrl(input.databaseUrl);
+  const raw = input.value?.trim() ?? "";
+  // Hors base locale, seule la ligne de commande compte : un `.env` de
+  // développement (mot de passe personnel ou défaut) ne doit jamais partir en production
+  const value = !local && input.fromDotenv ? "" : raw;
   const isPublicDefault = (PUBLIC_DEFAULT_PASSWORDS as readonly string[]).includes(value) || value === input.fallback;
   if (value !== "" && !isPublicDefault) return value;
   if (local) return value === "" ? input.fallback : value;
-  const host = databaseHost(input.databaseUrl) || "base distante";
-  const reason = value === "" ? "manquante" : "égale à un mot de passe par défaut";
-  throw new Error(
-    `${input.name} ${reason} : le mot de passe par défaut de .env.example (dépôt public) est réservé à une base locale. ` +
-      `Fournissez un mot de passe propre à cette base (${host}), par exemple : ${input.name}="<mot de passe>" pnpm db:seed`,
+  const host = databaseHost(input.databaseUrl);
+  const where = host ? `cette base (${host})` : "cette base distante";
+  const reason =
+    value === ""
+      ? `manquante : hors base locale, le seed n'utilise ni le mot de passe par défaut de .env.example (dépôt public)${
+          input.fromDotenv && raw !== "" ? ", ni une valeur lue dans un fichier .env" : ""
+        }`
+      : "égale à un mot de passe par défaut de .env.example (dépôt public) : refusée hors base locale";
+  throw new SeedGuardError(
+    `${input.name} ${reason}. Fournissez un mot de passe propre à ${where} sur la ligne de commande, par exemple : ` +
+      `DATABASE_URL="<URL de la base>" SEED_ADMIN_PASSWORD="<mot de passe>" SEED_CLIENT_PASSWORD="<mot de passe>" pnpm db:seed ` +
+      `(voir DEPLOY.md, étape 2.3). Le seed est idempotent : relancez la commande complète.`,
   );
 }

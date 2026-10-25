@@ -36,7 +36,13 @@ import {
 } from "@theralys/db";
 import { mockPlacePhotoDataUri, mockReviewerAvatarDataUri } from "@theralys/providers/google";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
-import { hashPassword, hasPublicDefaultPassword, isLocalDatabaseUrl, seedPassword } from "./seed-guard";
+import {
+  hashPassword,
+  hasPublicDefaultPassword,
+  isLocalDatabaseUrl,
+  SeedGuardError,
+  seedPassword,
+} from "./seed-guard";
 import {
   ensureEditorialCalendars,
   generateDueArticles,
@@ -45,6 +51,8 @@ import {
 } from "./ticks";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+/** Variables présentes AVANT la lecture du `.env` : la ligne de commande (ou l'environnement du shell). */
+const shellEnv: Record<string, string | undefined> = { ...process.env };
 config({ path: path.resolve(here, "../../../.env") });
 
 const DEMO_SLUG = "claire-dupont-sophrologue-albi";
@@ -53,26 +61,31 @@ async function main() {
   const db = getDb();
   const now = new Date();
 
-  // ── Compte admin ────────────────────────────────────────────────────────────
+  // ── Comptes : mots de passe résolus AVANT toute écriture ───────────────────
+  // Un refus du garde-fou (base distante, mot de passe absent ou par défaut)
+  // n'écrit rien : ni compte, ni démo. Comptes déjà seedés avec un défaut
+  // public sur une base distante : mot de passe remplacé (seed-guard.ts).
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "contact@kitchenstrategy.fr";
-  const existingAdmin = await db.query.users.findFirst({ where: eq(users.email, adminEmail) });
-  if (existingAdmin) {
-    await replacePublicDefaultPassword(existingAdmin, "SEED_ADMIN_PASSWORD", "admin-change-me");
-  } else {
-    // Mot de passe par défaut accepté sur une base locale seulement (seed-guard.ts)
-    const adminPassword = seedPassword({
-      name: "SEED_ADMIN_PASSWORD",
-      value: process.env.SEED_ADMIN_PASSWORD,
-      fallback: "admin-change-me",
-      databaseUrl: process.env.DATABASE_URL,
-    });
+  const clientEmail = process.env.SEED_CLIENT_EMAIL ?? "claire@demo-theralys.fr";
+  const [existingAdmin, existingClient] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.email, adminEmail) }),
+    db.query.users.findFirst({ where: eq(users.email, clientEmail) }),
+  ]);
+  const adminPassword = resolveSeedPassword(existingAdmin, "SEED_ADMIN_PASSWORD", "admin-change-me");
+  const clientPassword = resolveSeedPassword(existingClient, "SEED_CLIENT_PASSWORD", "client-demo");
+
+  // ── Compte admin ────────────────────────────────────────────────────────────
+  if (!existingAdmin) {
     await db.insert(users).values({
       email: adminEmail,
-      passwordHash: hashPassword(adminPassword),
+      passwordHash: hashPassword(adminPassword ?? ""),
       role: "admin",
       name: "Kitchen Strategy",
     });
     console.log(`✔ Admin créé : ${adminEmail}`);
+  } else if (adminPassword) {
+    await db.update(users).set({ passwordHash: hashPassword(adminPassword) }).where(eq(users.id, existingAdmin.id));
+    console.log(`✔ Mot de passe par défaut remplacé : ${adminEmail}`);
   }
 
   // ── Démo « Sophrologue à Albi » ─────────────────────────────────────────────
@@ -84,25 +97,18 @@ async function main() {
   const siteId = site.id;
 
   // ── Compte client (accès au studio) ─────────────────────────────────────────
-  const clientEmail = process.env.SEED_CLIENT_EMAIL ?? "claire@demo-theralys.fr";
-  const existingClient = await db.query.users.findFirst({ where: eq(users.email, clientEmail) });
-  if (existingClient) {
-    await replacePublicDefaultPassword(existingClient, "SEED_CLIENT_PASSWORD", "client-demo");
-  } else {
-    const clientPassword = seedPassword({
-      name: "SEED_CLIENT_PASSWORD",
-      value: process.env.SEED_CLIENT_PASSWORD,
-      fallback: "client-demo",
-      databaseUrl: process.env.DATABASE_URL,
-    });
+  if (!existingClient) {
     await db.insert(users).values({
       email: clientEmail,
-      passwordHash: hashPassword(clientPassword),
+      passwordHash: hashPassword(clientPassword ?? ""),
       role: "client",
       name: "Claire Dupont",
       siteId,
     });
     console.log(`✔ Client créé : ${clientEmail}`);
+  } else if (clientPassword) {
+    await db.update(users).set({ passwordHash: hashPassword(clientPassword) }).where(eq(users.id, existingClient.id));
+    console.log(`✔ Mot de passe par défaut remplacé : ${clientEmail}`);
   }
 
   // ── Tâches d'onboarding ─────────────────────────────────────────────────────
@@ -407,22 +413,30 @@ async function seedTraffic(siteId: string, now: Date) {
 }
 
 /**
- * Compte déjà seedé sur une base distante avec un mot de passe par défaut
- * public (base seedée avant le garde-fou) : remplacé par la valeur fournie
- * dans l'environnement, sinon le seed s'arrête avec le message explicite de
- * `seedPassword`. Sur une base locale, rien à faire.
+ * Mot de passe à écrire pour un compte seedé, ou null s'il n'y a rien à faire :
+ * - compte absent → mot de passe de création (défaut accepté en local seulement) ;
+ * - compte présent sur une base distante avec un mot de passe par défaut
+ *   public → mot de passe de remplacement (obligatoire, sinon erreur) ;
+ * - compte présent sinon → null.
+ * Appelé avant toute écriture : un refus laisse la base intacte.
  */
-async function replacePublicDefaultPassword(
-  account: { id: string; email: string; passwordHash: string | null },
+function resolveSeedPassword(
+  account: { passwordHash: string | null } | undefined,
   name: "SEED_ADMIN_PASSWORD" | "SEED_CLIENT_PASSWORD",
   fallback: string,
-) {
+): string | null {
   const databaseUrl = process.env.DATABASE_URL;
-  if (isLocalDatabaseUrl(databaseUrl) || !hasPublicDefaultPassword(account.passwordHash)) return;
-  console.warn(`⚠ ${account.email} utilise encore un mot de passe par défaut public sur cette base distante`);
-  const fresh = seedPassword({ name, value: process.env[name], fallback, databaseUrl });
-  await getDb().update(users).set({ passwordHash: hashPassword(fresh) }).where(eq(users.id, account.id));
-  console.log(`✔ Mot de passe par défaut remplacé : ${account.email}`);
+  if (account) {
+    if (isLocalDatabaseUrl(databaseUrl) || !hasPublicDefaultPassword(account.passwordHash)) return null;
+    console.warn(`⚠ Un compte utilise encore un mot de passe par défaut public sur cette base distante (${name})`);
+  }
+  return seedPassword({
+    name,
+    value: process.env[name],
+    fallback,
+    databaseUrl,
+    fromDotenv: shellEnv[name] === undefined && process.env[name] !== undefined,
+  });
 }
 
 async function shutdown() {
@@ -430,6 +444,7 @@ async function shutdown() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  // Garde-fou : message seul (pas de pile d'appels), l'utilisateur sait quoi faire
+  console.error(err instanceof SeedGuardError ? `✖ ${err.message}` : err);
   process.exit(1);
 });

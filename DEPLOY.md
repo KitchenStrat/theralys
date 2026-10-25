@@ -41,7 +41,7 @@ production » plus bas.
    sélectionnez **Pooled connection**, cochez « Show password », copiez l'URL
    (`postgresql://…@…-pooler…neon.tech/neondb?sslmode=require`).
    → C'est votre `DATABASE_URL` de production. Gardez-la de côté.
-3. **Appliquer le schéma + créer le compte admin** — depuis un terminal sur
+3. **Appliquer le schéma + créer les comptes admin et client** — depuis un terminal sur
    votre machine (ou demandez à Claude de le faire en lui donnant l'URL) :
 
    ```bash
@@ -58,12 +58,16 @@ production » plus bas.
 
    Le seed crée votre compte admin + un jeu de données d'exemple (démo
    « Claire Dupont », compte client de test, leads) bien pratique pour valider
-   le déploiement — tout est supprimable ensuite. Les deux mots de passe sont
-   obligatoires hors base locale : le seed refuse les valeurs par défaut de
+   le déploiement — tout est supprimable ensuite. Le compte client de test est
+   `claire@demo-theralys.fr` (valeur par défaut de `SEED_CLIENT_EMAIL`) avec le
+   `SEED_CLIENT_PASSWORD` choisi ici. Hors base locale, les deux mots de passe
+   se passent sur la ligne de commande (un fichier `.env` est ignoré) à la
+   création des comptes : le seed refuse les valeurs par défaut de
    `.env.example` (ce dépôt est public, elles sont connues de tous) et, si un
    compte déjà seedé les utilise encore, le remplace par la valeur fournie.
-   Passez-les aussi si vous atteignez Neon par un tunnel sur `localhost`
-   (non détecté comme base distante).
+   Un refus n'écrit rien ; relancer le seed sur une base déjà seedée
+   correctement ne demande aucune variable. Passez-les aussi si vous atteignez
+   Neon par un tunnel sur `localhost` (non détecté comme base distante).
 
 4. Notez aussi dès maintenant deux secrets à générer
    (`openssl rand -base64 32`, ou 2 longues phrases aléatoires) :
@@ -127,7 +131,8 @@ Cliquez **Deploy** pour chaque projet (2-3 min de build chacun).
    `harmony-sites.vercel.app`.
 3. Créez une démo de test réelle (~4 min, ~0,35 €) pour valider la génération
    en production.
-4. `https://harmony-studio.vercel.app` → connexion avec le compte client seedé.
+4. `https://harmony-studio.vercel.app` → connexion avec le compte client seedé
+   (`claire@demo-theralys.fr` et le `SEED_CLIENT_PASSWORD` choisi à l'étape 2.3).
 
 ## Étape 5 — Brancher vos domaines (10 min)
 
@@ -248,6 +253,7 @@ a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQ
 | Badge « mode mock » malgré la clé | Variable absente de l'environnement **Production**, ou pas de redéploiement après ajout |
 | Démo bloquée « En préparation » puis « Erreur … timeout » | Plan Hobby (60 s max) — passer Pro, ou tester en mock |
 | Connexion admin/studio en boucle | `AUTH_SECRET` différent entre projets |
+| `pnpm db:seed` s'arrête sur « SEED_…_PASSWORD manquante / égale à un mot de passe par défaut » | Base distante : passer `SEED_ADMIN_PASSWORD` et `SEED_CLIENT_PASSWORD` sur la ligne de commande comme à l'étape 2.3 (rien n'a été écrit, relancez la commande complète) |
 | Page Réseaux sociaux « Cette section est en cours d'activation » | Migration `0001_social_posts` non appliquée sur Neon → section « Mettre à jour le schéma en production » |
 | Paramétrage des réseaux sociaux « L'option Paramétrage est en cours d'activation » | Migration `0002_social_settings` non appliquée sur Neon → même section |
 | Sites clients 404 sur leur domaine | Domaine non ajouté au projet **harmony-sites** |

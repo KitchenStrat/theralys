@@ -50,16 +50,20 @@ pnpm dev                        # lance sites (3000) + admin (3001)
 
 Puis :
 
-- **Admin** : http://localhost:3001 — identifiants du seed
-  (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, par défaut `contact@kitchenstrategy.fr`).
-- **Studio client** : http://localhost:3002 — compte seedé
-  (`SEED_CLIENT_EMAIL` / `SEED_CLIENT_PASSWORD`, par défaut `claire@demo-theralys.fr`).
-
-Les mots de passe par défaut de `.env.example` ne sont acceptés que sur une base
-locale : sur toute autre base, le seed exige `SEED_ADMIN_PASSWORD` et
-`SEED_CLIENT_PASSWORD` explicites, refuse les valeurs par défaut et remplace
-celles qu'un compte déjà seedé utiliserait encore (`packages/jobs/src/seed-guard.ts`).
+- **Admin** : http://localhost:3001 — `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`
+  de votre `.env` (valeurs de développement dans `.env.example`, email par défaut
+  `contact@kitchenstrategy.fr`).
+- **Studio client** : http://localhost:3002 — `SEED_CLIENT_EMAIL` /
+  `SEED_CLIENT_PASSWORD` de votre `.env` (email par défaut `claire@demo-theralys.fr`).
 - **Démo seedée** : http://localhost:3000/claire-dupont-sophrologue-albi
+
+Les mots de passe de développement de `.env.example` ne sont acceptés que sur une
+base locale (`localhost`, `127.0.0.1`, `::1`, `*.local`, `*.localhost` ou nom
+d'hôte sans point). Sur toute autre base, à la création des comptes ou si un
+compte déjà seedé garde un mot de passe par défaut, le seed exige
+`SEED_ADMIN_PASSWORD` et `SEED_CLIENT_PASSWORD` sur la ligne de commande (un
+`.env` est ignoré), refuse les valeurs par défaut et remplace celles encore en
+place (`packages/jobs/src/seed-guard.ts`).
 
 Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sync
 Search Console) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en production,

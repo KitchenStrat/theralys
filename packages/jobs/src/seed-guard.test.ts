@@ -5,6 +5,7 @@ import {
   hashPassword,
   isLocalDatabaseUrl,
   passwordMatches,
+  SeedGuardError,
   seedPassword,
 } from "./seed-guard";
 
@@ -34,6 +35,15 @@ describe("isLocalDatabaseUrl", () => {
   it("mot de passe non encodé (@, /) : l'hôte reste correctement lu", () => {
     expect(databaseHost("postgresql://u:p@ss/w@rd@ep-x-1.neon.tech:5432/db")).toBe("ep-x-1.neon.tech");
     expect(isLocalDatabaseUrl("postgresql://u:p@ss@localhost:5432/db")).toBe(true);
+    expect(databaseHost("postgresql://u:p%40ss%2Fw%3Ard@ep-x-1.neon.tech/db?sslmode=require")).toBe("ep-x-1.neon.tech");
+  });
+
+  it("URL illisible (« ? » ou « # » bruts dans le mot de passe, forme libpq) : hôte vide ⇒ distante", () => {
+    expect(databaseHost("postgresql://u:p?x@ep-x-1.neon.tech:5432/db")).toBe("");
+    expect(isLocalDatabaseUrl("postgresql://u:p?x@ep-x-1.neon.tech:5432/db")).toBe(false);
+    expect(isLocalDatabaseUrl("postgresql://u:p#x@localhost:5432/db")).toBe(false);
+    expect(isLocalDatabaseUrl("host=localhost dbname=theralys")).toBe(false);
+    expect(isLocalDatabaseUrl("postgresql://")).toBe(false);
   });
 });
 
@@ -53,7 +63,7 @@ describe("seedPassword", () => {
 
   it("base distante : valeur absente ou égale au défaut → erreur nommant la variable et l'hôte", () => {
     expect(() => seedPassword({ ...base, value: undefined, databaseUrl: NEON })).toThrow(
-      /SEED_CLIENT_PASSWORD manquante .*ep-cool-sea-123456\.eu-central-1\.aws\.neon\.tech/,
+      /SEED_CLIENT_PASSWORD manquante .*ep-cool-sea-123456\.eu-central-1\.aws\.neon\.tech.*DEPLOY\.md, étape 2\.3/,
     );
     expect(() => seedPassword({ ...base, value: "client-demo", databaseUrl: NEON })).toThrow(
       /SEED_CLIENT_PASSWORD égale à un mot de passe par défaut/,
@@ -69,7 +79,16 @@ describe("seedPassword", () => {
   });
 
   it("URL absente : traitée comme distante (jamais de défaut sans savoir où l'on écrit)", () => {
-    expect(() => seedPassword({ ...base, value: undefined, databaseUrl: undefined })).toThrow(/base distante/);
+    expect(() => seedPassword({ ...base, value: undefined, databaseUrl: undefined })).toThrow(/cette base distante/);
+    expect(() => seedPassword({ ...base, value: undefined, databaseUrl: undefined })).toThrow(SeedGuardError);
+  });
+
+  it("valeur venant d'un .env : acceptée en local, ignorée hors base locale (message explicite)", () => {
+    expect(seedPassword({ ...base, value: "perso", fromDotenv: true, databaseUrl: LOCAL })).toBe("perso");
+    expect(() => seedPassword({ ...base, value: "perso", fromDotenv: true, databaseUrl: NEON })).toThrow(
+      /SEED_CLIENT_PASSWORD manquante .*ni une valeur lue dans un fichier \.env/,
+    );
+    expect(seedPassword({ ...base, value: "perso", fromDotenv: false, databaseUrl: NEON })).toBe("perso");
   });
 });
 
