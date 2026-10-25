@@ -8,7 +8,6 @@
  */
 
 import path from "node:path";
-import { randomBytes, scryptSync } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import { eq } from "drizzle-orm";
@@ -37,6 +36,7 @@ import {
 } from "@theralys/db";
 import { mockPlacePhotoDataUri, mockReviewerAvatarDataUri } from "@theralys/providers/google";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
+import { hashPassword, hasPublicDefaultPassword, isLocalDatabaseUrl, seedPassword } from "./seed-guard";
 import {
   ensureEditorialCalendars,
   generateDueArticles,
@@ -47,12 +47,6 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.resolve(here, "../../../.env") });
 
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `scrypt:${salt}:${hash}`;
-}
-
 const DEMO_SLUG = "claire-dupont-sophrologue-albi";
 
 async function main() {
@@ -61,8 +55,17 @@ async function main() {
 
   // ── Compte admin ────────────────────────────────────────────────────────────
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "contact@kitchenstrategy.fr";
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin-change-me";
-  if (!(await db.query.users.findFirst({ where: eq(users.email, adminEmail) }))) {
+  const existingAdmin = await db.query.users.findFirst({ where: eq(users.email, adminEmail) });
+  if (existingAdmin) {
+    await replacePublicDefaultPassword(existingAdmin, "SEED_ADMIN_PASSWORD", "admin-change-me");
+  } else {
+    // Mot de passe par défaut accepté sur une base locale seulement (seed-guard.ts)
+    const adminPassword = seedPassword({
+      name: "SEED_ADMIN_PASSWORD",
+      value: process.env.SEED_ADMIN_PASSWORD,
+      fallback: "admin-change-me",
+      databaseUrl: process.env.DATABASE_URL,
+    });
     await db.insert(users).values({
       email: adminEmail,
       passwordHash: hashPassword(adminPassword),
@@ -82,8 +85,16 @@ async function main() {
 
   // ── Compte client (accès au studio) ─────────────────────────────────────────
   const clientEmail = process.env.SEED_CLIENT_EMAIL ?? "claire@demo-theralys.fr";
-  const clientPassword = process.env.SEED_CLIENT_PASSWORD ?? "client-demo";
-  if (!(await db.query.users.findFirst({ where: eq(users.email, clientEmail) }))) {
+  const existingClient = await db.query.users.findFirst({ where: eq(users.email, clientEmail) });
+  if (existingClient) {
+    await replacePublicDefaultPassword(existingClient, "SEED_CLIENT_PASSWORD", "client-demo");
+  } else {
+    const clientPassword = seedPassword({
+      name: "SEED_CLIENT_PASSWORD",
+      value: process.env.SEED_CLIENT_PASSWORD,
+      fallback: "client-demo",
+      databaseUrl: process.env.DATABASE_URL,
+    });
     await db.insert(users).values({
       email: clientEmail,
       passwordHash: hashPassword(clientPassword),
@@ -393,6 +404,25 @@ async function seedTraffic(siteId: string, now: Date) {
   for (let i = 0; i < rows.length; i += 500) {
     await db.insert(analyticsEvents).values(rows.slice(i, i + 500));
   }
+}
+
+/**
+ * Compte déjà seedé sur une base distante avec un mot de passe par défaut
+ * public (base seedée avant le garde-fou) : remplacé par la valeur fournie
+ * dans l'environnement, sinon le seed s'arrête avec le message explicite de
+ * `seedPassword`. Sur une base locale, rien à faire.
+ */
+async function replacePublicDefaultPassword(
+  account: { id: string; email: string; passwordHash: string | null },
+  name: "SEED_ADMIN_PASSWORD" | "SEED_CLIENT_PASSWORD",
+  fallback: string,
+) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (isLocalDatabaseUrl(databaseUrl) || !hasPublicDefaultPassword(account.passwordHash)) return;
+  console.warn(`⚠ ${account.email} utilise encore un mot de passe par défaut public sur cette base distante`);
+  const fresh = seedPassword({ name, value: process.env[name], fallback, databaseUrl });
+  await getDb().update(users).set({ passwordHash: hashPassword(fresh) }).where(eq(users.id, account.id));
+  console.log(`✔ Mot de passe par défaut remplacé : ${account.email}`);
 }
 
 async function shutdown() {

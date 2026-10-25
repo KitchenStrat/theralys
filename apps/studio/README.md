@@ -82,7 +82,9 @@ pnpm db:seed
 pnpm --filter @theralys/studio dev        # http://localhost:3002
 ```
 
-Compte de démonstration seedé : `claire@demo-theralys.fr` / `client-demo`.
+Compte client seedé : `SEED_CLIENT_EMAIL` / `SEED_CLIENT_PASSWORD` de votre `.env`
+(valeurs de développement dans `.env.example`). Hors base locale, le seed exige un
+mot de passe explicite et refuse celui par défaut (`packages/jobs/src/seed-guard.ts`).
 
 ## Déploiement
 

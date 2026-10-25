@@ -52,12 +52,18 @@ production » plus bas.
    DATABASE_URL="<URL Neon>" \
      SEED_ADMIN_EMAIL="contact@kitchenstrategy.fr" \
      SEED_ADMIN_PASSWORD="<votre vrai mot de passe admin>" \
+     SEED_CLIENT_PASSWORD="<mot de passe du compte client de test>" \
      AI_MOCK=1 pnpm db:seed
    ```
 
    Le seed crée votre compte admin + un jeu de données d'exemple (démo
    « Claire Dupont », compte client de test, leads) bien pratique pour valider
-   le déploiement — tout est supprimable ensuite.
+   le déploiement — tout est supprimable ensuite. Les deux mots de passe sont
+   obligatoires hors base locale : le seed refuse les valeurs par défaut de
+   `.env.example` (ce dépôt est public, elles sont connues de tous) et, si un
+   compte déjà seedé les utilise encore, le remplace par la valeur fournie.
+   Passez-les aussi si vous atteignez Neon par un tunnel sur `localhost`
+   (non détecté comme base distante).
 
 4. Notez aussi dès maintenant deux secrets à générer
    (`openssl rand -base64 32`, ou 2 longues phrases aléatoires) :

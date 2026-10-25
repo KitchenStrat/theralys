@@ -54,6 +54,11 @@ Puis :
   (`SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`, par défaut `contact@kitchenstrategy.fr`).
 - **Studio client** : http://localhost:3002 — compte seedé
   (`SEED_CLIENT_EMAIL` / `SEED_CLIENT_PASSWORD`, par défaut `claire@demo-theralys.fr`).
+
+Les mots de passe par défaut de `.env.example` ne sont acceptés que sur une base
+locale : sur toute autre base, le seed exige `SEED_ADMIN_PASSWORD` et
+`SEED_CLIENT_PASSWORD` explicites, refuse les valeurs par défaut et remplace
+celles qu'un compte déjà seedé utiliserait encore (`packages/jobs/src/seed-guard.ts`).
 - **Démo seedée** : http://localhost:3000/claire-dupont-sophrologue-albi
 
 Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sync
