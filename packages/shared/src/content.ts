@@ -94,6 +94,7 @@ export function specialtyIconFor(title: string, index = 0): SectionIconName {
 
 export type HeroSection = {
   type: "hero";
+  hidden?: boolean;
   /** Badge local, ex. « Massages Bien-être à Clapiers (34) » */
   badge?: string;
   /** H1 orienté bénéfice */
@@ -110,11 +111,13 @@ export type HeroSection = {
 /** Bandeau de points forts entre le hero et les spécialités. */
 export type HighlightsSection = {
   type: "highlights";
+  hidden?: boolean;
   items: { icon?: string; title: string; text?: string }[];
 };
 
 export type SpecialtiesSection = {
   type: "specialties";
+  hidden?: boolean;
   title: string;
   intro?: string;
   items: {
@@ -130,6 +133,7 @@ export type SpecialtiesSection = {
 
 export type AboutSection = {
   type: "about";
+  hidden?: boolean;
   title: string;
   paragraphs: string[];
   imageUrl?: string;
@@ -140,6 +144,7 @@ export type AboutSection = {
 /** Projection positive vers l'avenir : liste à puces + photo de séance. */
 export type FutureSection = {
   type: "future";
+  hidden?: boolean;
   /** Badge pilule, ex. « Santé & Équilibre » */
   badge?: string;
   /** Titre projectif, ex. « Et si vous retrouviez enfin … ? » */
@@ -173,24 +178,28 @@ export function futureBodyText(section: FutureSection): string {
 /** Les avis eux-mêmes viennent de la table google_reviews (synchronisés). */
 export type ReviewsSection = {
   type: "reviews";
+  hidden?: boolean;
   title: string;
   intro?: string;
 };
 
 export type ProcessSection = {
   type: "process";
+  hidden?: boolean;
   title: string;
   steps: { title: string; description: string }[];
 };
 
 export type FaqSection = {
   type: "faq";
+  hidden?: boolean;
   title: string;
   items: { question: string; answer: string }[];
 };
 
 export type ContactSection = {
   type: "contact";
+  hidden?: boolean;
   title: string;
   address?: string;
   phone?: string;
@@ -204,12 +213,14 @@ export type ContactSection = {
 /** Corps de texte markdown (pages de motifs, mentions légales…). */
 export type RichTextSection = {
   type: "richText";
+  hidden?: boolean;
   title?: string;
   body: string;
 };
 
 export type CtaSection = {
   type: "cta";
+  hidden?: boolean;
   title: string;
   body?: string;
   buttonLabel: string;
@@ -230,6 +241,55 @@ export type Section =
 
 export type SectionType = Section["type"];
 export type PageSections = Section[];
+
+/**
+ * Visibilité d'une section : `hidden: true` (interrupteur « Visible sur cette
+ * page » du studio) la retire du site public sans perdre son contenu ; dans
+ * l'aperçu de l'éditeur elle apparaît sous forme d'une barre « Section
+ * masquée — Afficher ».
+ */
+export function isSectionVisible(section: { hidden?: boolean }): boolean {
+  return section.hidden !== true;
+}
+
+/** Libellés des sections (accordéon du studio, étiquette de survol de l'aperçu). */
+export const SECTION_LABELS: Record<SectionType, string> = {
+  hero: "En-tête",
+  highlights: "Points forts",
+  specialties: "Spécialités",
+  future: "Projection vers l'avenir",
+  about: "À propos",
+  reviews: "Avis Google",
+  process: "Déroulement d'une séance",
+  faq: "Questions fréquentes",
+  contact: "Contact",
+  richText: "Contenu de la page",
+  cta: "Bandeau d'appel à l'action",
+};
+
+/**
+ * Longueurs conseillées des champs (compteurs du studio, `maxLength` des
+ * champs) : des repères de lisibilité, pas des contraintes serveur.
+ */
+export const SECTION_LIMITS = {
+  badge: 60,
+  title: 120,
+  cardTitle: 60,
+  cardText: 200,
+  excerpt: 240,
+  paragraph: 1000,
+  body: 2500,
+  faqQuestion: 160,
+  faqAnswer: 1000,
+  stepTitle: 80,
+  stepDescription: 400,
+  statValue: 20,
+  statLabel: 55,
+  buttonLabel: 40,
+  hoursLabel: 30,
+  hoursValue: 40,
+  note: 160,
+} as const;
 
 // ─── Thème par site (palette, polices) ───────────────────────────────────────
 
@@ -300,6 +360,85 @@ export type SiteCabinet = {
   photoUrl?: string;
 };
 
+/** Page introuvable (404) personnalisable depuis le studio. */
+export type SiteNotFound = {
+  title?: string;
+  /** Vide = masqué */
+  message?: string;
+  /** Bouton vers l'accueil */
+  buttonLabel?: string;
+  /** Liste de liens vers les pages de spécialité (4 premières) */
+  showSpecialties?: boolean;
+};
+
+export const DEFAULT_NOT_FOUND = {
+  title: "Cette page n'est plus disponible",
+  message: "Retrouvez les informations et les coordonnées sur le site.",
+  buttonLabel: "Retour à l'accueil",
+  showSpecialties: true,
+} as const satisfies Required<SiteNotFound>;
+
+/** Nombre de spécialités proposées sur la page introuvable. */
+export const NOT_FOUND_SPECIALTIES = 4;
+
+/**
+ * Informations légales saisies dans le studio (Paramètres → Informations
+ * légales) : elles alimentent les pages Mentions légales / Confidentialité /
+ * Cookies générées automatiquement (cf. legal-pages.ts).
+ */
+export type SiteLegal = {
+  /** Forme juridique, ex. « Entrepreneur individuel », « SASU » */
+  legalForm?: string;
+  siret?: string;
+  /** Numéro d'enregistrement professionnel (ADELI, RPPS, RCS…) */
+  registration?: string;
+  /** E-mail de contact publié dans les mentions légales (défaut : section Contact) */
+  email?: string;
+  /** Médiateur de la consommation désigné (nom + site) */
+  mediatorName?: string;
+  mediatorUrl?: string;
+  /** Mentions complémentaires libres (assurance RC pro, diplômes…), markdown léger */
+  extra?: string;
+};
+
+/** Réseaux sociaux affichés dans le pied de page (URL complètes). */
+export type SiteSocialLinks = {
+  instagram?: string;
+  facebook?: string;
+  linkedin?: string;
+  tiktok?: string;
+  youtube?: string;
+};
+
+export const FOOTER_SOCIAL_NETWORKS: { key: keyof SiteSocialLinks; label: string; host: string }[] = [
+  { key: "instagram", label: "Instagram", host: "instagram.com" },
+  { key: "facebook", label: "Facebook", host: "facebook.com" },
+  { key: "linkedin", label: "LinkedIn", host: "linkedin.com" },
+  { key: "tiktok", label: "TikTok", host: "tiktok.com" },
+  { key: "youtube", label: "YouTube", host: "youtube.com" },
+];
+
+/** Pied de page : texte d'accompagnement et informations complémentaires. */
+export type SiteFooterSettings = {
+  /** Phrase d'accompagnement sous le nom (≤ 300 caractères) */
+  text?: string;
+  /** Informations complémentaires : SIRET, diplômes, adhésions… (≤ 500 caractères) */
+  details?: string;
+};
+
+/**
+ * Page de spécialité en cours de préparation par l'IA (création depuis le
+ * studio, asynchrone) : la page existe en base (désactivée, sans sections)
+ * jusqu'à la fin de la génération ; `error` = échec à relancer ou supprimer.
+ */
+export type GeneratingMotif = {
+  slug: string;
+  subject: string;
+  /** ISO 8601 */
+  startedAt: string;
+  error?: string;
+};
+
 export type SiteTheme = {
   /** Logo du praticien (remplace le nom dans l'en-tête du site) */
   logoUrl?: string;
@@ -335,6 +474,16 @@ export type SiteTheme = {
    * (JSONB du site) — pas de migration de schéma.
    */
   tracking?: SiteTracking;
+  /** Page introuvable personnalisée (défaut : DEFAULT_NOT_FOUND). JSONB — pas de migration. */
+  notFound?: SiteNotFound;
+  /** Informations légales (mentions, confidentialité, cookies). JSONB — pas de migration. */
+  legal?: SiteLegal;
+  /** Réseaux sociaux du pied de page. JSONB — pas de migration. */
+  social?: SiteSocialLinks;
+  /** Pied de page (texte, informations complémentaires). JSONB — pas de migration. */
+  footer?: SiteFooterSettings;
+  /** Pages de spécialité en cours de génération (création depuis le studio). */
+  generatingMotifs?: GeneratingMotif[];
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */

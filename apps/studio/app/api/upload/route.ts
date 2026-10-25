@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "Image trop lourde (4 Mo maximum)" }, { status: 400 });
+    return NextResponse.json({ error: "Image trop lourde (8 Mo maximum)" }, { status: 400 });
   }
 
   if (process.env.BLOB_READ_WRITE_TOKEN) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Image trop lourde pour le stockage local (1,5 Mo max). Configurez Vercel Blob ou réduisez l'image.",
+          "Image trop lourde pour le stockage local (2,5 Mo max). Configurez Vercel Blob ou réduisez l'image.",
       },
       { status: 400 },
     );

@@ -3,6 +3,8 @@ export * from "./preview-token";
 export * from "./dates";
 export * from "./ids";
 export * from "./content";
+export * from "./icons";
+export * from "./legal-pages";
 export * from "./site-theme";
 export * from "./professions";
 export * from "./social";

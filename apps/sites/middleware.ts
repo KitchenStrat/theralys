@@ -54,8 +54,13 @@ export async function middleware(request: NextRequest) {
   const preview = await previewSiteId(request);
   const requestHeaders = new Headers(request.headers);
   if (preview) requestHeaders.set("x-hy-preview", preview.siteId);
+  // Clé du segment [site] (slug sur l'hôte de base, domaine sinon) : lue par
+  // la page introuvable, qui ne reçoit pas les paramètres de route
+  const isBaseHost = baseHosts().includes(host);
+  const siteKey = isBaseHost ? (pathname.split("/")[1] ?? "") : host;
+  if (siteKey) requestHeaders.set("x-hy-site", siteKey);
 
-  const response = baseHosts().includes(host)
+  const response = isBaseHost
     ? NextResponse.next({ request: { headers: requestHeaders } })
     : // Domaine custom : préfixer le chemin par le domaine pour le segment [site]
       NextResponse.rewrite(
