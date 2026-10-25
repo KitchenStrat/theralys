@@ -274,3 +274,28 @@ summary::-webkit-details-marker {
 .site-prose ul li {
   line-height: 1.7;
 }
+
+/* Pages légales : titres de section aux couleurs du thème, listes aérées */
+.legal-page .site-prose h2 {
+  font-size: 1.45rem;
+  color: var(--site-primary-dark);
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--site-text) 10%, transparent);
+}
+.legal-page .site-prose h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.legal-page .site-prose ul,
+.legal-page .site-prose ol {
+  margin-left: 1.5rem;
+}
+.legal-page .site-prose li::marker {
+  color: var(--site-primary);
+}
+.legal-page .site-prose a {
+  color: var(--site-primary);
+  overflow-wrap: anywhere;
+}

@@ -1,7 +1,18 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
-import { futureBodyText, reviewDateFr, specialtyIconFor, type Section, type SiteCabinet } from "@theralys/shared";
+import {
+  futureBodyText,
+  isSectionVisible,
+  reviewDateFr,
+  SECTION_ICON_SVG,
+  SECTION_LABELS,
+  specialtyIconFor,
+  type Section,
+  type SectionIconName,
+} from "@theralys/shared";
+import { cabinetAddressLine, cabinetMapsUrl, visibleCabinets } from "@/lib/cabinets";
+import type { EditorRef } from "@/lib/editor-refs";
 import { GoogleG, GoogleReviewsCarousel, GoogleStars } from "./google-reviews";
 import { Markdown } from "./markdown";
 import { RdvButton } from "./rdv-button";
@@ -24,28 +35,109 @@ export type SectionContext = {
   address?: string | null;
 };
 
-/** Rendu d'une liste de sections typées (contenu structuré, jamais de HTML libre). */
-export function Sections({ sections, ctx }: { sections: Section[]; ctx: SectionContext }) {
+/**
+ * Rendu d'une liste de sections typées (contenu structuré, jamais de HTML libre).
+ *
+ * Repères pour l'éditeur du studio (lus par EditorBridge) sur le conteneur de
+ * chaque section :
+ * - `data-hy-section="<index>"` : section propre à la page (index dans
+ *   `page.sections` en base), ou `data-hy-shared="<type>"` : section héritée
+ *   de l'accueil (avis, contact d'une page de spécialité) — sans index ;
+ * - `data-hy-label` : libellé lisible (SECTION_LABELS) pour l'étiquette de survol ;
+ * - `data-hy-hidden="1"` : section masquée, rendue en barre dans l'aperçu.
+ *
+ * `editorRefs` (même longueur que `sections`, défaut : l'index) dit à quoi
+ * chaque section correspond ; `preview` (aperçu de l'éditeur, en-tête
+ * `x-hy-preview`) remplace les sections masquées par une barre cliquable au
+ * lieu de les retirer comme sur le site public.
+ */
+export function Sections({
+  sections,
+  ctx,
+  editorRefs,
+  preview = false,
+}: {
+  sections: Section[];
+  ctx: SectionContext;
+  editorRefs?: EditorRef[];
+  preview?: boolean;
+}) {
   const contact = sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
   const enriched: SectionContext = {
     ...ctx,
     phone: ctx.phone ?? contact?.phone ?? null,
     address: ctx.address ?? contact?.address ?? null,
   };
+  // Les fondus entre sections (prevType/nextType) ne regardent que les
+  // sections réellement rendues : une section masquée n'est pas une voisine.
+  const entries = sections.map((section, i) => ({
+    section,
+    ref: editorRefs?.[i] ?? { index: i },
+    visible: isSectionVisible(section),
+  }));
+  const rendered = entries.filter((e) => e.visible);
   return (
     <>
-      {sections.map((section, i) => (
-        // data-hy-section : repère utilisé par l'éditeur du studio (EditorBridge)
-        <div key={`${section.type}-${i}`} data-hy-section={i}>
-          <SectionRenderer
-            section={section}
-            ctx={enriched}
-            prevType={sections[i - 1]?.type}
-            nextType={sections[i + 1]?.type}
-          />
-        </div>
-      ))}
+      {entries.map((entry, i) => {
+        const marker = editorMarker(entry.ref, entry.section);
+        if (!entry.visible) {
+          if (!preview) return null;
+          return <HiddenSectionBar key={`${entry.section.type}-${i}`} marker={marker} section={entry.section} />;
+        }
+        const at = rendered.indexOf(entry);
+        return (
+          <div key={`${entry.section.type}-${i}`} {...marker}>
+            <SectionRenderer
+              section={entry.section}
+              ctx={enriched}
+              prevType={rendered[at - 1]?.section.type}
+              nextType={rendered[at + 1]?.section.type}
+            />
+          </div>
+        );
+      })}
     </>
+  );
+}
+
+type EditorMarker = {
+  "data-hy-section"?: number;
+  "data-hy-shared"?: Section["type"];
+  "data-hy-label": string;
+};
+
+/** Attributs `data-hy-*` du conteneur d'une section (cf. doc de `Sections`). */
+function editorMarker(ref: EditorRef, section: Section): EditorMarker {
+  const label = SECTION_LABELS[section.type];
+  return "shared" in ref
+    ? { "data-hy-shared": section.type, "data-hy-label": label }
+    : { "data-hy-section": ref.index, "data-hy-label": label };
+}
+
+/**
+ * Aperçu de l'éditeur : une section masquée devient une fine barre. Le clic
+ * (capté par EditorBridge) la sélectionne dans le studio, qui propose de la
+ * réafficher. Jamais rendue sur le site public.
+ */
+function HiddenSectionBar({ marker, section }: { marker: EditorMarker; section: Section }) {
+  return (
+    <div
+      {...marker}
+      data-hy-hidden="1"
+      role="note"
+      className="flex items-center justify-center gap-2 border-y border-dashed border-[var(--site-text)]/15 bg-[var(--site-soft)]/50 px-4 py-2.5 text-center text-sm text-[var(--site-text)]/70"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden className="shrink-0">
+        <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.4 5.3A10.5 10.5 0 0 1 12 5c5 0 9 4.5 10 7-0.4 1-1.3 2.3-2.6 3.5M6.6 6.6C4.1 8.2 2.5 10.6 2 12c1 2.5 5 7 10 7 1.5 0 2.9-.4 4.1-1" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span>
+        Section masquée : <span className="font-medium">{SECTION_LABELS[section.type]}</span>
+      </span>
+      <span aria-hidden>—</span>
+      <span className="font-semibold text-[var(--site-primary)] underline decoration-current/40 underline-offset-2">
+        Afficher
+      </span>
+    </div>
   );
 }
 
@@ -168,128 +260,12 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
 }
 
 /**
- * Bibliothèque d'icônes des encarts (points forts, infos pratiques, badges).
- * Les noms viennent de SECTION_ICONS (packages/shared) ; repli : cœur.
+ * Icône d'encart par nom (points forts, infos pratiques, badges, cartes de
+ * spécialité). Le dessin vient de SECTION_ICON_SVG (@theralys/shared), source
+ * unique partagée avec le sélecteur du studio ; repli : cœur si le nom est
+ * inconnu. Le balisage interne est une constante du dépôt (jamais une saisie
+ * de l'utilisateur) : son injection brute est sûre.
  */
-const ICON_PATHS: Record<string, ReactNode> = {
-  medaille: (
-    <>
-      <circle cx="12" cy="9" r="5.5" />
-      <path d="M9.5 13.5 8 21l4-2 4 2-1.5-7.5" strokeLinejoin="round" />
-      <path d="m12 6.6.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 8.7l2-.3z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  diplome: (
-    <>
-      <path d="M2.5 9.5 12 4.5l9.5 5L12 14.5z" strokeLinejoin="round" />
-      <path d="M6.5 12v4.5c0 1 2.5 2.5 5.5 2.5s5.5-1.5 5.5-2.5V12M21.5 9.5V15" strokeLinecap="round" />
-    </>
-  ),
-  coeur: (
-    <path d="M12 20.5C6.5 16.5 3.5 13 3.5 9.5 3.5 7 5.5 5 8 5c1.6 0 3.1.9 4 2.2C12.9 5.9 14.4 5 16 5c2.5 0 4.5 2 4.5 4.5 0 3.5-3 7-8.5 11z" strokeLinejoin="round" />
-  ),
-  mains: (
-    <>
-      <path d="M12 12.5c-3-2.5-4.8-4.4-4.8-6.3C7.2 4.9 8.3 4 9.5 4c1 0 1.9.5 2.5 1.3C12.6 4.5 13.5 4 14.5 4c1.2 0 2.3.9 2.3 2.2 0 1.9-1.8 3.8-4.8 6.3z" strokeLinejoin="round" />
-      <path d="M4 15.5c2-1.5 4-1.5 5.5-.5l2.5 1.5c.8.5.8 1.7-.3 2l-3.2.8M20 15.5c-2-1.5-4-1.5-5.5-.5l-.8.5" strokeLinecap="round" />
-      <path d="M2.5 14.5 6 19.5M21.5 14.5 18 19.5" strokeLinecap="round" />
-    </>
-  ),
-  fleur: (
-    <>
-      <path d="M12 20c0-4 0-6.5 0-6.5M12 13.5c-2.8 0-5-2.2-5-5V6c2.8 0 5 2.2 5 5m0 2.5c2.8 0 5-2.2 5-5V6c-2.8 0-5 2.2-5 5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 11V4.5" strokeLinecap="round" />
-    </>
-  ),
-  feuille: (
-    <path d="M6 18C6 10 11 5 19 5c0 8-5 13-13 13zm0 0c0-4 2-7 5-9" strokeLinecap="round" strokeLinejoin="round" />
-  ),
-  soleil: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" strokeLinecap="round" />
-    </>
-  ),
-  etoile: (
-    <path d="m12 4 2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.3l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z" strokeLinejoin="round" />
-  ),
-  carte: (
-    <>
-      <path d="M3.5 6.5 9 4.5l6 2 5.5-2v13l-5.5 2-6-2-5.5 2z" strokeLinejoin="round" />
-      <path d="M9 4.5v13M15 6.5v13" />
-    </>
-  ),
-  colonne: (
-    <>
-      <rect x="9.2" y="2.8" width="5.6" height="3.6" rx="1.5" />
-      <rect x="9.2" y="7.8" width="5.6" height="3.6" rx="1.5" />
-      <rect x="9.2" y="12.8" width="5.6" height="3.6" rx="1.5" />
-      <rect x="9.2" y="17.8" width="5.6" height="3.6" rx="1.5" />
-    </>
-  ),
-  bebe: (
-    <>
-      <circle cx="12" cy="8.5" r="4.5" />
-      <path d="M12 4c.2-1.2 1-2 2.1-2" strokeLinecap="round" />
-      <path d="M5.5 21c.7-4.4 3.2-6.8 6.5-6.8s5.8 2.4 6.5 6.8" strokeLinecap="round" />
-    </>
-  ),
-  lune: <path d="M19.5 14.5A8.5 8.5 0 1 1 9.5 4.5a7 7 0 0 0 10 10z" strokeLinejoin="round" />,
-  eclair: <path d="M13.5 2.5 5.5 13.5h5l-1 8 8-11h-5z" strokeLinejoin="round" />,
-  tete: (
-    <>
-      <path
-        d="M9.5 21v-3.1a7.5 7.5 0 1 1 9.4-8.3c.2 1.3-.1 2.6-.8 3.7-.3.4-.3.9-.2 1.3l.7 1.8c.2.6-.2 1.2-.9 1.2h-1.2v.9c0 1.1-.9 2-2 2z"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M10.8 9.6c.8-.7 1.7-.7 2.5 0" strokeLinecap="round" />
-    </>
-  ),
-  maison: (
-    <path d="M4 11.5 12 4l8 7.5M6 10v9.5h12V10M10 19.5v-5h4v5" strokeLinecap="round" strokeLinejoin="round" />
-  ),
-  calendrier: (
-    <>
-      <rect x="4" y="5.5" width="16" height="15" rx="2" />
-      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" strokeLinecap="round" />
-      <path d="M8 14h2M14 14h2M8 17h2" strokeLinecap="round" />
-    </>
-  ),
-  horloge: (
-    <>
-      <circle cx="12" cy="12" r="8.5" />
-      <path d="M12 7v5l3.5 2" strokeLinecap="round" strokeLinejoin="round" />
-    </>
-  ),
-  euro: (
-    <>
-      <path d="M17.5 6.5A7 7 0 0 0 12 4.5c-3.6 0-6.5 3.4-6.5 7.5s2.9 7.5 6.5 7.5a7 7 0 0 0 5.5-2" strokeLinecap="round" />
-      <path d="M3.5 10.5h9M3.5 13.5h8" strokeLinecap="round" />
-    </>
-  ),
-  document: (
-    <>
-      <path d="M6 3.5h9l3 3v14l-2-1-2 1-2-1-2 1-2-1-2 1z" strokeLinejoin="round" />
-      <path d="M9 9h6M9 12.5h6M9 16h3.5" strokeLinecap="round" />
-    </>
-  ),
-  bouclier: (
-    <>
-      <path d="M12 3.5 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z" strokeLinejoin="round" />
-      <path d="m8.8 11.8 2.2 2.2 4.2-4.5" strokeLinecap="round" strokeLinejoin="round" />
-    </>
-  ),
-  personnes: (
-    <>
-      <circle cx="9" cy="8.5" r="3.5" />
-      <path d="M3.5 20c.5-3.5 2.7-5.5 5.5-5.5s5 2 5.5 5.5" strokeLinecap="round" />
-      <path d="M15.5 5.5a3.5 3.5 0 0 1 0 6M17.5 14.8c1.7.8 2.7 2.6 3 5.2" strokeLinecap="round" />
-    </>
-  ),
-};
-
-/** Icône d'encart par nom (repli : cœur si le nom est inconnu). */
 function SectionIcon({
   name,
   size = 28,
@@ -299,9 +275,10 @@ function SectionIcon({
   size?: number;
   strokeWidth?: number;
 }) {
+  const inner = SECTION_ICON_SVG[(name ?? "") as SectionIconName] ?? SECTION_ICON_SVG.coeur;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} aria-hidden>
-      {ICON_PATHS[name ?? ""] ?? ICON_PATHS.coeur}
+      <g dangerouslySetInnerHTML={{ __html: inner }} />
     </svg>
   );
 }
@@ -459,23 +436,6 @@ function googleMapsUrl(ctx: SectionContext, address: string | null): string | nu
   }`;
 }
 
-/** Cabinets supplémentaires saisis dans les paramètres du studio (multi-cabinets). */
-function extraCabinets(ctx: SectionContext): SiteCabinet[] {
-  return (ctx.site.theme.cabinets ?? []).filter((c) => c.name.trim() && c.address.trim());
-}
-
-function cabinetMapsUrl(cabinet: SiteCabinet): string {
-  const query = [cabinet.name, cabinet.address, `${cabinet.postalCode} ${cabinet.city}`.trim()]
-    .filter(Boolean)
-    .join(", ");
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-}
-
-function cabinetAddressLine(cabinet: SiteCabinet): string {
-  const cityPart = `${cabinet.postalCode} ${cabinet.city}`.trim();
-  return cityPart ? `${cabinet.address}, ${cityPart}` : cabinet.address;
-}
-
 // ─── Sections ────────────────────────────────────────────────────────────────
 
 function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; ctx: SectionContext }) {
@@ -529,7 +489,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
     </div>
   );
   // Cabinets supplémentaires : mêmes cartes, lien Google Maps sur l'adresse
-  const cabinets = extraCabinets(ctx);
+  const cabinets = visibleCabinets(ctx.site.theme);
   const cabinetCards = (
     <div className="mt-8 flex flex-wrap items-stretch gap-3">
       {googleCard}
@@ -1188,7 +1148,7 @@ function Contact({
   const placeName = ctx.googleBusinessName ?? ctx.site.name;
   const mapQuery = address ? `${placeName}, ${address}` : null;
   const mapsUrl = googleMapsUrl(ctx, address);
-  const cabinets = extraCabinets(ctx);
+  const cabinets = visibleCabinets(ctx.site.theme);
 
   return (
     <section

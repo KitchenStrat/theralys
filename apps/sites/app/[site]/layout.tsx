@@ -9,7 +9,9 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Tracker } from "@/components/tracker";
 import { TrackingScripts } from "@/components/tracking-scripts";
-import { getMotifPages, getSiteByKey, isDemoExpired } from "@/lib/site-data";
+import { navAnchors } from "@/lib/nav";
+import { findSection } from "@/lib/page-sections";
+import { getHomePage, getMotifPages, getProspect, getSiteByKey, isDemoExpired } from "@/lib/site-data";
 import { themeCssVars } from "@/lib/theme";
 
 type Props = { children: ReactNode; params: Promise<{ site: string }> };
@@ -68,8 +70,17 @@ export default async function SiteLayout({ children, params }: Props) {
     );
   }
 
-  const motifPages = await getMotifPages(site);
+  // Accueil, fiche Google et pages de spécialité chargés une fois pour
+  // l'en-tête (ancres des sections visibles, téléphone) et le pied de page
+  const [motifPages, home, prospect] = await Promise.all([
+    getMotifPages(site),
+    getHomePage(site.id),
+    getProspect(site.prospectId),
+  ]);
   const prefix = `/${siteKey}`;
+  const anchors = navAnchors(home?.sections);
+  const contact = findSection(home?.sections, "contact");
+  const phone = contact?.phone?.trim() || null;
 
   return (
     <div
@@ -79,9 +90,23 @@ export default async function SiteLayout({ children, params }: Props) {
       data-ambiance={site.theme.ambiance ?? "naturel"}
       className="min-h-screen bg-[var(--site-bg)] text-[var(--site-text)]"
     >
-      <SiteHeader site={site} motifPages={motifPages} prefix={prefix} />
+      <SiteHeader site={site} motifPages={motifPages} prefix={prefix} anchors={anchors} phone={phone} />
       {children}
-      <SiteFooter site={site} />
+      <SiteFooter
+        site={site}
+        prefix={prefix}
+        motifPages={motifPages}
+        google={
+          prospect
+            ? {
+                name: prospect.googleBusinessName,
+                address: prospect.googleAddress,
+                placeId: prospect.googlePlaceId,
+              }
+            : null
+        }
+        phone={phone}
+      />
       {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
       {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
       <Tracker siteId={site.id} />

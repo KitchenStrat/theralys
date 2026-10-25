@@ -1,25 +1,34 @@
 import Link from "next/link";
 import type { Page, Site } from "@theralys/db";
+import type { NavAnchor } from "@/lib/nav";
 import { hasBlogAccess } from "@/lib/site-data";
+import { MobileNav } from "./mobile-nav";
 import { RdvButton } from "./rdv-button";
 
 /**
- * Header du template : logo + nom, nav (Spécialités ▾, À propos, Avis,
- * Déroulement, Questions, Contact, Blog), bouton « Prendre Rendez-Vous ».
+ * Header du template : logo + nom, nav desktop (Spécialités ▾, ancres de
+ * l'accueil, Blog), bouton « Prendre Rendez-Vous », menu mobile (< lg).
+ * Les ancres (`anchors`) sont calculées par le layout : seules les sections
+ * de l'accueil existantes et visibles y figurent.
  */
 export function SiteHeader({
   site,
   motifPages,
   prefix,
+  anchors,
+  phone,
 }: {
   site: Site;
   motifPages: Page[];
   prefix: string;
+  anchors: NavAnchor[];
+  phone: string | null;
 }) {
   const home = `${prefix}`;
+  const blog = hasBlogAccess(site);
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:py-4">
         <Link href={home} className="flex min-w-0 items-center">
           {site.theme.logoUrl ? (
             <img
@@ -59,21 +68,32 @@ export function SiteHeader({
               </div>
             </div>
           ) : null}
-          <Link href={`${home}#a-propos`} className="hover:text-[var(--site-primary)]">À propos</Link>
-          <Link href={`${home}#avis`} className="hover:text-[var(--site-primary)]">Avis</Link>
-          <Link href={`${home}#deroulement`} className="hover:text-[var(--site-primary)]">Déroulement</Link>
-          <Link href={`${home}#questions`} className="hover:text-[var(--site-primary)]">Questions</Link>
-          <Link href={`${home}#contact`} className="hover:text-[var(--site-primary)]">Contact</Link>
-          {hasBlogAccess(site) ? (
+          {anchors.map((anchor) => (
+            <Link key={anchor.href} href={`${home}${anchor.href}`} className="hover:text-[var(--site-primary)]">
+              {anchor.label}
+            </Link>
+          ))}
+          {blog ? (
             <Link href={`${prefix}/blog`} className="hover:text-[var(--site-primary)]">Blog</Link>
           ) : null}
         </nav>
 
-        <RdvButton
-          siteId={site.id}
-          bookingUrl={site.bookingUrl}
-          className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-3 text-[0.9rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          <RdvButton
+            siteId={site.id}
+            bookingUrl={site.bookingUrl}
+            className="hidden shrink-0 items-center justify-center btn-glow rounded-[var(--r-pill)] bg-[var(--site-primary)] px-5 py-3 text-[0.9rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)] sm:inline-flex"
+          />
+          <MobileNav
+            siteId={site.id}
+            bookingUrl={site.bookingUrl}
+            prefix={prefix}
+            anchors={anchors}
+            motifPages={motifPages.map((p) => ({ slug: p.slug, title: p.title }))}
+            blog={blog}
+            phone={phone}
+          />
+        </div>
       </div>
     </header>
   );

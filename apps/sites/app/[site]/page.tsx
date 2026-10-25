@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { HeroSection } from "@theralys/shared";
 import { Sections } from "@/components/sections";
+import { findSection } from "@/lib/page-sections";
 import {
   getHomePage,
   getMotifPages,
@@ -52,6 +54,9 @@ export default async function HomePage({ params }: Props) {
   if (!site) notFound();
   const home = await getHomePage(site.id);
   if (!home) notFound();
+  // Aperçu depuis l'éditeur du studio (jeton signé `?apercu=`, vérifié par le
+  // middleware) : les sections masquées s'affichent en barre « Section masquée »
+  const preview = (await headers()).get("x-hy-preview") === site.id;
 
   const [reviews, prospect, motifPages] = await Promise.all([
     getReviews(site.id),
@@ -63,12 +68,15 @@ export default async function HomePage({ params }: Props) {
     prospect?.googleRating ?? (reviews.length > 0 ? averageRating(reviews) : null);
   const googleReviewCount = prospect?.googleReviewCount ?? (reviews.length || null);
 
+  const contact = findSection(home.sections, "contact");
   const jsonLd = localBusinessJsonLd({
     site,
     prospect,
     url: siteBaseUrl(site),
     ratingValue: googleRating,
     reviewCount: googleReviewCount,
+    telephone: contact?.phone ?? null,
+    email: contact?.email ?? null,
   });
 
   return (
@@ -77,8 +85,10 @@ export default async function HomePage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      {/* Accueil : chaque section porte son index dans page.sections (refs = identité) */}
       <Sections
         sections={home.sections}
+        preview={preview}
         ctx={{
           site,
           prefix: `/${siteKey}`,

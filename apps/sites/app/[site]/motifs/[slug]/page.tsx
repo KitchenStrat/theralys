@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import type { Section } from "@theralys/shared";
 import { Sections } from "@/components/sections";
+import { composeMotifSections } from "@/lib/editor-refs";
+import { NOT_FOUND_METADATA } from "@/lib/not-found";
 import {
   getHomePage,
   getMotifPage,
@@ -18,8 +19,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { site: siteKey, slug } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) return {};
-  const page = await getMotifPage(site, slug);
-  if (!page) return {};
+  const preview = (await headers()).get("x-hy-preview") === site.id;
+  const page = await getMotifPage(site, slug, { includeDisabled: preview });
+  // Page inconnue ou désactivée (hors aperçu) : métadonnées de la 404
+  if (!page) return NOT_FOUND_METADATA;
   return {
     title: { absolute: page.metaTitle ?? page.title },
     description: page.metaDescription ?? undefined,
@@ -38,7 +41,8 @@ export default async function MotifPage({ params }: Props) {
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
   // Aperçu depuis l'éditeur du studio (jeton signé `?apercu=`, vérifié par le
-  // middleware) : les pages désactivées restent prévisualisables
+  // middleware) : les pages désactivées restent prévisualisables et les
+  // sections masquées s'affichent en barre « Section masquée »
   const preview = (await headers()).get("x-hy-preview") === site.id;
   const page = await getMotifPage(site, slug, { includeDisabled: preview });
   if (!page) notFound();
@@ -54,25 +58,17 @@ export default async function MotifPage({ params }: Props) {
   const googleReviewCount = prospect?.googleReviewCount ?? (reviews.length || null);
 
   // Avis Google et contact hérités de la page d'accueil (une seule source de
-  // vérité, éditée une fois pour tout) ; les avis s'insèrent AVANT la FAQ
-  // (preuve sociale d'abord, questions ensuite), le contact reste en bas.
-  // Le bandeau CTA des anciennes générations est retiré : redondant ici.
-  const homeReviews = home?.sections.find((s): s is Extract<Section, { type: "reviews" }> => s.type === "reviews");
-  const homeContact = home?.sections.find((s): s is Extract<Section, { type: "contact" }> => s.type === "contact");
-  const pageSections = page.sections.filter((s) => s.type !== "cta");
-  const reviewsSection: Section = homeReviews ?? { type: "reviews", title: "Ils me font confiance" };
-  const faqIndex = pageSections.findIndex((s) => s.type === "faq");
-  const sections: Section[] = [
-    ...(faqIndex === -1 ? pageSections : pageSections.slice(0, faqIndex)),
-    reviewsSection,
-    ...(faqIndex === -1 ? [] : pageSections.slice(faqIndex)),
-    ...(homeContact ? [homeContact] : []),
-  ];
+  // vérité, éditée une fois pour tout), CTA retirés — cf. composeMotifSections.
+  // Les refs transmises à l'éditeur gardent l'index d'origine de chaque section
+  // propre (dans page.sections) et marquent reviews/contact comme hérités.
+  const { sections, refs } = composeMotifSections(page.sections, home?.sections);
 
   return (
     <main>
       <Sections
         sections={sections}
+        editorRefs={refs}
+        preview={preview}
         ctx={{
           site,
           prefix: `/${siteKey}`,

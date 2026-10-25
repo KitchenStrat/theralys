@@ -20,6 +20,10 @@ export function ConsentBanner() {
 
   useEffect(() => {
     setVisible(readConsent() === null);
+    // « Gérer les cookies » (pied de page) efface le choix et réaffiche le bandeau
+    const onReset = () => setVisible(true);
+    window.addEventListener("tl:consent-reset", onReset);
+    return () => window.removeEventListener("tl:consent-reset", onReset);
   }, []);
 
   if (!visible) return null;
