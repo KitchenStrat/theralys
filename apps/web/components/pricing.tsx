@@ -16,6 +16,7 @@ export type PlanCard = {
   searchConsoleAccess: boolean;
   keywordResearch: boolean;
   academy: boolean;
+  socialMedia: boolean;
 };
 
 const TAGLINES: Record<string, string> = {
@@ -25,6 +26,14 @@ const TAGLINES: Record<string, string> = {
 
 /* Icônes des caractéristiques (traits 20×20, couleur héritée du badge) */
 const ICONS: Record<string, ReactNode> = {
+  share: (
+    <>
+      <circle cx="5" cy="10" r="2.25" />
+      <circle cx="14.5" cy="4.75" r="2.25" />
+      <circle cx="14.5" cy="15.25" r="2.25" />
+      <path d="m7 8.9 5.5-3.1M7 11.1l5.5 3.1" strokeLinecap="round" />
+    </>
+  ),
   article: (
     <>
       <path d="M5.5 2.75h6.25l3.25 3.25v11.25H5.5z" strokeLinejoin="round" />
@@ -133,6 +142,12 @@ function featureList(plan: PlanCard): Feature[] {
       icon: "bulb",
     },
     { text: "Académie", included: plan.academy, highlight: plan.academy, icon: "cap" },
+    {
+      text: "Contenus réseaux sociaux prêts à poster",
+      included: plan.socialMedia,
+      highlight: plan.socialMedia,
+      icon: "share",
+    },
     { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];
 }

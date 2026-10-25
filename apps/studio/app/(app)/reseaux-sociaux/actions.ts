@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, hasSocialMedia, socialPosts, type NewSocialPost } from "@theralys/db";
+import { getDb, hasSocialMedia, socialPosts, type NewSocialPost, type PlanId } from "@theralys/db";
 import { checkEthicalCompliance, createSocialGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
 import {
   EMPTY_SOCIAL_ASSETS,
@@ -27,6 +27,11 @@ import { ownedSocialPost } from "@/lib/social/post-access";
 
 const PATH = "/reseaux-sociaux";
 const NOT_INCLUDED = "Les contenus réseaux sociaux ne sont pas inclus dans votre formule.";
+
+/** Les démos présentent l'offre complète ; les clients suivent leur formule (Scale). */
+function socialAccess(site: { type: string; plan: PlanId }): boolean {
+  return site.type === "demo" || hasSocialMedia(site.plan);
+}
 const NOT_FOUND = "Contenu introuvable.";
 const FUTURE_DATE = "Choisissez une date à venir.";
 const MONTH_OVER = "Ce mois est terminé.";
@@ -73,7 +78,7 @@ export async function planSocialMonth(
   const parsed = planSchema.safeParse(input);
   if (!parsed.success) return { error: "Mois invalide" };
   const site = await getSite(session.siteId);
-  if (!hasSocialMedia(site.plan)) return { error: NOT_INCLUDED };
+  if (!socialAccess(site)) return { error: NOT_INCLUDED };
 
   const { month } = parsed.data;
   const [year, monthNumber] = month.split("-").map(Number) as [number, number];
@@ -204,7 +209,7 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Demande invalide" };
   const site = await getSite(session.siteId);
-  if (!hasSocialMedia(site.plan)) return { error: NOT_INCLUDED };
+  if (!socialAccess(site)) return { error: NOT_INCLUDED };
   const { topic, format, scheduledFor } = parsed.data;
   const accentColor = parsed.data.accentColor ? parsed.data.accentColor.toLowerCase() : null;
 
@@ -324,7 +329,7 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
 /** Contenu du site de la session, non archivé — sinon null. */
 async function activePost(siteId: string, postId: string) {
   const site = await getSite(siteId);
-  if (!hasSocialMedia(site.plan)) return null;
+  if (!socialAccess(site)) return null;
   const post = await ownedSocialPost(siteId, postId);
   return post && post.status !== "archived" ? post : null;
 }

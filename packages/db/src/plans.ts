@@ -41,8 +41,8 @@ export type PlanDefinition = {
   academy: boolean;
   /** Toujours inclus, toutes formules */
   googleReviewsSync: true;
-  /** Section « Réseaux sociaux » du studio (contenus prêts à poster) */
-  socialMedia: true;
+  /** Section « Réseaux sociaux » du studio (contenus prêts à poster) — Scale uniquement */
+  socialMedia: boolean;
   advancedAnalytics: true;
   hostingAndDomain: true;
 };
@@ -60,7 +60,7 @@ const STARTER: PlanDefinition = {
   keywordResearch: false,
   academy: false,
   googleReviewsSync: true,
-  socialMedia: true,
+  socialMedia: false,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };

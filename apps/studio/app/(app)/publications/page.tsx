@@ -22,8 +22,8 @@ export default async function PublicationsPage({ searchParams }: Props) {
           <p className="font-medium text-ink-700">Le blog automatisé n&apos;est pas inclus dans votre formule</p>
           <p className="mt-1 text-sm">
             Passez à la formule <strong>Scale</strong> (208 articles/an, 6 pages de
-            spécialités dédiées, suivi et recherche de mots-clés, Académie) pour activer
-            votre blog SEO.
+            spécialités dédiées, suivi et recherche de mots-clés, Académie, contenus réseaux
+            sociaux) pour activer votre blog SEO.
           </p>
         </Card>
       </div>

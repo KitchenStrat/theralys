@@ -26,12 +26,14 @@ export default async function SocialPage({ searchParams }: Props) {
   const session = await requireClient();
   const site = await getSite(session.siteId);
 
-  // Incluse dans toutes les formules (démos comprises) — repli conservé si le gating changeait
-  if (!hasSocialMedia(site.plan)) {
+  // Les démos présentent l'offre complète ; les clients suivent leur formule (Scale)
+  if (site.type !== "demo" && !hasSocialMedia(site.plan)) {
     return (
       <Fallback title="Les contenus réseaux sociaux ne sont pas inclus dans votre formule">
-        Contactez Harmony pour activer vos contenus prêts à poster, préparés chaque mois à partir
-        de votre site.
+        Passez à la formule <strong>Scale</strong> pour recevoir chaque mois vos contenus
+        réseaux sociaux prêts à poster — visuels dans vos couleurs, carrousels, stories et
+        légendes — préparés à partir de votre site, en plus du blog SEO, des outils de
+        mots-clés et de l&apos;Académie.
       </Fallback>
     );
   }

@@ -15,7 +15,7 @@ export function StudioNav({
   showSocial = true,
 }: {
   showPublications?: boolean;
-  /** Section « Réseaux sociaux » (hasSocialMedia — vrai sur toutes les formules) */
+  /** Section « Réseaux sociaux » (démos et formule Scale) */
   showSocial?: boolean;
 }) {
   const pathname = usePathname();

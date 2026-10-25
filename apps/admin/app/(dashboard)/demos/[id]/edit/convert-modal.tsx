@@ -126,7 +126,7 @@ export function ConvertModal({
             <FieldHint>
               Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni outils SEO.
               Scale : 6 pages de spécialités, blog (208 articles/an), suivi et recherche de
-              mots-clés, Académie.
+              mots-clés, Académie, contenus réseaux sociaux prêts à poster.
             </FieldHint>
           </div>
           <div>

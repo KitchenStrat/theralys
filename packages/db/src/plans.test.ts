@@ -78,10 +78,10 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     }
   });
 
-  it("réseaux sociaux : inclus dans Starter, Scale et l'héritage Boost", () => {
-    expect(hasSocialMedia("starter")).toBe(true);
+  it("réseaux sociaux : réservés à Scale (et à l'héritage Boost), pas à Starter", () => {
+    expect(hasSocialMedia("starter")).toBe(false);
     expect(hasSocialMedia("scale")).toBe(true);
     expect(hasSocialMedia("boost")).toBe(true);
-    for (const plan of Object.values(PLANS)) expect(plan.socialMedia).toBe(true);
+    expect(PLANS.starter.socialMedia).toBe(false);
   });
 });

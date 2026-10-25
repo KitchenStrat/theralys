@@ -42,7 +42,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
 
           <StudioNav
             showPublications={site.type === "demo" || hasBlog(site.plan)}
-            showSocial={hasSocialMedia(site.plan)}
+            showSocial={site.type === "demo" || hasSocialMedia(site.plan)}
           />
 
           <div className="border-t border-cream-200 p-4 md:mt-auto">

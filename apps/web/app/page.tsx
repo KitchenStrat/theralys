@@ -36,6 +36,7 @@ export default function HomePage() {
       searchConsoleAccess: plan.searchConsoleAccess,
       keywordResearch: plan.keywordResearch,
       academy: plan.academy,
+      socialMedia: plan.socialMedia,
     };
   });
 
