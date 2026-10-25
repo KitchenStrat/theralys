@@ -409,6 +409,27 @@ export const socialPosts = pgTable(
   (t) => [index("social_posts_site_date_idx").on(t.siteId, t.scheduledFor)],
 );
 
+/**
+ * Réglages « Paramétrage » des contenus réseaux sociaux (une ligne par site,
+ * absente tant que le praticien n'a rien enregistré : la voix du blog fait
+ * alors foi). Même voix que `blog_settings`, mais indépendante.
+ */
+export const socialSettings = pgTable("social_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  siteId: uuid("site_id")
+    .notNull()
+    .references(() => sites.id, { onDelete: "cascade" }),
+  voiceDesignation: voiceDesignationEnum("voice_designation").notNull().default("je"),
+  voiceAccord: genderEnum("voice_accord").notNull().default("feminin"),
+  voiceReader: voiceReaderEnum("voice_reader").notNull().default("vous"),
+  voiceTone: voiceToneEnum("voice_tone").notNull().default("chaleureux"),
+  /** Consignes libres au générateur (≤ 1 500 caractères), null = aucune */
+  instructions: text("instructions"),
+  /** Jours de publication (ISO : 1 = lundi … 7 = dimanche), triés, 1 à 7 valeurs */
+  postDays: jsonb("post_days").$type<number[]>().notNull().default([2, 5]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("social_settings_site_id_idx").on(t.siteId)]);
+
 // ─── Types dérivés ───────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -429,4 +450,6 @@ export type Domain = typeof domains.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type SocialPost = typeof socialPosts.$inferSelect;
 export type NewSocialPost = typeof socialPosts.$inferInsert;
+export type SocialSettings = typeof socialSettings.$inferSelect;
+export type NewSocialSettings = typeof socialSettings.$inferInsert;
 export type SitePlan = PlanId;

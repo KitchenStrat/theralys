@@ -49,8 +49,12 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler puis 0001_social_posts, fichiers présents", () => {
-    expect(journal.entries.map((e) => e.tag)).toEqual(["0000_soft_scrambler", "0001_social_posts"]);
+  it("référence 0000_soft_scrambler, 0001_social_posts puis 0002_social_settings, fichiers présents", () => {
+    expect(journal.entries.map((e) => e.tag)).toEqual([
+      "0000_soft_scrambler",
+      "0001_social_posts",
+      "0002_social_settings",
+    ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
       expect(entry.breakpoints).toBe(true);
@@ -116,5 +120,30 @@ describe("0001_social_posts : résorbe la dérive et crée social_posts", () => 
     expect(
       statements.some((s) => s.startsWith('CREATE INDEX IF NOT EXISTS "social_posts_site_date_idx"')),
     ).toBe(true);
+  });
+});
+
+describe("0002_social_settings : crée social_settings (« Paramétrage » des réseaux sociaux)", () => {
+  const statements = statementsOf("0002_social_settings");
+
+  it("table, clé étrangère gardée et index unique sur site_id — rien d'autre", () => {
+    expect(statements).toHaveLength(3);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "social_settings"'));
+    expect(table).toBeDefined();
+    expect(table).toContain(`"post_days" jsonb DEFAULT '[2,5]'::jsonb NOT NULL`);
+    expect(table).toContain(`"voice_tone" "voice_tone" DEFAULT 'chaleureux' NOT NULL`);
+    expect(table).toContain('"instructions" text,');
+    expect(
+      statements.some((s) =>
+        /^DO \$\$ BEGIN ALTER TABLE "social_settings" ADD CONSTRAINT "social_settings_site_id_sites_id_fk" FOREIGN KEY/.test(s),
+      ),
+    ).toBe(true);
+    expect(
+      statements.some((s) =>
+        s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "social_settings_site_id_idx" ON "social_settings"'),
+      ),
+    ).toBe(true);
+    // Les enums voice_* et gender existent depuis 0000 : aucun CREATE TYPE ici
+    expect(statements.some((s) => /CREATE TYPE/.test(s))).toBe(false);
   });
 });

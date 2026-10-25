@@ -675,6 +675,23 @@ describe("parseArticleOutline", () => {
   });
 });
 
+describe("buildSocialBrief — consignes du praticien", () => {
+  it("absentes ou vides : pas de champ ; présentes : nettoyées (≤ 1 500), hors plafond de taille", () => {
+    const base = fixture();
+    expect(buildSocialBrief(base).brief).not.toHaveProperty("instructions");
+    expect(buildSocialBrief({ ...base, instructions: "  \n " }).brief).not.toHaveProperty("instructions");
+    expect(buildSocialBrief({ ...base, instructions: null }).brief).not.toHaveProperty("instructions");
+    const { brief } = buildSocialBrief({ ...base, instructions: " Terminer par une question.\r\n\r\n\r\nParler de « séance ».\u0000 " });
+    expect(brief.instructions).toBe("Terminer par une question.\n\nParler de « séance ».");
+    const long = buildSocialBrief({ ...base, instructions: "x".repeat(3000) }).brief;
+    expect(long.instructions).toHaveLength(1500);
+    // Le plafond ne tient pas compte des consignes : articles et avis ne sont pas rognés à cause d'elles
+    const withoutInstructions = buildSocialBrief(base).brief;
+    expect(long.articles).toHaveLength(withoutInstructions.articles.length);
+    expect(long.motifPages.map((p) => p.headings)).toEqual(withoutInstructions.motifPages.map((p) => p.headings));
+  });
+});
+
 describe("plafond de taille", () => {
   it("un brief normal tient largement sous 28 000 caractères", () => {
     const { brief } = buildSocialBrief(fixture());

@@ -186,7 +186,9 @@ rejouables : le code déjà en production continue de fonctionner avec le schém
 étendu. Si le déploiement devait malgré tout précéder la migration, la page
 **Réseaux sociaux** du studio affiche « Cette section est en cours d'activation,
 revenez dans quelques minutes. » (pas d'erreur) tant que `0001_social_posts`
-n'est pas appliquée — appliquez-la alors sans attendre.
+n'est pas appliquée ; sans `0002_social_settings`, la section fonctionne avec
+les réglages par défaut et l'enregistrement du « Paramétrage » répond « L'option
+Paramétrage est en cours d'activation ». Appliquez-les alors sans attendre.
 
 1. **Point de restauration** — sur Neon, projet `theralys` → **Branches** →
    **Create branch** depuis la branche de production : copie instantanée du
@@ -209,9 +211,12 @@ n'est pas appliquée — appliquez-la alors sans attendre.
 
    ```sql
    select id, created_at from drizzle.__drizzle_migrations order by id;
-   -- 2 lignes : 1784128836899 (0000_soft_scrambler), 1792775462436 (0001_social_posts)
+   -- 3 lignes : 1784128836899 (0000_soft_scrambler), 1792775462436 (0001_social_posts),
+   --            1792937442640 (0002_social_settings)
    select count(*) from social_posts;
    -- 0 juste après la migration : la table existe, les contenus arrivent avec les praticiens
+   select count(*) from social_settings;
+   -- 0 aussi : une ligne apparaît quand un praticien enregistre son « Paramétrage »
    ```
 
    Une ligne par entrée du journal (`created_at` = champ `when` de
@@ -223,8 +228,8 @@ n'est pas appliquée — appliquez-la alors sans attendre.
 ont été poussées à la main) : rien de particulier à faire. La migration `0000`
 est rejouable — chaque instruction est gardée par `IF NOT EXISTS` ou
 `DO $$ … EXCEPTION WHEN duplicate_object` — donc `pnpm db:migrate` passe sur les
-objets existants sans les toucher, applique ce qui manque (`0001`) et inscrit
-les deux lignes du journal. Relancer `pnpm db:migrate` est toujours sans effet
+objets existants sans les toucher, applique ce qui manque (`0001`, `0002`) et
+inscrit les trois lignes du journal. Relancer `pnpm db:migrate` est toujours sans effet
 (no-op). Ne lancez jamais `drizzle-kit push` contre la base de production : elle
 a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQL
 (gardes conservées) → commit → `pnpm db:migrate`.
@@ -238,4 +243,5 @@ a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQ
 | Démo bloquée « En préparation » puis « Erreur … timeout » | Plan Hobby (60 s max) — passer Pro, ou tester en mock |
 | Connexion admin/studio en boucle | `AUTH_SECRET` différent entre projets |
 | Page Réseaux sociaux « Cette section est en cours d'activation » | Migration `0001_social_posts` non appliquée sur Neon → section « Mettre à jour le schéma en production » |
+| Paramétrage des réseaux sociaux « L'option Paramétrage est en cours d'activation » | Migration `0002_social_settings` non appliquée sur Neon → même section |
 | Sites clients 404 sur leur domaine | Domaine non ajouté au projet **harmony-sites** |

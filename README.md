@@ -221,8 +221,9 @@ Le seed est idempotent. La CI (GitHub Actions) exécute lint + typecheck + tests
 ### Migrations
 
 Le dossier `packages/db/drizzle/` est **à jour du schéma** (`packages/db/src/schema.ts`) :
-`0000_soft_scrambler` (schéma initial) puis `0001_social_posts` (réseaux sociaux + les
-colonnes autrefois poussées à la main). Les migrations s'appliquent avec **`pnpm db:migrate`**,
+`0000_soft_scrambler` (schéma initial), `0001_social_posts` (réseaux sociaux + les
+colonnes autrefois poussées à la main) puis `0002_social_settings` (option « Paramétrage »
+des réseaux sociaux). Les migrations s'appliquent avec **`pnpm db:migrate`**,
 en local comme en production (procédure dans `DEPLOY.md`, section « Mettre à jour le schéma
 en production »), qui tient le journal `drizzle.__drizzle_migrations`. Elles sont rejouables
 (`IF NOT EXISTS`, `DO $$ … duplicate_object`) : `pnpm db:migrate` passe aussi sur une base

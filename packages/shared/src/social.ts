@@ -85,8 +85,10 @@ export const SOCIAL_DEFAULT_TEMPLATE: Record<SocialFormat, SocialTemplate> = {
 export const SOCIAL_ACCENT_ROLES = ["primary", "primaryDark", "deep", "soft"] as const;
 export type SocialAccentRole = (typeof SOCIAL_ACCENT_ROLES)[number];
 
-/** Jours de publication de la cadence (ISO : 1 = lundi … 7 = dimanche) : mardi, vendredi. */
+/** Jours de publication de la cadence par défaut (ISO : 1 = lundi … 7 = dimanche) : mardi, vendredi. */
 export const SOCIAL_POST_DAYS = [2, 5] as const;
+/** Consignes libres du praticien au générateur (« Paramétrage ») : longueur maximale. */
+export const SOCIAL_INSTRUCTIONS_MAX = 1500;
 /** Annonces « Nouvel article » (J+1) par mois, au plus. */
 export const SOCIAL_NEW_ARTICLE_POSTS_MAX = 2;
 /** Demandes « sur mesure » par site et mois civil (UTC). */
@@ -116,6 +118,47 @@ export const DEFAULT_SOCIAL_VOICE: SocialVoice = {
   reader: "vous",
   tone: "chaleureux",
 };
+
+// ─── Réglages « Paramétrage » (social_settings) ──────────────────────────────
+
+/**
+ * Jours de publication valides : entiers ISO 1..7, dédoublonnés et triés ;
+ * sans aucune valeur valide, les jours par défaut (mardi, vendredi).
+ */
+export function normalizePostDays(days: readonly unknown[] | null | undefined): number[] {
+  const valid = new Set<number>();
+  for (const day of days ?? []) {
+    if (typeof day === "number" && Number.isInteger(day) && day >= 1 && day <= 7) valid.add(day);
+  }
+  return valid.size > 0 ? [...valid].sort((a, b) => a - b) : [...SOCIAL_POST_DAYS];
+}
+
+/**
+ * Consignes libres nettoyées : retours à la ligne normalisés, caractères de
+ * contrôle retirés, espaces resserrés, au plus deux lignes vides consécutives,
+ * ≤ SOCIAL_INSTRUCTIONS_MAX caractères. Chaîne vide si rien d'exploitable.
+ */
+export function cleanSocialInstructions(text: string | null | undefined): string {
+  if (!text) return "";
+  let out = "";
+  // NFKC + retrait des caractères de format (U+200B, bidi, BOM…) et du trait
+  // d'union conditionnel : un mot interdit ne peut pas être « coupé » en deux
+  const normalized = text.normalize("NFKC").replace(/[\p{Cf}\u00ad]/gu, "");
+  for (const ch of normalized.replace(/\r\n?/g, "\n")) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === "\n") out += ch;
+    else if (code < 0x20 || code === 0x7f || (code >= 0x80 && code < 0xa0)) out += " ";
+    else out += ch;
+  }
+  return out
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, SOCIAL_INSTRUCTIONS_MAX)
+    .trim();
+}
 
 // ─── Types JSON stockés (social_posts.content / assets) ──────────────────────
 
@@ -154,6 +197,8 @@ export type SocialPostContent = {
   /** Instantané de la voix au moment de la génération */
   voice: SocialVoice;
   generator: "anthropic" | "mock";
+  /** Jours de publication (ISO) en vigueur à la préparation du mois (source calendar) */
+  planDays?: number[];
 };
 
 export type SocialRender = {
@@ -188,6 +233,8 @@ export type SocialSlotsInput = {
   today: Date;
   /** Articles `scheduled`/`published` (filtrés par l'appelant) ; `publishAt` null ignoré */
   articles: { id: string; publishAt: Date | string | null }[];
+  /** Jours de publication (ISO 1..7) choisis par le praticien ; défaut SOCIAL_POST_DAYS */
+  postDays?: readonly number[];
 };
 
 /** "YYYY-MM-DD" d'une date, en UTC. */
@@ -212,27 +259,33 @@ export function monthRange(
   return { start, end, startIso: isoDay(start), endIso: isoDay(end) };
 }
 
+/** Jour ISO (1 = lundi … 7 = dimanche) d'une date "YYYY-MM-DD" (UTC). */
+export function isoWeekday(day: string): number {
+  return new Date(`${day}T00:00:00Z`).getUTCDay() || 7;
+}
+
 /**
  * Créneaux d'un mois, triés par date :
- * - `cadence` : mardis et vendredis strictement postérieurs à `today` (UTC) ;
+ * - `cadence` : jours de publication (`postDays`, défaut mardi et vendredi)
+ *   strictement postérieurs à `today` (UTC) ;
  * - `nouvel_article` : lendemain de `publishAt` de chaque article du mois (au
- *   plus 2, les plus récents), jamais le même jour qu'un créneau cadence
- *   (collision → J+2), toujours dans le mois et strictement après `today`.
+ *   plus 2, les plus récents) ; si ce lendemain est un jour de publication
+ *   choisi, le premier jour libre dans les 3 jours suivants, sinon le lendemain
+ *   quand même (deux contenus ce jour-là plutôt qu'une annonce tardive) ;
+ *   toujours dans le mois et strictement après `today`.
  * Un mois passé n'a aucun créneau.
  */
 export function socialSlotsForMonth(input: SocialSlotsInput): SocialSlot[] {
   const { startIso, endIso } = monthRange(input.year, input.month);
   const todayIso = isoDay(input.today);
   const inMonth = (day: string) => day >= startIso && day < endIso;
+  const postDays = normalizePostDays(input.postDays ?? SOCIAL_POST_DAYS);
 
   const cadence: SocialSlot[] = [];
-  const cadenceDays = new Set<string>();
   for (let day = startIso; day < endIso; day = shiftDay(day, 1)) {
-    const weekday = new Date(`${day}T00:00:00Z`).getUTCDay() || 7; // ISO : dimanche = 7
-    if (!(SOCIAL_POST_DAYS as readonly number[]).includes(weekday)) continue;
+    if (!postDays.includes(isoWeekday(day))) continue;
     if (day <= todayIso) continue;
     cadence.push({ date: day, kind: "cadence" });
-    cadenceDays.add(day);
   }
 
   const candidates = input.articles
@@ -250,8 +303,15 @@ export function socialSlotsForMonth(input: SocialSlotsInput): SocialSlot[] {
   const taken = new Set<string>();
   for (const article of candidates) {
     if (articleSlots.length >= SOCIAL_NEW_ARTICLE_POSTS_MAX) break;
-    let day = shiftDay(article.day, 1);
-    if (cadenceDays.has(day)) day = shiftDay(day, 1);
+    const next = shiftDay(article.day, 1);
+    let day = next;
+    // Jour libre dans les 3 jours suivants, sinon le lendemain même s'il est un jour choisi
+    let tries = 0;
+    while (postDays.includes(isoWeekday(day)) && tries < 3) {
+      day = shiftDay(day, 1);
+      tries += 1;
+    }
+    if (postDays.includes(isoWeekday(day))) day = next;
     if (!inMonth(day) || day <= todayIso || taken.has(day)) continue;
     taken.add(day);
     articleSlots.push({ date: day, kind: "nouvel_article", articleId: article.id });

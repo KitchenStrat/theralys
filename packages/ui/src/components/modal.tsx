@@ -15,6 +15,12 @@ export type ModalProps = {
   size?: ModalSize;
   /** Hérité : équivalent de `size="lg"` */
   wide?: boolean;
+  /**
+   * Sans en-tête ni pied ni marges : le contenu dessine sa propre structure
+   * (bandeau, progression, boutons) — assistants « Paramètres » du studio.
+   * `title` reste le nom accessible de la boîte.
+   */
+  plain?: boolean;
 };
 
 const SIZES: Record<ModalSize, string> = {
@@ -38,7 +44,7 @@ function focusablesIn(root: HTMLElement): HTMLElement[] {
  * Maj+Tab bouclent sur ses éléments, Échap et le clic hors ferment, le focus
  * revient à l'élément déclencheur à la fermeture.
  */
-export function Modal({ open, onClose, title, children, footer, size, wide }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size, wide, plain }: ModalProps) {
   const resolvedSize: ModalSize = size ?? (wide ? "lg" : "md");
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -101,27 +107,35 @@ export function Modal({ open, onClose, title, children, footer, size, wide }: Mo
         aria-label={title}
         tabIndex={-1}
         className={clsx(
-          "max-h-[90vh] w-full overflow-y-auto rounded-card bg-white shadow-pop focus:outline-none",
+          "max-h-[90vh] w-full overflow-y-auto bg-white focus:outline-none",
+          // Assistants « plain » (paramètres du blog / réseaux sociaux) : boîte plus ronde et ombre portée
+          plain ? "rounded-3xl shadow-2xl" : "rounded-card shadow-pop",
           SIZES[resolvedSize],
         )}
       >
-        <div className="flex items-center justify-between border-b border-cream-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fermer"
-            className="rounded-full p-1 text-ink-500 hover:bg-cream-200"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        <div className="px-6 py-5">{children}</div>
-        {footer ? (
-          <div className="flex justify-end gap-3 border-t border-cream-200 px-6 py-4">{footer}</div>
-        ) : null}
+        {plain ? (
+          children
+        ) : (
+          <>
+            <div className="flex items-center justify-between border-b border-cream-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Fermer"
+                className="rounded-full p-1 text-ink-500 hover:bg-cream-200"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+                  <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-5">{children}</div>
+            {footer ? (
+              <div className="flex justify-end gap-3 border-t border-cream-200 px-6 py-4">{footer}</div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

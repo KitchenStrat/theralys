@@ -18,11 +18,22 @@ mots-clés Google, académie et éditeur de site (WYSIWYG).
 
 Section `app/(app)/reseaux-sociaux/` : contenus Instagram/Facebook/LinkedIn
 prêts à poster, préparés à partir du site (Harmony ne publie pas à la place
-du praticien). Incluse dans toutes les formules (`hasSocialMedia`), démos
+du praticien). Réservée à la formule Scale (`hasSocialMedia`), démos
 comprises.
 
-- **Calendrier** : 2 contenus par semaine (mardi, vendredi) + jusqu'à 2
-  annonces « Nouvel article » le lendemain d'une parution
+- **Paramétrage** (bouton de la carte « Vos contenus du mois »,
+  `social-settings-modal.tsx`, table `social_settings`) : voix (mêmes contrôles
+  que les Paramètres du blog, `voice-fields.tsx`, réglages indépendants),
+  consignes libres au générateur (≤ 1 500 caractères, vérifiées par
+  `checkEthicalCompliance` + `checkSocialCompliance` à l'enregistrement, puis
+  injectées dans les prompts comme une donnée, bloc `<consignes>`) et jours de
+  publication. Sans ligne enregistrée : voix du blog, mardi/vendredi
+  (`lib/social/settings.ts`). Les contenus déjà préparés ne changent pas : un
+  mois préparé garde les jours de sa préparation (`planDays` dans le contenu).
+- **Calendrier** : 2 contenus par semaine (mardi et vendredi par défaut, jours
+  choisis dans le Paramétrage) + jusqu'à 2 annonces « Nouvel article » le
+  lendemain d'une parution — décalée au premier jour libre dans les 3 jours
+  suivants si ce lendemain est un jour de publication, sinon maintenue
   (`socialSlotsForMonth`, `@theralys/shared`). « Préparer mon mois de
   contenus » = 1 appel IA pour les créneaux à pourvoir (`planSocialMonth`) :
   transaction courte sous `pg_try_advisory_xact_lock` par site et mois (lecture

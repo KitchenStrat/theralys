@@ -75,6 +75,38 @@ describe("computeSocialMonthState", () => {
     expect(state.freeSlots[0]?.articleId).toBe("a1");
   });
 
+  it("jours de publication des réglages : créneaux lundi/jeudi, contenus mardi/vendredi déjà préparés sans créneau libre supplémentaire", () => {
+    const state = computeSocialMonthState({ ...base, posts: [], postDays: [1, 4] });
+    expect(state.slots.map((s) => s.date)).toEqual([
+      "2026-11-02", "2026-11-05", "2026-11-09", "2026-11-12", "2026-11-16", "2026-11-19", "2026-11-23", "2026-11-26", "2026-11-30",
+    ]);
+    expect(state.freeSlots).toHaveLength(9);
+    // Changement de jours après préparation : 8 contenus du calendrier existent → 1 seul créneau à pourvoir, le premier non occupé
+    const prepared = computeSocialMonthState({ ...base, posts: CADENCE.map((d) => calendarPost(d)), postDays: [1, 4] });
+    expect(prepared.freeSlots.map((s) => s.date)).toEqual(["2026-11-02"]);
+    expect(prepared.calendarCount).toBe(8);
+  });
+
+  it("mois déjà préparé : les jours de la préparation (planDays) priment sur les réglages actuels", () => {
+    // Préparé en mardi/vendredi, réglages passés ensuite à lundi/jeudi : aucun créneau ne se rouvre
+    const posts = CADENCE.map((d) => ({ ...calendarPost(d), content: { planDays: [2, 5] } }));
+    const state = computeSocialMonthState({ ...base, posts, postDays: [1, 4] });
+    expect(state.slots.map((s) => s.date)).toEqual(CADENCE);
+    expect(state.freeSlots).toEqual([]);
+    // Plan partiel préparé en lundi/jeudi : les manquants suivent lundi/jeudi, pas les réglages actuels (mardi/vendredi)
+    const monThu = computeSocialMonthState({ ...base, posts: [], postDays: [1, 4] }).slots.map((s) => s.date);
+    const partial = computeSocialMonthState({
+      ...base,
+      posts: monThu.slice(0, 3).map((d) => ({ ...calendarPost(d), content: { planDays: [1, 4] } })),
+      postDays: [2, 5],
+    });
+    expect(partial.slots.map((s) => s.date)).toEqual(monThu);
+    expect(partial.freeSlots.map((s) => s.date)).toEqual(monThu.slice(3));
+    // Contenus sans planDays (préparés avant cette version) : réglages actuels
+    const legacy = computeSocialMonthState({ ...base, posts: CADENCE.slice(0, 2).map((d) => calendarPost(d)), postDays: [1, 4] });
+    expect(legacy.slots.map((s) => s.date)).toEqual(monThu);
+  });
+
   it("mois en cours : seuls les créneaux à venir comptent, jamais de manquant négatif", () => {
     const state = computeSocialMonthState({
       ...base,

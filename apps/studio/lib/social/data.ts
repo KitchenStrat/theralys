@@ -86,6 +86,8 @@ export type SocialMonthPostLite = {
   source: "calendar" | "request";
   status: "ready" | "published" | "archived";
   downloadedAt: Date | string | null;
+  /** Contenu (seul `planDays` est lu : jours en vigueur à la préparation) */
+  content?: { planDays?: number[] } | null;
 };
 
 /** Article du mois (`scheduled`/`published`) pour les créneaux « nouvel article ». */
@@ -142,12 +144,20 @@ export function computeSocialMonthState(input: {
   now: Date;
   posts: SocialMonthPostLite[];
   articles: SocialMonthArticle[];
+  /** Jours de publication des réglages (ISO 1..7) ; défaut mardi/vendredi */
+  postDays?: readonly number[];
 }): SocialMonthState {
+  // Un mois déjà préparé garde les jours de sa préparation : changer les jours
+  // dans « Paramétrage » ne rouvre pas le mois (seuls les créneaux d'un plan IA
+  // incomplet restent « manquants »)
+  const planned = input.posts.find((p) => p.source === "calendar" && p.content?.planDays?.length);
+  const postDays = planned?.content?.planDays ?? input.postDays;
   const slots = socialSlotsForMonth({
     year: input.year,
     month: input.month,
     today: input.now,
     articles: input.articles,
+    ...(postDays ? { postDays } : {}),
   });
   const visible = input.posts.filter((p) => p.status !== "archived");
   const calendarAll = input.posts.filter((p) => p.source === "calendar").length;
@@ -188,12 +198,14 @@ function monthArticles(
 /**
  * Contenus du mois pour la page : contenus non archivés (triés par date puis
  * création) et état du mois, en une seule lecture de `social_posts`.
+ * `postDays` : jours de publication des réglages (`getSocialSettings`).
  */
 export async function getSocialMonth(
   siteId: string,
   year: number,
   month: number,
   now: Date,
+  postDays?: readonly number[],
 ): Promise<SocialMonthData> {
   const db = getDb();
   const { startIso, endIso } = monthRange(year, month);
@@ -211,7 +223,7 @@ export async function getSocialMonth(
     }),
     monthArticles(db, siteId, year, month),
   ]);
-  const state = computeSocialMonthState({ year, month, now, posts, articles });
+  const state = computeSocialMonthState({ year, month, now, posts, articles, postDays });
   if (!site) return { items: [], state };
   const items = posts
     .filter((post) => post.status !== "archived")
@@ -231,6 +243,7 @@ export async function loadSocialMonthState(
   year: number,
   month: number,
   now: Date,
+  postDays?: readonly number[],
 ): Promise<SocialMonthState> {
   const { startIso, endIso } = monthRange(year, month);
   const [articles, posts] = await Promise.all([
@@ -241,10 +254,10 @@ export async function loadSocialMonthState(
         gte(socialPosts.scheduledFor, startIso),
         lt(socialPosts.scheduledFor, endIso),
       ),
-      columns: { scheduledFor: true, source: true, status: true, downloadedAt: true },
+      columns: { scheduledFor: true, source: true, status: true, downloadedAt: true, content: true },
     }),
   ]);
-  return computeSocialMonthState({ year, month, now, posts, articles });
+  return computeSocialMonthState({ year, month, now, posts, articles, postDays });
 }
 
 /**

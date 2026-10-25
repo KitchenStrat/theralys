@@ -8,10 +8,12 @@ import { Badge, Button, Card, FieldHint, Spinner } from "@theralys/ui";
 import { WEEKDAYS, buildMonthGrid, formatDayFr, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
 import type { SocialCalendarItem, SocialMonthState, SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
+import type { SocialSettingsView } from "@/lib/social/settings";
 import { planSocialMonth } from "./actions";
 import { DayModal, FORMAT_GLYPH, itemLabel, statusOf } from "./day-modal";
 import { RequestBar } from "./request-bar";
 import { SocialPostModal } from "./social-post-modal";
+import { SocialSettingsModal } from "./social-settings-modal";
 
 /** Puces affichées par jour avant « +N autres ». */
 const CHIP_MAX = 3;
@@ -34,6 +36,7 @@ export function SocialClient({
   siteName,
   todayIso,
   requestDates,
+  settings,
 }: {
   year: number;
   month: number;
@@ -45,10 +48,13 @@ export function SocialClient({
   /** Jour civil Europe/Paris */
   todayIso: string;
   requestDates: { default: string; min: string; max: string };
+  /** Réglages « Paramétrage » effectifs (voix, consignes, jours de publication) */
+  settings: SocialSettingsView;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [fromDay, setFromDay] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // Contenu créé par la barre : la modale s'ouvre dès qu'il apparaît dans `items`
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
 
@@ -124,6 +130,8 @@ export function SocialClient({
           tooFar={tooFar}
           nextMonthParam={shiftMonthParam(year, month, 1)}
           siteName={siteName}
+          settings={settings}
+          onOpenSettings={() => setSettingsOpen(true)}
           onSelect={openItem}
         />
         <RequestBar
@@ -185,6 +193,7 @@ export function SocialClient({
         </div>
       </div>
 
+      <SocialSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} initial={settings} />
       <DayModal
         date={dayOpen}
         items={dayOpen ? (byDate.get(dayOpen) ?? []) : []}
@@ -231,7 +240,7 @@ function progressLine(state: SocialMonthState): string {
   return `${plural(state.downloaded, "téléchargé")} · ${plural(state.published, "publié")} · ${state.toDownload} à télécharger`;
 }
 
-/** Carte A — « Vos contenus du mois » : états exclusifs (§6.2) + liste des contenus. */
+/** Carte A — « Vos contenus du mois » : états exclusifs (§6.2), bouton « Paramétrage », liste des contenus. */
 function MonthCard({
   monthParam,
   state,
@@ -241,6 +250,8 @@ function MonthCard({
   tooFar,
   nextMonthParam,
   siteName,
+  settings,
+  onOpenSettings,
   onSelect,
 }: {
   monthParam: string;
@@ -251,6 +262,8 @@ function MonthCard({
   tooFar: boolean;
   nextMonthParam: string;
   siteName: string;
+  settings: SocialSettingsView;
+  onOpenSettings: () => void;
   onSelect: (item: SocialCalendarItem) => void;
 }) {
   const router = useRouter();
@@ -354,8 +367,28 @@ function MonthCard({
 
   return (
     <Card className="p-6">
-      <h2 className="text-xl font-semibold">Vos contenus du mois</h2>
-      <p className="text-xs text-ink-500">{siteName}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold">Vos contenus du mois</h2>
+          <p className="text-xs text-ink-500">{siteName}</p>
+        </div>
+        {/* Visible dans tous les états de la carte : voix, consignes et jours de publication */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onOpenSettings}
+          title={settings.saved ? "Voix, consignes et jours de publication enregistrés" : undefined}
+          className="shrink-0"
+        >
+          ⚙ Paramétrage
+          {settings.saved ? (
+            <>
+              <span aria-hidden className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-primary-500 align-middle" />
+              <span className="sr-only"> (réglages personnalisés)</span>
+            </>
+          ) : null}
+        </Button>
+      </div>
       {body}
       {pending ? (
         <p className="mt-3 text-sm text-ink-700" aria-live="polite">

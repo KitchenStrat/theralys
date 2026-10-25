@@ -13,6 +13,7 @@ import {
   type SocialRequestUsage,
 } from "@/lib/social/data";
 import { swatchesFor } from "@/lib/social/render/theme";
+import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
 import { SocialClient } from "./social-client";
 
 export const metadata = { title: "Réseaux sociaux" };
@@ -44,15 +45,18 @@ export default async function SocialPage({ searchParams }: Props) {
 
   let data: SocialMonthData;
   let usage: SocialRequestUsage;
+  let settings: SocialSettingsView;
   try {
+    // Réglages « Paramétrage » d'abord : les créneaux du mois suivent les jours de publication choisis
+    settings = await getSocialSettings(site.id);
     [data, usage] = await Promise.all([
-      getSocialMonth(site.id, year, month, now),
+      getSocialMonth(site.id, year, month, now, settings.postDays),
       getSocialRequestUsage(site.id, now),
     ]);
   } catch (err) {
-    // Déploiement avant la migration `social_posts` : page utilisable plutôt qu'une erreur 500
+    // Déploiement avant les migrations `social_posts` / `social_settings` : page utilisable plutôt qu'une erreur 500
     if (!isMissingSchemaError(err)) throw err;
-    console.error("[social] schéma absent — migration 0001 non appliquée ?", err);
+    console.error("[social] schéma absent — migrations 0001/0002 non appliquées ?", err);
     return (
       <Fallback title="Cette section est en cours d'activation, revenez dans quelques minutes.">
         Vos contenus prêts à poster seront préparés à partir de votre site dès l&apos;activation.
@@ -82,6 +86,7 @@ export default async function SocialPage({ searchParams }: Props) {
       siteName={site.name}
       todayIso={todayIso}
       requestDates={{ default: clampIsoDay(wanted, min, max), min, max }}
+      settings={settings}
     />
   );
 }

@@ -59,7 +59,37 @@ type Ctx = {
   city: string;
   recent: string[];
   seed: number;
+  /** Consignes du praticien interprétées par le mock */
+  wishes: MockWishes;
 };
+
+/**
+ * Ce que le mock retient des consignes libres (« Paramétrage ») : le texte
+ * n'est pas compris, deux cas déterministes et testables sont honorés.
+ */
+export type MockWishes = {
+  /** Les consignes contiennent « question » : chaque légende se termine par une question */
+  endWithQuestion: boolean;
+  /** « hashtag » suivi de #Mot : ces hashtags sont ajoutés (normalizeHashtags dédoublonne) */
+  hashtags: string[];
+};
+
+const NO_WISHES: MockWishes = { endWithQuestion: false, hashtags: [] };
+
+/** Lit les consignes : « question » → légendes interrogatives ; « hashtag … #Mot » → hashtags ajoutés. */
+export function parseMockWishes(instructions: string | undefined): MockWishes {
+  if (!instructions) return NO_WISHES;
+  const hashtags: string[] = [];
+  for (const line of instructions.matchAll(/hashtags?\b([^\n]*)/giu)) {
+    for (const tag of (line[1] ?? "").matchAll(/#[\p{L}\p{N}_]{2,40}/gu)) hashtags.push(tag[0]);
+  }
+  // Formulation positive explicite seulement (« Terminer chaque légende par une question ») :
+  // « éviter les questions » ou « questions fréquentes » ne déclenchent rien
+  const endWithQuestion = /(terminer|finir|conclure|clore)[^.\n]*\bquestion\b|\bpar une question\b/i.test(
+    instructions,
+  );
+  return { endWithQuestion, hashtags };
+}
 
 function makeCtx(brief: SocialSiteBrief, recent: string[], seed: number): Ctx {
   const { firstName, profession, practiceName, city } = brief.practitioner;
@@ -74,6 +104,7 @@ function makeCtx(brief: SocialSiteBrief, recent: string[], seed: number): Ctx {
     city,
     recent: recent.map((t) => t.toLowerCase()),
     seed,
+    wishes: parseMockWishes(brief.instructions),
   };
 }
 
@@ -288,11 +319,23 @@ function prudenceLine(ctx: Ctx): string {
   return `${ctx.practiceCap} ne se substitue pas à un avis médical.`;
 }
 
+/** Question finale (consigne « question »), accordée au lecteur, variée par graine. */
+function closingQuestion(ctx: Ctx, k: number): string {
+  const { b } = ctx;
+  const questions = [
+    `Et ${b.reader("vous", "toi")}, qu'est-ce qui ${b.reader("vous aiderait", "t'aiderait")} à souffler cette semaine ?`,
+    `Et ${b.reader("vous", "toi")}, quand ${b.reader("avez-vous", "as-tu")} pris un vrai moment pour ${b.reader("vous", "toi")} ?`,
+    `Qu'est-ce qui ${b.reader("vous", "te")} ferait du bien en ce moment ?`,
+  ];
+  return questions[(ctx.seed + k) % questions.length]!;
+}
+
 /**
  * Accroche (≤ 125 caractères, 1 emoji) → développement → [prudence] →
- * ligne « lien dans ma bio » → signature « Prénom, métier à Ville ».
+ * [question finale si les consignes le demandent] → ligne « lien dans ma bio »
+ * → signature « Prénom, métier à Ville » (même structure que le prompt live).
  */
-function caption(ctx: Ctx, hook: string, development: string[], pillar: SocialPillar): string {
+function caption(ctx: Ctx, hook: string, development: string[], pillar: SocialPillar, k = 0): string {
   const dev = development.filter((p) => p.trim() !== "");
   const mentionsCare = /sommeil|douleur/i.test([hook, ...dev].join(" "));
   const prudent = pillar === "conseil" || pillar === "article" || mentionsCare;
@@ -300,6 +343,7 @@ function caption(ctx: Ctx, hook: string, development: string[], pillar: SocialPi
     truncateAtWord(hook, 125),
     ...dev,
     ...(prudent ? [prudenceLine(ctx)] : []),
+    ...(ctx.wishes.endWithQuestion ? [closingQuestion(ctx, k)] : []),
     SOCIAL_BIO_LINE,
     signature(ctx),
   ].join("\n\n");
@@ -310,6 +354,8 @@ function hashtags(ctx: Ctx, extra: string[]): string[] {
     camelHashtag(`${ctx.profession} ${ctx.city}`),
     camelHashtag(ctx.city),
     practiceTag(ctx.practice),
+    // Hashtags demandés dans les consignes : avant les thématiques, pour survivre au plafond de 8
+    ...ctx.wishes.hashtags,
     ...extra,
     "#BienEtre",
   ];
@@ -360,7 +406,7 @@ function draft(ctx: Ctx, parts: DraftParts): SocialPostDraft {
     accentRole: ACCENTS[(ctx.seed + parts.k) % ACCENTS.length] ?? "primary",
     topic: truncateAtWord(parts.topic, 70),
     slides,
-    caption: caption(ctx, parts.hook, parts.development, parts.pillar),
+    caption: caption(ctx, parts.hook, parts.development, parts.pillar, parts.k),
     hashtags: hashtags(ctx, parts.tags),
     altText: truncateAtWord(altText(ctx, parts, slides), 300),
     sourceRefs: [...new Set(parts.sourceRefs)].slice(0, 6),

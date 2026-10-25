@@ -1,15 +1,17 @@
 /**
  * Brief de site pour la génération des contenus réseaux sociaux : requêtes
  * drizzle (site, fiche praticien, pages accueil + motifs, articles en ligne ou
- * planifiés, avis Google des sites clients, voix du blog) puis
- * `buildSocialBrief` (fonction pure de `@theralys/shared`, testée sans base).
+ * planifiés, avis Google des sites clients, réglages « Paramétrage » : voix et
+ * consignes) puis `buildSocialBrief` (fonction pure de `@theralys/shared`,
+ * testée sans base).
  */
 
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
-import { blogArticles, blogSettings, getDb, googleReviews, pages } from "@theralys/db";
+import { blogArticles, getDb, googleReviews, pages } from "@theralys/db";
 import { resolveProfession } from "@theralys/ai";
-import { buildSocialBrief, type SocialBriefResult, type SocialVoice } from "@theralys/shared";
+import { buildSocialBrief, type SocialBriefResult } from "@theralys/shared";
 import { getProspect, getSite, siteUrl } from "@/lib/data";
+import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
 
 /** Articles transmis au brief (il n'en garde que `BRIEF_ARTICLES_KEPT`, triés par date de publication). */
 const ARTICLES_LIMIT = 12;
@@ -35,6 +37,8 @@ export type LoadSocialBriefOptions = {
    * planifié) : sans eux, le générateur laisse ces créneaux libres.
    */
   includeArticleIds?: string[];
+  /** Réglages déjà lus par l'appelant (évite une seconde lecture). */
+  settings?: SocialSettingsView;
 };
 
 export async function loadSocialBrief(
@@ -78,21 +82,9 @@ export async function loadSocialBrief(
           columns: { id: true, authorName: true, rating: true, text: true },
         })
       : Promise.resolve([]),
-    db.query.blogSettings.findFirst({
-      where: eq(blogSettings.siteId, siteId),
-      columns: { voiceDesignation: true, voiceAccord: true, voiceReader: true, voiceTone: true },
-    }),
+    // Voix et consignes : social_settings, sinon voix du blog, sinon défaut accordé au genre
+    options.settings ? Promise.resolve(options.settings) : getSocialSettings(siteId),
   ]);
-
-  // Voix du blog ; sinon buildSocialBrief applique DEFAULT_SOCIAL_VOICE accordé au genre
-  const voice: SocialVoice | null = settings
-    ? {
-        designation: settings.voiceDesignation,
-        accord: settings.voiceAccord,
-        reader: settings.voiceReader,
-        tone: settings.voiceTone,
-      }
-    : null;
 
   return buildSocialBrief({
     site: {
@@ -117,7 +109,8 @@ export async function loadSocialBrief(
     pages: sitePages,
     articles: mergeArticles(requiredArticles, recentArticles),
     reviews,
-    voice,
+    voice: settings.voice,
+    instructions: settings.instructions,
     practiceName: resolveProfession(prospect?.profession ?? site.name).practiceName,
   });
 }

@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   SIZES_FOR_FORMAT,
+  SOCIAL_INSTRUCTIONS_MAX,
   SOCIAL_MAX_CAROUSEL_SLIDES,
   SOCIAL_NEW_ARTICLE_POSTS_MAX,
   SOCIAL_POST_DAYS,
   SOCIAL_TEMPLATES,
   TEMPLATE_FORMATS,
   canonicalJson,
+  cleanSocialInstructions,
   isoDay,
+  isoWeekday,
   monthRange,
+  normalizePostDays,
   sizesFor,
   socialAssetKeyPayload,
   socialSlotsForMonth,
@@ -103,6 +107,106 @@ describe("socialSlotsForMonth", () => {
       ],
     });
     expect(slots.filter((s) => s.kind === "nouvel_article")).toEqual([]);
+  });
+});
+
+describe("socialSlotsForMonth — jours de publication personnalisés (« Paramétrage »)", () => {
+  it("lundi et jeudi : 9 créneaux cadence en novembre 2026, aux bons jours", () => {
+    const slots = socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [1, 4] });
+    expect(slots.map((s) => s.date)).toEqual([
+      "2026-11-02", "2026-11-05", "2026-11-09", "2026-11-12", "2026-11-16", "2026-11-19", "2026-11-23", "2026-11-26", "2026-11-30",
+    ]);
+    for (const s of slots) expect([1, 4]).toContain(isoWeekday(s.date));
+    // Sans postDays : la cadence par défaut (mardi, vendredi) est inchangée
+    expect(socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [] })).toEqual(
+      socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [...SOCIAL_POST_DAYS] }),
+    );
+  });
+
+  it("un seul jour (dimanche) : 5 créneaux ; 7 jours : un créneau par jour restant", () => {
+    const sundays = socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [7] });
+    expect(sundays.map((s) => s.date)).toEqual(["2026-11-01", "2026-11-08", "2026-11-15", "2026-11-22", "2026-11-29"]);
+    const daily = socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [1, 2, 3, 4, 5, 6, 7] });
+    expect(daily).toHaveLength(30);
+    expect(daily.every((s) => s.kind === "cadence")).toBe(true);
+  });
+
+  it("jours en désordre, doublons et valeurs invalides : dédoublonnés, triés, invalides ignorés ; aucun valide → défaut", () => {
+    expect(normalizePostDays([5, 2, 5, 0, 8, 2.5, Number.NaN])).toEqual([2, 5]);
+    expect(normalizePostDays([4, 1])).toEqual([1, 4]);
+    expect(normalizePostDays([])).toEqual([2, 5]);
+    expect(normalizePostDays(undefined)).toEqual([2, 5]);
+    expect(normalizePostDays(["1", null, 9])).toEqual([2, 5]);
+    const a = socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [4, 1, 1, 0] });
+    const b = socialSlotsForMonth({ year: 2026, month: 11, today: TODAY, articles: [], postDays: [1, 4] });
+    expect(a).toEqual(b);
+  });
+
+  it("les créneaux « nouvel article » évitent les jours choisis (3 jours max), sinon le lendemain", () => {
+    // Article publié le lundi 2 : J+1 = mardi 3 (jour choisi) → mercredi 4 avec [2, 3] → jeudi 5
+    const slots = socialSlotsForMonth({
+      year: 2026,
+      month: 11,
+      today: TODAY,
+      articles: [{ id: "a1", publishAt: "2026-11-02T08:00:00Z" }],
+      postDays: [2, 3],
+    });
+    const article = slots.find((s) => s.kind === "nouvel_article");
+    expect(article?.date).toBe("2026-11-05");
+    expect(slots.filter((s) => s.kind === "cadence").map((s) => s.date)).toContain("2026-11-04");
+    // Tous les jours sont des jours de publication : l'annonce reste le lendemain
+    // (deux contenus ce jour-là) plutôt que d'être repoussée ou écartée
+    const daily = socialSlotsForMonth({
+      year: 2026,
+      month: 11,
+      today: TODAY,
+      articles: [{ id: "a1", publishAt: "2026-11-02T08:00:00Z" }],
+      postDays: [1, 2, 3, 4, 5, 6, 7],
+    });
+    expect(daily.filter((s) => s.kind === "nouvel_article").map((s) => s.date)).toEqual(["2026-11-03"]);
+    expect(daily.filter((s) => s.date === "2026-11-03")).toHaveLength(2);
+    // Lundi → jeudi choisis : J+1 = mardi, mercredi, jeudi pris, vendredi libre (3 décalages)
+    const monToThu = socialSlotsForMonth({
+      year: 2026,
+      month: 11,
+      today: TODAY,
+      articles: [{ id: "a1", publishAt: "2026-11-02T08:00:00Z" }],
+      postDays: [1, 2, 3, 4],
+    });
+    expect(monToThu.find((s) => s.kind === "nouvel_article")?.date).toBe("2026-11-06");
+    // Cinq jours consécutifs choisis : plus de jour libre à 3 jours → lendemain quand même
+    const monToFri = socialSlotsForMonth({
+      year: 2026,
+      month: 11,
+      today: TODAY,
+      articles: [{ id: "a1", publishAt: "2026-11-02T08:00:00Z" }],
+      postDays: [1, 2, 3, 4, 5],
+    });
+    expect(monToFri.find((s) => s.kind === "nouvel_article")?.date).toBe("2026-11-03");
+    // Avec lundi/jeudi, l'article du mardi 3 est annoncé le mercredi 4 (jour libre)
+    const monThu = socialSlotsForMonth({
+      year: 2026,
+      month: 11,
+      today: TODAY,
+      articles: [{ id: "a1", publishAt: "2026-11-03T08:00:00Z" }],
+      postDays: [1, 4],
+    });
+    expect(monThu.find((s) => s.kind === "nouvel_article")?.date).toBe("2026-11-04");
+  });
+});
+
+describe("cleanSocialInstructions", () => {
+  it("normalise les retours à la ligne, retire les caractères de contrôle, resserre les espaces, plafonne", () => {
+    expect(cleanSocialInstructions("  Terminer par une question.\r\n\r\n\r\n\r\nNe jamais\tciter\u0007 de   tarif. \n")).toBe(
+      "Terminer par une question.\n\nNe jamais citer de tarif.",
+    );
+    expect(cleanSocialInstructions(null)).toBe("");
+    // Caractères invisibles (zéro-largeur, trait d'union conditionnel, BOM) et
+    // compatibilité Unicode (ligatures, pleine chasse) : un mot interdit ne se cache pas
+    expect(cleanSocialInstructions("gu\u200bé\u00adri\ufeffson \uff47arantie ﬁn")).toBe("guérison garantie fin");
+    expect(cleanSocialInstructions("   \n \n")).toBe("");
+    expect(cleanSocialInstructions("a".repeat(2000))).toHaveLength(SOCIAL_INSTRUCTIONS_MAX);
+    expect(SOCIAL_INSTRUCTIONS_MAX).toBe(1500);
   });
 });
 

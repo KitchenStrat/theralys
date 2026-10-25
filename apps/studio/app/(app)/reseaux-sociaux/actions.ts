@@ -3,13 +3,29 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, hasSocialMedia, socialPosts, type NewSocialPost, type PlanId } from "@theralys/db";
-import { checkEthicalCompliance, createSocialGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
 import {
+  getDb,
+  hasSocialMedia,
+  socialPosts,
+  socialSettings,
+  type NewSocialPost,
+  type PlanId,
+} from "@theralys/db";
+import {
+  checkEthicalCompliance,
+  checkSocialCompliance,
+  createSocialGenerator,
+  FORBIDDEN_PATTERNS,
+  SOCIAL_FORBIDDEN_PATTERNS,
+} from "@theralys/ai";
+import {
+  cleanSocialInstructions,
   EMPTY_SOCIAL_ASSETS,
   isoDay,
   monthRange,
+  normalizePostDays,
   SOCIAL_FORMATS,
+  SOCIAL_INSTRUCTIONS_MAX,
   SOCIAL_REQUESTS_PER_MONTH,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
@@ -22,8 +38,10 @@ import {
   recentSocialTopics,
   SOCIAL_HORIZON_DAYS,
   type DbTransaction,
+  isMissingSchemaError,
 } from "@/lib/social/data";
 import { ownedSocialPost } from "@/lib/social/post-access";
+import { getSocialSettings } from "@/lib/social/settings";
 
 const PATH = "/reseaux-sociaux";
 const NOT_INCLUDED = "Les contenus réseaux sociaux ne sont pas inclus dans votre formule.";
@@ -95,10 +113,13 @@ export async function planSocialMonth(
   const started = Date.now();
   const db = getDb();
   try {
+    // Réglages « Paramétrage » : jours de publication (créneaux), voix et consignes (brief)
+    const settings = await getSocialSettings(site.id);
+    const { postDays } = settings;
     // 1. Transaction courte : verrou + créneaux à pourvoir (lectures via tx)
     const initial = await db.transaction(async (tx) => {
       if (!(await tryLock(tx, key))) return null;
-      return loadSocialMonthState(tx, site.id, year, monthNumber, now);
+      return loadSocialMonthState(tx, site.id, year, monthNumber, now, postDays);
     });
     if (!initial) return { error: PLAN_IN_PROGRESS };
     if (initial.slots.length === 0) return { error: MONTH_OVER };
@@ -109,7 +130,7 @@ export async function planSocialMonth(
       .map((slot) => slot.articleId)
       .filter((id): id is string => typeof id === "string" && id !== "");
     const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
-      loadSocialBrief(site.id, { includeArticleIds: articleIds }),
+      loadSocialBrief(site.id, { includeArticleIds: articleIds, settings }),
       recentSocialTopics(site.id, now),
     ]);
     const generator = createSocialGenerator();
@@ -124,7 +145,7 @@ export async function planSocialMonth(
     // 3. Transaction courte : verrou repris, créneaux encore libres recalculés, insertion de ceux-là seulement
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
-      const { freeSlots } = await loadSocialMonthState(tx, site.id, year, monthNumber, now);
+      const { freeSlots } = await loadSocialMonthState(tx, site.id, year, monthNumber, now, postDays);
       const free = new Set(freeSlots.map((slot) => slot.date));
       const rows: NewSocialPost[] = [];
       for (const post of posts) {
@@ -139,7 +160,7 @@ export async function planSocialMonth(
           topic: post.topic,
           template: post.template,
           accentColor: null,
-          content: post.content,
+          content: { ...post.content, planDays: [...postDays] },
         });
       }
       if (rows.length === 0) {
@@ -188,8 +209,11 @@ const requestSchema = z.object({
 });
 
 /** Premier terme interdit du texte (pour le message), sinon null. */
-function forbiddenWord(text: string): string | null {
-  for (const { pattern } of FORBIDDEN_PATTERNS) {
+function forbiddenWord(
+  text: string,
+  patterns: readonly { pattern: RegExp }[] = FORBIDDEN_PATTERNS,
+): string | null {
+  for (const { pattern } of patterns) {
     pattern.lastIndex = 0;
     const match = pattern.exec(text);
     pattern.lastIndex = 0;
@@ -322,6 +346,104 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
         "La création a échoué — réessayez dans un instant. Votre demande n'a pas été décomptée.",
     };
   }
+}
+
+// ─── Paramétrage (voix, consignes, jours de publication) ─────────────────────
+
+const socialSettingsSchema = z.object({
+  designation: z.enum(["nous", "je", "on"]),
+  accord: z.enum(["feminin", "masculin"]),
+  reader: z.enum(["vous", "tu"]),
+  tone: z.enum(["chaleureux", "rassurant", "pose", "direct", "pedagogue"]),
+  instructions: z.string().trim().max(SOCIAL_INSTRUCTIONS_MAX),
+  postDays: z
+    .array(z.number().int().min(1).max(7))
+    .min(1)
+    .max(7)
+    .transform((days) => normalizePostDays(days)),
+});
+
+/**
+ * Enregistre les réglages « Paramétrage » du site (une ligne par site, créée
+ * ou mise à jour). Les consignes libres passent le garde-fou éthique et les
+ * règles sociales AVANT d'être stockées : un terme interdit est refusé avec
+ * le mot en cause (la modale reste sur l'étape « Vos consignes »). Les
+ * contenus déjà préparés ne changent pas : les réglages valent pour les
+ * prochaines préparations et demandes.
+ */
+export async function saveSocialSettings(
+  input: unknown,
+): Promise<{ error?: string; field?: "instructions" }> {
+  const session = await requireClient();
+  const parsed = socialSettingsSchema.safeParse(input);
+  if (!parsed.success) return { error: "Réglages invalides" };
+  const site = await getSite(session.siteId);
+  if (!socialAccess(site)) return { error: NOT_INCLUDED };
+
+  const instructions = cleanSocialInstructions(parsed.data.instructions);
+  if (instructions !== "") {
+    const refusal = instructionsRefusal(instructions);
+    if (refusal) return { error: refusal, field: "instructions" };
+  }
+
+  const { designation, accord, reader, tone, postDays } = parsed.data;
+  const values = {
+    voiceDesignation: designation,
+    voiceAccord: accord,
+    voiceReader: reader,
+    voiceTone: tone,
+    instructions: instructions === "" ? null : instructions,
+    postDays,
+    updatedAt: new Date(),
+  };
+  try {
+    await getDb()
+      .insert(socialSettings)
+      .values({ siteId: site.id, ...values })
+      .onConflictDoUpdate({ target: socialSettings.siteId, set: values });
+  } catch (err) {
+    if (isMissingSchemaError(err)) {
+      return { error: "L'option Paramétrage est en cours d'activation — réessayez dans quelques minutes." };
+    }
+    console.error("[social] enregistrement des réglages échoué", { siteId: site.id, err });
+    return { error: "L'enregistrement a échoué — réessayez dans un instant." };
+  }
+  revalidatePath(PATH);
+  return {};
+}
+
+/**
+ * Contrôle des consignes : on ne juge que ce que le praticien DEMANDE. Les
+ * phrases négatives (« Ne jamais promettre de guérison », « éviter… ») et les
+ * passages entre guillemets (« … ») sont des interdictions ou des citations,
+ * pas des consignes à reproduire ; le reste est vérifié en minuscules (la
+ * règle « majuscules criées » vise les légendes, pas un sigle dans une
+ * consigne). Message distinct pour le vocabulaire médical et les règles
+ * sociales ; null si tout est acceptable.
+ */
+function instructionsRefusal(instructions: string): string | null {
+  const NEGATION =
+    /\b(ne|n')\s*\S*\s*(pas|jamais|plus|rien|aucun|aucune)\b|\b(jamais|éviter|évitez|évite|sans|interdit|interdite|interdits|proscrire|proscrit|bannir|exclure|aucun|aucune|pas de)\b/i;
+  const judged = instructions
+    .replace(/«[^»]*»|"[^"\n]*"|“[^”]*”/g, " ")
+    .split(/(?<=[.!?;\n])\s+|\n/)
+    .filter((sentence) => sentence.trim() !== "" && !NEGATION.test(sentence))
+    .join(" ")
+    .toLowerCase();
+  if (judged.trim() === "") return null;
+  const ethical = checkEthicalCompliance(judged);
+  if (!ethical.ok) {
+    const word = forbiddenWord(judged, FORBIDDEN_PATTERNS) ?? ethical.violations[0]?.rule ?? "";
+    return `Vos consignes contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`;
+  }
+  const social = checkSocialCompliance(judged);
+  if (!social.ok) {
+    const rule = social.violations[0]?.rule ?? "";
+    const word = forbiddenWord(judged, SOCIAL_FORBIDDEN_PATTERNS) ?? rule;
+    const detail = rule === "" || rule.toLowerCase() === word.toLowerCase() ? `« ${word} »` : `« ${word} », ${rule}`;
+    return `Vos consignes contiennent une formulation que nous n'employons pas sur les réseaux (${detail}). Reformulez-la.`;
+  }
+  return null;
 }
 
 // ─── Actions sur un contenu ──────────────────────────────────────────────────

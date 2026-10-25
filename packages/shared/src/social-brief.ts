@@ -11,7 +11,12 @@
 
 import type { Section, SiteTheme } from "./content";
 import { futureBodyText } from "./content";
-import { DEFAULT_SOCIAL_VOICE, type SocialSourceRef, type SocialVoice } from "./social";
+import {
+  DEFAULT_SOCIAL_VOICE,
+  cleanSocialInstructions,
+  type SocialSourceRef,
+  type SocialVoice,
+} from "./social";
 import { plainText, stripEmoji, truncateAtSentence, truncateAtWord } from "./social-text";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -71,6 +76,12 @@ export type SocialSiteBrief = {
     gender: "feminin" | "masculin";
   };
   voice: SocialVoice;
+  /**
+   * Consignes libres du praticien (« Paramétrage », ≤ 1 500 caractères,
+   * nettoyées) : transmises au générateur comme une donnée, hors plafond de
+   * taille du brief. Absentes si vides.
+   */
+  instructions?: string;
   siteType: "demo" | "client";
   siteName: string;
   /** siteUrl(site) sans protocole */
@@ -142,6 +153,8 @@ export type SocialBriefInput = {
   }[];
   reviews: { id: string; authorName: string; rating: number; text: string }[];
   voice: SocialVoice | null;
+  /** Consignes libres du praticien (social_settings.instructions), nettoyées par le brief */
+  instructions?: string | null;
   /** ex. « la sophrologie » (resolveProfession(profession).practiceName) */
   practiceName: string;
   /** Instant de référence pour `isUpcoming` (défaut : maintenant) */
@@ -752,6 +765,10 @@ export function buildSocialBrief(input: SocialBriefInput): SocialBriefResult {
   // Photos d'articles écartés : retirées de la liste (les ids restent stables)
   const keptArticlePhotos = new Set(brief.articles.map((a) => a.photoId).filter(Boolean));
   brief.photos = brief.photos.filter((p) => p.kind !== "article" || keptArticlePhotos.has(p.id));
+
+  // Consignes du praticien : ajoutées après le plafond (elles n'en font pas partie)
+  const instructions = cleanSocialInstructions(input.instructions);
+  if (instructions !== "") brief.instructions = instructions;
 
   return { brief, photosById: photos.byId, refsById };
 }
