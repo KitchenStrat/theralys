@@ -8,11 +8,49 @@ mots-clés Google, académie et éditeur de site (WYSIWYG).
 - `app/(app)/` — pages avec la barre latérale : Accueil, Publications,
   Réseaux sociaux, Mots-clés, Académie, Compte. L'éditeur n'apparaît pas dans
   la navigation : on y accède depuis la carte « Votre site » de l'Accueil.
-- `app/(editor)/editor/` — éditeur plein écran des sections du site
-  (`section-fields.tsx` contient le champ Paragraphe WYSIWYG : gras réel via
-  Ctrl+B, lignes ✅, sérialisé vers le format `**gras**` stocké).
+- `app/(editor)/editor/` — éditeur plein écran du site (voir « Éditeur de
+  site » ci-dessous ; `section-fields.tsx` contient le champ Paragraphe
+  WYSIWYG : gras réel via Ctrl+B, lignes ✅, sérialisé vers le format
+  `**gras**` stocké).
 - `app/login/` — authentification par session (cookie signé, `lib/auth.ts`).
 - `middleware.ts` — protège toutes les routes hors login.
+
+## Éditeur de site
+
+`app/(editor)/editor/` : l'aperçu est le vrai site public dans une iframe
+(jeton signé `?apercu=`, cf. `apps/sites/middleware.ts`) ; chaque section y est
+cliquable (pont postMessage `hy:hello` / `hy:ready` / `hy:select` / `hy:focus` /
+`hy:theme`, `apps/sites/components/editor-bridge.tsx`). Trois panneaux :
+
+- **Pages** (`pages-panel.tsx`, helpers purs dans `lib/editor/page-groups.ts`) :
+  accueil (toujours en ligne), pages de spécialité (statut Activé/Désactivé,
+  compteur, menu ⋯ : Modifier le titre sans changer l'URL, Référencement,
+  Changer de spécialité = régénération IA, Supprimer), « Ajouter une page »
+  (sujet libre, génération IA asynchrone via `after()` : la page existe tout de
+  suite, désactivée et sans section, état dans `theme.generatingMotifs` ; le
+  site public ne sert jamais une page sans section ; une génération de plus de
+  10 min est considérée en échec, relance ou suppression proposées), page
+  introuvable personnalisable (`theme.notFound`) et pages légales générées
+  (`@theralys/shared` `legal-pages.ts`, aperçu seulement). Plafond de pages :
+  `canAddMotifPage` recompté sous verrou de la ligne `sites`.
+- **Contenu** (`section-fields.tsx`) : formulaires par section avec
+  interrupteur « Visible sur cette page » (`hidden`, section conservée mais
+  non rendue), compteurs de caractères (`SECTION_LIMITS`), réordonnancement
+  ↑↓ des listes (`lib/editor/move-item.ts`), sélecteur d'icônes avec recherche
+  (`searchSectionIcons`), horaires, note Google. Une section héritée de
+  l'accueil (avis, contact d'une page de spécialité) renvoie vers l'accueil.
+- **Style** : inchangé (teinte, intensité, polices, coins, ambiance).
+
+Paramètres (modale) : Identité, Logo, Aperçu du lien, Icône du navigateur,
+Rendez-vous & téléphone, Fiche Google, Cabinets, Tracking, **Informations
+légales** (`theme.legal`, alimente les pages légales), **Réseaux sociaux** et
+**Texte du pied de page** (`theme.social`, `theme.footer`). L'URL reflète
+l'état (`?page=<id>`, `?section=<type>`, `?surface=settings&tab=<id>`).
+Aperçu Ordinateur (rendu 1280 px réduit à l'échelle) / Tablette / Mobile ;
+garde `beforeunload` sur les modifications non publiées. Toutes les écritures
+du JSONB `sites.theme` passent par `updateSiteTheme` (transaction + `SELECT …
+FOR UPDATE`) pour ne jamais s'écraser entre elles (réglages, fin de
+génération asynchrone, activation d'une page).
 
 ## Réseaux sociaux
 

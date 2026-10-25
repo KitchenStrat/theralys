@@ -3,6 +3,7 @@ import {
   buildLegalPage,
   buildLegalPages,
   configuredTrackers,
+  formatSiret,
   isLegalPageSlug,
   LEGAL_PAGES,
   type LegalPageInput,
@@ -56,7 +57,7 @@ describe("pages légales générées", () => {
       bookingUrl: "https://www.doctolib.fr/sophrologue/albi/claire",
       legal: {
         legalForm: "Entrepreneur individuel",
-        siret: "123 456 789 00012",
+        siret: "12345678900012",
         registration: "ADELI 81 00 0000 0",
         email: "contact@claire-dupont.fr",
         mediatorName: "CM2C",
@@ -105,6 +106,14 @@ describe("pages légales générées", () => {
     expect(off).toContain("bandeau de consentement est désactivé");
     expect(off).toContain("chargés dès votre arrivée");
     expect(off).not.toContain("Gérer les cookies");
+  });
+
+  it("formatSiret : 14 ou 9 chiffres groupés, sinon valeur telle quelle", () => {
+    expect(formatSiret("12345678900012")).toBe("123 456 789 00012");
+    expect(formatSiret("123 456 789 00012")).toBe("123 456 789 00012");
+    expect(formatSiret("123456789")).toBe("123 456 789");
+    expect(formatSiret(" RCS Albi 123 ")).toBe("RCS Albi 123");
+    expect(formatSiret(undefined)).toBe("");
   });
 
   it("configuredTrackers : un outil par identifiant renseigné, dans un ordre stable", () => {

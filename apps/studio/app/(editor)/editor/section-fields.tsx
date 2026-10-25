@@ -9,24 +9,28 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { SECTION_ICONS, SECTION_ICON_LABELS, futureBodyText, specialtyIconFor, type Section } from "@theralys/shared";
+import { clsx } from "clsx";
+import {
+  SECTION_ICONS,
+  SECTION_ICON_CATEGORIES,
+  SECTION_ICON_CATEGORY,
+  SECTION_ICON_LABELS,
+  sectionIconMarkup,
+  SECTION_LABELS,
+  SECTION_LIMITS,
+  futureBodyText,
+  searchSectionIcons,
+  specialtyIconFor,
+  type Section,
+  type SectionIconCategory,
+  type SectionIconName,
+} from "@theralys/shared";
+import { moveItem } from "@/lib/editor/move-item";
 import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
 
-/** Libellés des sections, partagés avec l'accordéon de l'éditeur. */
-export const SECTION_LABELS: Record<Section["type"], string> = {
-  hero: "En-tête (hero)",
-  highlights: "Points forts",
-  specialties: "Spécialités",
-  future: "Projection vers l'avenir",
-  about: "À propos",
-  reviews: "Avis Google",
-  process: "Déroulement d'une séance",
-  faq: "Questions fréquentes",
-  contact: "Contact",
-  richText: "Contenu de la page",
-  cta: "Bandeau d'appel à l'action",
-};
+/** Libellés des sections : source partagée avec le site public (étiquettes de l'aperçu). */
+export { SECTION_LABELS };
 
 /**
  * Édition structurée d'une section : champs prédéfinis par type de section
@@ -36,22 +40,31 @@ export function SectionFields({
   section,
   onChange,
   onPageRegenerated,
+  googleConnected = false,
 }: {
   section: Section;
   onChange: (patch: Partial<Section>) => void;
   /** Appelé après la régénération d'une page de spécialité (rafraîchit l'aperçu). */
   onPageRegenerated?: () => void;
+  /** Fiche Google reliée : propose le badge « note Google » du hero */
+  googleConnected?: boolean;
 }) {
   switch (section.type) {
-    case "hero":
+    case "hero": {
+      const stats = section.stats ?? [];
       return (
-        <SectionBox title="En-tête (hero)">
-          <Field label="Badge local">
-            <TextInput value={section.badge ?? ""} onChange={(badge) => onChange({ badge })} />
+        <SectionBox>
+          <Field label="Badge local" length={(section.badge ?? "").length} limit={SECTION_LIMITS.badge}>
+            <TextInput
+              value={section.badge ?? ""}
+              limit={SECTION_LIMITS.badge}
+              onChange={(badge) => onChange({ badge })}
+            />
           </Field>
           <RichField
             label="Titre principal (H1)"
             minHeight="min-h-16"
+            limit={SECTION_LIMITS.title}
             value={section.title}
             onChange={(title) => onChange({ title })}
           />
@@ -61,57 +74,89 @@ export function SectionFields({
             value={section.imageUrl ?? ""}
             onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
           />
-          <Field label="Texte du bouton">
-            <TextInput value={section.ctaLabel ?? ""} onChange={(ctaLabel) => onChange({ ctaLabel })} />
+          <Field
+            label="Texte du bouton"
+            length={(section.ctaLabel ?? "").length}
+            limit={SECTION_LIMITS.buttonLabel}
+          >
+            <TextInput
+              value={section.ctaLabel ?? ""}
+              limit={SECTION_LIMITS.buttonLabel}
+              onChange={(ctaLabel) => onChange({ ctaLabel })}
+            />
           </Field>
+          {googleConnected ? (
+            <SwitchRow
+              label="Afficher la note Google"
+              hint="Badge « ★ note/5 · avis Google » sous le titre, d'après votre fiche reliée."
+              checked={section.showGoogleRating === true}
+              onChange={(showGoogleRating) => onChange({ showGoogleRating })}
+            />
+          ) : null}
           <p className="text-xs font-medium text-ink-700">Badges chiffrés sur la photo</p>
-          {(section.stats ?? []).map((stat, i) => {
-            const stats = section.stats ?? [];
-            return (
-              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
-                <IconField
-                  value={stat.icon}
-                  onChange={(icon) =>
-                    onChange({ stats: stats.map((s, j) => (j === i ? { ...s, icon } : s)) })
-                  }
+          {stats.map((stat, i) => (
+            <ListItem
+              key={i}
+              label={`Badge ${i + 1}`}
+              index={i}
+              count={stats.length}
+              onMove={(to) => onChange({ stats: moveItem(stats, i, to) })}
+              removeLabel="Supprimer ce badge"
+              onRemove={() => onChange({ stats: stats.filter((_, j) => j !== i) })}
+            >
+              <IconField
+                value={stat.icon}
+                onChange={(icon) => onChange({ stats: stats.map((s, j) => (j === i ? { ...s, icon } : s)) })}
+              />
+              <Field
+                label="Chiffre / valeur (ex. « +300 », « 7j/7 »)"
+                length={stat.value.length}
+                limit={SECTION_LIMITS.statValue}
+              >
+                <TextInput
+                  value={stat.value}
+                  limit={SECTION_LIMITS.statValue}
+                  onChange={(value) => onChange({ stats: stats.map((s, j) => (j === i ? { ...s, value } : s)) })}
                 />
-                <Field label="Chiffre / valeur (ex. « +300 », « 7j/7 »)">
-                  <TextInput
-                    value={stat.value}
-                    onChange={(value) =>
-                      onChange({ stats: stats.map((s, j) => (j === i ? { ...s, value } : s)) })
-                    }
-                  />
-                </Field>
-                <Field label="Légende (ex. « Patients accompagnés »)">
-                  <TextInput
-                    value={stat.label}
-                    onChange={(label) =>
-                      onChange({ stats: stats.map((s, j) => (j === i ? { ...s, label } : s)) })
-                    }
-                  />
-                </Field>
-                <RemoveButton
-                  label="Supprimer ce badge"
-                  onClick={() => onChange({ stats: stats.filter((_, j) => j !== i) })}
+              </Field>
+              <Field
+                label="Légende (ex. « Patients accompagnés »)"
+                length={stat.label.length}
+                limit={SECTION_LIMITS.statLabel}
+              >
+                <TextInput
+                  value={stat.label}
+                  limit={SECTION_LIMITS.statLabel}
+                  onChange={(label) => onChange({ stats: stats.map((s, j) => (j === i ? { ...s, label } : s)) })}
                 />
-              </div>
-            );
-          })}
+              </Field>
+            </ListItem>
+          ))}
           <AddButton
             label="+ Ajouter un badge chiffré"
-            onClick={() =>
-              onChange({ stats: [...(section.stats ?? []), { icon: "etoile", value: "", label: "" }] })
-            }
+            onClick={() => onChange({ stats: [...stats, { icon: "etoile", value: "", label: "" }] })}
           />
         </SectionBox>
       );
+    }
 
     case "highlights":
       return (
-        <SectionBox title="Points forts">
+        <SectionBox>
           {section.items.map((item, i) => (
-            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+            <ListItem
+              key={i}
+              label={`Point fort ${i + 1}`}
+              index={i}
+              count={section.items.length}
+              onMove={(to) => onChange({ items: moveItem(section.items, i, to) })}
+              removeLabel="Supprimer ce point fort"
+              onRemove={
+                section.items.length > 1
+                  ? () => onChange({ items: section.items.filter((_, j) => j !== i) })
+                  : undefined
+              }
+            >
               <IconField
                 value={item.icon}
                 onChange={(icon) =>
@@ -119,7 +164,8 @@ export function SectionFields({
                 }
               />
               <RichField
-                label={`Point fort ${i + 1} — titre`}
+                label="Titre"
+                limit={SECTION_LIMITS.cardTitle}
                 value={item.title}
                 onChange={(title) =>
                   onChange({ items: section.items.map((it, j) => (j === i ? { ...it, title } : it)) })
@@ -127,18 +173,13 @@ export function SectionFields({
               />
               <RichField
                 label="Texte (1 phrase courte)"
+                limit={SECTION_LIMITS.cardText}
                 value={item.text ?? ""}
                 onChange={(text) =>
                   onChange({ items: section.items.map((it, j) => (j === i ? { ...it, text } : it)) })
                 }
               />
-              {section.items.length > 1 ? (
-                <RemoveButton
-                  label="Supprimer ce point fort"
-                  onClick={() => onChange({ items: section.items.filter((_, j) => j !== i) })}
-                />
-              ) : null}
-            </div>
+            </ListItem>
           ))}
           <AddButton
             label="+ Ajouter un point fort"
@@ -151,16 +192,28 @@ export function SectionFields({
 
     case "specialties":
       return (
-        <SectionBox title="Spécialités">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           <RichField
             label="Introduction"
             minHeight="min-h-16"
+            limit={SECTION_LIMITS.excerpt}
             value={section.intro ?? ""}
             onChange={(intro) => onChange({ intro })}
           />
           {section.items.map((item, i) => (
-            <div key={item.slug} className="space-y-3 rounded-xl bg-cream-100 p-3">
+            <ListItem
+              key={item.slug}
+              label={`Spécialité ${i + 1}`}
+              index={i}
+              count={section.items.length}
+              onMove={(to) => onChange({ items: moveItem(section.items, i, to) })}
+            >
               <IconField
                 value={item.icon ?? specialtyIconFor(item.title, i)}
                 onChange={(icon) =>
@@ -168,7 +221,8 @@ export function SectionFields({
                 }
               />
               <RichField
-                label={`Spécialité ${i + 1} — titre`}
+                label="Titre"
+                limit={SECTION_LIMITS.cardTitle}
                 value={item.title}
                 onChange={(title) =>
                   onChange({ items: section.items.map((it, j) => (j === i ? { ...it, title } : it)) })
@@ -177,6 +231,7 @@ export function SectionFields({
               <RichField
                 label="Résumé de la carte"
                 minHeight="min-h-16"
+                limit={SECTION_LIMITS.excerpt}
                 value={item.excerpt}
                 onChange={(excerpt) =>
                   onChange({
@@ -190,20 +245,29 @@ export function SectionFields({
                 excerpt={item.excerpt}
                 onDone={onPageRegenerated}
               />
-            </div>
+            </ListItem>
           ))}
         </SectionBox>
       );
 
     case "future":
       return (
-        <SectionBox title="Projection vers l'avenir">
-          <Field label="Badge (ex. « Santé & Équilibre »)">
-            <TextInput value={section.badge ?? ""} onChange={(badge) => onChange({ badge })} />
+        <SectionBox>
+          <Field
+            label="Badge (ex. « Santé & Équilibre »)"
+            length={(section.badge ?? "").length}
+            limit={SECTION_LIMITS.badge}
+          >
+            <TextInput
+              value={section.badge ?? ""}
+              limit={SECTION_LIMITS.badge}
+              onChange={(badge) => onChange({ badge })}
+            />
           </Field>
           <RichField
             label="Titre (question projective)"
             minHeight="min-h-16"
+            limit={SECTION_LIMITS.title}
             value={section.title}
             onChange={(title) => onChange({ title })}
           />
@@ -211,6 +275,7 @@ export function SectionFields({
             label="Texte (introduction + liste à puces)"
             multiline
             minHeight="min-h-48"
+            limit={SECTION_LIMITS.body}
             value={futureBodyText(section)}
             onChange={(body) => onChange({ body })}
             hint="💡 Une ligne par bénéfice via le bouton liste à puces · B : le début de ligne en gras · la première ligne sert d'introduction"
@@ -220,16 +285,30 @@ export function SectionFields({
             value={section.imageUrl ?? ""}
             onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
           />
-          <Field label="Texte du bouton">
-            <TextInput value={section.ctaLabel ?? ""} onChange={(ctaLabel) => onChange({ ctaLabel })} />
+          <Field
+            label="Texte du bouton"
+            length={(section.ctaLabel ?? "").length}
+            limit={SECTION_LIMITS.buttonLabel}
+          >
+            <TextInput
+              value={section.ctaLabel ?? ""}
+              limit={SECTION_LIMITS.buttonLabel}
+              onChange={(ctaLabel) => onChange({ ctaLabel })}
+            />
           </Field>
         </SectionBox>
       );
 
-    case "about":
+    case "about": {
+      const cards = section.infoCards ?? [];
       return (
-        <SectionBox title="À propos">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           <ParagraphsField paragraphs={section.paragraphs} onChange={(paragraphs) => onChange({ paragraphs })} />
           <ImageField
             label="Photo (votre portrait, votre cabinet…)"
@@ -237,54 +316,62 @@ export function SectionFields({
             onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
           />
           <p className="text-xs font-medium text-ink-700">Cartes infos pratiques (durée, tarifs…)</p>
-          {(section.infoCards ?? []).map((card, i) => {
-            const cards = section.infoCards ?? [];
-            return (
-              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
-                <IconField
-                  value={card.icon}
-                  onChange={(icon) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })
-                  }
-                />
-                <RichField
-                  label={`Carte ${i + 1} — titre`}
-                  value={card.title}
-                  onChange={(title) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
-                  }
-                />
-                <RichField
-                  label="Texte"
-                  multiline
-                  minHeight="min-h-16"
-                  value={card.text}
-                  onChange={(text) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
-                  }
-                />
-                <RemoveButton
-                  label="Supprimer cette carte"
-                  onClick={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
-                />
-              </div>
-            );
-          })}
+          {cards.map((card, i) => (
+            <ListItem
+              key={i}
+              label={`Carte ${i + 1}`}
+              index={i}
+              count={cards.length}
+              onMove={(to) => onChange({ infoCards: moveItem(cards, i, to) })}
+              removeLabel="Supprimer cette carte"
+              onRemove={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
+            >
+              <IconField
+                value={card.icon}
+                onChange={(icon) => onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })}
+              />
+              <RichField
+                label="Titre"
+                limit={SECTION_LIMITS.cardTitle}
+                value={card.title}
+                onChange={(title) =>
+                  onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
+                }
+              />
+              <RichField
+                label="Texte"
+                multiline
+                minHeight="min-h-16"
+                limit={SECTION_LIMITS.cardText}
+                value={card.text}
+                onChange={(text) => onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })}
+              />
+            </ListItem>
+          ))}
           <AddButton
             label="+ Ajouter une carte info"
-            onClick={() =>
-              onChange({
-                infoCards: [...(section.infoCards ?? []), { icon: "horloge", title: "", text: "" }],
-              })
-            }
+            onClick={() => onChange({ infoCards: [...cards, { icon: "horloge", title: "", text: "" }] })}
           />
         </SectionBox>
       );
+    }
 
     case "reviews":
       return (
-        <SectionBox title="Avis Google">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
+          <RichField
+            label="Introduction (facultative)"
+            minHeight="min-h-16"
+            limit={SECTION_LIMITS.excerpt}
+            value={section.intro ?? ""}
+            onChange={(intro) => onChange({ intro })}
+          />
           <p className="text-xs text-ink-500">
             Les avis sont synchronisés depuis votre fiche Google.
           </p>
@@ -293,12 +380,30 @@ export function SectionFields({
 
     case "process":
       return (
-        <SectionBox title="Déroulement d'une séance">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           {section.steps.map((step, i) => (
-            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+            <ListItem
+              key={i}
+              label={`Étape ${i + 1}`}
+              index={i}
+              count={section.steps.length}
+              onMove={(to) => onChange({ steps: moveItem(section.steps, i, to) })}
+              removeLabel="Supprimer cette étape"
+              onRemove={
+                section.steps.length > 1
+                  ? () => onChange({ steps: section.steps.filter((_, j) => j !== i) })
+                  : undefined
+              }
+            >
               <RichField
-                label={`Étape ${i + 1} — titre`}
+                label="Titre"
+                limit={SECTION_LIMITS.stepTitle}
                 value={step.title}
                 onChange={(title) =>
                   onChange({ steps: section.steps.map((s, j) => (j === i ? { ...s, title } : s)) })
@@ -308,6 +413,7 @@ export function SectionFields({
                 label="Description"
                 multiline
                 minHeight="min-h-20"
+                limit={SECTION_LIMITS.stepDescription}
                 value={step.description}
                 onChange={(description) =>
                   onChange({
@@ -315,13 +421,7 @@ export function SectionFields({
                   })
                 }
               />
-              {section.steps.length > 1 ? (
-                <RemoveButton
-                  label="Supprimer cette étape"
-                  onClick={() => onChange({ steps: section.steps.filter((_, j) => j !== i) })}
-                />
-              ) : null}
-            </div>
+            </ListItem>
           ))}
           <AddButton
             label="+ Ajouter une étape"
@@ -332,12 +432,30 @@ export function SectionFields({
 
     case "faq":
       return (
-        <SectionBox title="Questions fréquentes">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           {section.items.map((item, i) => (
-            <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
+            <ListItem
+              key={i}
+              label={`Question ${i + 1}`}
+              index={i}
+              count={section.items.length}
+              onMove={(to) => onChange({ items: moveItem(section.items, i, to) })}
+              removeLabel="Supprimer cette question"
+              onRemove={
+                section.items.length > 1
+                  ? () => onChange({ items: section.items.filter((_, j) => j !== i) })
+                  : undefined
+              }
+            >
               <RichField
-                label={`Question ${i + 1}`}
+                label="Question"
+                limit={SECTION_LIMITS.faqQuestion}
                 value={item.question}
                 onChange={(question) =>
                   onChange({ items: section.items.map((it, j) => (j === i ? { ...it, question } : it)) })
@@ -347,18 +465,13 @@ export function SectionFields({
                 label="Réponse"
                 multiline
                 minHeight="min-h-20"
+                limit={SECTION_LIMITS.faqAnswer}
                 value={item.answer}
                 onChange={(answer) =>
                   onChange({ items: section.items.map((it, j) => (j === i ? { ...it, answer } : it)) })
                 }
               />
-              {section.items.length > 1 ? (
-                <RemoveButton
-                  label="Supprimer cette question"
-                  onClick={() => onChange({ items: section.items.filter((_, j) => j !== i) })}
-                />
-              ) : null}
-            </div>
+            </ListItem>
           ))}
           <AddButton
             label="+ Ajouter une question"
@@ -367,10 +480,17 @@ export function SectionFields({
         </SectionBox>
       );
 
-    case "contact":
+    case "contact": {
+      const hours = section.hours ?? [];
+      const cards = section.infoCards ?? [];
       return (
-        <SectionBox title="Contact">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           <Field label="Adresse">
             <TextInput value={section.address ?? ""} onChange={(address) => onChange({ address })} />
           </Field>
@@ -382,6 +502,7 @@ export function SectionFields({
           </Field>
           <RichField
             label="Note pratique (parking, accès…)"
+            limit={SECTION_LIMITS.note}
             value={section.note ?? ""}
             onChange={(note) => onChange({ note })}
           />
@@ -389,55 +510,93 @@ export function SectionFields({
             La carte interactive et l&apos;encart « Le cabinet » utilisent votre fiche Google
             (onglet Paramètres) ou, à défaut, l&apos;adresse ci-dessus.
           </p>
-          <p className="text-xs font-medium text-ink-700">Cartes de rappel (expérience, accès…)</p>
-          {(section.infoCards ?? []).map((card, i) => {
-            const cards = section.infoCards ?? [];
-            return (
-              <div key={i} className="space-y-3 rounded-xl bg-cream-100 p-3">
-                <IconField
-                  value={card.icon}
-                  onChange={(icon) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })
-                  }
-                />
-                <RichField
-                  label={`Carte ${i + 1} — titre`}
-                  value={card.title}
-                  onChange={(title) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
-                  }
-                />
-                <RichField
-                  label="Texte"
-                  minHeight="min-h-16"
-                  value={card.text}
-                  onChange={(text) =>
-                    onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })
-                  }
-                />
-                <RemoveButton
-                  label="Supprimer cette carte"
-                  onClick={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
-                />
+
+          <p className="text-xs font-medium text-ink-700">Horaires</p>
+          {hours.map((slot, i) => (
+            <ListItem
+              key={i}
+              label={`Horaire ${i + 1}`}
+              index={i}
+              count={hours.length}
+              onMove={(to) => onChange({ hours: moveItem(hours, i, to) })}
+              removeLabel="Supprimer cet horaire"
+              onRemove={() => onChange({ hours: hours.filter((_, j) => j !== i) })}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Jours" length={slot.label.length} limit={SECTION_LIMITS.hoursLabel}>
+                  <TextInput
+                    value={slot.label}
+                    placeholder="Lundi – Vendredi"
+                    limit={SECTION_LIMITS.hoursLabel}
+                    onChange={(label) => onChange({ hours: hours.map((h, j) => (j === i ? { ...h, label } : h)) })}
+                  />
+                </Field>
+                <Field label="Heures" length={slot.value.length} limit={SECTION_LIMITS.hoursValue}>
+                  <TextInput
+                    value={slot.value}
+                    placeholder="9h – 19h"
+                    limit={SECTION_LIMITS.hoursValue}
+                    onChange={(value) => onChange({ hours: hours.map((h, j) => (j === i ? { ...h, value } : h)) })}
+                  />
+                </Field>
               </div>
-            );
-          })}
+            </ListItem>
+          ))}
+          <AddButton
+            label="+ Ajouter un horaire"
+            onClick={() => onChange({ hours: [...hours, { label: "", value: "" }] })}
+          />
+
+          <p className="text-xs font-medium text-ink-700">Cartes de rappel (expérience, accès…)</p>
+          {cards.map((card, i) => (
+            <ListItem
+              key={i}
+              label={`Carte ${i + 1}`}
+              index={i}
+              count={cards.length}
+              onMove={(to) => onChange({ infoCards: moveItem(cards, i, to) })}
+              removeLabel="Supprimer cette carte"
+              onRemove={() => onChange({ infoCards: cards.filter((_, j) => j !== i) })}
+            >
+              <IconField
+                value={card.icon}
+                onChange={(icon) => onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, icon } : c)) })}
+              />
+              <RichField
+                label="Titre"
+                limit={SECTION_LIMITS.cardTitle}
+                value={card.title}
+                onChange={(title) =>
+                  onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, title } : c)) })
+                }
+              />
+              <RichField
+                label="Texte"
+                minHeight="min-h-16"
+                limit={SECTION_LIMITS.cardText}
+                value={card.text}
+                onChange={(text) => onChange({ infoCards: cards.map((c, j) => (j === i ? { ...c, text } : c)) })}
+              />
+            </ListItem>
+          ))}
           <AddButton
             label="+ Ajouter une carte"
-            onClick={() =>
-              onChange({
-                infoCards: [...(section.infoCards ?? []), { icon: "medaille", title: "", text: "" }],
-              })
-            }
+            onClick={() => onChange({ infoCards: [...cards, { icon: "medaille", title: "", text: "" }] })}
           />
         </SectionBox>
       );
+    }
 
     case "richText":
       return (
-        <SectionBox title="Contenu de la page">
+        <SectionBox>
           {section.title !== undefined ? (
-            <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+            <RichField
+              label="Titre"
+              limit={SECTION_LIMITS.title}
+              value={section.title}
+              onChange={(title) => onChange({ title })}
+            />
           ) : null}
           <RichField
             label="Texte de la page"
@@ -453,17 +612,27 @@ export function SectionFields({
 
     case "cta":
       return (
-        <SectionBox title="Bandeau d'appel à l'action">
-          <RichField label="Titre" value={section.title} onChange={(title) => onChange({ title })} />
+        <SectionBox>
+          <RichField
+            label="Titre"
+            limit={SECTION_LIMITS.title}
+            value={section.title}
+            onChange={(title) => onChange({ title })}
+          />
           <RichField
             label="Texte"
             multiline
             minHeight="min-h-16"
+            limit={SECTION_LIMITS.excerpt}
             value={section.body ?? ""}
             onChange={(body) => onChange({ body })}
           />
-          <Field label="Texte du bouton">
-            <TextInput value={section.buttonLabel} onChange={(buttonLabel) => onChange({ buttonLabel })} />
+          <Field label="Texte du bouton" length={section.buttonLabel.length} limit={SECTION_LIMITS.buttonLabel}>
+            <TextInput
+              value={section.buttonLabel}
+              limit={SECTION_LIMITS.buttonLabel}
+              onChange={(buttonLabel) => onChange({ buttonLabel })}
+            />
           </Field>
         </SectionBox>
       );
@@ -473,8 +642,331 @@ export function SectionFields({
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
 /** Le titre est porté par l'accordéon de l'éditeur (SiteEditor). */
-function SectionBox({ children }: { title?: string; children: ReactNode }) {
+function SectionBox({ children }: { children: ReactNode }) {
   return <div className="space-y-3">{children}</div>;
+}
+
+/**
+ * Compteur de caractères « 52 / 60 » : repère de lisibilité (SECTION_LIMITS),
+ * orange au-delà — la saisie n'est pas bloquée (maxLength = limite × 1,5).
+ */
+export function CharCounter({ length, limit }: { length: number; limit: number }) {
+  const over = length > limit;
+  return (
+    <span
+      aria-live="polite"
+      className={clsx("shrink-0 text-[11px] tabular-nums", over ? "font-semibold text-amber-600" : "text-ink-500")}
+      title={over ? `Au-delà de la longueur conseillée (${limit} caractères)` : `Longueur conseillée : ${limit} caractères`}
+    >
+      {length} / {limit}
+    </span>
+  );
+}
+
+/** `maxLength` tolérant : 1,5 × la longueur conseillée, pour ne jamais bloquer une saisie en cours. */
+export function softMaxLength(limit: number): number {
+  return Math.ceil(limit * 1.5);
+}
+
+/** Interrupteur accessible (role="switch") — cartes de l'accordéon, paramètres. */
+export function ToggleSwitch({
+  checked,
+  label,
+  onChange,
+  size = "md",
+  className,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const small = size === "sm";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!checked);
+      }}
+      className={clsx(
+        "relative shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300",
+        small ? "h-5 w-9" : "h-6 w-11",
+        checked ? "bg-primary-500" : "bg-ink-300",
+        className,
+      )}
+    >
+      <span
+        aria-hidden
+        className={clsx(
+          "absolute top-0.5 rounded-full bg-white shadow transition-[left]",
+          small ? "h-4 w-4" : "h-5 w-5",
+          checked ? (small ? "left-[18px]" : "left-[22px]") : "left-0.5",
+        )}
+      />
+    </button>
+  );
+}
+
+/** Ligne « libellé + explication + interrupteur » dans un formulaire de section. */
+function SwitchRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-cream-100 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-ink-700">{label}</p>
+        {hint ? <p className="mt-0.5 text-[11px] text-ink-500">{hint}</p> : null}
+      </div>
+      <ToggleSwitch checked={checked} label={label} onChange={onChange} size="sm" />
+    </div>
+  );
+}
+
+/**
+ * Élément d'une liste ordonnée (badge, point fort, étape, question, horaire,
+ * carte) : en-tête avec flèches ↑↓ de réordonnancement, champs, suppression.
+ */
+function ListItem({
+  label,
+  index,
+  count,
+  onMove,
+  removeLabel,
+  onRemove,
+  children,
+}: {
+  label: string;
+  index: number;
+  count: number;
+  onMove: (to: number) => void;
+  removeLabel?: string;
+  onRemove?: () => void;
+  children: ReactNode;
+}) {
+  const arrow =
+    "flex h-6 w-6 items-center justify-center rounded-md border border-ink-300 bg-white text-xs text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-ink-300 disabled:hover:text-ink-700";
+  return (
+    <div className="space-y-3 rounded-xl bg-cream-100 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-ink-700">{label}</p>
+        {count > 1 ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={`Monter : ${label}`}
+              title="Monter"
+              disabled={index === 0}
+              onClick={() => onMove(index - 1)}
+              className={arrow}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              aria-label={`Descendre : ${label}`}
+              title="Descendre"
+              disabled={index === count - 1}
+              onClick={() => onMove(index + 1)}
+              className={arrow}
+            >
+              ↓
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {children}
+      {onRemove && removeLabel ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
+    </div>
+  );
+}
+
+/** Dessin d'une icône de la bibliothèque partagée (balisage du dépôt, jamais de saisie utilisateur). */
+export function IconGlyph({
+  name,
+  size = 20,
+  className,
+}: {
+  name: SectionIconName;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      aria-hidden
+      className={className}
+    >
+      <g dangerouslySetInnerHTML={{ __html: sectionIconMarkup(name) }} />
+    </svg>
+  );
+}
+
+function isIconName(value: string | undefined): value is SectionIconName {
+  return value !== undefined && (SECTION_ICONS as readonly string[]).includes(value);
+}
+
+/**
+ * Choix d'une icône d'encart : bouton (icône courante + libellé) ouvrant un
+ * sélecteur — recherche, catégories, grille — utilisable au clavier
+ * (Échap ferme, chaque icône est un bouton nommé).
+ */
+export function IconField({
+  value,
+  onChange,
+  label = "Icône",
+}: {
+  value: string | undefined;
+  onChange: (value: string) => void;
+  label?: string;
+}) {
+  const current: SectionIconName = isIconName(value) ? value : "coeur";
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  return (
+    <Field label={label}>
+      <div ref={rootRef} className="relative">
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label={`${label} : ${SECTION_ICON_LABELS[current]} — changer`}
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-2.5 rounded-xl border border-ink-300 bg-white px-3 py-2 text-left text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+            <IconGlyph name={current} size={18} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{SECTION_ICON_LABELS[current]}</span>
+          <span aria-hidden className={clsx("text-ink-500 transition-transform", open && "rotate-180")}>
+            ⌄
+          </span>
+        </button>
+        {open ? (
+          <IconPickerPopover
+            value={current}
+            onSelect={(name) => {
+              onChange(name);
+              setOpen(false);
+            }}
+          />
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
+function IconPickerPopover({
+  value,
+  onSelect,
+}: {
+  value: SectionIconName;
+  onSelect: (name: SectionIconName) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<SectionIconCategory | null>(null);
+  const results = searchSectionIcons(query, category);
+  const chip = (active: boolean) =>
+    clsx(
+      "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+      active ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-700 hover:bg-cream-200",
+    );
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Choisir une icône"
+      className="absolute -left-1 -right-1 top-full z-30 mt-1 rounded-xl border border-cream-300 bg-white p-3 shadow-lg"
+    >
+      <input
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Rechercher (sommeil, tarif, dos…)"
+        aria-label="Rechercher une icône"
+        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      />
+      <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Catégories">
+        <button type="button" aria-pressed={category === null} onClick={() => setCategory(null)} className={chip(category === null)}>
+          Toutes
+        </button>
+        {SECTION_ICON_CATEGORIES.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={category === c.id}
+            onClick={() => setCategory(category === c.id ? null : c.id)}
+            className={chip(category === c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      {results.length > 0 ? (
+        <div className="mt-2 grid grid-cols-6 gap-1" role="listbox" aria-label="Icônes">
+          {results.map((name) => (
+            <button
+              key={name}
+              type="button"
+              role="option"
+              aria-selected={name === value}
+              aria-label={SECTION_ICON_LABELS[name]}
+              title={`${SECTION_ICON_LABELS[name]} · ${SECTION_ICON_CATEGORIES.find((c) => c.id === SECTION_ICON_CATEGORY[name])?.label ?? ""}`}
+              onClick={() => onSelect(name)}
+              className={clsx(
+                "flex aspect-square items-center justify-center rounded-xl border transition-colors",
+                name === value
+                  ? "border-primary-500 bg-primary-50 text-primary-600 ring-2 ring-primary-100"
+                  : "border-cream-300 text-ink-700 hover:border-primary-300 hover:bg-cream-50 hover:text-primary-600",
+              )}
+            >
+              <IconGlyph name={name} size={22} />
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-center text-xs text-ink-500">Aucune icône ne correspond à « {query.trim()} ».</p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -579,31 +1071,6 @@ function ImageField({
   );
 }
 
-/** Choix d'une icône d'encart parmi la bibliothèque partagée. */
-function IconField({
-  value,
-  onChange,
-}: {
-  value: string | undefined;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Field label="Icône">
-      <select
-        value={value && (SECTION_ICONS as readonly string[]).includes(value) ? value : "coeur"}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-      >
-        {SECTION_ICONS.map((name) => (
-          <option key={name} value={name}>
-            {SECTION_ICON_LABELS[name]}
-          </option>
-        ))}
-      </select>
-    </Field>
-  );
-}
-
 /**
  * Régénère la page de spécialité liée à une carte (titre modifié → nouveau
  * contenu IA + nouvelle photo, mêmes URL ; sujets d'articles re-planifiés).
@@ -675,10 +1142,24 @@ function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  length,
+  limit,
+  children,
+}: {
+  label: string;
+  /** Avec `limit` : compteur « n / limite » à droite du libellé */
+  length?: number;
+  limit?: number;
+  children: ReactNode;
+}) {
   return (
     <div>
-      <p className="mb-1 text-xs font-medium text-ink-700">{label}</p>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <p className="text-xs font-medium text-ink-700">{label}</p>
+        {limit !== undefined && length !== undefined ? <CharCounter length={length} limit={limit} /> : null}
+      </div>
       {children}
     </div>
   );
@@ -687,16 +1168,20 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function TextInput({
   value,
   placeholder,
+  limit,
   onChange,
 }: {
   value: string;
   placeholder?: string;
+  /** Longueur conseillée : la saisie est plafonnée à 1,5 × cette valeur */
+  limit?: number;
   onChange: (value: string) => void;
 }) {
   return (
     <input
       value={value}
       placeholder={placeholder}
+      maxLength={limit !== undefined ? softMaxLength(limit) : undefined}
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
     />
@@ -1344,6 +1829,7 @@ function RichField({
   headings = false,
   hint,
   minHeight = "min-h-10",
+  limit,
 }: {
   label: string;
   value: string;
@@ -1353,6 +1839,8 @@ function RichField({
   headings?: boolean;
   hint?: string;
   minHeight?: string;
+  /** Longueur conseillée : affiche un compteur (sans bloquer la saisie) */
+  limit?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const lastEmitted = useRef<string | null>(null);
@@ -1417,7 +1905,10 @@ function RichField({
   return (
     <div>
       <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-        <p className="text-xs font-medium text-ink-700">{label}</p>
+        <p className="flex items-baseline gap-2 text-xs font-medium text-ink-700">
+          {label}
+          {limit !== undefined ? <CharCounter length={value.length} limit={limit} /> : null}
+        </p>
         <RichToolbar getEl={() => ref.current} onApplied={emit} lists={multiline} headings={headings} />
       </div>
       <div

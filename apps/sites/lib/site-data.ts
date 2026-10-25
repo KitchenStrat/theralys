@@ -66,9 +66,10 @@ export async function getMotifPages(site: Site): Promise<Page[]> {
     where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
     orderBy: (p, { asc }) => [asc(p.position)],
   });
-  // Pages désactivées par le praticien : retirées partout (y compris démos)
+  // Pages désactivées par le praticien : retirées partout (y compris démos) ;
+  // une page sans section (création en cours depuis le studio) n'est jamais servie
   const disabledSlugs = new Set(site.theme.disabledMotifs ?? []);
-  const enabled = all.filter((p) => !disabledSlugs.has(p.slug));
+  const enabled = all.filter((p) => !disabledSlugs.has(p.slug) && p.sections.length > 0);
   // Les démos présentent toujours l'offre complète
   if (site.type === "demo") return enabled;
   return enabled.slice(0, motifPagesAllowance(site.plan));
@@ -88,7 +89,7 @@ export async function getMotifPage(
     const page = await db.query.pages.findFirst({
       where: and(eq(pages.siteId, site.id), eq(pages.type, "motif"), eq(pages.slug, slug)),
     });
-    return page ?? null;
+    return page && page.sections.length > 0 ? page : null;
   }
   return null;
 }

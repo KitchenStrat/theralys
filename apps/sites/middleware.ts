@@ -53,6 +53,10 @@ export async function middleware(request: NextRequest) {
 
   const preview = await previewSiteId(request);
   const requestHeaders = new Headers(request.headers);
+  // Jamais de confiance aux en-têtes x-hy-* entrants : un client pourrait
+  // sinon forger l'aperçu (pages désactivées, démo expirée) ou la clé du site
+  requestHeaders.delete("x-hy-preview");
+  requestHeaders.delete("x-hy-site");
   if (preview) requestHeaders.set("x-hy-preview", preview.siteId);
   // Clé du segment [site] (slug sur l'hôte de base, domaine sinon) : lue par
   // la page introuvable, qui ne reçoit pas les paramètres de route

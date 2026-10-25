@@ -4,13 +4,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Button, Spinner } from "@theralys/ui";
+import { Badge, Button, Segmented, Spinner } from "@theralys/ui";
+import type { PlanId } from "@theralys/db/plans";
 import {
+  FOOTER_SOCIAL_NETWORKS,
+  LEGAL_PAGES,
+  SECTION_LABELS,
   THEME_PRESETS,
   TRACKING_ID_PATTERNS,
+  isSectionType,
+  isSectionVisible,
   themeCssVars,
+  type GeneratingMotif,
   type Section,
+  type SectionType,
   type SiteCabinet,
+  type SiteLegal,
+  type SiteNotFound,
   type SiteTheme,
   type ThemePreset,
   type FontPreset,
@@ -26,14 +36,21 @@ import {
   searchGoogle,
   setMotifPageEnabled,
 } from "../../(app)/actions";
-import { SECTION_LABELS, SectionFields } from "./section-fields";
+import { isGenerationStale, type EditorPageRef } from "@/lib/editor/page-groups";
+import { previewPath, previewTargetForPage, type PreviewTarget } from "@/lib/editor/preview-path";
+import { socialUrlError, type SocialNetworkKey } from "@/lib/editor/social-links";
+import { PagesPanel } from "./pages-panel";
+import { CharCounter, SectionFields, ToggleSwitch } from "./section-fields";
 
-type PageRef = { id: string; type: string; slug: string; title: string };
+/** Informations légales telles que le formulaire les manipule (chaînes, jamais undefined). */
+type LegalForm = Record<keyof SiteLegal, string>;
+type SocialForm = Record<SocialNetworkKey, string>;
 
 type Props = {
   site: {
     id: string;
     name: string;
+    plan: PlanId;
     bookingUrl: string;
     themePreset: ThemePreset;
     fontPreset: FontPreset;
@@ -55,6 +72,8 @@ type Props = {
     shareImageUrl: string;
     /** Jeton signé d'aperçu (`?apercu=`) — vide si AUTH_SECRET est absente */
     previewToken: string;
+    /** Pages de spécialité en cours de génération (création depuis le studio) */
+    generatingMotifs: GeneratingMotif[];
   };
   city: string;
   /** Numéro affiché sur le site (source : section contact de l'accueil) */
@@ -75,12 +94,43 @@ type Props = {
     rating: number | null;
     reviewCount: number | null;
   } | null;
-  pages: PageRef[];
-  selectedPage: { id: string; type: string; slug: string; sections: Section[] } | null;
+  /** Fiche Google reliée (badge « note Google » du hero) */
+  googleConnected: boolean;
+  /** Identifiant de la page d'accueil (lien « Modifier sur l'accueil ») */
+  homePageId: string | null;
+  /** Cartes de la section Spécialités de l'accueil / plafond de la formule */
+  homeSpecialtiesCount: number;
+  homeSpecialtiesMax: number;
+  /** Page introuvable : valeurs effectives */
+  notFound: Required<SiteNotFound>;
+  legal: LegalForm;
+  social: SocialForm;
+  footer: { text: string; details: string };
+  pages: EditorPageRef[];
+  selectedPage: {
+    id: string;
+    type: string;
+    slug: string;
+    sections: Section[];
+    /** Contenu en préparation : pas d'édition des sections */
+    generating: boolean;
+  } | null;
 };
 
-type Panel = "contenu" | "style";
+type Panel = "pages" | "contenu" | "style";
 type StyleTab = "couleur" | "typo" | "forme";
+
+/** Largeurs de l'aperçu (null = toute la largeur disponible). */
+type PreviewWidth = "desktop" | "tablet" | "mobile";
+const PREVIEW_WIDTHS: Record<PreviewWidth, number | null> = { desktop: null, tablet: 820, mobile: 390 };
+/** Largeur de rendu du mode Ordinateur (réduite à l'échelle si le panneau est plus étroit). */
+const DESKTOP_PREVIEW_WIDTH = 1280;
+const PREVIEW_WIDTH_OPTIONS: { value: PreviewWidth; label: string }[] = [
+  { value: "desktop", label: "Ordinateur" },
+  { value: "tablet", label: "Tablette" },
+  { value: "mobile", label: "Mobile" },
+];
+
 
 /** Catégories de la fenêtre Paramètres (navigation de gauche). */
 type SettingsTab =
@@ -91,7 +141,10 @@ type SettingsTab =
   | "coordonnees"
   | "google"
   | "cabinets"
-  | "tracking";
+  | "tracking"
+  | "legal"
+  | "social"
+  | "footer";
 
 const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; label: string }[] }[] = [
   { group: "Profil", items: [{ id: "identite", icon: "👤", label: "Identité" }] },
@@ -112,6 +165,69 @@ const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; lab
     ],
   },
   { group: "Suivi", items: [{ id: "tracking", icon: "📊", label: "Tracking" }] },
+  { group: "Légal", items: [{ id: "legal", icon: "⚖️", label: "Informations légales" }] },
+  {
+    group: "Pied de page",
+    items: [
+      { id: "social", icon: "📱", label: "Réseaux sociaux" },
+      { id: "footer", icon: "📝", label: "Texte du pied de page" },
+    ],
+  },
+];
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+  return value !== null && SETTINGS_NAV.some((g) => g.items.some((i) => i.id === value));
+}
+
+/** Champs de la catégorie Informations légales. */
+const LEGAL_FIELDS: {
+  key: keyof SiteLegal;
+  label: string;
+  placeholder?: string;
+  hint?: string;
+  limit: number;
+  multiline?: boolean;
+  type?: "email" | "url";
+}[] = [
+  {
+    key: "legalForm",
+    label: "Forme juridique",
+    placeholder: "Entrepreneur individuel, SASU, EURL…",
+    limit: 80,
+  },
+  { key: "siret", label: "SIRET", placeholder: "123 456 789 00012", hint: "14 chiffres (ou SIREN à 9 chiffres).", limit: 20 },
+  {
+    key: "registration",
+    label: "Numéro d'enregistrement professionnel",
+    placeholder: "ADELI, RPPS, RCS…",
+    hint: "Facultatif selon votre profession.",
+    limit: 80,
+  },
+  {
+    key: "email",
+    label: "E-mail de contact publié",
+    placeholder: "contact@votre-cabinet.fr",
+    hint: "Affiché dans les mentions légales. À défaut, l'e-mail de la section Contact est utilisé.",
+    limit: 120,
+    type: "email",
+  },
+  { key: "mediatorName", label: "Médiateur de la consommation — nom", placeholder: "ex. CM2C, Medicys…", limit: 120 },
+  {
+    key: "mediatorUrl",
+    label: "Médiateur de la consommation — site",
+    placeholder: "https://…",
+    hint: "Adresse https:// du médiateur désigné (obligatoire pour les professionnels vendant à des particuliers).",
+    limit: 300,
+    type: "url",
+  },
+  {
+    key: "extra",
+    label: "Mentions complémentaires",
+    placeholder: "Assurance RC professionnelle, diplômes, adhésions…",
+    hint: "Texte libre ajouté en fin de mentions légales.",
+    limit: 2000,
+    multiline: true,
+  },
 ];
 
 /** Outils de la catégorie Tracking (interrupteur + identifiant). */
@@ -227,6 +343,14 @@ export function SiteEditor({
   seo,
   tracking,
   googleBusiness,
+  googleConnected,
+  homePageId,
+  homeSpecialtiesCount,
+  homeSpecialtiesMax,
+  notFound,
+  legal: legalProp,
+  social: socialProp,
+  footer: footerProp,
   pages,
   selectedPage,
 }: Props) {
@@ -236,8 +360,21 @@ export function SiteEditor({
   const [active, setActive] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Activation des pages de spécialité (optimiste, persistée côté serveur)
+  // Activation des pages de spécialité (optimiste, persistée côté serveur) —
+  // resynchronisée quand le serveur change l'état (page créée désactivée…)
   const [disabledMotifs, setDisabledMotifs] = useState<string[]>(site.disabledMotifs);
+  const disabledKey = site.disabledMotifs.join("|");
+  useEffect(() => {
+    setDisabledMotifs(disabledKey === "" ? [] : disabledKey.split("|"));
+  }, [disabledKey]);
+  // Informations légales, réseaux sociaux et pied de page (paramètres)
+  const [legal, setLegal] = useState<LegalForm>(legalProp);
+  const [social, setSocial] = useState<SocialForm>(socialProp);
+  const [footerText, setFooterText] = useState(footerProp.text);
+  const [footerDetails, setFooterDetails] = useState(footerProp.details);
+  const socialErrors = FOOTER_SOCIAL_NETWORKS.filter((n) => socialUrlError(n.key, social[n.key]) !== null).map(
+    (n) => n.key,
+  );
   // Cabinets supplémentaires (multi-cabinets), sauvegardés avec les paramètres
   const [cabinets, setCabinets] = useState<SiteCabinet[]>(site.cabinets);
   // Icône du navigateur ("" = logo Harmony)
@@ -290,21 +427,107 @@ export function SiteEditor({
     cookieBanner: boolean;
     trackingIds: Record<TrackerKey, string>;
     trackingEnabled: Record<TrackerKey, boolean>;
+    legal: LegalForm;
+    social: SocialForm;
+    footerText: string;
+    footerDetails: string;
   } | null>(null);
 
-  async function togglePageEnabled(slug: string, enabled: boolean) {
+  /** Active/désactive une page (optimiste) ; faux si le serveur a refusé. */
+  async function togglePageEnabled(slug: string, enabled: boolean): Promise<boolean> {
     setDisabledMotifs((prev) => (enabled ? prev.filter((s) => s !== slug) : [...prev, slug]));
     const result = await setMotifPageEnabled({ slug, enabled });
     if (result.error) {
       // Retour arrière si le serveur a refusé
       setDisabledMotifs((prev) => (enabled ? [...prev, slug] : prev.filter((s) => s !== slug)));
-      return;
+      return false;
     }
     setPreviewKey((k) => k + 1); // cartes de l'accueil et navigation changent
     router.refresh();
+    return true;
   }
   const [previewKey, setPreviewKey] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  // ── Aperçu : cible (page, page légale, 404) et largeur ───────────────────
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget>(() => previewTargetForPage(selectedPage));
+  const [previewWidth, setPreviewWidth] = useState<PreviewWidth>("desktop");
+  // Section héritée de l'accueil (avis, contact) cliquée dans l'aperçu d'une autre page
+  const [sharedNotice, setSharedNotice] = useState<SectionType | null>(null);
+  // Interrupteur de visibilité mis en évidence après un clic sur une barre « Section masquée »
+  const [highlightVisibility, setHighlightVisibility] = useState<number | null>(null);
+  useEffect(() => {
+    if (highlightVisibility === null) return;
+    const timer = setTimeout(() => setHighlightVisibility(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightVisibility]);
+
+  // Pages en génération : sondage toutes les 5 s jusqu'à la fin (une entrée
+  // périmée ou orpheline — page supprimée — n'entretient pas le sondage)
+  const generatingSlugs = site.generatingMotifs
+    .filter((g) => !g.error && pages.some((p) => p.slug === g.slug))
+    .map((g) => `${g.slug}@${g.startedAt}`)
+    .join(",");
+  useEffect(() => {
+    if (generatingSlugs === "") return;
+    const live = () =>
+      site.generatingMotifs.some(
+        (g) => !isGenerationStale(g) && pages.some((p) => p.slug === g.slug),
+      );
+    if (!live()) return;
+    const timer = setInterval(() => {
+      if (live()) router.refresh();
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `generatingSlugs` résume site.generatingMotifs et pages
+  }, [generatingSlugs, router]);
+
+  // Garde : modifications non publiées → avertissement avant de quitter l'onglet
+  const [settingsDirtyForGuard, setSettingsDirtyForGuard] = useState(false);
+  const anyDirty = dirty || settingsDirtyForGuard;
+  useEffect(() => {
+    if (!anyDirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [anyDirty]);
+
+  /** Confirmation avant de perdre les modifications non publiées de la page. */
+  function confirmLeavePage(): boolean {
+    if (!dirty) return true;
+    return window.confirm(
+      "Des modifications de cette page ne sont pas publiées et seront perdues. Changer de page quand même ?",
+    );
+  }
+
+  /** Ouvre une page dans l'éditeur (navigation `?page=`). */
+  function goToPage(page: EditorPageRef, section?: SectionType) {
+    if (page.id === selectedPage?.id && !section) {
+      setPreviewTarget(previewTargetForPage(page));
+      setPanel("contenu");
+      return;
+    }
+    if (!confirmLeavePage()) return;
+    router.push(`/editor?page=${page.id}${section ? `&section=${section}` : ""}`);
+  }
+
+  /** Affiche une page légale ou la page introuvable dans l'aperçu (sans quitter la page éditée). */
+  function showInPreview(target: PreviewTarget) {
+    if (dirty) {
+      const label =
+        target.kind === "legal"
+          ? `« ${LEGAL_PAGES.find((p) => p.slug === target.slug)?.title ?? "cette page"} »`
+          : "la page introuvable";
+      const ok = window.confirm(
+        `Des modifications de cette page ne sont pas publiées. Afficher ${label} dans l'aperçu quand même ? Vos modifications restent disponibles dans le panneau Contenu.`,
+      );
+      if (!ok) return;
+    }
+    setPreviewTarget(target);
+  }
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -421,8 +644,8 @@ export function SiteEditor({
     }
   }
 
-  function openSettings() {
-    settingsSnapshot.current = {
+  function currentSettingsSnapshot() {
+    return {
       siteName,
       bookingUrl,
       city: cityValue,
@@ -436,11 +659,61 @@ export function SiteEditor({
       cookieBanner,
       trackingIds,
       trackingEnabled,
+      legal,
+      social,
+      footerText,
+      footerDetails,
     };
+  }
+
+  function openSettings(tab?: SettingsTab) {
+    settingsSnapshot.current = currentSettingsSnapshot();
     setSettingsFeedback(null);
     setSettingsDirty(false);
+    if (tab) setSettingsTab(tab);
     setSettingsOpen(true);
   }
+
+  // La garde beforeunload suit l'état « modifié » des paramètres
+  useEffect(() => {
+    setSettingsDirtyForGuard(settingsOpen && settingsDirty);
+  }, [settingsOpen, settingsDirty]);
+
+  // Paramètres de l'URL au montage : `?section=<type>` ouvre la première
+  // section de ce type ; `?surface=settings&tab=<id>` ouvre les Paramètres.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sectionType = params.get("section");
+    if (sectionType) {
+      const index = sections.findIndex((s) => s.type === sectionType);
+      if (index >= 0) {
+        setPanel("contenu");
+        setActive(index);
+        setTimeout(() => cardRefs.current[index]?.scrollIntoView({ block: "nearest" }), 50);
+      }
+    }
+    if (params.get("surface") === "settings") {
+      const tab = params.get("tab");
+      openSettings(isSettingsTab(tab) ? tab : undefined);
+    }
+    // Lecture unique au montage (l'état initial vient du serveur)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // L'URL reflète la fenêtre Paramètres ouverte (onglet) — sans toucher à `?page=`
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (settingsOpen) {
+      url.searchParams.set("surface", "settings");
+      url.searchParams.set("tab", settingsTab);
+    } else {
+      url.searchParams.delete("surface");
+      url.searchParams.delete("tab");
+    }
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) window.history.replaceState(window.history.state, "", next);
+  }, [settingsOpen, settingsTab]);
 
   /** Ferme la fenêtre en abandonnant les modifications non publiées. */
   const cancelSettings = useCallback(() => {
@@ -459,6 +732,10 @@ export function SiteEditor({
       setCookieBanner(snap.cookieBanner);
       setTrackingIds(snap.trackingIds);
       setTrackingEnabled(snap.trackingEnabled);
+      setLegal(snap.legal);
+      setSocial(snap.social);
+      setFooterText(snap.footerText);
+      setFooterDetails(snap.footerDetails);
     }
     setSettingsDirty(false);
     setSettingsFeedback(null);
@@ -479,6 +756,11 @@ export function SiteEditor({
     if (trackingErrors.length > 0) {
       setSettingsTab("tracking");
       setSettingsFeedback("Corrigez le format des identifiants de tracking avant de publier.");
+      return;
+    }
+    if (socialErrors.length > 0) {
+      setSettingsTab("social");
+      setSettingsFeedback("Corrigez les liens des réseaux sociaux avant de publier.");
       return;
     }
     setSettingsSaving(true);
@@ -503,6 +785,9 @@ export function SiteEditor({
         googleAdsId: trackingEnabled.googleAdsId ? trackingIds.googleAdsId.trim() : "",
         metaPixelId: trackingEnabled.metaPixelId ? trackingIds.metaPixelId.trim() : "",
       },
+      legal,
+      social,
+      footer: { text: footerText, details: footerDetails },
     });
     setSettingsSaving(false);
     if (result.error) {
@@ -517,34 +802,35 @@ export function SiteEditor({
       );
     }
     // « Annuler » après publication ne doit pas revenir en deçà de la publication
-    settingsSnapshot.current = {
-      siteName,
-      bookingUrl,
-      city: cityValue,
-      phone: phoneValue,
-      logoUrl,
-      faviconUrl,
-      cabinets,
-      seoTitle,
-      seoDescription,
-      shareImageUrl,
-      cookieBanner,
-      trackingIds,
-      trackingEnabled,
-    };
+    settingsSnapshot.current = currentSettingsSnapshot();
     setSettingsDirty(false);
     setSettingsFeedback("Publié ✓ — votre site est à jour.");
     setPreviewKey((k) => k + 1);
     router.refresh();
   }
 
-  const previewPath = useMemo(() => {
-    const path =
-      selectedPage && selectedPage.type === "motif" ? `/motifs/${selectedPage.slug}` : "";
-    // ?apercu=<jeton signé> : l'aperçu affiche la démo même expirée et les
-    // pages désactivées (vérifié côté sites par le middleware)
-    return site.previewToken ? `${path}?apercu=${encodeURIComponent(site.previewToken)}` : path;
-  }, [selectedPage, site.previewToken]);
+  // ?apercu=<jeton signé> : l'aperçu affiche la démo même expirée, les pages
+  // désactivées et la page introuvable (vérifié côté sites par le middleware)
+  const previewSrc = useMemo(
+    () => `${site.url}${previewPath(previewTarget, site.previewToken)}`,
+    [site.url, previewTarget, site.previewToken],
+  );
+  const previewLabel = useMemo(() => {
+    switch (previewTarget.kind) {
+      case "home":
+        return "Page d'accueil";
+      case "motif":
+        return pages.find((p) => p.slug === previewTarget.slug && p.type === "motif")?.title ?? previewTarget.slug;
+      case "legal":
+        return LEGAL_PAGES.find((p) => p.slug === previewTarget.slug)?.title ?? "Page légale";
+      case "notFound":
+        return "Page introuvable (404)";
+    }
+  }, [previewTarget, pages]);
+  const currentPageTitle =
+    selectedPage?.type === "home"
+      ? "Page d'accueil"
+      : (pages.find((p) => p.id === selectedPage?.id)?.title ?? "Choisir une page");
 
   const activeSettingsLabel =
     SETTINGS_NAV.flatMap((g) => g.items).find((i) => i.id === settingsTab)?.label ?? "";
@@ -574,8 +860,34 @@ export function SiteEditor({
     iframeRef.current?.contentWindow?.postMessage(message, siteOrigin);
   }
 
+  // Zone d'aperçu mesurée (ResizeObserver) : en mode Ordinateur, le site est
+  // rendu à DESKTOP_PREVIEW_WIDTH puis réduit pour tenir dans le panneau
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  const [previewBox, setPreviewBox] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const el = previewBoxRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect) setPreviewBox({ width: rect.width, height: rect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const desktopScale =
+    previewWidth === "desktop" && previewBox && previewBox.width > 0 && previewBox.width < DESKTOP_PREVIEW_WIDTH
+      ? previewBox.width / DESKTOP_PREVIEW_WIDTH
+      : 1;
+
+  // Pont annoncé jusqu'à l'accusé de réception `hy:ready` du site : son
+  // hydratation peut suivre l'événement load de plusieurs secondes (réseau
+  // lent, premier chargement)
+  const bridgeReady = useRef(false);
+  const announceTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
   function announceEditor() {
-    // Plusieurs annonces : l'hydratation du site peut suivre l'événement load
+    bridgeReady.current = false;
+    if (announceTimer.current) clearInterval(announceTimer.current);
     const send = () => {
       iframeRef.current?.contentWindow?.postMessage({ type: "hy:hello" }, siteOrigin);
       if (pendingThemeMsg.current) {
@@ -584,20 +896,52 @@ export function SiteEditor({
     };
     send();
     let tries = 0;
-    const interval = setInterval(() => {
+    announceTimer.current = setInterval(() => {
+      if (bridgeReady.current || ++tries >= 50) {
+        if (announceTimer.current) clearInterval(announceTimer.current);
+        announceTimer.current = null;
+        return;
+      }
       send();
-      if (++tries >= 5) clearInterval(interval);
     }, 600);
   }
+
+  useEffect(
+    () => () => {
+      if (announceTimer.current) clearInterval(announceTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== siteOrigin) return;
-      const data = event.data as { type?: string; index?: number } | null;
-      if (data?.type === "hy:select" && typeof data.index === "number") {
+      const data = event.data as
+        | { type?: string; index?: number; hidden?: boolean; shared?: string }
+        | null;
+      if (data?.type === "hy:ready") {
+        bridgeReady.current = true;
+        return;
+      }
+      if (data?.type !== "hy:select") return;
+      // Section héritée de l'accueil (avis, contact) sur une page de spécialité
+      if (typeof data.shared === "string") {
+        if (isSectionType(data.shared)) {
+          setPanel("contenu");
+          setSharedNotice(data.shared);
+        }
+        return;
+      }
+      if (typeof data.index === "number") {
+        const index = data.index;
         setPanel("contenu");
-        setActive(data.index);
-        cardRefs.current[data.index]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        setSharedNotice(null);
+        setActive(index);
+        // Barre « Section masquée » cliquée : on montre où la réafficher
+        if (data.hidden === true) setHighlightVisibility(index);
+        requestAnimationFrame(() =>
+          cardRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+        );
       }
     }
     window.addEventListener("message", onMessage);
@@ -615,6 +959,7 @@ export function SiteEditor({
   }
 
   async function onSave() {
+    if (panel === "pages") return;
     setSaving(true);
     setFeedback(null);
     let result: { error?: string } = {};
@@ -647,19 +992,30 @@ export function SiteEditor({
           >
             ← Accueil
           </Link>
-          <PagePicker
-            pages={pages}
-            selectedPage={selectedPage}
-            disabledMotifs={disabledMotifs}
-            onSelect={(id) => router.push(`/editor?page=${id}`)}
-            onToggle={togglePageEnabled}
-          />
+          <button
+            type="button"
+            onClick={() => setPanel("pages")}
+            aria-label={`Page éditée : ${currentPageTitle} — ouvrir le panneau Pages`}
+            title="Ouvrir le panneau Pages"
+            className="flex max-w-72 items-center gap-2 rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm hover:border-primary-400"
+          >
+            <span aria-hidden>📄</span>
+            <span className="truncate">{currentPageTitle}</span>
+            {dirty ? (
+              <span
+                aria-label="Modifications non publiées"
+                title="Modifications non publiées"
+                className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+              />
+            ) : null}
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
+          <PanelTab label="Pages" active={panel === "pages"} onClick={() => setPanel("pages")} />
           <PanelTab label="Contenu" active={panel === "contenu"} onClick={() => setPanel("contenu")} />
           <PanelTab label="🎨 Style" active={panel === "style"} onClick={() => setPanel("style")} />
-          <PanelTab label="⚙ Paramètres" active={settingsOpen} onClick={openSettings} />
+          <PanelTab label="⚙ Paramètres" active={settingsOpen} onClick={() => openSettings()} />
           <a
             href={site.url}
             target="_blank"
@@ -675,48 +1031,170 @@ export function SiteEditor({
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-96 shrink-0 flex-col border-r border-cream-300 bg-white">
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {panel === "pages" ? (
+              <PagesPanel
+                pages={pages}
+                selectedPageId={selectedPage?.id ?? null}
+                previewTarget={previewTarget}
+                disabledMotifs={disabledMotifs}
+                generatingMotifs={site.generatingMotifs}
+                plan={site.plan}
+                homeSpecialtiesCount={homeSpecialtiesCount}
+                homeSpecialtiesMax={homeSpecialtiesMax}
+                notFound={notFound}
+                onSelectPage={goToPage}
+                onPreview={showInPreview}
+                onToggle={togglePageEnabled}
+                onOpenSettings={(tab) => openSettings(tab)}
+                onRenamed={(slug, title) => {
+                  // Carte de l'accueil chargée dans le panneau Contenu : titre aligné
+                  setSections((prev) =>
+                    prev.map((s) =>
+                      s.type === "specialties"
+                        ? { ...s, items: s.items.map((it) => (it.slug === slug ? { ...it, title } : it)) }
+                        : s,
+                    ),
+                  );
+                  setPreviewKey((k) => k + 1);
+                  router.refresh();
+                }}
+                onChanged={() => {
+                  setPreviewKey((k) => k + 1);
+                  router.refresh();
+                }}
+                onDeleted={(page) => {
+                  if (page.id === selectedPage?.id) {
+                    router.push("/editor");
+                    return;
+                  }
+                  if (previewTarget.kind === "motif" && previewTarget.slug === page.slug) {
+                    setPreviewTarget({ kind: "home" });
+                  }
+                  setPreviewKey((k) => k + 1);
+                  router.refresh();
+                }}
+              />
+            ) : null}
+
             {panel === "contenu" ? (
-              sections.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-                    💡 Cliquez sur une section de l&apos;aperçu à droite pour l&apos;ouvrir ici,
-                    puis modifiez textes et photos.
+              selectedPage?.generating ? (
+                <div className="rounded-2xl border border-cream-300 bg-cream-50 p-4 text-sm text-ink-700">
+                  <p className="flex items-center gap-2 font-semibold">
+                    <Spinner /> Page en préparation…
                   </p>
-                  {sections.map((section, i) => (
+                  <p className="mt-1 text-xs text-ink-500">
+                    Le contenu de cette page est en cours de rédaction (environ une minute). Ses sections
+                    seront modifiables dès qu&apos;il sera prêt — vous pouvez suivre l&apos;avancement
+                    dans le panneau Pages.
+                  </p>
+                </div>
+              ) : sections.length > 0 ? (
+                <div className="space-y-2">
+                  {sharedNotice ? (
                     <div
-                      key={`${section.type}-${i}`}
-                      ref={(el) => {
-                        cardRefs.current[i] = el;
-                      }}
-                      className={clsx(
-                        "rounded-2xl border transition-colors",
-                        active === i ? "border-primary-400 shadow-sm" : "border-cream-300",
-                      )}
+                      role="status"
+                      className="mb-3 flex items-start gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-ink-700"
                     >
+                      <span aria-hidden>ℹ️</span>
+                      <div className="min-w-0 flex-1">
+                        <p>
+                          Cette section (<strong>{SECTION_LABELS[sharedNotice]}</strong>) est partagée avec la
+                          page d&apos;accueil : son contenu se modifie depuis l&apos;accueil.
+                        </p>
+                        {homePageId ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const home = pages.find((p) => p.id === homePageId);
+                              if (home) goToPage(home, sharedNotice);
+                            }}
+                            className="mt-1 font-medium text-primary-600 hover:underline"
+                          >
+                            Modifier sur l&apos;accueil →
+                          </button>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => selectSection(i)}
-                        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-semibold"
+                        aria-label="Fermer ce message"
+                        onClick={() => setSharedNotice(null)}
+                        className="shrink-0 rounded-full px-1 text-ink-500 hover:text-ink-900"
                       >
-                        {SECTION_LABELS[section.type]}
-                        <span aria-hidden className="text-ink-500">
-                          {active === i ? "−" : "+"}
-                        </span>
+                        ✕
                       </button>
-                      {active === i ? (
-                        <div className="border-t border-cream-200 p-4">
-                          <SectionFields
-                            section={section}
-                            onChange={(patch) => updateSection(i, patch)}
-                            onPageRegenerated={() => {
-                              setPreviewKey((k) => k + 1);
-                              router.refresh();
-                            }}
-                          />
-                        </div>
-                      ) : null}
                     </div>
-                  ))}
+                  ) : null}
+                  <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+                    💡 Cliquez sur une section de l&apos;aperçu à droite pour l&apos;ouvrir ici,
+                    puis modifiez textes et photos. L&apos;interrupteur masque une section sans
+                    perdre son contenu.
+                  </p>
+                  {sections.map((section, i) => {
+                    const visible = isSectionVisible(section);
+                    const label = SECTION_LABELS[section.type];
+                    return (
+                      <div
+                        key={`${section.type}-${i}`}
+                        ref={(el) => {
+                          cardRefs.current[i] = el;
+                        }}
+                        data-section-type={section.type}
+                        data-section-hidden={visible ? undefined : "true"}
+                        className={clsx(
+                          "rounded-2xl border transition-colors",
+                          active === i ? "border-primary-400 shadow-sm" : "border-cream-300",
+                          !visible && "bg-cream-50",
+                        )}
+                      >
+                        <div className={clsx("flex items-center gap-2 py-2 pl-3 pr-3", !visible && "opacity-70")}>
+                          <button
+                            type="button"
+                            onClick={() => selectSection(i)}
+                            aria-expanded={active === i}
+                            className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left text-sm font-semibold"
+                          >
+                            <span aria-hidden className="w-3 text-ink-500">
+                              {active === i ? "−" : "+"}
+                            </span>
+                            <span className="truncate">{label}</span>
+                            {!visible ? <Badge tone="neutral">Masquée</Badge> : null}
+                          </button>
+                          <span
+                            className={clsx(
+                              "flex shrink-0 items-center rounded-full p-0.5 transition-shadow",
+                              highlightVisibility === i && "animate-pulse ring-2 ring-amber-400 ring-offset-1",
+                            )}
+                          >
+                            <ToggleSwitch
+                              size="sm"
+                              checked={visible}
+                              label={`Visible sur cette page : ${label}`}
+                              onChange={(next) => updateSection(i, { hidden: !next })}
+                            />
+                          </span>
+                        </div>
+                        {active === i ? (
+                          <div className={clsx("border-t border-cream-200 p-4", !visible && "opacity-75")}>
+                            {!visible ? (
+                              <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+                                Cette section est masquée : elle n&apos;apparaît pas sur le site public.
+                                Réactivez l&apos;interrupteur « Visible sur cette page » pour l&apos;afficher.
+                              </p>
+                            ) : null}
+                            <SectionFields
+                              section={section}
+                              googleConnected={googleConnected || gBusiness !== null}
+                              onChange={(patch) => updateSection(i, patch)}
+                              onPageRegenerated={() => {
+                                setPreviewKey((k) => k + 1);
+                                router.refresh();
+                              }}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="p-4 text-sm text-ink-500">Aucune section éditable sur cette page.</p>
@@ -909,28 +1387,74 @@ export function SiteEditor({
             ) : null}
           </div>
 
-          <div className="border-t border-cream-300 p-4">
-            {feedback ? (
-              <p className={clsx("mb-2 text-xs", feedback.startsWith("Publié") ? "text-success-500" : "text-danger-500")}>
-                {feedback}
-              </p>
-            ) : null}
-            <Button onClick={onSave} disabled={saving || (!dirty && panel === "contenu")} className="w-full">
-              {saving ? <Spinner className="text-white" /> : null}
-              {saving ? "Publication…" : "Enregistrer et publier"}
-            </Button>
-          </div>
+          {panel !== "pages" ? (
+            <div className="border-t border-cream-300 p-4">
+              {feedback ? (
+                <p className={clsx("mb-2 text-xs", feedback.startsWith("Publié") ? "text-success-500" : "text-danger-500")}>
+                  {feedback}
+                </p>
+              ) : null}
+              <Button onClick={onSave} disabled={saving || (!dirty && panel === "contenu")} className="w-full">
+                {saving ? <Spinner className="text-white" /> : null}
+                {saving ? "Publication…" : "Enregistrer et publier"}
+              </Button>
+            </div>
+          ) : (
+            <p className="border-t border-cream-300 px-4 py-3 text-xs text-ink-500">
+              Une page désactivée n&apos;apparaît plus sur votre site (carte, menu, Google) mais reste
+              éditable ici.
+            </p>
+          )}
         </aside>
 
-        <div className="min-w-0 flex-1 bg-cream-200 p-4">
-          <iframe
-            key={previewKey}
-            ref={iframeRef}
-            src={`${site.url}${previewPath}`}
-            title="Prévisualisation de votre site"
-            onLoad={announceEditor}
-            className="h-full w-full rounded-2xl border border-cream-300 bg-white shadow-card"
-          />
+        <div className="flex min-w-0 flex-1 flex-col bg-cream-200">
+          <div className="flex items-center justify-between gap-3 px-4 pt-3">
+            <p className="min-w-0 truncate text-xs text-ink-500">
+              Aperçu : <span className="font-medium text-ink-700">{previewLabel}</span>
+            </p>
+            <Segmented
+              aria-label="Largeur de l'aperçu"
+              options={PREVIEW_WIDTH_OPTIONS}
+              value={previewWidth}
+              onChange={setPreviewWidth}
+              className="shrink-0 bg-white/70"
+            />
+          </div>
+          <div
+            ref={previewBoxRef}
+            className={clsx(
+              "flex min-h-0 flex-1 overflow-hidden p-4",
+              desktopScale < 1 ? "justify-start" : "justify-center",
+            )}
+          >
+            {/* Ordinateur : rendu à 1280 px puis réduit à l'échelle du panneau,
+                sinon le site passerait en version mobile (menu hamburger) dès
+                que la zone d'aperçu est plus étroite que 1024 px */}
+            <iframe
+              key={previewKey}
+              ref={iframeRef}
+              src={previewSrc}
+              title="Prévisualisation de votre site"
+              onLoad={announceEditor}
+              data-preview-width={previewWidth}
+              data-preview-scale={desktopScale < 1 ? desktopScale.toFixed(3) : undefined}
+              style={
+                desktopScale < 1 && previewBox
+                  ? {
+                      width: DESKTOP_PREVIEW_WIDTH,
+                      height: previewBox.height / desktopScale,
+                      transform: `scale(${desktopScale})`,
+                      transformOrigin: "top left",
+                      flex: "none",
+                    }
+                  : { width: PREVIEW_WIDTHS[previewWidth] ?? "100%", maxWidth: "100%" }
+              }
+              className={clsx(
+                "rounded-2xl border border-cream-300 bg-white shadow-card transition-[width] duration-300",
+                desktopScale < 1 ? "" : "h-full",
+              )}
+            />
+          </div>
         </div>
       </div>
 
@@ -952,10 +1476,10 @@ export function SiteEditor({
             <div className="flex items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
               <p className="flex items-center gap-3 text-lg font-semibold">
                 Paramètres
-                {trackingErrors.length > 0 ? (
+                {trackingErrors.length > 0 || socialErrors.length > 0 ? (
                   <button
                     type="button"
-                    onClick={() => setSettingsTab("tracking")}
+                    onClick={() => setSettingsTab(trackingErrors.length > 0 ? "tracking" : "social")}
                     className="inline-flex items-center gap-1 rounded-full border border-warning-500/50 bg-warning-100 px-2.5 py-0.5 text-xs font-medium text-warning-500"
                   >
                     ⚠ Format à corriger
@@ -996,7 +1520,8 @@ export function SiteEditor({
                         >
                           <span aria-hidden>{item.icon}</span>
                           <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                          {item.id === "tracking" && trackingErrors.length > 0 ? (
+                          {(item.id === "tracking" && trackingErrors.length > 0) ||
+                          (item.id === "social" && socialErrors.length > 0) ? (
                             <span
                               aria-hidden
                               className={clsx(
@@ -1373,6 +1898,158 @@ export function SiteEditor({
                   </SettingsPane>
                 ) : null}
 
+                {settingsTab === "legal" ? (
+                  <SettingsPane
+                    title="Informations légales"
+                    description="Ces informations alimentent les pages Mentions légales, Politique de confidentialité et Politique de cookies de votre site."
+                  >
+                    <div className="rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-xs text-ink-700">
+                      <p className="font-semibold">Pages générées automatiquement</p>
+                      <p className="mt-0.5 leading-relaxed">
+                        Elles reprennent le nom du site, vos coordonnées, l&apos;hébergeur, le bandeau cookies
+                        et les outils de suivi configurés : aucune rédaction nécessaire, complétez simplement
+                        les champs ci-dessous. Les pages sont liées depuis le pied de page du site.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {LEGAL_PAGES.map((page) => (
+                          <a
+                            key={page.slug}
+                            href={`${site.url}${previewPath({ kind: "legal", slug: page.slug }, site.previewToken)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-full bg-white px-3 py-1 font-medium text-primary-600 ring-1 ring-primary-200 hover:bg-primary-100"
+                          >
+                            ↗ {page.title}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                    {LEGAL_FIELDS.map((field) => (
+                      <div key={field.key}>
+                        <div className="mb-1 flex items-baseline justify-between gap-2">
+                          <label htmlFor={`legal-${field.key}`} className="text-sm font-medium">
+                            {field.label}
+                          </label>
+                          <CharCounter length={legal[field.key].length} limit={field.limit} />
+                        </div>
+                        {field.multiline ? (
+                          <textarea
+                            id={`legal-${field.key}`}
+                            value={legal[field.key]}
+                            rows={4}
+                            maxLength={field.limit}
+                            placeholder={field.placeholder}
+                            onChange={(e) => {
+                              setLegal((prev) => ({ ...prev, [field.key]: e.target.value }));
+                              setSettingsDirty(true);
+                            }}
+                            className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                          />
+                        ) : (
+                          <input
+                            id={`legal-${field.key}`}
+                            type={field.type ?? "text"}
+                            value={legal[field.key]}
+                            maxLength={field.limit}
+                            placeholder={field.placeholder}
+                            onChange={(e) => {
+                              setLegal((prev) => ({ ...prev, [field.key]: e.target.value }));
+                              setSettingsDirty(true);
+                            }}
+                            className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                          />
+                        )}
+                        {field.hint ? <p className="mt-1 text-xs text-ink-500">{field.hint}</p> : null}
+                      </div>
+                    ))}
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "social" ? (
+                  <SettingsPane
+                    title="Réseaux sociaux"
+                    description="Les réseaux renseignés apparaissent sous forme d'icônes dans le pied de page du site. Laissez vide ceux que vous n'utilisez pas."
+                  >
+                    {FOOTER_SOCIAL_NETWORKS.map((network) => {
+                      const error = socialUrlError(network.key, social[network.key]);
+                      return (
+                        <div key={network.key}>
+                          <label htmlFor={`social-${network.key}`} className="mb-1 block text-sm font-medium">
+                            {network.label}
+                          </label>
+                          <input
+                            id={`social-${network.key}`}
+                            type="url"
+                            value={social[network.key]}
+                            placeholder={`https://www.${network.host}/votre-page`}
+                            onChange={(e) => {
+                              setSocial((prev) => ({ ...prev, [network.key]: e.target.value }));
+                              setSettingsDirty(true);
+                            }}
+                            className={clsx(
+                              "w-full rounded-xl border px-3 py-2 text-sm",
+                              error ? "border-danger-500" : "border-ink-300",
+                            )}
+                          />
+                          {error ? <p className="mt-1 text-xs text-danger-500">⚠ {error}</p> : null}
+                        </div>
+                      );
+                    })}
+                  </SettingsPane>
+                ) : null}
+
+                {settingsTab === "footer" ? (
+                  <SettingsPane
+                    title="Texte du pied de page"
+                    description="Une phrase d'accompagnement sous le nom du site, et des informations complémentaires (SIRET, diplômes, adhésions…) en bas de chaque page."
+                  >
+                    <div>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <label htmlFor="footer-text" className="text-sm font-medium">
+                          Phrase d&apos;accompagnement
+                        </label>
+                        <CharCounter length={footerText.length} limit={300} />
+                      </div>
+                      <textarea
+                        id="footer-text"
+                        value={footerText}
+                        rows={3}
+                        maxLength={300}
+                        placeholder="ex. Sophrologie à Albi : un espace pour souffler, respirer et retrouver l'équilibre."
+                        onChange={(e) => {
+                          setFooterText(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <div className="mb-1 flex items-baseline justify-between gap-2">
+                        <label htmlFor="footer-details" className="text-sm font-medium">
+                          Informations complémentaires
+                        </label>
+                        <CharCounter length={footerDetails.length} limit={500} />
+                      </div>
+                      <textarea
+                        id="footer-details"
+                        value={footerDetails}
+                        rows={4}
+                        maxLength={500}
+                        placeholder="ex. SIRET 123 456 789 00012 · Diplômée de l'ISEBA · Membre de la Chambre syndicale de la sophrologie"
+                        onChange={(e) => {
+                          setFooterDetails(e.target.value);
+                          setSettingsDirty(true);
+                        }}
+                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                      />
+                      <p className="mt-1 text-xs text-ink-500">
+                        Affichées en petit sous les liens du pied de page. Un retour à la ligne sépare deux
+                        informations.
+                      </p>
+                    </div>
+                  </SettingsPane>
+                ) : null}
+
                 {settingsTab === "tracking" ? (
                   <SettingsPane
                     title="Tracking"
@@ -1489,39 +2166,6 @@ export function SiteEditor({
         </div>
       ) : null}
     </>
-  );
-}
-
-/** Interrupteur des cartes de la catégorie Tracking. */
-function ToggleSwitch({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={clsx(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors",
-        checked ? "bg-primary-500" : "bg-ink-300",
-      )}
-    >
-      <span
-        aria-hidden
-        className={clsx(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left]",
-          checked ? "left-[22px]" : "left-0.5",
-        )}
-      />
-    </button>
   );
 }
 
@@ -1873,114 +2517,6 @@ function CabinetsEditor({
         >
           + Ajouter un cabinet
         </button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Sélecteur de page : liste les pages du site et, pour chaque page de
- * spécialité, un petit contrôle Activé/Désactivé (pastille + menu) — une page
- * désactivée n'est plus servie sur le site public mais reste éditable ici.
- */
-function PagePicker({
-  pages,
-  selectedPage,
-  disabledMotifs,
-  onSelect,
-  onToggle,
-}: {
-  pages: PageRef[];
-  selectedPage: { id: string } | null;
-  disabledMotifs: string[];
-  onSelect: (id: string) => void;
-  onToggle: (slug: string, enabled: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  const current = pages.find((p) => p.id === selectedPage?.id);
-  const label = current ? (current.type === "home" ? "Page d'accueil" : current.title) : "Choisir une page";
-
-  return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label="Page à éditer"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-64 items-center justify-between gap-2 rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-      >
-        <span className="truncate">{label}</span>
-        <span aria-hidden className={clsx("text-ink-500 transition-transform", open && "rotate-180")}>
-          ⌄
-        </span>
-      </button>
-
-      {open ? (
-        <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-cream-300 bg-white p-1 shadow-lg">
-          {pages.map((page) => {
-            const isHome = page.type === "home";
-            const enabled = !disabledMotifs.includes(page.slug);
-            return (
-              <div
-                key={page.id}
-                className={clsx(
-                  "flex items-center justify-between gap-2 rounded-lg px-2 py-1.5",
-                  page.id === selectedPage?.id ? "bg-primary-50" : "hover:bg-cream-100",
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onSelect(page.id);
-                  }}
-                  className={clsx(
-                    "min-w-0 flex-1 truncate text-left text-sm",
-                    !isHome && !enabled && "text-ink-500 line-through decoration-ink-300",
-                  )}
-                >
-                  {isHome ? "Page d'accueil" : page.title}
-                </button>
-                {!isHome ? (
-                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      className={clsx(
-                        "h-2 w-2 rounded-full",
-                        enabled ? "bg-[#22a06b]" : "bg-danger-500",
-                      )}
-                    />
-                    <select
-                      aria-label={`Activation de la page « ${page.title} »`}
-                      value={enabled ? "on" : "off"}
-                      onChange={(event) => onToggle(page.slug, event.target.value === "on")}
-                      className="cursor-pointer rounded-md border-0 bg-transparent py-0.5 pr-1 text-xs font-medium text-ink-700 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                    >
-                      <option value="on">Activé</option>
-                      <option value="off">Désactivé</option>
-                    </select>
-                  </label>
-                ) : null}
-              </div>
-            );
-          })}
-          <p className="mt-1 border-t border-cream-200 px-2 pb-1 pt-2 text-xs text-ink-500">
-            Une page désactivée n'apparaît plus sur votre site (carte, menu, Google) mais reste
-            éditable ici.
-          </p>
-        </div>
       ) : null}
     </div>
   );

@@ -252,6 +252,11 @@ export function isSectionVisible(section: { hidden?: boolean }): boolean {
   return section.hidden !== true;
 }
 
+/** Garde de type : `value` est-il un type de section connu ? */
+export function isSectionType(value: unknown): value is SectionType {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(SECTION_LABELS, value);
+}
+
 /** Libellés des sections (accordéon du studio, étiquette de survol de l'aperçu). */
 export const SECTION_LABELS: Record<SectionType, string> = {
   hero: "En-tête",
@@ -436,6 +441,8 @@ export type GeneratingMotif = {
   subject: string;
   /** ISO 8601 */
   startedAt: string;
+  /** Intention « afficher une carte sur l'accueil » (mémorisée pour une relance) */
+  showCard?: boolean;
   error?: string;
 };
 

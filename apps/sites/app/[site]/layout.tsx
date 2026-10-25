@@ -111,7 +111,8 @@ export default async function SiteLayout({ children, params }: Props) {
       {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
       <Tracker siteId={site.id} />
       <TrackingScripts tracking={site.theme.tracking ?? {}} />
-      <EditorBridge />
+      {/* Pont avec l'éditeur : seulement dans l'aperçu authentifié (jeton signé) */}
+      {editorPreview ? <EditorBridge /> : null}
       <ScrollReveal />
     </div>
   );

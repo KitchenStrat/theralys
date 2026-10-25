@@ -17,7 +17,9 @@ import { useEffect } from "react";
  *  - `hy:theme { vars, ambiance? }` prévisualise un style (variables CSS du
  *                                   thème) avant publication.
  *
- * Émis vers l'éditeur, au clic sur une section :
+ * Émis vers l'éditeur :
+ *  - `hy:ready`                     accusé de réception du `hy:hello` ;
+ *  au clic sur une section :
  *  - `hy:select { index, hidden }`  section propre à la page : `index` = position
  *                                   dans `page.sections` (attribut
  *                                   `data-hy-section`), `hidden` = true si la
@@ -98,8 +100,11 @@ export function EditorBridge() {
       if (data.type === "hy:hello") {
         editorOrigin = event.origin;
         editorWindow = event.source as Window;
-        document.head.appendChild(style);
+        if (!style.isConnected) document.head.appendChild(style);
         document.documentElement.classList.add("hy-editing");
+        // Accusé de réception : l'éditeur cesse de ré-annoncer (l'hydratation
+        // du site peut suivre de plusieurs secondes l'événement load de l'iframe)
+        editorWindow.postMessage({ type: "hy:ready" }, editorOrigin);
         return;
       }
       if (event.origin !== editorOrigin) return;

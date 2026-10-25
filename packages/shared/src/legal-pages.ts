@@ -103,6 +103,16 @@ function clean(value: string | null | undefined): string {
   return (value ?? "").trim();
 }
 
+/** SIRET (14 chiffres) ou SIREN (9) stocké sans espace → affiché par groupes (123 456 789 00012). */
+export function formatSiret(value: string | null | undefined): string {
+  const digits = clean(value).replace(/\s/g, "");
+  if (/^\d{14}$/.test(digits)) {
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)} ${digits.slice(9)}`;
+  }
+  if (/^\d{9}$/.test(digits)) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  return clean(value);
+}
+
 export function buildLegalPage(slug: LegalPageSlug, input: LegalPageInput): LegalPage {
   const meta = LEGAL_PAGES.find((p) => p.slug === slug)!;
   const body =
@@ -127,7 +137,7 @@ function mentionsLegales(input: LegalPageInput): string {
   const editor: string[] = [
     `- **Éditeur :** ${fullName}, ${clean(p.profession).toLowerCase()}`,
     ...(clean(legal?.legalForm) ? [`- **Forme juridique :** ${clean(legal?.legalForm)}`] : []),
-    ...(clean(legal?.siret) ? [`- **SIRET :** ${clean(legal?.siret)}`] : []),
+    ...(clean(legal?.siret) ? [`- **SIRET :** ${formatSiret(legal?.siret)}`] : []),
     ...(clean(legal?.registration) ? [`- **Numéro d'enregistrement professionnel :** ${clean(legal?.registration)}`] : []),
     ...(clean(input.address) ? [`- **Adresse :** ${clean(input.address)}`] : []),
     ...(clean(input.phone) ? [`- **Téléphone :** ${clean(input.phone)}`] : []),

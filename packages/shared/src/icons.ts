@@ -109,8 +109,19 @@ export function searchSectionIcons(
   });
 }
 
+/**
+ * Balisage interne d'une icône par nom (repli : cœur). Seules les clés propres
+ * de la table sont acceptées : un nom tel que « constructor » venu de la base
+ * ne doit pas remonter une propriété du prototype.
+ */
+export function sectionIconMarkup(name: string | undefined): string {
+  return name && Object.prototype.hasOwnProperty.call(SECTION_ICON_SVG, name)
+    ? SECTION_ICON_SVG[name as SectionIconName]
+    : SECTION_ICON_SVG.coeur;
+}
+
 /** Balisage SVG complet d'une icône (repli : cœur pour un nom inconnu). */
 export function sectionIconSvg(name: string | undefined, size = 28, strokeWidth = 1.6): string {
-  const inner = SECTION_ICON_SVG[(name ?? "") as SectionIconName] ?? SECTION_ICON_SVG.coeur;
+  const inner = sectionIconMarkup(name);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" aria-hidden="true">${inner}</svg>`;
 }

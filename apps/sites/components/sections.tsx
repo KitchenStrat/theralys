@@ -5,11 +5,10 @@ import {
   futureBodyText,
   isSectionVisible,
   reviewDateFr,
-  SECTION_ICON_SVG,
+  sectionIconMarkup,
   SECTION_LABELS,
   specialtyIconFor,
   type Section,
-  type SectionIconName,
 } from "@theralys/shared";
 import { cabinetAddressLine, cabinetMapsUrl, visibleCabinets } from "@/lib/cabinets";
 import type { EditorRef } from "@/lib/editor-refs";
@@ -117,7 +116,8 @@ function editorMarker(ref: EditorRef, section: Section): EditorMarker {
 /**
  * Aperçu de l'éditeur : une section masquée devient une fine barre. Le clic
  * (capté par EditorBridge) la sélectionne dans le studio, qui propose de la
- * réafficher. Jamais rendue sur le site public.
+ * réafficher. Jamais rendue sur le site public ; dans l'aperçu, affichée
+ * seulement une fois l'éditeur connecté (classe `hy-editing`).
  */
 function HiddenSectionBar({ marker, section }: { marker: EditorMarker; section: Section }) {
   return (
@@ -125,7 +125,10 @@ function HiddenSectionBar({ marker, section }: { marker: EditorMarker; section: 
       {...marker}
       data-hy-hidden="1"
       role="note"
-      className="flex items-center justify-center gap-2 border-y border-dashed border-[var(--site-text)]/15 bg-[var(--site-soft)]/50 px-4 py-2.5 text-center text-sm text-[var(--site-text)]/70"
+      // Visible seulement quand l'éditeur est connecté (classe `hy-editing`
+      // posée par EditorBridge) : avec le cookie d'aperçu, le praticien qui
+      // ouvre son site dans le même navigateur ne doit pas voir ces barres
+      className="hidden items-center justify-center gap-2 border-y border-dashed border-[var(--site-text)]/15 bg-[var(--site-soft)]/50 px-4 py-2.5 text-center text-sm text-[var(--site-text)]/70 [.hy-editing_&]:flex"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden className="shrink-0">
         <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.4 5.3A10.5 10.5 0 0 1 12 5c5 0 9 4.5 10 7-0.4 1-1.3 2.3-2.6 3.5M6.6 6.6C4.1 8.2 2.5 10.6 2 12c1 2.5 5 7 10 7 1.5 0 2.9-.4 4.1-1" strokeLinecap="round" strokeLinejoin="round" />
@@ -275,7 +278,7 @@ function SectionIcon({
   size?: number;
   strokeWidth?: number;
 }) {
-  const inner = SECTION_ICON_SVG[(name ?? "") as SectionIconName] ?? SECTION_ICON_SVG.coeur;
+  const inner = sectionIconMarkup(name);
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} aria-hidden>
       <g dangerouslySetInnerHTML={{ __html: inner }} />
