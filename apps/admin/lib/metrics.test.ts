@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { blogHealth, computeMrr, estimateAiCosts } from "./metrics";
+import { blogHealth, computeMrr, estimateAiCosts, providerCostsEur } from "./metrics";
+
+describe("providerCostsEur", () => {
+  it("convertit les dollars DataForSEO en euros au centime, jamais négatif", () => {
+    expect(providerCostsEur(0)).toBe(0);
+    expect(providerCostsEur(5)).toBe(4.6);
+    expect(providerCostsEur(0.098)).toBe(0.09);
+    expect(providerCostsEur(-1)).toBe(0);
+  });
+});
 
 describe("computeMrr", () => {
   it("additionne actifs et impayés au bon tarif, ignore essais et annulés", () => {

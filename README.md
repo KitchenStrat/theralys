@@ -66,8 +66,11 @@ compte déjà seedé garde un mot de passe par défaut, le seed exige
 place (`packages/jobs/src/seed-guard.ts`).
 
 Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sync
-Search Console) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en production,
-un cron horaire appelle ce point d'entrée (état porté par Postgres, ticks idempotents).
+Search Console et avis, fiche Google du studio : audit, tâches d'avis DataForSEO,
+relevés de visibilité) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en
+production, un cron appelle ce point d'entrée (état porté par Postgres, ticks
+idempotents, un tick en erreur ne bloque pas les suivants). Test de fumée de la
+fiche Google en mode mock : `pnpm --filter @theralys/jobs exec tsx scripts/google-smoke.mts`.
 
 ### Brancher la vraie clé Anthropic
 
@@ -147,7 +150,12 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   servies et maillées (Boost = 3, Scale = 6) ; les pages excédentaires restent en
   base et se réactivent en cas d&apos;upgrade.
 - **Sync des avis Google** : tick périodique (upsert par identifiant source,
-  jamais de doublon), affichés sur le site public.
+  jamais de doublon, jamais d&apos;avis factices sur un site client), affichés
+  sur le site public.
+- **Fiche Google (studio, Scale + démos)** : lecture seule via DataForSEO
+  (fiche, avis complets avec réponses, grille de positions Maps 7×7), repli
+  Places API pour la fiche ; audit déterministe, analyse des avis et posts par
+  l&apos;IA ; budget vérifié avant chaque appel facturé (≤ 5 $ par site et par mois).
 - **Jobs en production** : cron Vercel horaire → `GET /api/jobs/tick` (admin),
   protégé par `CRON_SECRET`.
 

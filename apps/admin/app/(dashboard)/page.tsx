@@ -1,18 +1,20 @@
 import Link from "next/link";
-import { and, count, eq, gte, isNotNull, lt } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { Badge, Card } from "@theralys/ui";
 import {
   blogArticles,
   editorialCalendarEntries,
   getDb,
+  googleUsage,
   PLANS,
   prospects,
   sites,
   type OfferedPlanId,
 } from "@theralys/db";
 import { resolveAiMode } from "@theralys/ai";
+import { usageMonthKey } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
-import { computeMrr, estimateAiCosts, type SubscriptionLike } from "@/lib/metrics";
+import { computeMrr, estimateAiCosts, providerCostsEur, type SubscriptionLike } from "@/lib/metrics";
 
 export const metadata = { title: "Vue d'ensemble" };
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export default async function OverviewPage() {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const todayIso = now.toISOString().slice(0, 10);
 
-  const [subs, siteCounts, erroredSites, lateEntries, monthArticles, monthImages, monthDemos] =
+  const [subs, siteCounts, erroredSites, lateEntries, monthArticles, monthImages, monthDemos, monthProviders] =
     await Promise.all([
       db.query.subscriptions.findMany(),
       db
@@ -64,6 +66,14 @@ export default async function OverviewPage() {
         .select({ value: count() })
         .from(sites)
         .where(and(eq(sites.type, "demo"), gte(sites.createdAt, monthStart))),
+      // Fournisseurs facturés en dollars (DataForSEO) : coûts réels inscrits par les jobs
+      db
+        .select({
+          costUsd: sql<number>`coalesce(sum(${googleUsage.costUsd}), 0)`,
+          requests: sql<number>`coalesce(sum(${googleUsage.requests}), 0)`,
+        })
+        .from(googleUsage)
+        .where(eq(googleUsage.month, usageMonthKey(now))),
     ]);
 
   const mrr = computeMrr(subs as SubscriptionLike[]);
@@ -82,6 +92,9 @@ export default async function OverviewPage() {
     imagesGenerated: monthImages[0]?.value ?? 0,
     demosGenerated: monthDemos[0]?.value ?? 0,
   });
+  const providerUsd = Number(monthProviders[0]?.costUsd ?? 0);
+  const providerRequests = Number(monthProviders[0]?.requests ?? 0);
+  const providerEur = providerCostsEur(providerUsd);
   const jobsHealthy = erroredSites.length === 0 && lateCount === 0;
   const aiMode = resolveAiMode();
   const imageMode = process.env.IMAGE_PROVIDER !== "mock" && process.env.FAL_API_KEY ? "fal" : "mock";
@@ -104,8 +117,8 @@ export default async function OverviewPage() {
         <StatCard label="Démos" value={String(demoCount)} detail="sites d'avant-vente actifs" />
         <StatCard
           label="Coûts API du mois"
-          value={`${costs.totalEur.toFixed(2)} €`}
-          detail="estimation Claude + fal.ai"
+          value={`${(costs.totalEur + providerEur).toFixed(2)} €`}
+          detail="estimation Claude + fal.ai, réel DataForSEO"
         />
       </div>
 
@@ -203,7 +216,7 @@ export default async function OverviewPage() {
 
       <Card className="mt-6 p-5">
         <h2 className="font-semibold">Coûts API du mois (estimation)</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {costs.details.map((detail) => (
             <div key={detail.label} className="rounded-2xl bg-cream-100 p-4">
               <p className="text-xs text-ink-500">{detail.label}</p>
@@ -211,10 +224,19 @@ export default async function OverviewPage() {
               <p className="text-xs text-ink-500">≈ {detail.costEur.toFixed(2)} €</p>
             </div>
           ))}
+          <div className="rounded-2xl bg-cream-100 p-4">
+            <p className="text-xs text-ink-500">Fournisseurs (DataForSEO)</p>
+            <p className="mt-1 text-xl font-bold">{providerRequests}</p>
+            <p className="text-xs text-ink-500">
+              {providerEur.toFixed(2)} € ({providerUsd.toFixed(2)} $ facturés, fiche Google)
+            </p>
+          </div>
         </div>
         <p className="mt-4 text-xs text-ink-500">
           Barème estimatif : article ≈ 0,03 € (claude-sonnet-5) · image ≈ 0,0025 € (fal.ai
-          FLUX.1 schnell) · démo complète ≈ 0,30 €. En mode mock, rien n&apos;est facturé.
+          FLUX.1 schnell) · démo complète ≈ 0,30 €. DataForSEO (fiche Google) : coût réel
+          renvoyé par l&apos;API, plafonné à 5 $ par site et par mois. En mode mock, rien
+          n&apos;est facturé.
         </p>
       </Card>
     </div>

@@ -160,12 +160,19 @@ chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 ## Étape 6 — Le cron des jobs (déjà câblé, à vérifier)
 
 `apps/admin/vercel.json` déclare le cron sur `/api/jobs/tick`
-(calendrier éditorial, rédaction J-7, publication auto, syncs Google).
+(calendrier éditorial, rédaction J-7, publication auto, syncs Google : stats,
+avis, puis fiche Google du studio — audit mensuel, collecte des tâches d'avis
+DataForSEO, relevés de visibilité tous les 14 jours).
 Vercel envoie automatiquement `Authorization: Bearer <CRON_SECRET>`.
 
 Cadence : **quotidienne à 6h UTC** (compatible plan Hobby — les articles étant
 rédigés 7 jours à l'avance, c'est suffisant). Une fois en Pro, vous pouvez
 passer à l'horaire en changeant `"schedule"` en `"0 * * * *"` dans ce fichier.
+Chaque tick est isolé : un tick en erreur est journalisé (`processed: 0`) sans
+bloquer les suivants. Les ticks de la fiche Google ne dépensent rien sans
+`DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (mock) et respectent le plafond de
+5 $ par site et par mois (1 $ pour une démo) ; les dépenses réelles
+apparaissent dans la vue d'ensemble de l'admin (« Fournisseurs (DataForSEO) »).
 
 Vérification : projet admin → onglet **Cron Jobs** → « Run » → le log doit
 répondre `{"ok":true,…}`.

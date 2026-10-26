@@ -55,6 +55,17 @@ export const UNIT_COSTS_EUR = {
   demoGeneration: 0.8,
 } as const;
 
+/** Taux USD → EUR appliqué aux fournisseurs facturés en dollars (DataForSEO). */
+export const USD_TO_EUR = 0.92;
+
+/**
+ * Coûts fournisseur réels du mois (DataForSEO : `SUM(google_usage.cost_usd)`),
+ * convertis en euros et arrondis au centime.
+ */
+export function providerCostsEur(costUsd: number): number {
+  return Math.round(Math.max(0, costUsd) * USD_TO_EUR * 100) / 100;
+}
+
 export type AiUsage = {
   articlesGenerated: number;
   imagesGenerated: number;
