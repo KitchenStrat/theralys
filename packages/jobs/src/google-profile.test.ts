@@ -14,6 +14,7 @@ import {
   scanStatusForMissing,
   selectDueKeywords,
   selectDueSites,
+  hasRealGoogleProvider,
 } from "./google-profile";
 
 const NOW = new Date("2026-10-26T06:00:00Z");
@@ -124,5 +125,14 @@ describe("tâches d'avis et échéance des ticks", () => {
     expect(pastDeadline({}, NOW.getTime())).toBe(false);
     expect(pastDeadline({ deadline: NOW }, NOW.getTime())).toBe(false);
     expect(pastDeadline({ deadline: NOW }, NOW.getTime() + 1)).toBe(true);
+  });
+});
+
+describe("hasRealGoogleProvider", () => {
+  it("vrai avec DataForSEO (hors mock forcé) ou une clé Places", () => {
+    expect(hasRealGoogleProvider({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(hasRealGoogleProvider({ DATAFORSEO_LOGIN: "a", DATAFORSEO_PASSWORD: "b" } as NodeJS.ProcessEnv)).toBe(true);
+    expect(hasRealGoogleProvider({ DATAFORSEO_LOGIN: "a", DATAFORSEO_PASSWORD: "b", DATAFORSEO_MOCK: "1" } as NodeJS.ProcessEnv)).toBe(false);
+    expect(hasRealGoogleProvider({ GOOGLE_PLACES_API_KEY: "k" } as NodeJS.ProcessEnv)).toBe(true);
   });
 });

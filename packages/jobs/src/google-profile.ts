@@ -25,7 +25,7 @@
  *   attributs et description inconnus).
  */
 
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, ne, notInArray, notLike, or, sql } from "drizzle-orm";
 import {
   DATAFORSEO_UNIT_COSTS,
   GOOGLE_GRID,
@@ -45,6 +45,7 @@ import {
   findOwnListing,
   gridPoints,
   gridRadiusKm,
+  isMockPlaceId,
   summarizeScan,
   usageMonthKey,
   type GeoPoint,
@@ -258,6 +259,17 @@ export function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
 // ─── Aides communes ──────────────────────────────────────────────────────────
 
 /** Accès à la section Fiche Google : démos et formule Scale. */
+/**
+ * Au moins un fournisseur réel est configuré (DataForSEO ou Places) : les
+ * identifiants de fiche factices (`mock-…`) ne sont alors jamais envoyés et la
+ * section propose de relier la vraie fiche.
+ */
+export function hasRealGoogleProvider(env: NodeJS.ProcessEnv = process.env): boolean {
+  const mock = env.DATAFORSEO_MOCK === "1" || env.DATAFORSEO_MOCK === "true";
+  const dataforseo = !mock && Boolean(env.DATAFORSEO_LOGIN && env.DATAFORSEO_PASSWORD);
+  return dataforseo || Boolean(env.GOOGLE_PLACES_API_KEY);
+}
+
 export function hasGoogleProfileAccess(site: Pick<Site, "type" | "plan">): boolean {
   return site.type === "demo" || hasGoogleProfile(site.plan);
 }
@@ -446,6 +458,8 @@ export async function syncGoogleProfile(
   const { site, prospect } = loaded;
   const placeId = prospect?.googlePlaceId ?? null;
   if (!prospect || !placeId) return { status: "skipped", reason: "no_place" };
+  // Fiche factice d'une démo créée sans clé Places : rien à synchroniser avec un fournisseur réel
+  if (isMockPlaceId(placeId) && hasRealGoogleProvider()) return { status: "skipped", reason: "no_place" };
   if (!hasGoogleProfileAccess(site)) return { status: "skipped", reason: "no_access" };
 
   const previousSnapshot = (await latestAudit(db, siteId))?.snapshot ?? null;
@@ -885,6 +899,8 @@ export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {
     .where(
       and(
         isNotNull(prospects.googlePlaceId),
+        // Fiches factices (démos créées sans clé Places) ignorées dès qu'un fournisseur réel existe
+        hasRealGoogleProvider() ? notLike(prospects.googlePlaceId, "mock-%") : undefined,
         ne(sites.status, "archived"),
         googleAccessCondition(),
         clientsAllowed ? undefined : eq(sites.type, "demo"),
@@ -1026,6 +1042,7 @@ export async function runScheduledGoogleScans(now = new Date(), opts: TickOption
       and(
         eq(googleKeywords.active, true),
         isNotNull(prospects.googlePlaceId),
+        hasRealGoogleProvider() ? notLike(prospects.googlePlaceId, "mock-%") : undefined,
         ne(sites.status, "archived"),
         googleAccessCondition(),
         // Position de la fiche connue : le dernier audit du site porte un instantané avec `location`

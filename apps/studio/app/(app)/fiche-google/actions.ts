@@ -14,7 +14,7 @@ import {
   type PlanId,
 } from "@theralys/db";
 import { checkEthicalCompliance, createGooglePostGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
-import { analyzeGoogleReviews, googleBudget, runGoogleScan, syncGoogleProfile } from "@theralys/jobs";
+import { analyzeGoogleReviews, googleBudget, hasRealGoogleProvider, runGoogleScan, syncGoogleProfile } from "@theralys/jobs";
 import {
   EMPTY_SOCIAL_ASSETS,
   GOOGLE_KEYWORDS_MAX,
@@ -24,6 +24,7 @@ import {
   estimateScanCostUsd,
   isoDay,
   monthRange,
+  isMockPlaceId,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
@@ -130,7 +131,9 @@ export async function linkGoogleProfile(input: unknown): Promise<SyncResult> {
   // Une fiche déjà reliée ne se relie pas à nouveau par cette action (ce serait
   // une synchronisation forcée sans la règle des 24 h d'« Actualiser »)
   const prospect = await getProspect(site);
-  if (prospect?.googlePlaceId) return { error: "Votre fiche est déjà reliée." };
+  if (prospect?.googlePlaceId && !(isMockPlaceId(prospect.googlePlaceId) && hasRealGoogleProvider())) {
+    return { error: "Votre fiche est déjà reliée." };
+  }
 
   const linked = await connectGooglePlace(parsed.data);
   if (linked.error) return { error: linked.error };

@@ -10,6 +10,7 @@ import {
   estimateScanCostUsd,
   findOwnListing,
   gridPoints,
+  isMockPlaceId,
   isDistinctiveTitle,
   rankTone,
   summarizeScan,
@@ -213,5 +214,13 @@ describe("texte d'un post Google", () => {
       "Un conseil simple.\n\nRespirez trois fois.",
     );
     expect(captionToGoogleSummary("a".repeat(2000), "")).toHaveLength(1500);
+  });
+});
+
+describe("isMockPlaceId", () => {
+  it("reconnaît les identifiants du mock Places", () => {
+    expect(isMockPlaceId("mock-jonathan-lespinasse-1")).toBe(true);
+    expect(isMockPlaceId("ChIJN1t_tDeuEmsRUsoyG83frY4")).toBe(false);
+    expect(isMockPlaceId(null)).toBe(false);
   });
 });

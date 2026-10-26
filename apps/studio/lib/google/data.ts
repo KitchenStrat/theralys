@@ -16,7 +16,8 @@ import {
   type Prospect,
   type Site,
 } from "@theralys/db";
-import { googleBudget, type GoogleBudget } from "@theralys/jobs";
+import { googleBudget, hasRealGoogleProvider, type GoogleBudget } from "@theralys/jobs";
+import { isMockPlaceId } from "@theralys/shared";
 import type {
   GoogleAudit,
   GoogleCompetitor,
@@ -96,8 +97,13 @@ export type GoogleProfileData = {
 };
 
 /** Fiche reliée (prospect) : null tant que `googlePlaceId` est vide. */
-export function linkedProfileOf(prospect: Prospect | null): GoogleLinkedProfile | null {
+export function linkedProfileOf(
+  prospect: Prospect | null,
+  opts: { realProviders?: boolean } = {},
+): GoogleLinkedProfile | null {
   if (!prospect?.googlePlaceId) return null;
+  // Démo créée sans clé Places : identifiant factice, à remplacer par la vraie fiche dès qu'un fournisseur réel existe
+  if (opts.realProviders && isMockPlaceId(prospect.googlePlaceId)) return null;
   return {
     placeId: prospect.googlePlaceId,
     name: prospect.googleBusinessName ?? `${prospect.firstName} ${prospect.lastName}`,
@@ -257,7 +263,7 @@ export async function getGoogleProfileData(
     getGoogleRequestUsage(site.id, now),
   ]);
   return {
-    linked: linkedProfileOf(prospect),
+    linked: linkedProfileOf(prospect, { realProviders: hasRealGoogleProvider() }),
     latestAudit,
     history,
     keywords,

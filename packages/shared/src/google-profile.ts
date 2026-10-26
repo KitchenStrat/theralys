@@ -310,6 +310,15 @@ export function benchmarkFrom(competitors: GoogleCompetitor[]): GoogleBenchmark 
   };
 }
 
+/**
+ * Identifiant de fiche factice (`MockGooglePlacesProvider`, démos créées sans
+ * clé Places) : jamais envoyé à un fournisseur réel ; la section propose alors
+ * de relier la vraie fiche.
+ */
+export function isMockPlaceId(placeId: string | null | undefined): boolean {
+  return typeof placeId === "string" && placeId.startsWith("mock-");
+}
+
 // ─── Instantané de la fiche ──────────────────────────────────────────────────
 
 export type GoogleProfileSnapshot = {
