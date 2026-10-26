@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { SOCIAL_SIZES } from "@theralys/shared";
 import { getSession } from "@/lib/auth";
+import { getSite } from "@/lib/data";
+import { googleAccess } from "@/lib/google/access";
 import { ownedActiveGooglePost } from "@/lib/google/post-access";
 import { GOOGLE_POST_SIZE, renderableGooglePost } from "@/lib/google/render";
 import { renderKey, renderSlideCached } from "@/lib/social/render/cache";
@@ -28,6 +30,10 @@ const NO_STORE = "private, no-store";
 export async function GET(request: NextRequest, context: { params: Promise<{ postId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
+  // Formule : un client repassé à une formule sans Fiche Google ne rend ni ne télécharge plus ses posts
+  if (!googleAccess(await getSite(session.siteId))) {
+    return NextResponse.json({ error: "La Fiche Google n'est pas incluse dans votre formule." }, { status: 403 });
+  }
 
   const { postId } = await context.params;
   const post = await ownedActiveGooglePost(session.siteId, postId);

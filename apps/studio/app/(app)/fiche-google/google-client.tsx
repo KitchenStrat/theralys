@@ -114,6 +114,7 @@ export function GoogleClient({
         {tab === "avis" ? (
           <ReviewsTab
             reviews={data.reviews}
+            totalCount={data.reviewsTotal}
             summary={data.reviewsSummary}
             placeId={data.linked?.placeId ?? null}
           />

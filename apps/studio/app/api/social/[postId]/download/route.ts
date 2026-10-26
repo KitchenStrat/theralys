@@ -3,7 +3,9 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, socialPosts } from "@theralys/db";
 import { SOCIAL_SIZES, sizesFor, type SocialFormat, type SocialSize, type SocialTemplate } from "@theralys/shared";
+import { hasSocialMedia } from "@theralys/db";
 import { getSession } from "@/lib/auth";
+import { getSite } from "@/lib/data";
 import { ownedActiveSocialPost } from "@/lib/social/post-access";
 import {
   SIZE_SUFFIX,
@@ -52,6 +54,11 @@ function file(data: Uint8Array, contentType: string, filename: string): NextResp
 export async function GET(request: NextRequest, context: { params: Promise<{ postId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
+  // Formule : un client repassé à une formule sans réseaux sociaux ne rend ni ne télécharge plus ses contenus
+  const site = await getSite(session.siteId);
+  if (site.type !== "demo" && !hasSocialMedia(site.plan)) {
+    return NextResponse.json({ error: "Les contenus réseaux sociaux ne sont pas inclus dans votre formule." }, { status: 403 });
+  }
 
   const { postId } = await context.params;
   const post = await ownedActiveSocialPost(session.siteId, postId);

@@ -8,6 +8,23 @@ import { and, eq, gte, lt, ne, sql } from "drizzle-orm";
 import { getDb, googleRankScans } from "@theralys/db";
 import { GOOGLE_MANUAL_SCANS_PER_MONTH, isoDay } from "@theralys/shared";
 
+/** Un relevé `running` plus ancien est considéré comme interrompu (processus mort). */
+export const RUNNING_STALE_MS = 15 * 60_000;
+
+/**
+ * Statut à afficher : un relevé `running` périmé (> RUNNING_STALE_MS) est
+ * présenté en erreur pour ne pas figer l'onglet jusqu'au prochain relevé.
+ */
+export function displayScanStatus(
+  status: "running" | "done" | "error",
+  scannedAt: Date | string,
+  now: Date,
+): "running" | "done" | "error" {
+  if (status !== "running") return status;
+  const at = scannedAt instanceof Date ? scannedAt : new Date(scannedAt);
+  return now.getTime() - at.getTime() > RUNNING_STALE_MS ? "error" : "running";
+}
+
 export type ScanUsage = {
   used: number;
   remaining: number;

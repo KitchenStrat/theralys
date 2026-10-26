@@ -23,6 +23,8 @@ export function LinkCard({ siteName }: { siteName: string }) {
   const [pending, startTransition] = useTransition();
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  const lastRequest = useRef(0);
+
   useEffect(() => () => clearTimeout(timer.current), []);
 
   function onQueryChange(value: string) {
@@ -34,10 +36,16 @@ export function LinkCard({ siteName }: { siteName: string }) {
       return;
     }
     timer.current = setTimeout(() => {
+      // Une réponse lente d'une saisie précédente ne doit pas écraser les résultats courants
+      const requestId = ++lastRequest.current;
       setSearching(true);
       searchGoogle(value)
-        .then(setResults)
-        .finally(() => setSearching(false));
+        .then((found) => {
+          if (requestId === lastRequest.current) setResults(found);
+        })
+        .finally(() => {
+          if (requestId === lastRequest.current) setSearching(false);
+        });
     }, 350);
   }
 

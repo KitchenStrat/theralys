@@ -3,6 +3,8 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, googlePosts } from "@theralys/db";
 import { getSession } from "@/lib/auth";
+import { getSite } from "@/lib/data";
+import { googleAccess } from "@/lib/google/access";
 import { ownedActiveGooglePost } from "@/lib/google/post-access";
 import { GOOGLE_POST_SIZE, googlePostTxt, renderableGooglePost } from "@/lib/google/render";
 import { buildZip, contentDisposition, downloadFilename, type ZipEntry } from "@/lib/social/render/bundle";
@@ -36,6 +38,10 @@ function file(data: Uint8Array, contentType: string, filename: string): NextResp
 export async function GET(request: NextRequest, context: { params: Promise<{ postId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
+  // Formule : un client repassé à une formule sans Fiche Google ne rend ni ne télécharge plus ses posts
+  if (!googleAccess(await getSite(session.siteId))) {
+    return NextResponse.json({ error: "La Fiche Google n'est pas incluse dans votre formule." }, { status: 403 });
+  }
 
   const { postId } = await context.params;
   const post = await ownedActiveGooglePost(session.siteId, postId);

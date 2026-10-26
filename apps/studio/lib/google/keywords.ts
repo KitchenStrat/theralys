@@ -16,7 +16,8 @@ export type KeywordNormalization = { ok: true; keyword: string } | { ok: false; 
  */
 export function normalizeKeyword(raw: unknown): KeywordNormalization {
   if (typeof raw !== "string") return { ok: false, error: "Saisissez un mot-clé." };
-  const keyword = raw.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+  // Apostrophes typographiques (claviers mobiles, macOS) ramenées à l'apostrophe droite
+  const keyword = raw.normalize("NFC").replace(/[\u2019\u2018]/g, "'").toLowerCase().replace(/\s+/g, " ").trim();
   if (keyword.length < KEYWORD_MIN) return { ok: false, error: `Un mot-clé compte au moins ${KEYWORD_MIN} caractères.` };
   if (keyword.length > KEYWORD_MAX) return { ok: false, error: `Un mot-clé compte au plus ${KEYWORD_MAX} caractères.` };
   if (!/^[\p{L}\p{N}' -]+$/u.test(keyword)) {

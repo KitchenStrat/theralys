@@ -42,3 +42,10 @@ describe("rayons et quota", () => {
     expect(canAddKeyword(3)).toBe(false);
   });
 });
+
+describe("normalizeKeyword : apostrophe typographique", () => {
+  it("ramène ’ et ‘ à l'apostrophe droite", () => {
+    expect(normalizeKeyword("L’hypnose à Albi")).toEqual({ ok: true, keyword: "l'hypnose à albi" });
+    expect(normalizeKeyword("‘sophro’ albi")).toEqual({ ok: true, keyword: "'sophro' albi" });
+  });
+});

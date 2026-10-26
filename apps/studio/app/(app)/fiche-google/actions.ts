@@ -326,10 +326,15 @@ export async function scanGoogleKeyword(keywordId: unknown): Promise<ScanResult>
 // ─── Avis ────────────────────────────────────────────────────────────────────
 
 /** « Analyser les nouveaux avis » : sentiment, thèmes et réponse proposée (≤ 20 avis par appel). */
+/** Analyses en cours dans ce processus (par site) : second appel refusé sans appel IA. */
+const analysesInFlight = new Set<string>();
+
 export async function analyzeReviews(): Promise<{ error?: string; analyzed?: number }> {
   const session = await requireClient();
   const site = await getSite(session.siteId);
   if (!googleAccess(site)) return { error: NOT_INCLUDED };
+  if (analysesInFlight.has(site.id)) return { error: "Analyse déjà en cours, patientez." };
+  analysesInFlight.add(site.id);
   const started = Date.now();
   try {
     const analyzed = await analyzeGoogleReviews(site.id, { limit: 20 });
@@ -339,6 +344,8 @@ export async function analyzeReviews(): Promise<{ error?: string; analyzed?: num
   } catch (err) {
     console.error("[google] analyse des avis échouée", { siteId: site.id, ms: Date.now() - started, err });
     return { error: "L'analyse a échoué — réessayez dans un instant." };
+  } finally {
+    analysesInFlight.delete(site.id);
   }
 }
 
@@ -562,8 +569,11 @@ async function activePost(siteId: string, postId: string) {
 }
 
 /** « Marquer comme publié » / « Annuler ». */
-export async function markGooglePostPublished(postId: string, published: boolean): Promise<{ error?: string }> {
+export async function markGooglePostPublished(postId: string, publishedInput: unknown): Promise<{ error?: string }> {
   const session = await requireClient();
+  const parsedPublished = z.boolean().safeParse(publishedInput);
+  if (!parsedPublished.success) return { error: "Requête invalide." };
+  const published = parsedPublished.data;
   const post = await activePost(session.siteId, postId);
   if (!post) return { error: NOT_FOUND };
   const now = new Date();
@@ -586,7 +596,9 @@ export async function rescheduleGooglePost(input: unknown): Promise<{ error?: st
   if (!post) return { error: NOT_FOUND };
   const day = validDay(parsed.data.date);
   if (!day) return { error: "Date invalide" };
-  if (post.status !== "published" && day < parisDay(new Date())) return { error: FUTURE_DATE };
+  const today = parisDay(new Date());
+  if (post.status !== "published" && day < today) return { error: FUTURE_DATE };
+  if (day > shiftIsoDay(today, GOOGLE_HORIZON_DAYS)) return { error: "Choisissez une date dans les 4 prochains mois." };
   await getDb().update(googlePosts).set({ scheduledFor: day, updatedAt: new Date() }).where(eq(googlePosts.id, post.id));
   revalidatePath(PATH);
   return {};

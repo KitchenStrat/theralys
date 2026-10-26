@@ -72,12 +72,14 @@ export function filterReviews<T extends Pick<GoogleReviewView, "rating" | "analy
   return reviews;
 }
 
-export function summarizeReviews(reviews: Pick<GoogleReviewView, "rating" | "ownerReply" | "analysis">[]): ReviewsSummary {
+export function summarizeReviews(reviews: Pick<GoogleReviewView, "rating" | "ownerReply" | "analysis" | "text">[]): ReviewsSummary {
   const total = reviews.length;
   const counts = new Map<number, number>();
   const topics = new Map<GoogleReviewTopic, number>();
   let answered = 0;
   let analyzed = 0;
+  /** Avis analysables (texte non vide) encore sans analyse : les avis « note seule » ne sont jamais analysés */
+  let unanalyzed = 0;
   let negative = 0;
   let sum = 0;
   for (const review of reviews) {
@@ -88,6 +90,8 @@ export function summarizeReviews(reviews: Pick<GoogleReviewView, "rating" | "own
     if (review.analysis) {
       analyzed += 1;
       for (const topic of review.analysis.topics) topics.set(topic, (topics.get(topic) ?? 0) + 1);
+    } else if (review.text.trim() !== "") {
+      unanalyzed += 1;
     }
     if (isNegative(review)) negative += 1;
   }
@@ -107,7 +111,7 @@ export function summarizeReviews(reviews: Pick<GoogleReviewView, "rating" | "own
     answered,
     responseRate: total === 0 ? null : Math.round((answered / total) * 100),
     analyzed,
-    unanalyzed: total - analyzed,
+    unanalyzed,
     negative,
     topTopics,
   };

@@ -29,10 +29,13 @@ const SENTIMENT: Record<GoogleReviewSentiment, { label: string; tone: "success" 
 
 export function ReviewsTab({
   reviews,
+  totalCount,
   summary,
   placeId,
 }: {
   reviews: GoogleReviewView[];
+  /** Total en base (les `reviews` sont les plus récents) */
+  totalCount: number;
   summary: ReviewsSummary;
   placeId: string | null;
 }) {
@@ -73,6 +76,7 @@ export function ReviewsTab({
             <h2 className="text-xl font-semibold">Vos avis en un coup d&apos;œil</h2>
             <p className="mt-1 text-sm text-ink-500">
               {summary.total} avis synchronisé{summary.total > 1 ? "s" : ""}
+              {totalCount > summary.total ? ` (les ${summary.total} plus récents sur ${totalCount})` : ""}
               {summary.average !== null ? ` · note moyenne ${summary.average.toLocaleString("fr-FR")}` : ""}
             </p>
           </div>
@@ -172,8 +176,9 @@ export function ReviewsTab({
             <Card className="p-8 text-center text-sm text-ink-500">Aucun avis dans ce filtre.</Card>
           ) : (
             <ul className="space-y-4" aria-label="Avis">
+              {/* Clé liée à l'analyse : la réponse proposée remplace le brouillon vide après « Analyser » */}
               {visible.map((review) => (
-                <li key={review.id}>
+                <li key={`${review.id}:${review.analysis?.generatedAt ?? ""}`}>
                   <ReviewCard review={review} placeId={placeId} />
                 </li>
               ))}

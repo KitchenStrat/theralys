@@ -29,7 +29,7 @@ import type {
 import { isGridRadius } from "./keywords";
 import { getGoogleMonth, getGoogleRequestUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
 import { summarizeReviews, type GoogleReviewView, type ReviewsSummary } from "./reviews";
-import { getScanUsage, type ScanUsage } from "./scans";
+import { RUNNING_STALE_MS, displayScanStatus, getScanUsage, type ScanUsage } from "./scans";
 
 /** Audits conservés dans l'historique des scores. */
 const HISTORY_LIMIT = 12;
@@ -88,6 +88,8 @@ export type GoogleProfileData = {
   scanUsage: ScanUsage;
   budget: GoogleBudget;
   reviews: GoogleReviewView[];
+  /** Nombre total d'avis synchronisés (les `reviews` sont les REVIEWS_LIMIT plus récents) */
+  reviewsTotal: number;
   reviewsSummary: ReviewsSummary;
   posts: GoogleMonthData;
   postUsage: GoogleRequestUsage;
@@ -127,7 +129,7 @@ async function getScoreHistory(siteId: string): Promise<GoogleScoreHistoryPoint[
 }
 
 /** Mots-clés actifs du site (ordre de position puis de création) avec leurs derniers relevés. */
-export async function getGoogleKeywords(siteId: string): Promise<GoogleKeywordView[]> {
+export async function getGoogleKeywords(siteId: string, now = new Date()): Promise<GoogleKeywordView[]> {
   const db = getDb();
   const keywords = await db.query.googleKeywords.findMany({
     where: and(eq(googleKeywords.siteId, siteId), eq(googleKeywords.active, true)),
@@ -135,7 +137,9 @@ export async function getGoogleKeywords(siteId: string): Promise<GoogleKeywordVi
   });
   if (keywords.length === 0) return [];
   const ids = keywords.map((k) => k.id);
-  // Au plus SCANS_PER_KEYWORD relevés par mot-clé (fenêtre SQL), sans charger tout l'historique
+  // Au plus SCANS_PER_KEYWORD relevés aboutis par mot-clé (fenêtre SQL), sans
+  // charger tout l'historique ; les relevés en cours sont chargés à part (un
+  // relevé en erreur n'efface pas le dernier relevé réussi).
   const ranked = db.$with("ranked").as(
     db
       .select({
@@ -143,9 +147,27 @@ export async function getGoogleKeywords(siteId: string): Promise<GoogleKeywordVi
         rank: sql<number>`row_number() over (partition by ${googleRankScans.keywordId} order by ${googleRankScans.scannedAt} desc)`.as("rank"),
       })
       .from(googleRankScans)
-      .where(and(eq(googleRankScans.siteId, siteId), inArray(googleRankScans.keywordId, ids))),
+      .where(
+        and(
+          eq(googleRankScans.siteId, siteId),
+          inArray(googleRankScans.keywordId, ids),
+          eq(googleRankScans.status, "done"),
+        ),
+      ),
   );
-  const kept = await db.with(ranked).select({ id: ranked.id }).from(ranked).where(sql`${ranked.rank} <= ${SCANS_PER_KEYWORD}`);
+  const keptDone = await db.with(ranked).select({ id: ranked.id }).from(ranked).where(sql`${ranked.rank} <= ${SCANS_PER_KEYWORD}`);
+  const running = await db
+    .select({ id: googleRankScans.id })
+    .from(googleRankScans)
+    .where(
+      and(
+        eq(googleRankScans.siteId, siteId),
+        inArray(googleRankScans.keywordId, ids),
+        eq(googleRankScans.status, "running"),
+        sql`${googleRankScans.scannedAt} > ${new Date(now.getTime() - RUNNING_STALE_MS)}`,
+      ),
+    );
+  const kept = [...keptDone, ...running];
   const scans =
     kept.length === 0
       ? []
@@ -166,7 +188,7 @@ export async function getGoogleKeywords(siteId: string): Promise<GoogleKeywordVi
       id: scan.id,
       keywordId: scan.keywordId,
       trigger: scan.trigger,
-      status: scan.status,
+      status: displayScanStatus(scan.status, scan.scannedAt, now),
       grid: scan.grid,
       points: scan.points,
       summary: scan.summary ?? null,
@@ -207,6 +229,15 @@ export async function getGoogleReviews(siteId: string): Promise<GoogleReviewView
   }));
 }
 
+/** Nombre total d'avis synchronisés du site. */
+export async function countGoogleReviews(siteId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ total: sql<number>`count(*)`.mapWith(Number) })
+    .from(googleReviews)
+    .where(eq(googleReviews.siteId, siteId));
+  return row?.total ?? 0;
+}
+
 /** Toutes les données de la section, en parallèle. */
 export async function getGoogleProfileData(
   site: Site,
@@ -214,13 +245,14 @@ export async function getGoogleProfileData(
   calendar: { year: number; month: number },
   now = new Date(),
 ): Promise<GoogleProfileData> {
-  const [latestAudit, history, keywords, scanUsage, budget, reviews, posts, postUsage] = await Promise.all([
+  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage] = await Promise.all([
     getLatestGoogleAudit(site.id),
     getScoreHistory(site.id),
-    getGoogleKeywords(site.id),
+    getGoogleKeywords(site.id, now),
     getScanUsage(site.id, now),
     googleBudget(getDb(), { id: site.id, type: site.type }, now),
     getGoogleReviews(site.id),
+    countGoogleReviews(site.id),
     getGoogleMonth(site.id, calendar.year, calendar.month, now),
     getGoogleRequestUsage(site.id, now),
   ]);
@@ -232,6 +264,7 @@ export async function getGoogleProfileData(
     scanUsage,
     budget,
     reviews,
+    reviewsTotal,
     reviewsSummary: summarizeReviews(reviews),
     posts,
     postUsage,

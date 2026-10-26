@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GOOGLE_MANUAL_SCANS_PER_MONTH } from "@theralys/shared";
-import { computeScanUsage, usageMonthBounds, type ScanUsageRow } from "./scans";
+import { RUNNING_STALE_MS, computeScanUsage, displayScanStatus, usageMonthBounds, type ScanUsageRow } from "./scans";
 
 const NOW = new Date("2026-10-26T09:00:00Z");
 
@@ -39,5 +39,18 @@ describe("computeScanUsage", () => {
     const usage = computeScanUsage(scans, NOW);
     expect(usage.used).toBe(GOOGLE_MANUAL_SCANS_PER_MONTH + 2);
     expect(usage.remaining).toBe(0);
+  });
+});
+
+describe("displayScanStatus", () => {
+  const now = new Date("2026-10-26T12:00:00Z");
+  it("un relevé en cours récent reste en cours, un relevé en cours périmé est présenté en erreur", () => {
+    expect(displayScanStatus("running", new Date(now.getTime() - 60_000), now)).toBe("running");
+    expect(displayScanStatus("running", new Date(now.getTime() - RUNNING_STALE_MS - 1), now)).toBe("error");
+    expect(displayScanStatus("running", new Date(now.getTime() - RUNNING_STALE_MS - 1).toISOString(), now)).toBe("error");
+  });
+  it("les autres statuts sont inchangés", () => {
+    expect(displayScanStatus("done", new Date(0), now)).toBe("done");
+    expect(displayScanStatus("error", new Date(0), now)).toBe("error");
   });
 });

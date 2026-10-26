@@ -111,6 +111,12 @@ export async function connectGooglePlace(input: unknown): Promise<{ error?: stri
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
   if (!site?.prospectId) return { error: "Site sans fiche praticien" };
+  const previous = await db.query.prospects.findFirst({
+    where: eq(prospects.id, site.prospectId),
+    columns: { googlePlaceId: true },
+  });
+  // Même fiche reliée à nouveau : les avis déjà synchronisés (et leurs analyses) sont conservés
+  const placeChanged = previous?.googlePlaceId !== parsed.data.placeId;
 
   await db
     .update(prospects)
@@ -129,18 +135,34 @@ export async function connectGooglePlace(input: unknown): Promise<{ error?: stri
     try {
       const details = await places.fetchDetails(parsed.data.placeId);
       if (details.reviews.length > 0) {
-        await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
-        await db.insert(googleReviews).values(
-          details.reviews.map((r) => ({
-            siteId: site.id,
-            sourceReviewId: r.sourceReviewId,
-            authorName: r.authorName,
-            authorPhotoUrl: r.authorPhotoUrl,
-            rating: r.rating,
-            text: r.text,
-            reviewedAt: r.reviewedAt,
-          })),
-        );
+        if (placeChanged) await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
+        const existing = placeChanged
+          ? new Set<string>()
+          : new Set(
+              (
+                await db.query.googleReviews.findMany({
+                  where: eq(googleReviews.siteId, site.id),
+                  columns: { sourceReviewId: true },
+                })
+              )
+                .map((r) => r.sourceReviewId)
+                .filter((id): id is string => id !== null),
+            );
+        const fresh = details.reviews.filter((r) => !r.sourceReviewId || !existing.has(r.sourceReviewId));
+        if (fresh.length > 0) {
+          await db.insert(googleReviews).values(
+            fresh.map((r) => ({
+              siteId: site.id,
+              sourceReviewId: r.sourceReviewId,
+              authorName: r.authorName,
+              authorPhotoUrl: r.authorPhotoUrl,
+              rating: r.rating,
+              text: r.text,
+              reviewedAt: r.reviewedAt,
+              source: "places",
+            })),
+          );
+        }
         if (details.rating !== null) {
           await db
             .update(prospects)

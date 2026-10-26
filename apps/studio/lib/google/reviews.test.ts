@@ -14,11 +14,11 @@ function analysis(sentiment: GoogleReviewAnalysis["sentiment"], topics: GoogleRe
 }
 
 const REVIEWS = [
-  { rating: 5, ownerReply: "Merci !", analysis: analysis("positif", ["accueil", "ecoute"]) },
-  { rating: 5, ownerReply: null, analysis: analysis("positif", ["ecoute", "douceur"]) },
-  { rating: 4, ownerReply: "  ", analysis: null },
-  { rating: 3, ownerReply: null, analysis: analysis("mitige", ["tarifs", "ecoute"]) },
-  { rating: 1, ownerReply: null, analysis: null },
+  { rating: 5, ownerReply: "Merci !", analysis: analysis("positif", ["accueil", "ecoute"]), text: "Très bien" },
+  { rating: 5, ownerReply: null, analysis: analysis("positif", ["ecoute", "douceur"]), text: "Douceur" },
+  { rating: 4, ownerReply: "  ", analysis: null, text: "Bien" },
+  { rating: 3, ownerReply: null, analysis: analysis("mitige", ["tarifs", "ecoute"]), text: "Cher" },
+  { rating: 1, ownerReply: null, analysis: null, text: "Déçu" },
 ];
 
 describe("summarizeReviews", () => {
@@ -56,7 +56,17 @@ describe("summarizeReviews", () => {
   });
 
   it("les notes hors 1..5 sont ramenées dans la plage", () => {
-    expect(summarizeReviews([{ rating: 7, ownerReply: null, analysis: null }]).distribution[0]!.count).toBe(1);
+    expect(summarizeReviews([{ rating: 7, ownerReply: null, analysis: null, text: "x" }]).distribution[0]!.count).toBe(1);
+  });
+
+  it("un avis « note seule » (sans texte) n'est jamais compté comme « à analyser »", () => {
+    const summary = summarizeReviews([
+      { rating: 5, ownerReply: null, analysis: null, text: "" },
+      { rating: 4, ownerReply: null, analysis: null, text: "   " },
+      { rating: 2, ownerReply: null, analysis: null, text: "Trop long à obtenir" },
+    ]);
+    expect(summary.unanalyzed).toBe(1);
+    expect(summary.analyzed).toBe(0);
   });
 });
 
