@@ -7,15 +7,25 @@
  * - generateDueArticles      : J-7, rédige les articles (Claude/mock) + image
  * - publishDueArticles       : publication automatique à l'échéance
  * - syncGoogleData           : rafraîchit les stats Search Console (mock)
+ * - syncGoogleReviews        : avis des fiches reliées (Places API, toutes
+ *                              formules ; mock pour les démos seulement)
+ * - syncGoogleProfiles       : fiche Google (studio) : instantané + audit
+ *                              tous les 30 jours, tâche d'avis DataForSEO
+ * - collectGoogleReviewTasks : tâches d'avis terminées → avis, audit, analyse IA
+ * - runScheduledGoogleScans  : relevés de visibilité planifiés (14 jours)
+ *
+ * `runAllTicks` enchaîne les ticks avec un try/catch par tick : un tick en
+ * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants.
  */
 
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, ne } from "drizzle-orm";
 import {
   blogArticles,
   blogSettings,
   editorialCalendarEntries,
   getDb,
   googleConnections,
+  googleReviewTasks,
   googleReviews,
   hasBlog,
   pages,
@@ -38,7 +48,14 @@ import { readingTimeMinutes, slugify } from "@theralys/shared";
 import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
 import { generateMockSearchStats } from "./google-mock";
 import { createGooglePlacesProvider } from "@theralys/providers/google";
+import { createLocalSearchProvider } from "@theralys/providers/dataforseo";
 import { generateMockReviews } from "./reviews-mock";
+import {
+  collectGoogleReviewTasks,
+  hasGoogleProfileAccess,
+  runScheduledGoogleScans,
+  syncGoogleProfiles,
+} from "./google-profile";
 
 const HORIZON_WEEKS = 6;
 /** L'IA rédige chaque article 7 jours avant sa date de publication. */
@@ -266,75 +283,71 @@ export async function syncGoogleData(now = new Date()): Promise<TickReport> {
 }
 
 /**
- * Synchronisation des avis Google (toutes formules) : upsert par
- * sourceReviewId — jamais de doublon, les nouveaux avis apparaissent sur le
- * site public à la prochaine visite.
+ * Synchronisation des avis Google (toutes formules) des sites dont la fiche
+ * est reliée (`prospects.googlePlaceId`) : Places API (New) renvoie les 5
+ * avis les plus pertinents, upsert par sourceReviewId (jamais de doublon ni
+ * de suppression globale), note et nombre d'avis du prospect mis à jour. Les
+ * sites éligibles à la section Fiche Google sont ignorés quand DataForSEO est
+ * configuré : leurs avis arrivent par les tâches (`collectGoogleReviewTasks`).
+ * Sans aucun fournisseur réel, des avis factices ne sont générés que pour les
+ * démos (jamais sur un site client).
  */
 export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
   const db = getDb();
-  const connections = await db.query.googleConnections.findMany({
-    where: eq(googleConnections.status, "connected"),
-  });
+  const places = createGooglePlacesProvider();
+  const local = createLocalSearchProvider();
+  const rows = await db
+    .select({ site: sites, prospect: prospects })
+    .from(sites)
+    .innerJoin(prospects, eq(prospects.id, sites.prospectId))
+    .where(and(isNotNull(prospects.googlePlaceId), ne(sites.status, "archived")));
   let processed = 0;
 
-  const places = createGooglePlacesProvider();
+  for (const { site, prospect } of rows) {
+    const placeId = prospect.googlePlaceId;
+    if (!placeId) continue;
+    // Fiche Google (studio) + DataForSEO réel : avis complets via les tâches, pas Places
+    if (local.mode === "dataforseo" && hasGoogleProfileAccess(site)) continue;
 
-  for (const connection of connections) {
-    const site = await db.query.sites.findFirst({ where: eq(sites.id, connection.siteId) });
-    if (!site) continue;
-    const prospect = site.prospectId
-      ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
-      : null;
-
-    // Fiche Google reliée + API réelle : les vrais avis remplacent tout
-    if (places.mode === "google" && prospect?.googlePlaceId) {
+    if (places.mode === "google") {
       try {
-        const details = await places.fetchDetails(prospect.googlePlaceId);
-        if (details.reviews.length > 0) {
-          await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
-          await db.insert(googleReviews).values(
-            details.reviews.map((r) => ({
-              siteId: site.id,
-              sourceReviewId: r.sourceReviewId,
-              authorName: r.authorName,
-              authorPhotoUrl: r.authorPhotoUrl,
-              rating: r.rating,
-              text: r.text,
-              reviewedAt: r.reviewedAt,
-              syncedAt: now,
-            })),
-          );
-          if (details.rating !== null) {
-            await db
-              .update(prospects)
-              .set({
-                googleRating: details.rating,
-                googleReviewCount: details.reviewCount,
-                ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
-              })
-              .where(eq(prospects.id, prospect.id));
-          }
-          processed += details.reviews.length;
+        const details = await places.fetchDetails(placeId);
+        processed += await upsertPlacesReviews(db, site.id, details.reviews, now);
+        if (details.rating !== null) {
+          await db
+            .update(prospects)
+            .set({
+              googleRating: details.rating,
+              googleReviewCount: details.reviewCount,
+              ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
+            })
+            .where(eq(prospects.id, prospect.id));
         }
-        continue;
       } catch (err) {
         console.warn(`[sync-reviews] fiche Google indisponible pour ${site.slug} :`, err);
       }
+      continue;
     }
 
+    // Aucun fournisseur réel : avis factices pour les démos uniquement, et
+    // seulement tant qu'aucune tâche d'avis (mock) de la fiche Google n'a abouti
+    if (site.type !== "demo") continue;
+    const fed = await db.query.googleReviewTasks.findFirst({
+      where: and(eq(googleReviewTasks.siteId, site.id), eq(googleReviewTasks.status, "done")),
+      columns: { id: true },
+    });
+    if (fed) continue;
     const incoming = generateMockReviews({
       siteId: site.id,
-      firstName: prospect?.firstName ?? "votre praticien",
-      city: prospect?.city ?? "",
+      firstName: prospect.firstName,
+      city: prospect.city,
       now,
     });
-
     const existing = await db.query.googleReviews.findMany({
       where: eq(googleReviews.siteId, site.id),
       columns: { sourceReviewId: true },
     });
     const known = new Set(existing.map((r) => r.sourceReviewId).filter(Boolean));
-
     const fresh = incoming.filter((r) => !known.has(r.sourceReviewId));
     if (fresh.length > 0) {
       await db.insert(googleReviews).values(
@@ -346,6 +359,7 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
           rating: r.rating,
           text: r.text,
           reviewedAt: r.reviewedAt,
+          source: "mock",
           syncedAt: now,
         })),
       );
@@ -355,14 +369,68 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
   return { task: "sync-google-reviews", processed };
 }
 
+/** Avis Places → google_reviews : mise à jour des avis connus (par sourceReviewId), insertion des nouveaux. Renvoie le nombre d'avis traités. */
+async function upsertPlacesReviews(
+  db: Database,
+  siteId: string,
+  reviews: { sourceReviewId: string | null; authorName: string; authorPhotoUrl: string | null; rating: number; text: string; reviewedAt: Date | null }[],
+  now: Date,
+): Promise<number> {
+  const withId = reviews.filter((r): r is typeof r & { sourceReviewId: string } => r.sourceReviewId !== null);
+  if (withId.length === 0) return 0;
+  const existing = await db.query.googleReviews.findMany({
+    where: and(
+      eq(googleReviews.siteId, siteId),
+      inArray(
+        googleReviews.sourceReviewId,
+        withId.map((r) => r.sourceReviewId),
+      ),
+    ),
+    columns: { id: true, sourceReviewId: true },
+  });
+  const known = new Map(existing.map((r) => [r.sourceReviewId, r.id]));
+  const fresh: (typeof googleReviews.$inferInsert)[] = [];
+  for (const r of withId) {
+    const values = {
+      authorName: r.authorName,
+      authorPhotoUrl: r.authorPhotoUrl,
+      rating: r.rating,
+      text: r.text,
+      reviewedAt: r.reviewedAt,
+      source: "places",
+      syncedAt: now,
+    };
+    const id = known.get(r.sourceReviewId);
+    if (id) await db.update(googleReviews).set(values).where(eq(googleReviews.id, id));
+    else fresh.push({ siteId, sourceReviewId: r.sourceReviewId, ...values });
+  }
+  if (fresh.length > 0) await db.insert(googleReviews).values(fresh);
+  return withId.length;
+}
+
+const ALL_TICKS: { task: string; run: (now: Date) => Promise<TickReport> }[] = [
+  { task: "editorial-calendar", run: ensureEditorialCalendars },
+  { task: "generate-articles", run: generateDueArticles },
+  { task: "publish-articles", run: publishDueArticles },
+  { task: "sync-google", run: syncGoogleData },
+  { task: "sync-google-reviews", run: syncGoogleReviews },
+  { task: "sync-google-profiles", run: syncGoogleProfiles },
+  { task: "collect-google-reviews", run: collectGoogleReviewTasks },
+  { task: "scheduled-google-scans", run: runScheduledGoogleScans },
+];
+
+/** Tous les ticks, dans l'ordre ; un tick en erreur est journalisé et ne bloque pas les suivants. */
 export async function runAllTicks(now = new Date()): Promise<TickReport[]> {
-  return [
-    await ensureEditorialCalendars(now),
-    await generateDueArticles(now),
-    await publishDueArticles(now),
-    await syncGoogleData(now),
-    await syncGoogleReviews(now),
-  ];
+  const reports: TickReport[] = [];
+  for (const { task, run } of ALL_TICKS) {
+    try {
+      reports.push(await run(now));
+    } catch (err) {
+      console.error(`[ticks] ${task} en échec :`, err);
+      reports.push({ task, processed: 0 });
+    }
+  }
+  return reports;
 }
 
 async function availableArticleSlug(db: Database, siteId: string, base: string): Promise<string> {
