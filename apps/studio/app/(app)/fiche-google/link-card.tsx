@@ -12,7 +12,7 @@ type Place = { placeId: string; name: string; address: string; rating: number; r
  * « Reliez votre fiche Google » : recherche de la fiche (nom + ville), choix
  * dans les résultats, liaison puis première synchronisation (audit, avis).
  */
-export function LinkCard({ siteName }: { siteName: string }) {
+export function LinkCard({ siteName, onLinked }: { siteName: string; onLinked?: (message: string) => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Place[]>([]);
@@ -60,7 +60,9 @@ export function LinkCard({ siteName }: { siteName: string }) {
         setChosen(null);
         return;
       }
-      setMessage(result.message ?? "Fiche reliée.");
+      const notice = result.message ?? "Fiche reliée.";
+      setMessage(notice);
+      onLinked?.(notice);
       router.refresh();
     });
   }

@@ -14,11 +14,20 @@ export function formatSyncDate(iso: string): string {
 }
 
 /** Fiche reliée : nom, adresse, note, dernière synchronisation et bouton « Actualiser » (1 fois par 24 h). */
-export function ProfileCard({ linked, latestAudit }: { linked: GoogleLinkedProfile; latestAudit: GoogleAuditView | null }) {
+export function ProfileCard({
+  linked,
+  latestAudit,
+  notice = null,
+}: {
+  linked: GoogleLinkedProfile;
+  latestAudit: GoogleAuditView | null;
+  /** Message de la liaison qui vient d'aboutir (remplace l'état local jusqu'à la prochaine action) */
+  notice?: string | null;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(notice);
 
   function refresh() {
     setError(null);
@@ -66,7 +75,7 @@ export function ProfileCard({ linked, latestAudit }: { linked: GoogleLinkedProfi
             {pending ? <Spinner /> : null} Actualiser
           </Button>
           <p className="text-xs text-ink-500">
-            {latestAudit ? `Synchronisée le ${formatSyncDate(latestAudit.createdAt)}` : "Jamais synchronisée"}
+            {latestAudit ? `Synchronisée le ${formatSyncDate(latestAudit.snapshot.fetchedAt)}` : "Jamais synchronisée"}
           </p>
         </div>
       </div>

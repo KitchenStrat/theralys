@@ -27,7 +27,7 @@ import {
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
-import { getSite, siteUrl } from "@/lib/data";
+import { getProspect, getSite, siteUrl } from "@/lib/data";
 import { canAddKeyword, isGridRadius, normalizeKeyword } from "@/lib/google/keywords";
 import { ownedGooglePost } from "@/lib/google/post-access";
 import {
@@ -97,7 +97,7 @@ export type SyncResult = { error?: string; message?: string };
 
 /** Message lisible d'un résultat de `syncGoogleProfile`. */
 function syncMessage(outcome: Awaited<ReturnType<typeof syncGoogleProfile>>): SyncResult {
-  if (outcome.status === "done") return { message: "Fiche synchronisée : audit et avis mis à jour." };
+  if (outcome.status === "done") return { message: "Fiche synchronisée : audit mis à jour ; vos avis arrivent sous 24 h." };
   if (outcome.status === "error") {
     console.error("[google] synchronisation en erreur", outcome.message);
     return { error: "La synchronisation a échoué — réessayez dans un instant." };
@@ -127,6 +127,10 @@ export async function linkGoogleProfile(input: unknown): Promise<SyncResult> {
   if (!parsed.success) return { error: "Fiche invalide" };
   const site = await getSite(session.siteId);
   if (!googleAccess(site)) return { error: NOT_INCLUDED };
+  // Une fiche déjà reliée ne se relie pas à nouveau par cette action (ce serait
+  // une synchronisation forcée sans la règle des 24 h d'« Actualiser »)
+  const prospect = await getProspect(site);
+  if (prospect?.googlePlaceId) return { error: "Votre fiche est déjà reliée." };
 
   const linked = await connectGooglePlace(parsed.data);
   if (linked.error) return { error: linked.error };

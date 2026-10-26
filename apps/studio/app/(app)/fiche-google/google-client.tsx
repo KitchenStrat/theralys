@@ -31,6 +31,8 @@ export function GoogleClient({
   swatches: SocialSwatch[];
 }) {
   const [tab, setTab] = useState<GoogleTab>(initialTab);
+  /** Message de la liaison de fiche, affiché sur la carte de la fiche une fois reliée */
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const monthParam = `${calendar.year}-${String(calendar.month).padStart(2, "0")}`;
 
   function select(next: GoogleTab) {
@@ -53,9 +55,9 @@ export function GoogleClient({
 
       <div className="mt-6">
         {data.linked ? (
-          <ProfileCard linked={data.linked} latestAudit={data.latestAudit} />
+          <ProfileCard linked={data.linked} latestAudit={data.latestAudit} notice={linkNotice} />
         ) : (
-          <LinkCard siteName={siteName} />
+          <LinkCard siteName={siteName} onLinked={setLinkNotice} />
         )}
       </div>
 
