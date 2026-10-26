@@ -37,6 +37,7 @@ export default function HomePage() {
       keywordResearch: plan.keywordResearch,
       academy: plan.academy,
       socialMedia: plan.socialMedia,
+      googleProfile: plan.googleProfile,
     };
   });
 

@@ -110,6 +110,48 @@ comprises.
   `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (section Fiche Google, sinon
   données simulées, `DATAFORSEO_MOCK=1` pour forcer le mock).
 
+## Fiche Google
+
+Section `app/(app)/fiche-google/` (formule Scale, `hasGoogleProfile`, démos
+comprises) : audit de la fiche d'établissement, carte de visibilité par
+mot-clé, avis avec réponses proposées et posts Google — en lecture seule
+(fournisseur DataForSEO côté `@theralys/jobs`), le praticien publie lui-même
+(copier, télécharger, lien direct vers Google). Onglets `?onglet=audit|visibilite|avis|posts`
+(`tabs.ts`), calendrier des posts `?mois=YYYY-MM`.
+
+- **Liaison** (`link-card.tsx`) : recherche `searchGoogle` → `linkGoogleProfile`
+  (= `connectGooglePlace` puis `syncGoogleProfile(force)`). Fiche reliée
+  (`profile-card.tsx`) : « Actualiser » = synchronisation forcée, au plus une
+  fois par 24 h (refus explicite, `refreshGoogleProfile`).
+- **Audit** (`audit-tab.tsx`) : anneau SVG maison du score, contrôles,
+  plan d'action trié par impact, historique des scores (`google_profile_audits`),
+  benchmark des concurrents du podium quand un relevé existe.
+- **Visibilité** (`visibility-tab.tsx`) : ≤ 3 mots-clés actifs
+  (`lib/google/keywords.ts` : minuscules, espaces simples, 3-60 caractères,
+  réactivation d'un mot-clé retiré, quota sous verrou consultatif), « Relever
+  ma visibilité » → `runGoogleScan(manual)` (10 relevés manuels par mois hors
+  erreurs, `lib/google/scans.ts`, et budget `googleBudget`), carte Leaflet +
+  tuiles OpenStreetMap (`visibility-map.tsx`, import dynamique `ssr: false`
+  — ne jamais l'importer statiquement : Leaflet lit `window`), pastilles
+  colorées par `rankTone` (`tones.ts`), résumé et tableau des concurrents.
+- **Avis** (`reviews-tab.tsx`) : synthèse pure (`lib/google/reviews.ts` :
+  répartition, taux de réponse, thèmes), filtres, réponse proposée modifiable
+  (≤ 600) à copier, lien « Répondre sur Google » (liste blanche d'hôtes
+  Google, repli `search.google.com/local/reviews?placeid=`), « Analyser les
+  nouveaux avis » → `analyzeGoogleReviews`.
+- **Posts Google** (`posts-tab.tsx`, `google-post-modal.tsx`, table
+  `google_posts`) : un créneau par mardi (`GOOGLE_POST_DAY`,
+  `lib/google/posts.ts` `computeGoogleMonthState`), « Préparer mes posts du
+  mois » → `createGooglePostGenerator().planMonth` (mêmes verrous et garde que
+  `planSocialMonth`), 10 posts sur mesure par mois, visuel 4:3 rendu par le
+  moteur social (`lib/google/render.ts` : adaptateur `table: "google"` du
+  cache `lib/social/render/cache.ts`, routes `/api/google-posts/[postId]/render`
+  et `/download?kind=image|text|all`).
+- **Fixtures locales** : `pnpm --filter @theralys/studio fixtures:google`
+  (`scripts/google-fixtures.mts`, site de démo seulement, idempotent) insère
+  audits, mots-clés, relevés, analyses d'avis et posts en mock.
+- **Tests** : `lib/google/*.test.ts` (config `lib/vitest.config.ts`).
+
 ## Développement local
 
 Depuis la **racine** du monorepo (pnpm ne trouve pas les workspaces ailleurs) :

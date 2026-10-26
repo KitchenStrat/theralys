@@ -17,6 +17,7 @@ export type PlanCard = {
   keywordResearch: boolean;
   academy: boolean;
   socialMedia: boolean;
+  googleProfile: boolean;
 };
 
 const TAGLINES: Record<string, string> = {
@@ -91,6 +92,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M5.5 9.25v4C5.5 14.75 7.5 16 10 16s4.5-1.25 4.5-2.75v-4M18 7v4" strokeLinecap="round" />
     </>
   ),
+  pin: (
+    <>
+      <path d="M10 17.25s-5.25-4.9-5.25-9A5.25 5.25 0 0 1 15.25 8.25c0 4.1-5.25 9-5.25 9Z" strokeLinejoin="round" />
+      <circle cx="10" cy="8.25" r="1.9" />
+    </>
+  ),
 };
 
 type Feature = { text: string; included: boolean; highlight: boolean; icon: string };
@@ -147,6 +154,12 @@ function featureList(plan: PlanCard): Feature[] {
       included: plan.socialMedia,
       highlight: plan.socialMedia,
       icon: "share",
+    },
+    {
+      text: "Fiche Google : audit, visibilité locale, avis et posts",
+      included: plan.googleProfile,
+      highlight: plan.googleProfile,
+      icon: "pin",
     },
     { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];

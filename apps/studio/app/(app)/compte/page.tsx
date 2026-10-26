@@ -79,6 +79,11 @@ export default async function AccountPage() {
                   ? "✓ Contenus réseaux sociaux prêts à poster (visuels et légendes)"
                   : "— Contenus réseaux sociaux non inclus"}
               </li>
+              <li>
+                {plan.googleProfile
+                  ? "✓ Fiche Google : audit, visibilité locale, avis et posts"
+                  : "— Fiche Google (audit, visibilité locale, avis et posts) non incluse"}
+              </li>
               <li>✓ Avis Google synchronisés · statistiques · hébergement</li>
             </ul>
             <div className="mt-5">
