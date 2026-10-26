@@ -25,3 +25,6 @@ packages/db/drizzle/meta/_journal.json.bak
 
 # Script de fumée du rendu réseaux sociaux (images générées)
 apps/studio/.smoke/
+
+# Espaces de travail des agents (git worktree), jamais versionnés
+.claude/worktrees/
