@@ -41,6 +41,7 @@ import {
   socialMonthUserPrompt,
   socialRequestUserPrompt,
   socialSystemPrompt,
+  type SocialPromptVariant,
 } from "./social-prompts";
 import { voiceBricks, type BlogVoice } from "./voice";
 
@@ -166,9 +167,8 @@ export const socialPostSchema = z.object({
  * L'échec du `superRefine` (marketing interdit) fait échouer `schema.parse`
  * → `completeStructured` relance une fois avec le message en feedback.
  */
-export const socialPlanSchema = z
-  .object({ posts: z.array(socialPostSchema).min(1).max(12) })
-  .superRefine((plan, ctx) => {
+function planSchema<P extends z.ZodTypeAny>(post: P) {
+  return z.object({ posts: z.array(post).min(1).max(12) }).superRefine((plan, ctx) => {
     const { ok, violations } = checkSocialCompliance(plan);
     if (!ok) {
       ctx.addIssue({
@@ -180,6 +180,18 @@ export const socialPlanSchema = z
       });
     }
   });
+}
+
+export const socialPlanSchema = planSchema(socialPostSchema);
+
+/**
+ * Posts de la fiche Google : même sortie, mais sans hashtag obligatoire (le
+ * prompt demande un tableau vide ; `toGooglePost` ignore de toute façon les
+ * hashtags et retire ceux glissés dans le texte).
+ */
+export const googlePlanSchema = planSchema(
+  socialPostSchema.extend({ hashtags: z.array(z.string().trim().min(2).max(42)).max(10) }),
+);
 
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _planMatchesSchema: MutuallyAssignable<z.infer<typeof socialPlanSchema>, SocialPlan> = true;
@@ -974,17 +986,22 @@ export function createSocialGenerator(env: NodeJS.ProcessEnv = process.env): Soc
  * du schéma (les `.default()` rendent `accentRole`/`body` facultatifs) alors
  * que la valeur rendue est déjà la sortie de `schema.parse` : un second parse,
  * idempotent et sans coût notable, fixe le type sans conversion forcée.
+ * Variante « google » (posts de la fiche Google, `google-profile.ts`) : même
+ * appel avec le prompt système et le schéma de cette variante.
  */
-async function completeSocialPlan(
+export async function completeSocialPlan(
   options: AnthropicClientOptions,
   brief: SocialSiteBrief,
   userPrompt: string,
+  variant: SocialPromptVariant = "social",
+  complete: typeof completeStructured = completeStructured,
 ): Promise<SocialPlan> {
-  const parsed: z.input<typeof socialPlanSchema> = await completeStructured(
+  const schema = variant === "google" ? googlePlanSchema : socialPlanSchema;
+  const parsed: z.input<typeof schema> = await complete(
     options,
-    socialSystemPrompt(brief),
+    socialSystemPrompt(brief, { variant }),
     userPrompt,
-    socialPlanSchema,
+    schema,
   );
-  return socialPlanSchema.parse(parsed);
+  return schema.parse(parsed);
 }
