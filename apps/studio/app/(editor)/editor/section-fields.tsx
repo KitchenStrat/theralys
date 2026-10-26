@@ -54,7 +54,7 @@ export function SectionFields({
       const stats = section.stats ?? [];
       return (
         <SectionBox>
-          <Field label="Badge local" length={(section.badge ?? "").length} limit={SECTION_LIMITS.badge}>
+          <Field label="Badge local" length={visibleLength(section.badge ?? "")} limit={SECTION_LIMITS.badge}>
             <TextInput
               value={section.badge ?? ""}
               limit={SECTION_LIMITS.badge}
@@ -76,7 +76,7 @@ export function SectionFields({
           />
           <Field
             label="Texte du bouton"
-            length={(section.ctaLabel ?? "").length}
+            length={visibleLength(section.ctaLabel ?? "")}
             limit={SECTION_LIMITS.buttonLabel}
           >
             <TextInput
@@ -110,7 +110,7 @@ export function SectionFields({
               />
               <Field
                 label="Chiffre / valeur (ex. « +300 », « 7j/7 »)"
-                length={stat.value.length}
+                length={visibleLength(stat.value)}
                 limit={SECTION_LIMITS.statValue}
               >
                 <TextInput
@@ -121,7 +121,7 @@ export function SectionFields({
               </Field>
               <Field
                 label="Légende (ex. « Patients accompagnés »)"
-                length={stat.label.length}
+                length={visibleLength(stat.label)}
                 limit={SECTION_LIMITS.statLabel}
               >
                 <TextInput
@@ -255,7 +255,7 @@ export function SectionFields({
         <SectionBox>
           <Field
             label="Badge (ex. « Santé & Équilibre »)"
-            length={(section.badge ?? "").length}
+            length={visibleLength(section.badge ?? "")}
             limit={SECTION_LIMITS.badge}
           >
             <TextInput
@@ -287,7 +287,7 @@ export function SectionFields({
           />
           <Field
             label="Texte du bouton"
-            length={(section.ctaLabel ?? "").length}
+            length={visibleLength(section.ctaLabel ?? "")}
             limit={SECTION_LIMITS.buttonLabel}
           >
             <TextInput
@@ -523,7 +523,7 @@ export function SectionFields({
               onRemove={() => onChange({ hours: hours.filter((_, j) => j !== i) })}
             >
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Jours" length={slot.label.length} limit={SECTION_LIMITS.hoursLabel}>
+                <Field label="Jours" length={visibleLength(slot.label)} limit={SECTION_LIMITS.hoursLabel}>
                   <TextInput
                     value={slot.label}
                     placeholder="Lundi – Vendredi"
@@ -531,7 +531,7 @@ export function SectionFields({
                     onChange={(label) => onChange({ hours: hours.map((h, j) => (j === i ? { ...h, label } : h)) })}
                   />
                 </Field>
-                <Field label="Heures" length={slot.value.length} limit={SECTION_LIMITS.hoursValue}>
+                <Field label="Heures" length={visibleLength(slot.value)} limit={SECTION_LIMITS.hoursValue}>
                   <TextInput
                     value={slot.value}
                     placeholder="9h – 19h"
@@ -627,7 +627,7 @@ export function SectionFields({
             value={section.body ?? ""}
             onChange={(body) => onChange({ body })}
           />
-          <Field label="Texte du bouton" length={section.buttonLabel.length} limit={SECTION_LIMITS.buttonLabel}>
+          <Field label="Texte du bouton" length={visibleLength(section.buttonLabel)} limit={SECTION_LIMITS.buttonLabel}>
             <TextInput
               value={section.buttonLabel}
               limit={SECTION_LIMITS.buttonLabel}
@@ -650,6 +650,14 @@ function SectionBox({ children }: { children: ReactNode }) {
  * Compteur de caractères « 52 / 60 » : repère de lisibilité (SECTION_LIMITS),
  * orange au-delà — la saisie n'est pas bloquée (maxLength = limite × 1,5).
  */
+/**
+ * Longueur « lue » d'un champ : sans les marqueurs de gras `**`, en
+ * caractères Unicode (un emoji composé compte 1, pas 2 ou 5).
+ */
+export function visibleLength(value: string | undefined): number {
+  return [...(value ?? "").replace(/\*\*/g, "")].length;
+}
+
 export function CharCounter({ length, limit }: { length: number; limit: number }) {
   const over = length > limit;
   return (
@@ -841,6 +849,13 @@ export function IconField({
   const current: SectionIconName = isIconName(value) ? value : "coeur";
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  /** Ferme le sélecteur ; `restoreFocus` ramène le focus sur le bouton (clavier). */
+  function close(restoreFocus: boolean) {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -850,7 +865,7 @@ export function IconField({
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        setOpen(false);
+        close(true);
       }
     };
     document.addEventListener("mousedown", onDown);
@@ -863,8 +878,16 @@ export function IconField({
 
   return (
     <Field label={label}>
-      <div ref={rootRef} className="relative">
+      <div
+        ref={rootRef}
+        className="relative"
+        onBlur={(event) => {
+          // Le focus quitte le sélecteur (Tab après la dernière icône) : on le ferme
+          if (open && !rootRef.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+        }}
+      >
         <button
+          ref={triggerRef}
           type="button"
           aria-haspopup="dialog"
           aria-expanded={open}
@@ -885,7 +908,7 @@ export function IconField({
             value={current}
             onSelect={(name) => {
               onChange(name);
-              setOpen(false);
+              close(true);
             }}
           />
         ) : null}
@@ -1907,7 +1930,7 @@ function RichField({
       <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
         <p className="flex items-baseline gap-2 text-xs font-medium text-ink-700">
           {label}
-          {limit !== undefined ? <CharCounter length={value.length} limit={limit} /> : null}
+          {limit !== undefined ? <CharCounter length={visibleLength(value)} limit={limit} /> : null}
         </p>
         <RichToolbar getEl={() => ref.current} onApplied={emit} lists={multiline} headings={headings} />
       </div>

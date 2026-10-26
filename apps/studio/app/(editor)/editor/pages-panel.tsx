@@ -22,7 +22,7 @@ import {
   type MotifRow,
 } from "@/lib/editor/page-groups";
 import type { PreviewTarget } from "@/lib/editor/preview-path";
-import { CharCounter, ToggleSwitch } from "./section-fields";
+import { CharCounter, ToggleSwitch, visibleLength } from "./section-fields";
 
 export type PagesPanelProps = {
   pages: EditorPageRef[];
@@ -429,14 +429,33 @@ function RowMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    // Clavier : focus sur le premier élément, flèches ↑↓ / Début / Fin, Échap
+    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     const onDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        buttonRef.current?.focus();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const entries = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+      if (entries.length === 0) return;
+      event.preventDefault();
+      const index = entries.findIndex((el) => el === document.activeElement);
+      const next =
+        event.key === "Home" ? 0
+        : event.key === "End" ? entries.length - 1
+        : event.key === "ArrowDown" ? (index + 1) % entries.length
+        : (index - 1 + entries.length) % entries.length;
+      entries[next]?.focus();
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -449,6 +468,7 @@ function RowMenu({
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         aria-label={label}
         aria-haspopup="menu"
@@ -460,6 +480,7 @@ function RowMenu({
       </button>
       {open ? (
         <div
+          ref={menuRef}
           role="menu"
           className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-xl border border-cream-300 bg-white py-1 shadow-lg"
         >
@@ -470,6 +491,9 @@ function RowMenu({
               role="menuitem"
               onClick={() => {
                 setOpen(false);
+                // Le focus revient au bouton ⋯ avant l'ouverture d'une modale :
+                // c'est lui qui le récupère à la fermeture (l'élément de menu est démonté)
+                buttonRef.current?.focus();
                 item.onClick();
               }}
               className={clsx(
@@ -587,7 +611,7 @@ function RenameModal({
           void submit();
         }}
       >
-        <ModalField label="Titre de la page" length={title.length} limit={120}>
+        <ModalField label="Titre de la page" length={visibleLength(title)} limit={120}>
           <input
             ref={inputRef}
             value={title}
@@ -644,7 +668,7 @@ function SeoModal({ row, onClose, onDone }: { row: MotifRow; onClose: () => void
         <ModalField
           label="Titre SEO"
           hint="Le titre bleu du résultat Google. Recommandé : spécialité + ville, 70 caractères maximum."
-          length={metaTitle.length}
+          length={visibleLength(metaTitle)}
           limit={70}
         >
           <input
@@ -659,7 +683,7 @@ function SeoModal({ row, onClose, onDone }: { row: MotifRow; onClose: () => void
         <ModalField
           label="Description"
           hint="Les deux lignes grises sous le titre. Recommandé : 170 caractères maximum, avec une invitation à prendre rendez-vous."
-          length={metaDescription.length}
+          length={visibleLength(metaDescription)}
           limit={170}
         >
           <textarea
@@ -726,7 +750,7 @@ function ChangeSubjectModal({
       }
     >
       <div className="space-y-4">
-        <ModalField label="Nouvelle spécialité" length={subject.length} limit={120}>
+        <ModalField label="Nouvelle spécialité" length={visibleLength(subject)} limit={120}>
           <input
             autoFocus
             value={subject}
@@ -861,7 +885,7 @@ function AddPageModal({
         <ModalField
           label="Sujet de la page"
           hint={`Votre formule comprend ${maxMotifPages} pages de spécialité. Le contenu (textes, questions, photo) est préparé en arrière-plan : la page apparaît désactivée, vous la relisez puis l'activez.`}
-          length={subject.length}
+          length={visibleLength(subject)}
           limit={120}
         >
           <input
@@ -964,7 +988,7 @@ function NotFoundModal({
           Affichée quand un visiteur suit un lien qui n&apos;existe plus (ancienne page, faute de frappe). Elle
           le ramène vers votre site plutôt que vers une erreur brute.
         </p>
-        <ModalField label="Titre" length={title.length} limit={80}>
+        <ModalField label="Titre" length={visibleLength(title)} limit={80}>
           <input
             autoFocus
             value={title}
@@ -974,7 +998,7 @@ function NotFoundModal({
             className={inputClass}
           />
         </ModalField>
-        <ModalField label="Message" hint="Facultatif : vide = aucun message affiché." length={message.length} limit={200}>
+        <ModalField label="Message" hint="Facultatif : vide = aucun message affiché." length={visibleLength(message)} limit={200}>
           <textarea
             value={message}
             maxLength={300}
@@ -983,7 +1007,7 @@ function NotFoundModal({
             className={clsx(inputClass, "resize-y")}
           />
         </ModalField>
-        <ModalField label="Texte du bouton (retour à l'accueil)" length={buttonLabel.length} limit={40}>
+        <ModalField label="Texte du bouton (retour à l'accueil)" length={visibleLength(buttonLabel)} limit={40}>
           <input
             value={buttonLabel}
             maxLength={60}

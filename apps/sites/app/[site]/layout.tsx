@@ -107,10 +107,16 @@ export default async function SiteLayout({ children, params }: Props) {
         }
         phone={phone}
       />
-      {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
-      {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
-      <Tracker siteId={site.id} />
-      <TrackingScripts tracking={site.theme.tracking ?? {}} />
+      {/* Aperçu de l'éditeur : ni bandeau cookies, ni mesure d'audience, ni
+          traceurs — le praticien n'est pas un visiteur */}
+      {editorPreview ? null : (
+        <>
+          {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
+          {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
+          <Tracker siteId={site.id} />
+          <TrackingScripts tracking={site.theme.tracking ?? {}} />
+        </>
+      )}
       {/* Pont avec l'éditeur : seulement dans l'aperçu authentifié (jeton signé) */}
       {editorPreview ? <EditorBridge /> : null}
       <ScrollReveal />

@@ -39,8 +39,12 @@ async function previewSiteId(request: NextRequest): Promise<{ siteId: string; fr
     const payload = await verifySitePreviewToken(fromQuery, secret);
     if (payload) return { siteId: payload.siteId, fromQuery: true };
   }
+  // Le cookie ne vaut que pour les navigations dans l'iframe de l'éditeur :
+  // le praticien qui ouvre son site dans le même navigateur (onglet de premier
+  // niveau, Sec-Fetch-Dest: document) le voit tel que ses visiteurs
+  const dest = request.headers.get("sec-fetch-dest");
   const fromCookie = request.cookies.get(PREVIEW_COOKIE)?.value;
-  if (fromCookie) {
+  if (fromCookie && (dest === null || dest === "iframe")) {
     const payload = await verifySitePreviewToken(fromCookie, secret);
     if (payload) return { siteId: payload.siteId, fromQuery: false };
   }
@@ -80,12 +84,12 @@ export async function middleware(request: NextRequest) {
   // (le domaine d'un client est un site tiers vu depuis le studio : SameSite=None)
   if (preview?.fromQuery) {
     const secure = request.nextUrl.protocol === "https:";
+    // Cookie de session (pas de durée) : l'aperçu ne survit pas au navigateur
     response.cookies.set(PREVIEW_COOKIE, request.nextUrl.searchParams.get("apercu") ?? "", {
       httpOnly: true,
       sameSite: secure ? "none" : "lax",
       secure,
       path: "/",
-      maxAge: 60 * 60 * 24,
     });
   }
   return response;

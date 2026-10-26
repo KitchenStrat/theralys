@@ -1,7 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 export type ModalSize = "md" | "lg" | "xl";
 
@@ -40,15 +40,13 @@ function focusablesIn(root: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Boîte de dialogue modale : focus placé dans la boîte à l'ouverture, Tab et
- * Maj+Tab bouclent sur ses éléments, Échap et le clic hors ferment, le focus
- * revient à l'élément déclencheur à la fermeture.
+ * Gestion du focus d'une boîte de dialogue (`aria-modal`) : focus placé dans
+ * la boîte à l'ouverture, Tab et Maj+Tab bouclent sur ses éléments, le focus
+ * revient à l'élément déclencheur à la fermeture. La boîte doit porter
+ * `tabIndex={-1}`. Échap reste à la charge de l'appelant (Modal ci-dessous,
+ * ou une fenêtre maison comme les Paramètres du studio).
  */
-export function Modal({ open, onClose, title, children, footer, size, wide, plain }: ModalProps) {
-  const resolvedSize: ModalSize = size ?? (wide ? "lg" : "md");
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  // Focus initial et restitution : indépendants de `onClose` (souvent une fonction fléchée recréée à chaque rendu)
+export function useDialogFocus(open: boolean, dialogRef: RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -56,15 +54,11 @@ export function Modal({ open, onClose, title, children, footer, size, wide, plai
     return () => {
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
-  }, [open]);
+  }, [open, dialogRef]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
       const dialog = dialogRef.current;
       if (e.key !== "Tab" || !dialog) return;
       const items = focusablesIn(dialog);
@@ -86,6 +80,26 @@ export function Modal({ open, onClose, title, children, footer, size, wide, plai
         e.preventDefault();
         first.focus();
       }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, dialogRef]);
+}
+
+/**
+ * Boîte de dialogue modale : focus placé dans la boîte à l'ouverture, Tab et
+ * Maj+Tab bouclent sur ses éléments, Échap et le clic hors ferment, le focus
+ * revient à l'élément déclencheur à la fermeture.
+ */
+export function Modal({ open, onClose, title, children, footer, size, wide, plain }: ModalProps) {
+  const resolvedSize: ModalSize = size ?? (wide ? "lg" : "md");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

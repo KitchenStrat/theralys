@@ -202,7 +202,7 @@ export function SiteFooter({
         </div>
 
         <div className="mt-12 border-t border-white/10 pt-6 text-sm opacity-70">
-          {details ? <p className="mb-3 leading-relaxed">{details}</p> : null}
+          {details ? <p className="mb-3 whitespace-pre-line leading-relaxed">{details}</p> : null}
           <p>
             © {new Date().getFullYear()} {site.name} · Site créé avec{" "}
             <a

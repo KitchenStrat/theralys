@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, Segmented, Spinner } from "@theralys/ui";
+import { Badge, Button, Segmented, Spinner, useDialogFocus } from "@theralys/ui";
 import type { PlanId } from "@theralys/db/plans";
 import {
   FOOTER_SOCIAL_NETWORKS,
   LEGAL_PAGES,
+  formatSiret,
   SECTION_LABELS,
   THEME_PRESETS,
   TRACKING_ID_PATTERNS,
@@ -450,7 +451,7 @@ export function SiteEditor({
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // ── Aperçu : cible (page, page légale, 404) et largeur ───────────────────
-  const [previewTarget, setPreviewTarget] = useState<PreviewTarget>(() => previewTargetForPage(selectedPage));
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget>(() => previewTargetForPage(selectedPage, site.generatingMotifs));
   const [previewWidth, setPreviewWidth] = useState<PreviewWidth>("desktop");
   // Section héritée de l'accueil (avis, contact) cliquée dans l'aperçu d'une autre page
   const [sharedNotice, setSharedNotice] = useState<SectionType | null>(null);
@@ -506,7 +507,7 @@ export function SiteEditor({
   /** Ouvre une page dans l'éditeur (navigation `?page=`). */
   function goToPage(page: EditorPageRef, section?: SectionType) {
     if (page.id === selectedPage?.id && !section) {
-      setPreviewTarget(previewTargetForPage(page));
+      setPreviewTarget(previewTargetForPage(page, site.generatingMotifs));
       setPanel("contenu");
       return;
     }
@@ -659,7 +660,7 @@ export function SiteEditor({
       cookieBanner,
       trackingIds,
       trackingEnabled,
-      legal,
+      legal: { ...legal, siret: formatSiret(legal.siret) },
       social,
       footerText,
       footerDetails,
@@ -742,6 +743,10 @@ export function SiteEditor({
     setSettingsOpen(false);
   }, []);
 
+  // Focus dans la fenêtre Paramètres à l'ouverture, Tab en boucle, retour au déclencheur
+  const settingsDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(settingsOpen, settingsDialogRef);
+
   // Échap ferme la fenêtre Paramètres (comme « Annuler »)
   useEffect(() => {
     if (!settingsOpen) return;
@@ -801,6 +806,8 @@ export function SiteEditor({
         prev.map((s) => (s.type === "contact" ? { ...s, phone: phoneValue.trim() || undefined } : s)),
       );
     }
+    // SIRET affiché comme il sera publié (groupes de chiffres)
+    setLegal((current) => ({ ...current, siret: formatSiret(current.siret) }));
     // « Annuler » après publication ne doit pas revenir en deçà de la publication
     settingsSnapshot.current = currentSettingsSnapshot();
     setSettingsDirty(false);
@@ -818,7 +825,9 @@ export function SiteEditor({
   const previewLabel = useMemo(() => {
     switch (previewTarget.kind) {
       case "home":
-        return "Page d'accueil";
+        return selectedPage?.generating
+          ? "Page d'accueil — la page en préparation s'affichera ici une fois son contenu prêt"
+          : "Page d'accueil";
       case "motif":
         return pages.find((p) => p.slug === previewTarget.slug && p.type === "motif")?.title ?? previewTarget.slug;
       case "legal":
@@ -826,7 +835,7 @@ export function SiteEditor({
       case "notFound":
         return "Page introuvable (404)";
     }
-  }, [previewTarget, pages]);
+  }, [previewTarget, pages, selectedPage?.generating]);
   const currentPageTitle =
     selectedPage?.type === "home"
       ? "Page d'accueil"
@@ -988,6 +997,11 @@ export function SiteEditor({
         <div className="flex items-center gap-3">
           <Link
             href="/"
+            onClick={(e) => {
+              // Même garde que le changement de page : la navigation Next ne
+              // déclenche pas `beforeunload`
+              if (!confirmLeavePage()) e.preventDefault();
+            }}
             className="inline-flex items-center gap-1.5 rounded-full bg-cream-100 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-200"
           >
             ← Accueil
@@ -1468,10 +1482,12 @@ export function SiteEditor({
           }}
         >
           <div
+            ref={settingsDialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Paramètres du site"
-            className="flex h-full max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            tabIndex={-1}
+            className="flex h-full max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl focus:outline-none"
           >
             <div className="flex items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
               <p className="flex items-center gap-3 text-lg font-semibold">

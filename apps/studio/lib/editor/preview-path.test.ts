@@ -37,3 +37,12 @@ describe("previewPath", () => {
     expect(samePreviewTarget({ kind: "legal", slug: "mentions-legales" }, { kind: "notFound" })).toBe(false);
   });
 });
+
+describe("page en préparation", () => {
+  it("l'aperçu reste sur l'accueil tant que la génération est en cours, pas en cas d'erreur", () => {
+    const page = { type: "motif", slug: "anxiete" };
+    expect(previewTargetForPage(page, [{ slug: "anxiete" }])).toEqual({ kind: "home" });
+    expect(previewTargetForPage(page, [{ slug: "anxiete", error: "échec" }])).toEqual({ kind: "motif", slug: "anxiete" });
+    expect(previewTargetForPage(page, [{ slug: "autre" }])).toEqual({ kind: "motif", slug: "anxiete" });
+  });
+});

@@ -36,9 +36,19 @@ export function previewPath(target: PreviewTarget, token: string): string {
   return token ? `${path}?apercu=${encodeURIComponent(token)}` : path;
 }
 
-/** Cible d'aperçu correspondant à la page éditée (`?page=`). */
-export function previewTargetForPage(page: { type: string; slug: string } | null): PreviewTarget {
-  if (page && page.type === "motif") return { kind: "motif", slug: page.slug };
+/**
+ * Cible d'aperçu correspondant à la page éditée (`?page=`). Une page de
+ * spécialité en préparation n'a pas encore de contenu (le site public
+ * répondrait 404) : l'aperçu reste sur l'accueil jusqu'à la fin de la génération.
+ */
+export function previewTargetForPage(
+  page: { type: string; slug: string } | null,
+  generatingMotifs: { slug: string; error?: string }[] = [],
+): PreviewTarget {
+  if (page && page.type === "motif") {
+    const generating = generatingMotifs.some((g) => g.slug === page.slug && !g.error);
+    return generating ? { kind: "home" } : { kind: "motif", slug: page.slug };
+  }
   return { kind: "home" };
 }
 

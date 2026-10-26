@@ -43,7 +43,7 @@ export function EditorBridge() {
     const style = document.createElement("style");
     style.textContent = `
       .hy-editing [data-hy-section],
-      .hy-editing [data-hy-shared] { position: relative; }
+      .hy-editing [data-hy-shared] { position: relative; scroll-margin-top: 96px; }
       .hy-editing [data-hy-section]:hover,
       .hy-editing [data-hy-shared]:hover {
         outline: 2px dashed var(--site-primary);
