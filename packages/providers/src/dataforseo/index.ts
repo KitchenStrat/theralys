@@ -251,34 +251,545 @@ export function mockReviews(seedText: string, count: number): GoogleReviewItem[]
 
 // ─── Implémentation réelle ───────────────────────────────────────────────────
 
+/** Délai maximal d'une requête HTTP (ms) : au-delà, elle est abandonnée (AbortController). */
+export const DATAFORSEO_TIMEOUT_MS = 60_000;
+/** Requêtes simultanées pour une grille (DataForSEO tolère 30 appels en vol par compte). */
+export const DATAFORSEO_CONCURRENCY = 8;
+/** Rayon (m) autour du point d'observation pour la fiche et les avis (minimum DataForSEO : 199,9). */
+export const DATAFORSEO_NEAR_RADIUS_M = 1000;
+/** Critère géographique Google « France » : repli quand aucune coordonnée n'est connue. */
+export const DATAFORSEO_FRANCE_LOCATION_CODE = 2250;
+
+const STATUS_OK = 20000;
+const STATUS_TASK_CREATED = 20100;
+/** 40601 « Task Handed », 40602 « Task In Queue » : la tâche n'est pas encore terminée. */
+const STATUS_PENDING = new Set([40601, 40602]);
+
+/** Jour anglais → français (clés de `work_time.work_hours.timetable`). */
+const DAYS_FR: Record<string, string> = {
+  monday: "lundi",
+  tuesday: "mardi",
+  wednesday: "mercredi",
+  thursday: "jeudi",
+  friday: "vendredi",
+  saturday: "samedi",
+  sunday: "dimanche",
+};
+
+/** Libellés français des attributs Google courants pour un cabinet ; sinon l'identifiant est humanisé. */
+const ATTRIBUTE_LABELS_FR: Record<string, string> = {
+  wheelchair_accessible_entrance: "Entrée accessible PMR",
+  wheelchair_accessible_parking_lot: "Parking accessible PMR",
+  wheelchair_accessible_restroom: "Toilettes accessibles PMR",
+  wheelchair_accessible_seating: "Places assises accessibles PMR",
+  appointment_required: "Sur rendez-vous",
+  appointments_recommended: "Rendez-vous recommandé",
+  offers_online_appointments: "Rendez-vous en ligne",
+  online_appointments: "Rendez-vous en ligne",
+  online_care: "Consultations à distance",
+  onsite_services: "Services sur place",
+  identifies_as_women_owned: "Entreprise dirigée par une femme",
+  lgbtq_friendly: "LGBTQ+ friendly",
+  transgender_safespace: "Espace sûr pour les personnes trans",
+  credit_cards: "Cartes bancaires acceptées",
+  debit_cards: "Cartes de débit acceptées",
+  nfc_mobile_payments: "Paiement sans contact",
+  cash_only: "Espèces uniquement",
+  checks: "Chèques acceptés",
+  free_parking_lot: "Parking gratuit",
+  free_street_parking: "Stationnement gratuit dans la rue",
+  paid_parking_lot: "Parking payant",
+  paid_street_parking: "Stationnement payant dans la rue",
+  gender_neutral_restroom: "Toilettes non genrées",
+  restroom: "Toilettes",
+  wi_fi: "Wi-Fi",
+  free_wi_fi: "Wi-Fi gratuit",
+  language_assistance: "Aide linguistique",
+};
+
+// ─── Formes des réponses DataForSEO (sous-ensemble exploité) ─────────────────
+
+type DfsTask<R> = {
+  id?: string;
+  status_code?: number;
+  status_message?: string;
+  cost?: number | null;
+  result?: R[] | null;
+};
+
+type DfsResponse<R> = {
+  status_code?: number;
+  status_message?: string;
+  cost?: number | null;
+  tasks?: DfsTask<R>[] | null;
+};
+
+type DfsRating = { value?: number | null; votes_count?: number | null } | null;
+
+type DfsTimeOfDay = { hour?: number; minute?: number } | null;
+type DfsTimetable = Record<string, { open?: DfsTimeOfDay; close?: DfsTimeOfDay }[] | null> | null;
+type DfsWorkTime = { work_hours?: { timetable?: DfsTimetable; current_status?: string | null } | null } | null;
+
+export type DfsMapsItem = {
+  type?: string;
+  rank_absolute?: number | null;
+  rank_group?: number | null;
+  title?: string | null;
+  place_id?: string | null;
+  cid?: string | null;
+  rating?: DfsRating;
+  category?: string | null;
+  total_photos?: number | null;
+  is_claimed?: boolean | null;
+};
+type DfsMapsResult = { items?: DfsMapsItem[] | null };
+
+export type DfsBusinessItem = {
+  type?: string;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  additional_categories?: (string | null)[] | null;
+  cid?: string | null;
+  place_id?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  url?: string | null;
+  main_image?: string | null;
+  total_photos?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_claimed?: boolean | null;
+  attributes?: { available_attributes?: Record<string, (string | null)[] | null> | null } | null;
+  rating?: DfsRating;
+  rating_distribution?: Record<string, number | null> | null;
+  work_time?: DfsWorkTime;
+  book_online_url?: string | null;
+};
+type DfsBusinessResult = { items?: DfsBusinessItem[] | null };
+
+export type DfsReviewItem = {
+  type?: string;
+  review_id?: string | null;
+  review_text?: string | null;
+  timestamp?: string | null;
+  rating?: DfsRating;
+  profile_name?: string | null;
+  profile_image_url?: string | null;
+  owner_answer?: string | null;
+  owner_timestamp?: string | null;
+  review_url?: string | null;
+};
+type DfsReviewsResult = {
+  reviews_count?: number | null;
+  rating?: DfsRating;
+  items?: DfsReviewItem[] | null;
+};
+
+// ─── Normalisation ───────────────────────────────────────────────────────────
+
+function round6(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/** « lat,lng,14z » (Maps : zoom de 3z à 21z). */
+function mapsCoordinate(point: GeoPoint, zoom: number): string {
+  return `${point.lat},${point.lng},${Math.max(3, Math.min(21, Math.round(zoom)))}z`;
+}
+
+/** Fiche et avis : « lat,lng,rayon(m) » autour du point, sinon le critère géographique France. */
+function nearLocation(near: GeoPoint | null): { location_coordinate: string } | { location_code: number } {
+  return near
+    ? { location_coordinate: `${near.lat},${near.lng},${DATAFORSEO_NEAR_RADIUS_M}` }
+    : { location_code: DATAFORSEO_FRANCE_LOCATION_CODE };
+}
+
 /**
- * Client DataForSEO réel — contrat ; implémentation complète (lots, retries,
- * normalisation des réponses, coût réel) dans le lot « fournisseur ».
+ * Dates DataForSEO « 2024-05-15 14:09:32 +00:00 » (ou ISO 8601) → Date ;
+ * null si absente ou invalide.
+ */
+export function parseDataForSeoDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)\s*(Z|[+-]\d{2}:?\d{2})?$/.exec(value.trim());
+  const iso = m ? `${m[1]}T${m[2]}${m[3] ?? "Z"}` : value.trim();
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** « wheelchair_accessible_entrance » → « Entrée accessible PMR » ; inconnu → « Wheelchair accessible entrance ». */
+export function attributeLabel(id: string): string {
+  const key = id.trim().toLowerCase();
+  const known = ATTRIBUTE_LABELS_FR[key];
+  if (known) return known;
+  const words = key.replace(/[_\s]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Horaires par jour en français (« 09:00–12:00 ») ; null si la structure n'est pas celle attendue. */
+function hoursFromTimetable(timetable: DfsTimetable | undefined): Record<string, string[]> | null {
+  if (!timetable || typeof timetable !== "object") return null;
+  const hours: Record<string, string[]> = {};
+  for (const [day, ranges] of Object.entries(timetable)) {
+    const label = DAYS_FR[day.toLowerCase()];
+    if (!label || !Array.isArray(ranges)) continue;
+    const lines: string[] = [];
+    for (const range of ranges) {
+      const open = range?.open;
+      const close = range?.close;
+      if (typeof open?.hour !== "number" || typeof close?.hour !== "number") continue;
+      lines.push(`${pad2(open.hour)}:${pad2(open.minute ?? 0)}–${pad2(close.hour)}:${pad2(close.minute ?? 0)}`);
+    }
+    if (lines.length > 0) hours[label] = lines;
+  }
+  return hours;
+}
+
+function ratingDistribution(value: DfsBusinessItem["rating_distribution"]): GoogleProfileSnapshot["ratingDistribution"] {
+  if (!value || typeof value !== "object") return null;
+  const out = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+  let any = false;
+  for (const star of ["1", "2", "3", "4", "5"] as const) {
+    const n = numberOrNull(value[star]);
+    if (n !== null) {
+      out[star] = n;
+      any = true;
+    }
+  }
+  return any ? out : null;
+}
+
+/** Items « maps_search » d'un point → liste ordonnée par `rank_absolute`, ≤ depth. */
+export function normalizeMapsItems(items: DfsMapsItem[], depth: number): GoogleMapsListing[] {
+  return items
+    .filter((item) => (item.type === undefined || item.type === "maps_search") && textOrNull(item.title) !== null)
+    .map((item, index) => ({
+      rank: numberOrNull(item.rank_absolute) ?? numberOrNull(item.rank_group) ?? index + 1,
+      title: item.title!.trim(),
+      placeId: textOrNull(item.place_id),
+      cid: textOrNull(item.cid),
+      rating: numberOrNull(item.rating?.value),
+      votes: numberOrNull(item.rating?.votes_count),
+      category: textOrNull(item.category),
+      totalPhotos: numberOrNull(item.total_photos),
+      isClaimed: typeof item.is_claimed === "boolean" ? item.is_claimed : null,
+    }))
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, depth);
+}
+
+/** Item « google_business_info » → instantané de la fiche (`source: "dataforseo"`). */
+export function snapshotFromBusinessItem(item: DfsBusinessItem, fetchedAt: Date): GoogleProfileSnapshot {
+  const workTime = item.work_time;
+  const hours = hoursFromTimetable(workTime?.work_hours?.timetable);
+  const hasHours = workTime === undefined ? null : hours !== null && Object.keys(hours).length > 0;
+  const available = item.attributes?.available_attributes;
+  const attributes =
+    available && typeof available === "object"
+      ? [
+          ...new Set(
+            Object.values(available)
+              .flatMap((list) => (Array.isArray(list) ? list : []))
+              .filter((id): id is string => typeof id === "string" && id.trim() !== "")
+              .map(attributeLabel),
+          ),
+        ]
+      : [];
+  const lat = numberOrNull(item.latitude);
+  const lng = numberOrNull(item.longitude);
+  return {
+    source: "dataforseo",
+    fetchedAt: fetchedAt.toISOString(),
+    placeId: textOrNull(item.place_id),
+    cid: textOrNull(item.cid),
+    title: textOrNull(item.title) ?? "",
+    description: typeof item.description === "string" ? item.description.trim() : null,
+    category: textOrNull(item.category),
+    additionalCategories: (item.additional_categories ?? [])
+      .filter((c): c is string => typeof c === "string" && c.trim() !== "")
+      .map((c) => c.trim()),
+    address: textOrNull(item.address),
+    phone: textOrNull(item.phone),
+    website: textOrNull(item.url),
+    isClaimed: typeof item.is_claimed === "boolean" ? item.is_claimed : null,
+    rating: numberOrNull(item.rating?.value),
+    votes: numberOrNull(item.rating?.votes_count),
+    ratingDistribution: ratingDistribution(item.rating_distribution),
+    totalPhotos: numberOrNull(item.total_photos),
+    hasHours,
+    hours: hours && Object.keys(hours).length > 0 ? hours : null,
+    attributes,
+    bookOnlineUrl: textOrNull(item.book_online_url),
+    mainImage: textOrNull(item.main_image),
+    location: lat !== null && lng !== null ? { lat, lng } : null,
+  };
+}
+
+/** Item « google_reviews_search » → avis normalisé ; null sans `review_id`. */
+export function reviewFromItem(item: DfsReviewItem): GoogleReviewItem | null {
+  const id = textOrNull(item.review_id);
+  if (!id || (item.type !== undefined && item.type !== "google_reviews_search")) return null;
+  const rating = Math.round(numberOrNull(item.rating?.value) ?? 5);
+  return {
+    sourceReviewId: id,
+    authorName: textOrNull(item.profile_name) ?? "Client Google",
+    authorPhotoUrl: textOrNull(item.profile_image_url),
+    rating: Math.max(1, Math.min(5, rating)),
+    text: typeof item.review_text === "string" ? item.review_text.trim() : "",
+    reviewedAt: parseDataForSeoDate(item.timestamp),
+    ownerReply: textOrNull(item.owner_answer),
+    ownerRepliedAt: parseDataForSeoDate(item.owner_timestamp),
+    reviewUrl: textOrNull(item.review_url),
+  };
+}
+
+/**
+ * Applique `fn` à chaque élément avec au plus `limit` exécutions simultanées ;
+ * résultats dans l'ordre des entrées. À la première erreur, plus aucune tâche
+ * n'est lancée et l'erreur est propagée.
+ */
+export async function mapConcurrent<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed) {
+      const index = next++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await fn(items[index]!, index);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return results;
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.name === "AbortError" ? "délai dépassé" : err.message.slice(0, 200);
+  return String(err).slice(0, 200);
+}
+
+// ─── Client ──────────────────────────────────────────────────────────────────
+
+export type DataForSeoOptions = {
+  /** Délai par requête (ms), défaut DATAFORSEO_TIMEOUT_MS */
+  timeoutMs?: number;
+  /** Requêtes simultanées pour une grille, défaut DATAFORSEO_CONCURRENCY */
+  concurrency?: number;
+};
+
+/**
+ * Client DataForSEO réel. Chaque endpoint « live » n'accepte qu'une tâche par
+ * appel HTTP : une grille de 49 points = 49 appels, lancés avec une
+ * concurrence bornée (résultats dans l'ordre des entrées). Délai de 60 s par
+ * requête, une nouvelle tentative sur erreur 5xx ou réseau. Les erreurs sont
+ * explicites (`DataForSEO <endpoint> <statut>: <message>`) et ne contiennent
+ * jamais les identifiants. Le coût rendu est la somme des `tasks[].cost`
+ * renvoyés par l'API.
  */
 export class DataForSeoProvider implements LocalSearchProvider {
   readonly mode = "dataforseo" as const;
+  private readonly timeoutMs: number;
+  private readonly concurrency: number;
+
   constructor(
     private readonly login: string,
     private readonly password: string,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    options: DataForSeoOptions = {},
+  ) {
+    this.timeoutMs = options.timeoutMs ?? DATAFORSEO_TIMEOUT_MS;
+    this.concurrency = options.concurrency ?? DATAFORSEO_CONCURRENCY;
+  }
 
   protected authHeader(): string {
     return `Basic ${Buffer.from(`${this.login}:${this.password}`).toString("base64")}`;
   }
 
-  async mapsSearch(_inputs: MapsSearchInput[]): Promise<ProviderResult<GoogleMapsListing[][]>> {
-    void this.fetchImpl;
-    throw new Error("DataForSeoProvider.mapsSearch : à implémenter");
+  /**
+   * Un appel HTTP (JSON) : délai, une nouvelle tentative sur 5xx ou erreur
+   * réseau, statut général vérifié (20000). Renvoie les tâches et le coût total.
+   */
+  protected async request<R>(
+    endpoint: string,
+    init: { method: "GET" | "POST"; body?: unknown },
+  ): Promise<{ tasks: DfsTask<R>[]; cost: number }> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        let response: Response;
+        try {
+          response = await this.fetchImpl(`${DATAFORSEO_BASE}${endpoint}`, {
+            method: init.method,
+            headers: {
+              Authorization: this.authHeader(),
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          lastError = new Error(`DataForSEO ${endpoint} réseau: ${describeError(err)}`);
+          continue;
+        }
+        if (response.status >= 500) {
+          lastError = new Error(`DataForSEO ${endpoint} ${response.status}: ${await this.bodyExcerpt(response)}`);
+          continue;
+        }
+        if (!response.ok) {
+          throw new Error(`DataForSEO ${endpoint} ${response.status}: ${await this.bodyExcerpt(response)}`);
+        }
+        const json = (await response.json()) as DfsResponse<R>;
+        if (json.status_code !== STATUS_OK) {
+          throw new Error(
+            `DataForSEO ${endpoint} ${json.status_code ?? "?"}: ${json.status_message ?? "réponse invalide"}`,
+          );
+        }
+        const tasks = json.tasks ?? [];
+        return { tasks, cost: round6(tasks.reduce((sum, task) => sum + (numberOrNull(task.cost) ?? 0), 0)) };
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw lastError ?? new Error(`DataForSEO ${endpoint}: échec`);
   }
-  async businessInfo(_input: BusinessInfoInput): Promise<ProviderResult<GoogleProfileSnapshot | null>> {
-    throw new Error("DataForSeoProvider.businessInfo : à implémenter");
+
+  private async bodyExcerpt(response: Response): Promise<string> {
+    try {
+      const text = (await response.text()).replace(/\s+/g, " ").trim();
+      return text === "" ? response.statusText || "sans détail" : text.slice(0, 200);
+    } catch {
+      return response.statusText || "sans détail";
+    }
   }
-  async postReviewsTask(_input: ReviewsTaskInput): Promise<ProviderResult<{ taskId: string }>> {
-    throw new Error("DataForSeoProvider.postReviewsTask : à implémenter");
+
+  private taskError(endpoint: string, task: DfsTask<unknown> | undefined): Error {
+    return new Error(
+      `DataForSEO ${endpoint} ${task?.status_code ?? "?"}: ${task?.status_message ?? "tâche absente de la réponse"}`,
+    );
   }
-  async fetchReviewsTask(_taskId: string): Promise<ProviderResult<ReviewsTaskResult>> {
-    throw new Error("DataForSeoProvider.fetchReviewsTask : à implémenter");
+
+  async mapsSearch(inputs: MapsSearchInput[]): Promise<ProviderResult<GoogleMapsListing[][]>> {
+    const endpoint = "/serp/google/maps/live/advanced";
+    const results = await mapConcurrent(inputs, this.concurrency, async (input) => {
+      const depth = Math.max(1, Math.min(100, input.depth ?? 20));
+      const { tasks, cost } = await this.request<DfsMapsResult>(endpoint, {
+        method: "POST",
+        body: [
+          {
+            keyword: input.keyword,
+            location_coordinate: mapsCoordinate(input.point, input.zoom),
+            language_code: "fr",
+            depth,
+          },
+        ],
+      });
+      const task = tasks[0];
+      if (!task || task.status_code !== STATUS_OK) throw this.taskError(endpoint, task);
+      return { listings: normalizeMapsItems(task.result?.[0]?.items ?? [], depth), cost };
+    });
+    return {
+      data: results.map((r) => r.listings),
+      costUsd: round6(results.reduce((sum, r) => sum + r.cost, 0)),
+      mode: "dataforseo",
+    };
+  }
+
+  async businessInfo(input: BusinessInfoInput): Promise<ProviderResult<GoogleProfileSnapshot | null>> {
+    const endpoint = "/business_data/google/my_business_info/live";
+    const keyword = input.cid
+      ? `cid:${input.cid}`
+      : input.placeId
+        ? `place_id:${input.placeId}`
+        : textOrNull(input.title);
+    if (!keyword) return { data: null, costUsd: 0, mode: "dataforseo" };
+    const { tasks, cost } = await this.request<DfsBusinessResult>(endpoint, {
+      method: "POST",
+      body: [{ keyword, ...nearLocation(input.near), language_code: "fr" }],
+    });
+    const task = tasks[0];
+    if (!task || task.status_code !== STATUS_OK) throw this.taskError(endpoint, task);
+    const item = (task.result?.[0]?.items ?? []).find(
+      (it) => it.type === undefined || it.type === "google_business_info",
+    );
+    return { data: item ? snapshotFromBusinessItem(item, new Date()) : null, costUsd: cost, mode: "dataforseo" };
+  }
+
+  async postReviewsTask(input: ReviewsTaskInput): Promise<ProviderResult<{ taskId: string }>> {
+    const endpoint = "/business_data/google/reviews/task_post";
+    if (!input.placeId && !input.cid) {
+      throw new Error(`DataForSEO ${endpoint}: identifiant de fiche manquant (place_id ou cid)`);
+    }
+    const depth = Math.max(10, Math.ceil(input.depth / 10) * 10);
+    const { tasks, cost } = await this.request<unknown>(endpoint, {
+      method: "POST",
+      body: [
+        {
+          ...(input.placeId ? { place_id: input.placeId } : { cid: input.cid }),
+          ...nearLocation(input.near),
+          language_code: "fr",
+          depth,
+          sort_by: "newest",
+        },
+      ],
+    });
+    const task = tasks[0];
+    const created = task?.status_code === STATUS_TASK_CREATED || task?.status_code === STATUS_OK;
+    if (!task?.id || !created) throw this.taskError(endpoint, task);
+    return { data: { taskId: task.id }, costUsd: cost, mode: "dataforseo" };
+  }
+
+  async fetchReviewsTask(taskId: string): Promise<ProviderResult<ReviewsTaskResult>> {
+    if (!/^[A-Za-z0-9-]{1,80}$/.test(taskId)) {
+      throw new Error("DataForSEO /business_data/google/reviews/task_get: identifiant de tâche invalide");
+    }
+    const endpoint = `/business_data/google/reviews/task_get/${taskId}`;
+    const { tasks, cost } = await this.request<DfsReviewsResult>(endpoint, { method: "GET" });
+    const task = tasks[0];
+    if (!task) {
+      return { data: { status: "error", message: "tâche absente de la réponse" }, costUsd: cost, mode: "dataforseo" };
+    }
+    if (task.status_code !== undefined && STATUS_PENDING.has(task.status_code)) {
+      return { data: { status: "pending" }, costUsd: cost, mode: "dataforseo" };
+    }
+    if (task.status_code !== STATUS_OK) {
+      const message = `${task.status_code ?? "?"}: ${task.status_message ?? "erreur inconnue"}`.slice(0, 200);
+      return { data: { status: "error", message }, costUsd: cost, mode: "dataforseo" };
+    }
+    const result = task.result?.[0];
+    const reviews = (result?.items ?? []).map(reviewFromItem).filter((r): r is GoogleReviewItem => r !== null);
+    return {
+      data: {
+        status: "done",
+        reviews,
+        total: numberOrNull(result?.reviews_count),
+        rating: numberOrNull(result?.rating?.value),
+      },
+      costUsd: cost,
+      mode: "dataforseo",
+    };
   }
 }
 
