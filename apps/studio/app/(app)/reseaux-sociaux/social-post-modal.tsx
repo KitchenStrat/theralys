@@ -10,16 +10,18 @@ import type { SocialCalendarItem } from "@/lib/social/data";
 import { archiveSocialPost, markSocialPostPublished, rescheduleSocialPost } from "./actions";
 import { FORMAT_LABEL } from "./day-modal";
 
-const SIZE_LABEL: Record<SocialSize, string> = { square: "Carré", portrait: "Portrait", story: "Story" };
+const SIZE_LABEL: Record<SocialSize, string> = { square: "Carré", portrait: "Portrait", story: "Story", landscape: "Paysage" };
 const SIZE_HELP: Record<SocialSize, string> = {
   square: "Carré 1080×1080 · Instagram, Facebook, LinkedIn",
   portrait: "Portrait 1080×1350 · Instagram, prend plus de place dans le fil",
   story: "Story 1080×1920 · stories Instagram et Facebook",
+  landscape: "Paysage 1200×900 · posts Google",
 };
 const SIZE_ASPECT: Record<SocialSize, string> = {
   square: "aspect-square max-w-[540px]",
   portrait: "aspect-[4/5] max-w-[480px]",
   story: "aspect-[9/16] max-w-[340px]",
+  landscape: "aspect-[4/3] max-w-[560px]",
 };
 const NETWORKS: Record<SocialCalendarItem["format"], string> = {
   static: "Instagram, Facebook, LinkedIn",

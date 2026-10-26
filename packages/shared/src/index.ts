@@ -10,3 +10,4 @@ export * from "./professions";
 export * from "./social";
 export * from "./social-text";
 export * from "./social-brief";
+export * from "./google-profile";

@@ -179,6 +179,8 @@ répondre `{"ok":true,…}`.
 | E-mails d'invitation client | `RESEND_API_KEY` ([resend.com](https://resend.com), gratuit jusqu'à 100 e-mails/jour) + `MAIL_FROM` (ex. `Harmony <bonjour@harmony-web.fr>`, domaine à vérifier chez Resend). Sans clé : le lien d'invitation s'affiche dans l'admin, à envoyer soi-même. | admin |
 | Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
 | Google (GSC + fiche) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` | studio + admin |
+| Avis Google réels (Places API New) | `GOOGLE_PLACES_API_KEY` (Google Cloud, « Places API (New) » activée) | studio + admin |
+| Fiche Google (section du studio) | `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` ([app.dataforseo.com](https://app.dataforseo.com) → API Access ; prépayé, ≈ 0,10 $ par relevé de visibilité, plafond 5 $ par site et par mois). Sans identifiants : données simulées. | studio + admin |
 | Domaines clients OVH | `OVH_APP_KEY`, `OVH_APP_SECRET`, `OVH_CONSUMER_KEY` + `VERCEL_TOKEN`, `VERCEL_SITES_PROJECT_ID` (rattachement auto des domaines clients au projet sites) | studio |
 
 Après chaque ajout de variable : **Redeploy**.

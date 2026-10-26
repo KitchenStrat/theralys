@@ -51,6 +51,7 @@ export const SIZE_SUFFIX: Record<SocialSize, string> = {
   square: "carre",
   portrait: "portrait",
   story: "story",
+  landscape: "paysage",
 };
 
 /** `${date}-${slug(topic)}-${suffixe}.${ext}`, en ASCII (le slug retire les accents). */

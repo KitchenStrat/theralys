@@ -13,7 +13,20 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import type { PageSections, SiteTheme, SocialPostAssets, SocialPostContent } from "@theralys/shared";
+import type {
+  GoogleAudit,
+  GoogleCompetitor,
+  GoogleGridPoint,
+  GooglePostContent,
+  GoogleProfileSnapshot,
+  GoogleReviewAnalysis,
+  GoogleScanGrid,
+  GoogleScanSummary,
+  PageSections,
+  SiteTheme,
+  SocialPostAssets,
+  SocialPostContent,
+} from "@theralys/shared";
 import type { PlanId } from "./plans";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -82,6 +95,9 @@ export const googleConnectionStatusEnum = pgEnum("google_connection_status", [
 export const socialPostFormatEnum = pgEnum("social_post_format", ["static", "carousel", "story"]);
 export const socialPostSourceEnum = pgEnum("social_post_source", ["calendar", "request"]);
 export const socialPostStatusEnum = pgEnum("social_post_status", ["ready", "published", "archived"]);
+export const googleScanTriggerEnum = pgEnum("google_scan_trigger", ["manual", "scheduled"]);
+export const googleScanStatusEnum = pgEnum("google_scan_status", ["running", "done", "error"]);
+export const googleReviewTaskStatusEnum = pgEnum("google_review_task_status", ["pending", "done", "error"]);
 
 // ─── Utilisateurs (admin agence / client praticien) ──────────────────────────
 
@@ -293,6 +309,16 @@ export const googleReviews = pgTable(
     text: text("text").notNull(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+    // ─── Fiche Google (0003) ───
+    /** Provenance : places | dataforseo | mock | null (avis générés pour une démo, seed) */
+    source: text("source"),
+    /** Réponse publiée par le praticien sur Google (DataForSEO seulement ; null = pas de réponse ou inconnu) */
+    ownerReply: text("owner_reply"),
+    ownerRepliedAt: timestamp("owner_replied_at", { withTimezone: true }),
+    /** Lien direct vers l'avis sur Google Maps (pour y répondre) */
+    reviewUrl: text("review_url"),
+    /** Analyse IA (sentiment, thèmes, réponse proposée), null tant que non analysé */
+    analysis: jsonb("analysis").$type<GoogleReviewAnalysis>(),
   },
   (t) => [index("google_reviews_site_idx").on(t.siteId)],
 );
@@ -430,6 +456,147 @@ export const socialSettings = pgTable("social_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("social_settings_site_id_idx").on(t.siteId)]);
 
+// ─── Fiche Google (studio : audit, visibilité, avis, posts) ──────────────────
+
+/**
+ * Instantané de la fiche + audit calculé (une ligne par synchronisation ; la
+ * plus récente fait foi, les anciennes servent d'historique du score).
+ */
+export const googleProfileAudits = pgTable(
+  "google_profile_audits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    snapshot: jsonb("snapshot").$type<GoogleProfileSnapshot>().notNull(),
+    audit: jsonb("audit").$type<GoogleAudit>().notNull(),
+    /** 0..100 (copie de audit.score, pour les requêtes) */
+    score: integer("score").notNull(),
+    /** Coût fournisseur de cette synchronisation (USD) */
+    costUsd: real("cost_usd").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("google_profile_audits_site_time_idx").on(t.siteId, t.createdAt)],
+);
+
+/** Mots-clés suivis sur la carte de visibilité (≤ GOOGLE_KEYWORDS_MAX actifs par site). */
+export const googleKeywords = pgTable(
+  "google_keywords",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** Mot-clé normalisé (minuscules, espaces simples), ex. « sophrologue albi » */
+    keyword: text("keyword").notNull(),
+    /** GoogleGridRadius : quartier | ville | agglomeration */
+    radius: text("radius").notNull().default("ville"),
+    position: integer("position").notNull().default(0),
+    /** false = retiré (historique des relevés conservé) */
+    active: boolean("active").notNull().default(true),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("google_keywords_site_keyword_idx").on(t.siteId, t.keyword)],
+);
+
+/** Relevé de visibilité : une grille de positions pour un mot-clé à un instant. */
+export const googleRankScans = pgTable(
+  "google_rank_scans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    keywordId: uuid("keyword_id")
+      .notNull()
+      .references(() => googleKeywords.id, { onDelete: "cascade" }),
+    trigger: googleScanTriggerEnum("trigger").notNull().default("manual"),
+    status: googleScanStatusEnum("status").notNull().default("running"),
+    grid: jsonb("grid").$type<GoogleScanGrid>().notNull(),
+    /** Résultats point par point (ordre de gridPoints), vide tant que running */
+    points: jsonb("points").$type<GoogleGridPoint[]>().notNull().default([]),
+    summary: jsonb("summary").$type<GoogleScanSummary>(),
+    competitors: jsonb("competitors").$type<GoogleCompetitor[]>().notNull().default([]),
+    costUsd: real("cost_usd").notNull().default(0),
+    error: text("error"),
+    scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("google_rank_scans_keyword_time_idx").on(t.keywordId, t.scannedAt)],
+);
+
+/** Posts Google prêts à publier (calendrier + demandes), même moteur que social_posts. */
+export const googlePosts = pgTable(
+  "google_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scheduledFor: date("scheduled_for").notNull(),
+    source: socialPostSourceEnum("source").notNull().default("calendar"),
+    status: socialPostStatusEnum("status").notNull().default("ready"),
+    topic: text("topic").notNull(),
+    request: text("request"),
+    /** SocialTemplate statique (GOOGLE_POST_TEMPLATES) */
+    template: text("template").notNull(),
+    accentColor: text("accent_color"),
+    content: jsonb("content").$type<GooglePostContent>().notNull(),
+    assets: jsonb("assets")
+      .$type<SocialPostAssets>()
+      .notNull()
+      .default({ version: 1, renders: {} }),
+    downloadedAt: timestamp("downloaded_at", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("google_posts_site_date_idx").on(t.siteId, t.scheduledFor)],
+);
+
+/**
+ * Registre des dépenses fournisseur (DataForSEO) par site et par mois : une
+ * ligne par appel, `kind` = business_info | reviews | scan. Le plafond
+ * GOOGLE_MONTHLY_BUDGET_USD se vérifie sur SUM(cost_usd) du mois.
+ */
+export const googleUsage = pgTable(
+  "google_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** "YYYY-MM" (UTC) */
+    month: text("month").notNull(),
+    kind: text("kind").notNull(),
+    costUsd: real("cost_usd").notNull(),
+    requests: integer("requests").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("google_usage_site_month_idx").on(t.siteId, t.month)],
+);
+
+/** Tâches asynchrones « avis Google » (DataForSEO : task_post → task_get). */
+export const googleReviewTasks = pgTable(
+  "google_review_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** Identifiant DataForSEO */
+    taskId: text("task_id").notNull(),
+    status: googleReviewTaskStatusEnum("status").notNull().default("pending"),
+    depth: integer("depth").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("google_review_tasks_site_idx").on(t.siteId, t.status)],
+);
+
 // ─── Types dérivés ───────────────────────────────────────────────────────────
 
 export type User = typeof users.$inferSelect;
@@ -453,3 +620,11 @@ export type NewSocialPost = typeof socialPosts.$inferInsert;
 export type SocialSettings = typeof socialSettings.$inferSelect;
 export type NewSocialSettings = typeof socialSettings.$inferInsert;
 export type SitePlan = PlanId;
+export type GoogleProfileAudit = typeof googleProfileAudits.$inferSelect;
+export type GoogleKeyword = typeof googleKeywords.$inferSelect;
+export type GoogleRankScan = typeof googleRankScans.$inferSelect;
+export type NewGoogleRankScan = typeof googleRankScans.$inferInsert;
+export type GooglePost = typeof googlePosts.$inferSelect;
+export type NewGooglePost = typeof googlePosts.$inferInsert;
+export type GoogleUsage = typeof googleUsage.$inferSelect;
+export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;

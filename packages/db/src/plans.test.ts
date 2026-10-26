@@ -5,6 +5,7 @@ import {
   canAddMotifPage,
   hasAcademy,
   hasBlog,
+  hasGoogleProfile,
   hasKeywordResearch,
   hasSearchConsole,
   hasSocialMedia,
@@ -83,5 +84,12 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(hasSocialMedia("scale")).toBe(true);
     expect(hasSocialMedia("boost")).toBe(true);
     expect(PLANS.starter.socialMedia).toBe(false);
+  });
+
+  it("fiche Google : réservée à Scale (et à l'héritage Boost), pas à Starter", () => {
+    expect(hasGoogleProfile("starter")).toBe(false);
+    expect(hasGoogleProfile("scale")).toBe(true);
+    expect(hasGoogleProfile("boost")).toBe(true);
+    expect(PLANS.starter.googleProfile).toBe(false);
   });
 });

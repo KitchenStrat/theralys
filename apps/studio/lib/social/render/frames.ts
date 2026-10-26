@@ -28,6 +28,8 @@ export const FRAMES: Record<SocialSize, Frame> = {
   square: { w: 1080, h: 1080, pad: 80, title: 64, body: 34, label: 24, safeTop: 0, safeBottom: 0 },
   portrait: { w: 1080, h: 1350, pad: 88, title: 72, body: 36, label: 26, safeTop: 0, safeBottom: 0 },
   story: { w: 1080, h: 1920, pad: 96, title: 84, body: 40, label: 28, safeTop: 250, safeBottom: 320 },
+  // Posts Google (4:3) : marges et corps du carré, titre un peu plus petit (moins de hauteur)
+  landscape: { w: 1200, h: 900, pad: 80, title: 60, body: 32, label: 24, safeTop: 0, safeBottom: 0 },
 };
 
 /**

@@ -16,6 +16,8 @@ export const SOCIAL_SIZES = {
   square: { w: 1080, h: 1080 },
   portrait: { w: 1080, h: 1350 },
   story: { w: 1080, h: 1920 },
+  /** 4:3, visuel des posts Google (jamais proposé pour un format social) */
+  landscape: { w: 1200, h: 900 },
 } as const;
 export type SocialSize = keyof typeof SOCIAL_SIZES;
 

@@ -101,8 +101,12 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   illustrations SVG déterministes.
 - **Google (Search Console + fiche)** : sans `GOOGLE_CLIENT_ID`, la connexion depuis le
   studio crée une connexion mock et des statistiques réalistes (décalées de 2-3 jours).
-- **Fiche Google** : la recherche du formulaire de démo renvoie des résultats factices
-  (l'API Places réelle se branchera derrière `PlacesProvider`).
+- **Fiche Google (recherche, avis)** : sans `GOOGLE_PLACES_API_KEY`, la recherche d'établissement
+  et les avis sont factices ; avec la clé, Places API (New) fournit la fiche et ses 5 avis.
+- **Fiche Google (section du studio, Scale)** : sans `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD`
+  (ou avec `DATAFORSEO_MOCK=1`), audit, carte de visibilité et avis complets sont simulés de
+  façon déterministe ; avec les identifiants, DataForSEO fournit les données publiques Google
+  Maps (≤ 5 $ par site et par mois, plafond vérifié avant chaque appel).
 
 ## Ce que couvre la Phase 4
 

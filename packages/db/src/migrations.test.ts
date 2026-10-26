@@ -49,11 +49,12 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler, 0001_social_posts puis 0002_social_settings, fichiers présents", () => {
+  it("référence 0000_soft_scrambler, 0001_social_posts, 0002_social_settings puis 0003_google_profile, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
       "0002_social_settings",
+      "0003_google_profile",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -145,5 +146,46 @@ describe("0002_social_settings : crée social_settings (« Paramétrage » des r
     ).toBe(true);
     // Les enums voice_* et gender existent depuis 0000 : aucun CREATE TYPE ici
     expect(statements.some((s) => /CREATE TYPE/.test(s))).toBe(false);
+  });
+});
+
+describe("0003_google_profile : tables de la section Fiche Google et colonnes d'avis", () => {
+  const statements = statementsOf("0003_google_profile");
+  const count = (re: RegExp) => statements.filter((s) => re.test(s)).length;
+
+  it("3 enums, 6 tables, 5 colonnes ajoutées à google_reviews, 7 clés étrangères, 6 index — dans cet ordre", () => {
+    expect(count(/CREATE TYPE "public"\./)).toBe(3);
+    expect(count(/^CREATE TABLE IF NOT EXISTS "/)).toBe(6);
+    expect(count(/^ALTER TABLE "google_reviews" ADD COLUMN IF NOT EXISTS "/)).toBe(5);
+    expect(count(/ADD CONSTRAINT "[^"]+" FOREIGN KEY/)).toBe(7);
+    expect(count(/^CREATE (UNIQUE )?INDEX IF NOT EXISTS "/)).toBe(6);
+    expect(statements).toHaveLength(27);
+    const kind = (s: string) =>
+      /CREATE TYPE/.test(s) ? 0 : /CREATE TABLE/.test(s) ? 1 : /ADD COLUMN/.test(s) ? 2 : /ADD CONSTRAINT/.test(s) ? 3 : 4;
+    const kinds = statements.map(kind);
+    expect(kinds).toEqual([...kinds].sort((a, b) => a - b));
+  });
+
+  it("google_posts réutilise les enums des réseaux sociaux ; google_keywords est unique par (site, mot-clé)", () => {
+    const posts = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "google_posts"'));
+    expect(posts).toContain(`"source" "social_post_source" DEFAULT 'calendar' NOT NULL`);
+    expect(posts).toContain(`"status" "social_post_status" DEFAULT 'ready' NOT NULL`);
+    expect(posts).not.toContain('"format"');
+    expect(
+      statements.some((s) =>
+        s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "google_keywords_site_keyword_idx" ON "google_keywords"'),
+      ),
+    ).toBe(true);
+    const scans = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "google_rank_scans"'));
+    expect(scans).toContain(`"status" "google_scan_status" DEFAULT 'running' NOT NULL`);
+    expect(scans).toContain(`"points" jsonb DEFAULT '[]'::jsonb NOT NULL`);
+  });
+
+  it("les colonnes d'avis sont toutes facultatives (aucune valeur à rétro-remplir)", () => {
+    for (const col of ["source", "owner_reply", "owner_replied_at", "review_url", "analysis"]) {
+      const stmt = statements.find((s) => s.includes(`ADD COLUMN IF NOT EXISTS "${col}"`));
+      expect(stmt, col).toBeDefined();
+      expect(stmt).not.toContain("NOT NULL");
+    }
   });
 });

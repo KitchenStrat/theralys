@@ -26,7 +26,11 @@
     "NODE_ENV",
     "BLOB_READ_WRITE_TOKEN",
     "ANTHROPIC_EFFORT",
-    "PEXELS_API_KEY"
+    "PEXELS_API_KEY",
+    "GOOGLE_PLACES_API_KEY",
+    "DATAFORSEO_LOGIN",
+    "DATAFORSEO_PASSWORD",
+    "DATAFORSEO_MOCK"
   ],
   "tasks": {
     "build": {

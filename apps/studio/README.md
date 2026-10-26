@@ -106,7 +106,9 @@ comprises.
   — satori + sharp, polices OFL dans `assets/fonts/`, cache mémoire puis
   Vercel Blob si `BLOB_READ_WRITE_TOKEN` est renseigné (`lib/social/render/`).
 - **Variables** : `AI_MOCK=1` pour un générateur déterministe sans clé ;
-  `BLOB_READ_WRITE_TOKEN` (optionnel) pour persister les rendus.
+  `BLOB_READ_WRITE_TOKEN` (optionnel) pour persister les rendus ;
+  `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (section Fiche Google, sinon
+  données simulées, `DATAFORSEO_MOCK=1` pour forcer le mock).
 
 ## Développement local
 

@@ -355,6 +355,9 @@ importers:
       '@theralys/db':
         specifier: workspace:*
         version: link:../db
+      '@theralys/shared':
+        specifier: workspace:*
+        version: link:../shared
       stripe:
         specifier: ^17.5.0
         version: 17.7.0

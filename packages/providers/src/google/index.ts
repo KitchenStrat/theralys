@@ -32,6 +32,16 @@ export type GooglePlaceDetails = {
   /** Photo principale de la fiche, résolue côté serveur (jamais de clé API dans l'URL). */
   photoUrl: string | null;
   reviews: GooglePlaceReview[];
+  // ─── Champs d'audit (Fiche Google) — gratuits au palier « Enterprise + Atmosphere » ───
+  location: { lat: number; lng: number } | null;
+  website: string | null;
+  phone: string | null;
+  /** Horaires renseignés (null = inconnu) */
+  hasHours: boolean | null;
+  /** Type principal Google (« wellness_center »…) */
+  primaryType: string | null;
+  /** Photos renvoyées (Places en renvoie 10 au plus : ≥ 10 signifie « au moins 10 ») */
+  photoCount: number | null;
 };
 
 export interface GooglePlacesProvider {
@@ -88,7 +98,8 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
       {
         headers: {
           "X-Goog-Api-Key": this.apiKey,
-          "X-Goog-FieldMask": "id,rating,userRatingCount,reviews,photos",
+          "X-Goog-FieldMask":
+            "id,rating,userRatingCount,reviews,photos,location,websiteUri,nationalPhoneNumber,regularOpeningHours,primaryType",
         },
       },
     );
@@ -99,6 +110,11 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
       rating?: number;
       userRatingCount?: number;
       photos?: { name?: string }[];
+      location?: { latitude?: number; longitude?: number };
+      websiteUri?: string;
+      nationalPhoneNumber?: string;
+      regularOpeningHours?: { periods?: unknown[] };
+      primaryType?: string;
       reviews?: {
         name?: string;
         rating?: number;
@@ -122,6 +138,15 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
           reviewedAt: r.publishTime ? new Date(r.publishTime) : null,
         }))
         .filter((r) => r.text.length > 0),
+      location:
+        typeof data.location?.latitude === "number" && typeof data.location?.longitude === "number"
+          ? { lat: data.location.latitude, lng: data.location.longitude }
+          : null,
+      website: data.websiteUri ?? null,
+      phone: data.nationalPhoneNumber ?? null,
+      hasHours: data.regularOpeningHours ? (data.regularOpeningHours.periods?.length ?? 0) > 0 : false,
+      primaryType: data.primaryType ?? null,
+      photoCount: data.photos?.length ?? 0,
     };
   }
 
@@ -183,6 +208,12 @@ export class MockGooglePlacesProvider implements GooglePlacesProvider {
         ][i]!,
         reviewedAt: new Date(Date.UTC(2026, 5 - i, 12)),
       })),
+      location: { lat: 43.9289, lng: 2.1464 },
+      website: "https://exemple-harmony.fr",
+      phone: "05 63 00 00 00",
+      hasHours: true,
+      primaryType: "wellness_center",
+      photoCount: 7,
     };
   }
 }
