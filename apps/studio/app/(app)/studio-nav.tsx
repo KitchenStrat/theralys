@@ -13,10 +13,13 @@ import { clsx } from "clsx";
 export function StudioNav({
   showPublications = true,
   showSocial = true,
+  showGoogle = true,
 }: {
   showPublications?: boolean;
   /** Section « Réseaux sociaux » (démos et formule Scale) */
   showSocial?: boolean;
+  /** Section « Fiche Google » (démos et formule Scale) */
+  showGoogle?: boolean;
 }) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
@@ -47,6 +50,15 @@ export function StudioNav({
             href: "/reseaux-sociaux",
             label: "Réseaux sociaux",
             active: pathname.startsWith("/reseaux-sociaux"),
+          },
+        ]
+      : []),
+    ...(showGoogle
+      ? [
+          {
+            href: "/fiche-google",
+            label: "Fiche Google",
+            active: pathname.startsWith("/fiche-google"),
           },
         ]
       : []),
