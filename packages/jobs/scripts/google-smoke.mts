@@ -6,11 +6,27 @@
  *          AUTH_SECRET=… AI_MOCK=1 SITES_BASE_URL=http://localhost:3000
  *   pnpm --filter @theralys/jobs exec tsx scripts/google-smoke.mts [--cleanup]
  *
- * Relie une fiche mock au prospect du site démo si nécessaire, synchronise la
- * fiche (force), ajoute un mot-clé, lance un relevé manuel, collecte la tâche
- * d'avis, analyse les avis, puis affiche score, visibilité, avis analysés et
- * dépenses du mois. Avec `--cleanup`, retire uniquement les lignes créées par
- * ce passage (le site démo et ses avis d'origine ne sont jamais touchés).
+ * Le fichier `.env` de la racine est chargé : s'il contient des identifiants
+ * DataForSEO, le fournisseur réel est appelé et facturé (fiche ≈ 0,005 $,
+ * relevé ≈ 0,10 $, avis ≈ 0,004 $) — exporter `DATAFORSEO_MOCK=1` pour forcer
+ * le mock. Le site visé doit être une démo (`SMOKE_SITE_SLUG`, défaut :
+ * claire-dupont-sophrologue-albi) : sur un site client, le mock est refusé
+ * (`no_provider`, tâche d'avis en erreur) et la synchronisation s'arrête.
+ *
+ * Déroulé : relie une fiche mock au prospect si nécessaire, synchronise la
+ * fiche (force : l'intervalle de 30 jours est ignoré, pas le budget de 1 $
+ * de la démo), ajoute un mot-clé, lance un relevé manuel (quota mensuel de
+ * 10 relevés : au-delà, `quota`), collecte la tâche d'avis (le mock répond
+ * immédiatement ; la collecte remplace les avis Places / mock du site par
+ * ceux de la tâche), analyse les avis, puis affiche score, visibilité, avis
+ * analysés et dépenses du mois. Les relevés et usages s'horodatent à l'heure
+ * réelle, quel que soit le `now` passé.
+ *
+ * Avec `--cleanup`, retire les lignes créées par ce passage (usages, tâches,
+ * audits, avis mock synchronisés, mot-clé créé ou relevés du mot-clé
+ * existant, fiche mock reliée) ; les avis remplacés par la collecte ne sont
+ * pas restaurés (ils reviennent au prochain tick `syncGoogleReviews` pour une
+ * démo), et le site lui-même n'est jamais touché.
  */
 
 import path from "node:path";

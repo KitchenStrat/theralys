@@ -259,14 +259,18 @@ function ReviewCard({ review, placeId }: { review: GoogleReviewView; placeId: st
           <p className="mt-1 whitespace-pre-line text-ink-700">{review.ownerReply}</p>
         </div>
       ) : (
-        <ReplyEditor reviewId={review.id} suggested={review.analysis?.suggestedReply ?? ""} googleUrl={googleUrl} />
+        <ReplyEditor reviewId={review.id} suggested={review.analysis?.suggestedReply ?? ""} analyzed={review.analysis !== null} googleUrl={googleUrl} />
       )}
     </Card>
   );
 }
 
-/** Réponse proposée, modifiable, à copier puis coller sur Google (Harmony ne publie pas). */
-function ReplyEditor({ reviewId, suggested, googleUrl }: { reviewId: string; suggested: string; googleUrl: string | null }) {
+/**
+ * Réponse proposée, modifiable, à copier puis coller sur Google (Harmony ne
+ * publie pas). Un avis analysé sans réponse proposée (réponse écartée par les
+ * garde-fous) l'indique plutôt que d'inviter à relancer l'analyse.
+ */
+function ReplyEditor({ reviewId, suggested, analyzed, googleUrl }: { reviewId: string; suggested: string; analyzed: boolean; googleUrl: string | null }) {
   const [text, setText] = useState(suggested);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,9 +299,11 @@ function ReplyEditor({ reviewId, suggested, googleUrl }: { reviewId: string; sug
         maxLength={GOOGLE_REPLY_MAX}
         rows={4}
         placeholder={
-          suggested === ""
-            ? "Lancez « Analyser les nouveaux avis » pour obtenir une réponse proposée, ou rédigez la vôtre ici."
-            : undefined
+          suggested !== ""
+            ? undefined
+            : analyzed
+              ? "Pas de réponse proposée pour cet avis — rédigez la vôtre ici."
+              : "Lancez « Analyser les nouveaux avis » pour obtenir une réponse proposée, ou rédigez la vôtre ici."
         }
         aria-describedby={`${id}-count`}
         className="mt-1 w-full rounded-xl border border-cream-300 bg-cream-50 px-3 py-2 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"

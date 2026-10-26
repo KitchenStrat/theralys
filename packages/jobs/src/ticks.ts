@@ -15,7 +15,10 @@
  * - runScheduledGoogleScans  : relevés de visibilité planifiés (14 jours)
  *
  * `runAllTicks` enchaîne les ticks avec un try/catch par tick : un tick en
- * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants.
+ * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants. Les
+ * ticks de la fiche Google (appels fournisseur longs) reçoivent une échéance
+ * (TICK_DEADLINE_MS après `now`) et n'entament plus d'élément au-delà, pour
+ * rester sous la durée maximale de la route cron (800 s).
  */
 
 import { and, eq, inArray, isNotNull, lte, ne } from "drizzle-orm";
@@ -64,6 +67,12 @@ const WRITE_AHEAD_DAYS = 7;
 const PUBLISH_HOUR_UTC = 7;
 
 export type TickReport = { task: string; processed: number };
+
+/** Options communes des ticks : `deadline` (facultative) arrête la boucle avant l'élément suivant une fois dépassée. */
+export type TickOptions = { deadline?: Date };
+
+/** Durée allouée aux ticks d'un passage (ms) : 660 s, sous les 800 s de la route cron, marge pour l'élément en cours. */
+export const TICK_DEADLINE_MS = 660_000;
 
 /** Sites dont le blog est actif : formule avec blog + réglages existants. */
 async function blogActiveSites(db: Database): Promise<Site[]> {
@@ -408,7 +417,7 @@ async function upsertPlacesReviews(
   return withId.length;
 }
 
-const ALL_TICKS: { task: string; run: (now: Date) => Promise<TickReport> }[] = [
+const ALL_TICKS: { task: string; run: (now: Date, opts: TickOptions) => Promise<TickReport> }[] = [
   { task: "editorial-calendar", run: ensureEditorialCalendars },
   { task: "generate-articles", run: generateDueArticles },
   { task: "publish-articles", run: publishDueArticles },
@@ -419,12 +428,17 @@ const ALL_TICKS: { task: string; run: (now: Date) => Promise<TickReport> }[] = [
   { task: "scheduled-google-scans", run: runScheduledGoogleScans },
 ];
 
-/** Tous les ticks, dans l'ordre ; un tick en erreur est journalisé et ne bloque pas les suivants. */
+/**
+ * Tous les ticks, dans l'ordre ; un tick en erreur est journalisé et ne
+ * bloque pas les suivants. L'échéance commune (`now` + TICK_DEADLINE_MS) est
+ * transmise à chaque tick ; seuls ceux de la fiche Google la lisent.
+ */
 export async function runAllTicks(now = new Date()): Promise<TickReport[]> {
   const reports: TickReport[] = [];
+  const opts: TickOptions = { deadline: new Date(now.getTime() + TICK_DEADLINE_MS) };
   for (const { task, run } of ALL_TICKS) {
     try {
-      reports.push(await run(now));
+      reports.push(await run(now, opts));
     } catch (err) {
       console.error(`[ticks] ${task} en échec :`, err);
       reports.push({ task, processed: 0 });

@@ -6,23 +6,36 @@
  * Signatures figées (le studio les appelle telles quelles). Règles :
  * - aucun appel fournisseur sans vérifier `googleBudget` (plafond
  *   GOOGLE_MONTHLY_BUDGET_USD par site et par mois, démos : GOOGLE_DEMO_BUDGET_USD) ;
+ *   pour un relevé (≈ 0,10 $), le quota et le budget sont recomptés sous
+ *   verrou consultatif par site et le coût estimé est inscrit dans la même
+ *   transaction (budget atomique) ; pour la fiche (≈ 0,005 $) et les avis
+ *   (≈ 0,004 $) la vérification reste hors transaction : deux appels
+ *   simultanés dépasseraient le plafond de quelques millièmes de dollar ;
  * - chaque appel facturé est inscrit dans `google_usage` avec le coût réel
- *   renvoyé par le fournisseur (0 en mock, pour les compteurs) ;
- * - jamais d'avis factices sur un site client : le fournisseur mock ne lance
- *   et ne collecte des tâches d'avis que pour les démos (développement local) ;
+ *   renvoyé par le fournisseur (0 en mock, pour les compteurs), y compris en
+ *   échec partiel ou total (`DataForSeoError.costUsd`, sinon coût estimé par
+ *   prudence) ; chaque tentative de synchronisation sans appel abouti laisse
+ *   une ligne `sync_attempt` (coût 0) pour la planification ;
+ * - jamais de données factices sur un site client : le fournisseur mock ne
+ *   sert que les démos (fiche, relevés, tâches d'avis) ; un site client sans
+ *   fournisseur réel est ignoré (`no_provider`) et la fiche praticien
+ *   (`prospects`) n'est jamais mise à jour depuis un instantané mock ;
  * - repli Places API (New) pour la fiche quand DataForSEO est absent ou en
- *   échec (instantané `source: "places"`, attributs et description inconnus).
+ *   échec, seulement avec une clé réelle (instantané `source: "places"`,
+ *   attributs et description inconnus).
  */
 
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, ne, notInArray, or, sql } from "drizzle-orm";
 import {
   DATAFORSEO_UNIT_COSTS,
   GOOGLE_GRID,
   GOOGLE_GRID_RADII,
+  GOOGLE_KEYWORDS_MAX,
   GOOGLE_MANUAL_SCANS_PER_MONTH,
   GOOGLE_MONTHLY_BUDGET_USD,
   GOOGLE_PROFILE_SYNC_INTERVAL_DAYS,
   GOOGLE_REVIEWS_SYNC_DEPTH,
+  GOOGLE_SCAN_MAX_MISSING_POINTS,
   GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS,
   aggregateCompetitors,
   auditGoogleProfile,
@@ -34,15 +47,18 @@ import {
   gridRadiusKm,
   summarizeScan,
   usageMonthKey,
+  type GeoPoint,
   type GoogleAudit,
   type GoogleBenchmark,
   type GoogleCompetitor,
   type GoogleGridPoint,
   type GoogleGridRadius,
+  type GoogleMapsListing,
   type GoogleProfileSnapshot,
   type GoogleScanGrid,
 } from "@theralys/shared";
 import {
+  PLANS,
   getDb,
   googleKeywords,
   googleProfileAudits,
@@ -56,23 +72,26 @@ import {
   type Database,
   type GoogleProfileAudit,
   type GoogleRankScan,
+  type PlanId,
   type Prospect,
   type Site,
 } from "@theralys/db";
-import { createGoogleReviewsAnalyzer } from "@theralys/ai";
-import { createLocalSearchProvider, type GoogleReviewItem } from "@theralys/providers/dataforseo";
-import { createGooglePlacesProvider } from "@theralys/providers/google";
+import { GOOGLE_REVIEWS_BATCH, createGoogleReviewsAnalyzer, fallbackReviewAnalysis } from "@theralys/ai";
+import { DataForSeoError, createLocalSearchProvider, type GoogleReviewItem } from "@theralys/providers/dataforseo";
+import { createGooglePlacesProvider, type GooglePlacesProvider } from "@theralys/providers/google";
 import { loadGoogleBrief, siteUrl } from "./google-brief";
-import type { TickReport } from "./ticks";
+import type { TickOptions, TickReport } from "./ticks";
 
 /** Plafond mensuel d'une démo (audit + avis + quelques relevés), USD. */
 export const GOOGLE_DEMO_BUDGET_USD = 1;
 /** Sites synchronisés par passage du tick `syncGoogleProfiles`. */
 export const GOOGLE_SYNC_BATCH = 25;
-/** Mots-clés relevés par passage du tick `runScheduledGoogleScans`. */
-export const GOOGLE_SCAN_BATCH = 20;
-/** Lectures d'une tâche d'avis encore en attente avant abandon (≈ 2 jours au rythme horaire). */
-export const GOOGLE_REVIEW_TASK_MAX_ATTEMPTS = 48;
+/** Mots-clés relevés par passage du tick `runScheduledGoogleScans` (≈ 49 requêtes et jusqu'à une minute chacun). */
+export const GOOGLE_SCAN_BATCH = 8;
+/** Âge d'une tâche d'avis encore en attente au-delà duquel elle est abandonnée (jours). */
+export const GOOGLE_REVIEW_TASK_MAX_AGE_DAYS = 3;
+/** Lots d'avis (GOOGLE_REVIEWS_BATCH) analysés au plus par appel d'`analyzeGoogleReviews`. */
+export const GOOGLE_REVIEWS_MAX_BATCHES = 3;
 /** Relevé `running` plus ancien : le processus est mort, la ligne passe en erreur. */
 const SCAN_STALE_MINUTES = 15;
 /** Profondeur des requêtes Maps (au-delà du 20e, le rang n'a plus d'intérêt). */
@@ -80,7 +99,8 @@ const MAPS_DEPTH = 20;
 const DAY_MS = 86_400_000;
 const ERROR_MESSAGE_MAX = 300;
 
-export type GoogleUsageKind = "business_info" | "reviews" | "scan";
+/** `sync_attempt` : tentative de synchronisation sans appel abouti (coût 0, 0 requête), pour l'échéancier. */
+export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt";
 
 export type GoogleBudget = {
   month: string;
@@ -89,8 +109,12 @@ export type GoogleBudget = {
   remainingUsd: number;
 };
 
+/** Connexion ou transaction drizzle (les lectures de budget se font aussi sous verrou, dans une transaction). */
+type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type DbExecutor = Database | DbTransaction;
+
 /** Dépenses fournisseur du mois courant (USD) pour un site. */
-export async function monthlyGoogleSpendUsd(db: Database, siteId: string, now = new Date()): Promise<number> {
+export async function monthlyGoogleSpendUsd(db: DbExecutor, siteId: string, now = new Date()): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${googleUsage.costUsd}), 0)` })
     .from(googleUsage)
@@ -100,7 +124,7 @@ export async function monthlyGoogleSpendUsd(db: Database, siteId: string, now = 
 
 /** Budget restant du mois pour un site (démo : plafond réduit). */
 export async function googleBudget(
-  db: Database,
+  db: DbExecutor,
   site: { id: string; type: "demo" | "client" },
   now = new Date(),
 ): Promise<GoogleBudget> {
@@ -111,7 +135,7 @@ export async function googleBudget(
 
 /** Inscrit une dépense réelle (coût renvoyé par le fournisseur ; 0 en mock est inscrit aussi, pour les compteurs). */
 export async function recordGoogleUsage(
-  db: Database,
+  db: DbExecutor,
   siteId: string,
   kind: GoogleUsageKind,
   costUsd: number,
@@ -121,11 +145,129 @@ export async function recordGoogleUsage(
   await db.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind, costUsd, requests });
 }
 
+// ─── Logique pure (testée sans base) ─────────────────────────────────────────
+
+/** Date valide, ou null (colonnes agrégées en SQL rendues en chaîne, JSON `fetchedAt`, valeurs absentes). */
+export function dateOrNull(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function olderThan(date: Date | null, now: Date, days: number): boolean {
+  return date === null || now.getTime() - date.getTime() >= days * DAY_MS;
+}
+
+/**
+ * Fiche due : la dernière tentative (`google_usage` business_info /
+ * sync_attempt) ET le dernier audit facturé datent de plus de
+ * GOOGLE_PROFILE_SYNC_INTERVAL_DAYS (ou n'existent pas). Un site en échec
+ * ou au budget épuisé n'est donc pas repris chaque jour.
+ */
+export function isProfileSyncDue(
+  last: { attemptAt: Date | null; billedAt: Date | null },
+  now: Date,
+  intervalDays = GOOGLE_PROFILE_SYNC_INTERVAL_DAYS,
+): boolean {
+  return olderThan(last.attemptAt, now, intervalDays) && olderThan(last.billedAt, now, intervalDays);
+}
+
+/** Tri par dernière tentative croissante, jamais tentés d'abord. */
+function byOldestAttempt<T extends { attemptAt: Date | null }>(a: T, b: T): number {
+  return (a.attemptAt?.getTime() ?? -Infinity) - (b.attemptAt?.getTime() ?? -Infinity);
+}
+
+/** Sites dus (`isProfileSyncDue`), triés par dernière tentative croissante (`nulls first`), au plus `batch`. */
+export function selectDueSites<T extends { attemptAt: Date | null; billedAt: Date | null }>(
+  rows: T[],
+  now: Date,
+  batch = GOOGLE_SYNC_BATCH,
+): T[] {
+  return rows
+    .filter((row) => isProfileSyncDue(row, now))
+    .sort(byOldestAttempt)
+    .slice(0, batch);
+}
+
+/** Mot-clé dû : dernier relevé (tous statuts : une tentative en échec compte) plus vieux que l'intervalle, ou jamais relevé. */
+export function isKeywordScanDue(
+  lastAttemptAt: Date | null,
+  now: Date,
+  intervalDays = GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS,
+): boolean {
+  return olderThan(lastAttemptAt, now, intervalDays);
+}
+
+/**
+ * Mots-clés dus : au plus GOOGLE_KEYWORDS_MAX par site (les premiers par
+ * `position`), puis `isKeywordScanDue`, triés par dernière tentative
+ * croissante (jamais relevés d'abord), au plus `batch`.
+ */
+export function selectDueKeywords<T extends { siteId: string; position: number; attemptAt: Date | null }>(
+  rows: T[],
+  now: Date,
+  batch = GOOGLE_SCAN_BATCH,
+): T[] {
+  const bySite = new Map<string, T[]>();
+  for (const row of rows) bySite.set(row.siteId, [...(bySite.get(row.siteId) ?? []), row]);
+  const capped = [...bySite.values()].flatMap((list) =>
+    [...list].sort((a, b) => a.position - b.position).slice(0, GOOGLE_KEYWORDS_MAX),
+  );
+  return capped
+    .filter((row) => isKeywordScanDue(row.attemptAt, now))
+    .sort(byOldestAttempt)
+    .slice(0, batch);
+}
+
+/** Issue d'un relevé selon les points sans réponse : tolérés jusqu'à GOOGLE_SCAN_MAX_MISSING_POINTS (résumé sur les points connus). */
+export function scanStatusForMissing(missing: number, total: number): "done" | "error" {
+  if (total === 0 || missing >= total) return "error";
+  return missing <= GOOGLE_SCAN_MAX_MISSING_POINTS ? "done" : "error";
+}
+
+/** Coût à inscrire après un relevé en échec : celui déjà facturé si le fournisseur le connaît, sinon l'estimation par prudence. */
+export function scanCostOnError(err: unknown, estimated = estimateScanCostUsd()): number {
+  return err instanceof DataForSeoError ? err.costUsd : estimated;
+}
+
+/** Tâche d'avis abandonnée sur l'âge (plutôt qu'un compte de lectures, qui dépend du rythme des ticks). */
+export function isReviewTaskExpired(createdAt: Date, now: Date, maxAgeDays = GOOGLE_REVIEW_TASK_MAX_AGE_DAYS): boolean {
+  return now.getTime() - createdAt.getTime() > maxAgeDays * DAY_MS;
+}
+
+/** Point de grille d'après la liste du fournisseur (null = requête en échec : `missing`, rang inconnu). */
+export function gridPointFrom(
+  point: GeoPoint,
+  listings: GoogleMapsListing[] | null,
+  own: { placeId: string | null; cid: string | null; title: string | null },
+): GoogleGridPoint {
+  if (listings === null) return { ...point, rank: null, top: [], missing: true };
+  const self = findOwnListing(listings, own);
+  return {
+    ...point,
+    rank: self?.rank ?? null,
+    top: listings.slice(0, 3).map((l) => ({ title: l.title, cid: l.cid, rating: l.rating, votes: l.votes })),
+  };
+}
+
+/** Le tick a dépassé son échéance : plus aucun site / mot-clé / tâche n'est entamé. */
+export function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
+  return opts.deadline !== undefined && nowMs > opts.deadline.getTime();
+}
+
 // ─── Aides communes ──────────────────────────────────────────────────────────
 
 /** Accès à la section Fiche Google : démos et formule Scale. */
 export function hasGoogleProfileAccess(site: Pick<Site, "type" | "plan">): boolean {
   return site.type === "demo" || hasGoogleProfile(site.plan);
+}
+
+/** Formules donnant accès à la section (pour filtrer en SQL). */
+const GOOGLE_PROFILE_PLANS = (Object.keys(PLANS) as PlanId[]).filter((plan) => hasGoogleProfile(plan));
+
+/** Condition SQL d'accès à la section : démo, ou formule éligible. */
+function googleAccessCondition() {
+  return or(eq(sites.type, "demo"), inArray(sites.plan, GOOGLE_PROFILE_PLANS));
 }
 
 type SiteWithProspect = { site: Site; prospect: Prospect | null };
@@ -142,6 +284,14 @@ async function loadSite(db: Database, siteId: string): Promise<SiteWithProspect 
 async function latestAudit(db: Database, siteId: string): Promise<GoogleProfileAudit | undefined> {
   return db.query.googleProfileAudits.findFirst({
     where: eq(googleProfileAudits.siteId, siteId),
+    orderBy: [desc(googleProfileAudits.createdAt)],
+  });
+}
+
+/** Dernier audit issu d'un appel fournisseur facturé (les recalculs ont un coût 0). */
+async function latestBilledAudit(db: Database, siteId: string): Promise<GoogleProfileAudit | undefined> {
+  return db.query.googleProfileAudits.findFirst({
+    where: and(eq(googleProfileAudits.siteId, siteId), gt(googleProfileAudits.costUsd, 0)),
     orderBy: [desc(googleProfileAudits.createdAt)],
   });
 }
@@ -231,8 +381,13 @@ function humanizeType(type: string | null): string | null {
 }
 
 /** Instantané de repli depuis Places API (New) : description, attributs et revendication inconnus. */
-async function placesSnapshot(site: Site, prospect: Prospect, placeId: string, now: Date): Promise<GoogleProfileSnapshot> {
-  const places = createGooglePlacesProvider();
+async function placesSnapshot(
+  places: GooglePlacesProvider,
+  site: Site,
+  prospect: Prospect,
+  placeId: string,
+  now: Date,
+): Promise<GoogleProfileSnapshot> {
   const details = await places.fetchDetails(placeId);
   return {
     source: "places",
@@ -265,16 +420,20 @@ async function placesSnapshot(site: Site, prospect: Prospect, placeId: string, n
 
 export type SyncProfileOutcome =
   | { status: "done"; audit: GoogleProfileAudit }
-  | { status: "skipped"; reason: "no_place" | "recent" | "budget" | "no_access" }
+  | { status: "skipped"; reason: "no_place" | "recent" | "budget" | "no_access" | "no_provider" }
   | { status: "error"; message: string };
 
 /**
- * Synchronise la fiche d'un site : fiche d'établissement (DataForSEO, repli
- * Places), audit déterministe (`auditGoogleProfile`, avec le benchmark des
- * derniers relevés et les avis connus), insertion dans google_profile_audits,
- * mise à jour note / nombre d'avis du prospect, puis lancement d'une tâche
- * d'avis (GOOGLE_REVIEWS_SYNC_DEPTH) si aucune n'est en attente.
- * `force` ignore l'intervalle GOOGLE_PROFILE_SYNC_INTERVAL_DAYS (mais pas le budget).
+ * Synchronise la fiche d'un site : fiche d'établissement (DataForSEO, ou le
+ * mock pour une démo ; repli Places avec une clé réelle), audit déterministe
+ * (`auditGoogleProfile`, avec le benchmark des derniers relevés et les avis
+ * connus), insertion dans google_profile_audits, mise à jour note / nombre
+ * d'avis du prospect (jamais depuis un instantané mock), puis lancement d'une
+ * tâche d'avis (GOOGLE_REVIEWS_SYNC_DEPTH) si aucune n'est en attente.
+ * Un site client sans fournisseur réel est ignoré (`no_provider`).
+ * `force` ignore l'intervalle GOOGLE_PROFILE_SYNC_INTERVAL_DAYS — mesuré sur
+ * `snapshot.fetchedAt` du dernier audit facturé — mais pas le budget.
+ * Toute tentative sans appel abouti laisse une ligne `sync_attempt`.
  */
 export async function syncGoogleProfile(
   siteId: string,
@@ -289,39 +448,66 @@ export async function syncGoogleProfile(
   if (!prospect || !placeId) return { status: "skipped", reason: "no_place" };
   if (!hasGoogleProfileAccess(site)) return { status: "skipped", reason: "no_access" };
 
-  const previous = await latestAudit(db, siteId);
-  if (!opts.force && previous && now.getTime() - previous.createdAt.getTime() < GOOGLE_PROFILE_SYNC_INTERVAL_DAYS * DAY_MS) {
-    return { status: "skipped", reason: "recent" };
-  }
-  const budget = await googleBudget(db, site, now);
-  if (budget.remainingUsd < DATAFORSEO_UNIT_COSTS.businessInfoLive) return { status: "skipped", reason: "budget" };
-
-  // 1. Fiche d'établissement : DataForSEO (ou mock), repli Places
-  const previousSnapshot = previous?.snapshot ?? null;
+  const previousSnapshot = (await latestAudit(db, siteId))?.snapshot ?? null;
   const provider = createLocalSearchProvider(process.env, ownListing(prospect, previousSnapshot));
+  const places = createGooglePlacesProvider();
+  // Jamais de données factices sur un site client : le mock (DataForSEO comme Places) ne sert que les démos
+  const useLocal = provider.mode === "dataforseo" || site.type === "demo";
+  const usePlaces = places.mode === "google" || site.type === "demo";
+  if (!useLocal && !usePlaces) return { status: "skipped", reason: "no_provider" };
+
+  if (!opts.force) {
+    const billed = await latestBilledAudit(db, siteId);
+    const fetchedAt = billed ? (dateOrNull(billed.snapshot.fetchedAt) ?? billed.createdAt) : null;
+    if (fetchedAt && now.getTime() - fetchedAt.getTime() < GOOGLE_PROFILE_SYNC_INTERVAL_DAYS * DAY_MS) {
+      return { status: "skipped", reason: "recent" };
+    }
+  }
+  let attemptRecorded = false;
+  const recordAttempt = async () => {
+    if (attemptRecorded) return;
+    attemptRecorded = true;
+    await recordGoogleUsage(db, siteId, "sync_attempt", 0, 0, now);
+  };
+  const budget = await googleBudget(db, site, now);
+  if (budget.remainingUsd < DATAFORSEO_UNIT_COSTS.businessInfoLive) {
+    await recordAttempt();
+    return { status: "skipped", reason: "budget" };
+  }
+
+  // 1. Fiche d'établissement : DataForSEO (ou mock, démos), repli Places
   let snapshot: GoogleProfileSnapshot | null = null;
   let costUsd = 0;
-  try {
-    const result = await provider.businessInfo({
-      placeId,
-      cid: previousSnapshot?.cid ?? null,
-      title: prospect.googleBusinessName,
-      near: previousSnapshot?.location ?? null,
-    });
-    costUsd = result.costUsd;
-    // Appel abouti (fiche trouvée ou non) : coût réel inscrit, 0 en mock pour les compteurs
-    await recordGoogleUsage(db, siteId, "business_info", costUsd, 1, now);
-    snapshot = result.data;
-    if (snapshot) snapshot = { ...snapshot, fetchedAt: now.toISOString(), placeId: snapshot.placeId ?? placeId };
-  } catch (err) {
-    console.warn(`[google-profile] fiche ${placeId} indisponible via ${provider.mode} :`, errorMessage(err));
-  }
-  if (!snapshot) {
+  if (useLocal) {
     try {
-      snapshot = await placesSnapshot(site, prospect, placeId, now);
+      const result = await provider.businessInfo({
+        placeId,
+        cid: previousSnapshot?.cid ?? null,
+        title: prospect.googleBusinessName,
+        near: previousSnapshot?.location ?? null,
+      });
+      costUsd = result.costUsd;
+      // Appel abouti (fiche trouvée ou non) : coût réel inscrit, 0 en mock pour les compteurs
+      await recordGoogleUsage(db, siteId, "business_info", costUsd, 1, now);
+      attemptRecorded = true;
+      snapshot = result.data;
+      if (snapshot) snapshot = { ...snapshot, fetchedAt: now.toISOString(), placeId: snapshot.placeId ?? placeId };
     } catch (err) {
+      console.warn(`[google-profile] fiche ${placeId} indisponible via ${provider.mode} :`, errorMessage(err));
+      await recordAttempt();
+    }
+  }
+  if (!snapshot && usePlaces) {
+    try {
+      snapshot = await placesSnapshot(places, site, prospect, placeId, now);
+    } catch (err) {
+      await recordAttempt();
       return { status: "error", message: `Fiche Google indisponible : ${errorMessage(err)}` };
     }
+  }
+  if (!snapshot) {
+    await recordAttempt();
+    return { status: "error", message: "Fiche Google introuvable chez le fournisseur" };
   }
 
   // 2. Audit et historique
@@ -331,17 +517,19 @@ export async function syncGoogleProfile(
     .values({ siteId, snapshot, audit, score: audit.score, costUsd, createdAt: now })
     .returning();
 
-  // 3. Fiche du prospect (note, nombre d'avis, nom si vide)
-  const prospectPatch: Partial<Pick<Prospect, "googleRating" | "googleReviewCount" | "googleBusinessName">> = {};
-  if (snapshot.rating !== null) prospectPatch.googleRating = snapshot.rating;
-  if (snapshot.votes !== null) prospectPatch.googleReviewCount = snapshot.votes;
-  if (!prospect.googleBusinessName && snapshot.title) prospectPatch.googleBusinessName = snapshot.title;
-  if (Object.keys(prospectPatch).length > 0) {
-    await db.update(prospects).set(prospectPatch).where(eq(prospects.id, prospect.id));
+  // 3. Fiche du prospect (note, nombre d'avis, nom si vide) — jamais depuis un instantané mock
+  if (snapshot.source !== "mock") {
+    const prospectPatch: Partial<Pick<Prospect, "googleRating" | "googleReviewCount" | "googleBusinessName">> = {};
+    if (snapshot.rating !== null) prospectPatch.googleRating = snapshot.rating;
+    if (snapshot.votes !== null) prospectPatch.googleReviewCount = snapshot.votes;
+    if (!prospect.googleBusinessName && snapshot.title) prospectPatch.googleBusinessName = snapshot.title;
+    if (Object.keys(prospectPatch).length > 0) {
+      await db.update(prospects).set(prospectPatch).where(eq(prospects.id, prospect.id));
+    }
   }
 
   // 4. Avis : une tâche DataForSEO (ou mock, démos seulement) si aucune n'est en attente et si le budget le permet
-  if (provider.mode === "dataforseo" || site.type === "demo") {
+  if (useLocal) {
     try {
       const pending = await db.query.googleReviewTasks.findFirst({
         where: and(eq(googleReviewTasks.siteId, siteId), eq(googleReviewTasks.status, "pending")),
@@ -393,7 +581,7 @@ export type ScanOutcome =
   | { status: "error"; scanId: string | null; message: string };
 
 /** Relevés lancés à la demande ce mois-ci (tous statuts sauf erreur). */
-async function manualScansThisMonth(db: Database, siteId: string, now: Date): Promise<number> {
+async function manualScansThisMonth(db: DbExecutor, siteId: string, now: Date): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const [row] = await db
     .select({ total: sql<number>`count(*)` })
@@ -409,22 +597,40 @@ async function manualScansThisMonth(db: Database, siteId: string, now: Date): Pr
   return Number(row?.total ?? 0);
 }
 
+type ScanStart =
+  | { kind: "started"; scanId: string; usageId: string }
+  | { kind: "busy" }
+  | { kind: "quota" }
+  | { kind: "budget" };
+
 /**
  * Relevé d'un mot-clé : grille 7×7 (gridPoints, rayon du mot-clé) autour de
  * la fiche, une requête Maps par point, rang du cabinet (findOwnListing),
  * concurrents agrégés, résumé ; ligne google_rank_scans `running` → `done`
- * ou `error` ; coût inscrit ; keyword.lastScannedAt mis à jour.
- * Vérifie le budget (coût estimé) et, pour `manual`, GOOGLE_MANUAL_SCANS_PER_MONTH.
- * Un verrou consultatif (`google-scan:<keywordId>`) et la ligne `running`
- * empêchent deux relevés simultanés du même mot-clé.
+ * ou `error` ; keyword.lastScannedAt mis à jour sur succès seulement.
+ *
+ * Budget atomique : dans la transaction courte qui insère la ligne `running`
+ * (verrou consultatif `google-scan:<keywordId>` contre deux relevés
+ * simultanés du même mot-clé), un verrou `google-budget:<siteId>` sérialise
+ * les relevés du site, le quota GOOGLE_MANUAL_SCANS_PER_MONTH (`manual`) et
+ * le budget sont recomptés, et une ligne `google_usage` au coût estimé est
+ * inscrite aussitôt. Après l'appel, elle est ramenée au coût réel (succès,
+ * ou échec total dont le fournisseur connaît le coût) ; sinon elle reste à
+ * l'estimation, par prudence. Jusqu'à GOOGLE_SCAN_MAX_MISSING_POINTS points
+ * sans réponse, le relevé est `done` (points `missing`, résumé sur les
+ * points connus) ; au-delà, `error`.
+ *
+ * L'horodatage est l'heure réelle (`new Date()`), jamais le `now` d'un tick
+ * qui peut dater de plusieurs minutes : `opts.now` est accepté pour la
+ * compatibilité des appelants mais n'est plus lu.
  */
 export async function runGoogleScan(
   siteId: string,
   keywordId: string,
   trigger: "manual" | "scheduled",
-  opts: { now?: Date } = {},
+  _opts: { now?: Date } = {},
 ): Promise<ScanOutcome> {
-  const now = opts.now ?? new Date();
+  const now = new Date();
   const db = getDb();
   const keyword = await db.query.googleKeywords.findFirst({
     where: and(eq(googleKeywords.id, keywordId), eq(googleKeywords.siteId, siteId)),
@@ -436,11 +642,6 @@ export async function runGoogleScan(
   const snapshot = (await latestAudit(db, siteId))?.snapshot ?? null;
   const center = snapshot?.location ?? null;
   if (!center) return { status: "skipped", reason: "no_location" };
-  if (trigger === "manual" && (await manualScansThisMonth(db, siteId, now)) >= GOOGLE_MANUAL_SCANS_PER_MONTH) {
-    return { status: "skipped", reason: "quota" };
-  }
-  const budget = await googleBudget(db, site, now);
-  if (estimateScanCostUsd() > budget.remainingUsd) return { status: "skipped", reason: "budget" };
 
   const radius = gridRadiusOf(keyword.radius);
   const grid: GoogleScanGrid = {
@@ -451,50 +652,66 @@ export async function runGoogleScan(
     radiusKm: gridRadiusKm(radius),
     zoom: GOOGLE_GRID.zoom,
   };
+  const points = gridPoints(center, grid.radiusKm);
+  const estimated = estimateScanCostUsd();
 
-  // Transaction courte sous verrou consultatif : un seul relevé `running` par mot-clé
-  const scanId = await db.transaction(async (tx) => {
+  // Transaction courte sous verrous consultatifs : un seul relevé `running` par mot-clé, budget recompté et réservé
+  const started = await db.transaction(async (tx): Promise<ScanStart> => {
     const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`google-scan:${keywordId}`})) as locked`);
-    if (lock.rows[0]?.locked !== true) return null;
+    if (lock.rows[0]?.locked !== true) return { kind: "busy" };
     const running = await tx.query.googleRankScans.findMany({
       where: and(eq(googleRankScans.keywordId, keywordId), eq(googleRankScans.status, "running")),
       columns: { id: true, scannedAt: true },
     });
     const stale = running.filter((s) => now.getTime() - s.scannedAt.getTime() > SCAN_STALE_MINUTES * 60_000);
-    if (running.length > stale.length) return null;
+    if (running.length > stale.length) return { kind: "busy" };
     if (stale.length > 0) {
       await tx
         .update(googleRankScans)
         .set({ status: "error", error: "Relevé interrompu" })
         .where(inArray(googleRankScans.id, stale.map((s) => s.id)));
     }
-    const [row] = await tx
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`google-budget:${siteId}`}))`);
+    if (trigger === "manual" && (await manualScansThisMonth(tx, siteId, now)) >= GOOGLE_MANUAL_SCANS_PER_MONTH) {
+      return { kind: "quota" };
+    }
+    const budget = await googleBudget(tx, site, now);
+    if (estimated > budget.remainingUsd) return { kind: "budget" };
+    const [scan] = await tx
       .insert(googleRankScans)
       .values({ siteId, keywordId, trigger, status: "running", grid, scannedAt: now })
       .returning({ id: googleRankScans.id });
-    return row!.id;
+    const [usage] = await tx
+      .insert(googleUsage)
+      .values({ siteId, month: usageMonthKey(now), kind: "scan", costUsd: estimated, requests: points.length })
+      .returning({ id: googleUsage.id });
+    return { kind: "started", scanId: scan!.id, usageId: usage!.id };
   });
-  if (!scanId) return { status: "error", scanId: null, message: "Un relevé est déjà en cours pour ce mot-clé" };
+  if (started.kind === "busy") return { status: "error", scanId: null, message: "Un relevé est déjà en cours pour ce mot-clé" };
+  if (started.kind === "quota") return { status: "skipped", reason: "quota" };
+  if (started.kind === "budget") return { status: "skipped", reason: "budget" };
+  const { scanId, usageId } = started;
 
   try {
     const own = ownListing(prospect, snapshot);
     const provider = createLocalSearchProvider(process.env, own);
-    const points = gridPoints(center, grid.radiusKm);
     const result = await provider.mapsSearch(
       points.map((point) => ({ keyword: keyword.keyword, point, zoom: grid.zoom, depth: MAPS_DEPTH })),
     );
-    const gridResults: GoogleGridPoint[] = points.map((point, i) => {
-      const listings = result.data[i] ?? [];
-      const self = findOwnListing(listings, own);
-      return {
-        ...point,
-        rank: self?.rank ?? null,
-        top: listings.slice(0, 3).map((l) => ({ title: l.title, cid: l.cid, rating: l.rating, votes: l.votes })),
-      };
-    });
+    await db.update(googleUsage).set({ costUsd: result.costUsd }).where(eq(googleUsage.id, usageId));
+    const gridResults = points.map((point, i) => gridPointFrom(point, result.data[i] ?? null, own));
+    const missing = gridResults.filter((p) => p.missing).length;
+    if (scanStatusForMissing(missing, points.length) === "error") {
+      const message = `${missing} points sur ${points.length} sans réponse du fournisseur`;
+      console.error(`[google-scan] relevé ${scanId} (${keyword.keyword}) en échec :`, message);
+      await db
+        .update(googleRankScans)
+        .set({ status: "error", points: gridResults, costUsd: result.costUsd, error: message })
+        .where(eq(googleRankScans.id, scanId));
+      return { status: "error", scanId, message };
+    }
     const summary = summarizeScan(gridResults);
     const competitors = aggregateCompetitors(result.data, own);
-    await recordGoogleUsage(db, siteId, "scan", result.costUsd, points.length, now);
     const [scan] = await db
       .update(googleRankScans)
       .set({ status: "done", points: gridResults, summary, competitors, costUsd: result.costUsd, error: null })
@@ -505,7 +722,9 @@ export async function runGoogleScan(
   } catch (err) {
     const message = errorMessage(err);
     console.error(`[google-scan] relevé ${scanId} (${keyword.keyword}) en échec :`, message);
-    await db.update(googleRankScans).set({ status: "error", error: message }).where(eq(googleRankScans.id, scanId));
+    const costUsd = scanCostOnError(err, estimated);
+    await db.update(googleUsage).set({ costUsd }).where(eq(googleUsage.id, usageId));
+    await db.update(googleRankScans).set({ status: "error", costUsd, error: message }).where(eq(googleRankScans.id, scanId));
     return { status: "error", scanId, message };
   }
 }
@@ -514,14 +733,21 @@ export async function runGoogleScan(
 
 /**
  * Analyse IA des avis non analysés d'un site (≤ `limit`, les plus récents
- * d'abord) : sentiment, thèmes, réponse proposée → google_reviews.analysis.
- * Renvoie le nombre d'avis analysés ; une erreur IA est journalisée et vaut 0
- * (jamais de throw vers le tick).
+ * d'abord ; défaut et plafond : GOOGLE_REVIEWS_MAX_BATCHES lots de
+ * GOOGLE_REVIEWS_BATCH) : sentiment, thèmes, réponse proposée →
+ * google_reviews.analysis, écrit lot par lot (un lot en erreur ne défait pas
+ * les précédents). Un avis dont la réponse a été écartée par les garde-fous
+ * reçoit une analyse minimale (`fallbackReviewAnalysis`, réponse vide) pour
+ * ne pas être renvoyé au modèle indéfiniment. Renvoie le nombre d'avis
+ * analysés avec réponse ; une erreur IA est journalisée et le compte des
+ * lots déjà écrits est rendu (jamais de throw vers le tick).
  */
 export async function analyzeGoogleReviews(siteId: string, opts: { limit?: number; now?: Date } = {}): Promise<number> {
   const now = opts.now ?? new Date();
-  const limit = Math.max(1, opts.limit ?? 20);
+  const max = GOOGLE_REVIEWS_BATCH * GOOGLE_REVIEWS_MAX_BATCHES;
+  const limit = Math.max(1, Math.min(opts.limit ?? max, max));
   const db = getDb();
+  let count = 0;
   try {
     const pending = await db.query.googleReviews.findMany({
       where: and(eq(googleReviews.siteId, siteId), isNull(googleReviews.analysis), ne(googleReviews.text, "")),
@@ -531,33 +757,43 @@ export async function analyzeGoogleReviews(siteId: string, opts: { limit?: numbe
     if (pending.length === 0) return 0;
     const { brief } = await loadGoogleBrief(db, siteId, now);
     const analyzer = createGoogleReviewsAnalyzer();
-    const analyses = await analyzer.analyze({
-      brief,
-      reviews: pending.map((r) => ({
-        id: r.id,
-        authorName: r.authorName,
-        rating: r.rating,
-        text: r.text,
-        reviewedAt: r.reviewedAt,
-        ownerReply: r.ownerReply,
-      })),
-      now,
-    });
-    let count = 0;
-    for (const [id, analysis] of Object.entries(analyses)) {
-      await db.update(googleReviews).set({ analysis }).where(and(eq(googleReviews.id, id), eq(googleReviews.siteId, siteId)));
-      count += 1;
-    }
+    await analyzer.analyze(
+      {
+        brief,
+        reviews: pending.map((r) => ({
+          id: r.id,
+          authorName: r.authorName,
+          rating: r.rating,
+          text: r.text,
+          reviewedAt: r.reviewedAt,
+          ownerReply: r.ownerReply,
+        })),
+        now,
+      },
+      {
+        onBatch: async (analyses, batch) => {
+          for (const review of batch) {
+            const analysis = analyses[review.id] ?? fallbackReviewAnalysis(review, brief.voice, analyzer.mode, now);
+            await db
+              .update(googleReviews)
+              .set({ analysis })
+              .where(and(eq(googleReviews.id, review.id), eq(googleReviews.siteId, siteId)));
+            if (analyses[review.id]) count += 1;
+          }
+        },
+      },
+    );
     return count;
   } catch (err) {
     console.error(`[google-reviews] analyse impossible pour le site ${siteId} :`, errorMessage(err));
-    return 0;
+    return count;
   }
 }
 
 /**
- * Avis d'une tâche terminée → google_reviews : mise à jour par sourceReviewId
- * (analyse remise à zéro si le texte a changé), insertion des nouveaux, puis
+ * Avis d'une tâche terminée → google_reviews : dédoublonnage par
+ * sourceReviewId (le premier gagne), mise à jour des avis connus (analyse
+ * remise à zéro si le texte a changé), insertion des nouveaux, puis
  * suppression des anciens avis Places / mock du site (les avis sans
  * sourceReviewId des démos restent).
  */
@@ -568,7 +804,8 @@ async function upsertReviews(
   source: "dataforseo" | "mock",
   now: Date,
 ): Promise<void> {
-  const ids = incoming.map((r) => r.sourceReviewId);
+  const unique = [...new Map(incoming.map((r) => [r.sourceReviewId, r])).values()];
+  const ids = unique.map((r) => r.sourceReviewId);
   if (ids.length === 0) return;
   const existing = await db.query.googleReviews.findMany({
     where: and(eq(googleReviews.siteId, siteId), inArray(googleReviews.sourceReviewId, ids)),
@@ -576,7 +813,7 @@ async function upsertReviews(
   });
   const byId = new Map(existing.map((r) => [r.sourceReviewId, r]));
   const fresh: (typeof googleReviews.$inferInsert)[] = [];
-  for (const r of incoming) {
+  for (const r of unique) {
     const values = {
       authorName: r.authorName,
       authorPhotoUrl: r.authorPhotoUrl,
@@ -616,49 +853,73 @@ async function upsertReviews(
 
 // ─── Ticks (appelés par runAllTicks, quotidien 6 h UTC) ──────────────────────
 
-/** Sites éligibles (démo ou formule Scale, fiche reliée, non archivés), avec leur prospect. */
-async function eligibleSites(db: Database): Promise<SiteWithProspect[]> {
+/**
+ * Sites éligibles (démo ou formule Scale, fiche reliée, non archivés) dont la
+ * dernière tentative et le dernier audit facturé datent de plus de 30 jours
+ * (`selectDueSites`) : syncGoogleProfile. Lots de GOOGLE_SYNC_BATCH, jamais
+ * tentés d'abord. Sans fournisseur réel (DataForSEO ou Places), seules les
+ * démos sont synchronisées (mock) : les sites clients n'entament pas le lot.
+ * S'arrête avant le site suivant une fois `opts.deadline` dépassée.
+ */
+export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {}): Promise<TickReport> {
+  const db = getDb();
+  const clientsAllowed = createLocalSearchProvider().mode === "dataforseo" || createGooglePlacesProvider().mode === "google";
+  const attempts = db
+    .select({ siteId: googleUsage.siteId, last: sql<string | Date | null>`max(${googleUsage.createdAt})`.as("last_attempt") })
+    .from(googleUsage)
+    .where(inArray(googleUsage.kind, ["business_info", "sync_attempt"]))
+    .groupBy(googleUsage.siteId)
+    .as("attempts");
+  const billed = db
+    .select({ siteId: googleProfileAudits.siteId, last: sql<string | Date | null>`max(${googleProfileAudits.createdAt})`.as("last_billed") })
+    .from(googleProfileAudits)
+    .where(gt(googleProfileAudits.costUsd, 0))
+    .groupBy(googleProfileAudits.siteId)
+    .as("billed");
   const rows = await db
-    .select({ site: sites, prospect: prospects })
+    .select({ site: sites, attemptAt: attempts.last, billedAt: billed.last })
     .from(sites)
     .innerJoin(prospects, eq(prospects.id, sites.prospectId))
-    .where(and(isNotNull(prospects.googlePlaceId), ne(sites.status, "archived")))
+    .leftJoin(attempts, eq(attempts.siteId, sites.id))
+    .leftJoin(billed, eq(billed.siteId, sites.id))
+    .where(
+      and(
+        isNotNull(prospects.googlePlaceId),
+        ne(sites.status, "archived"),
+        googleAccessCondition(),
+        clientsAllowed ? undefined : eq(sites.type, "demo"),
+      ),
+    )
     .orderBy(asc(sites.createdAt));
-  return rows.filter((r) => hasGoogleProfileAccess(r.site));
-}
-
-/** Sites éligibles (démo ou formule Scale, fiche reliée) dont la fiche date de plus de 30 jours : syncGoogleProfile. Lots de 25. */
-export async function syncGoogleProfiles(now = new Date()): Promise<TickReport> {
-  const db = getDb();
-  const candidates = await eligibleSites(db);
-  const latest = await db
-    .select({ siteId: googleProfileAudits.siteId, last: sql<string | Date>`max(${googleProfileAudits.createdAt})` })
-    .from(googleProfileAudits)
-    .groupBy(googleProfileAudits.siteId);
-  const lastBySite = new Map(latest.map((r) => [r.siteId, new Date(r.last).getTime()]));
-  const cutoff = now.getTime() - GOOGLE_PROFILE_SYNC_INTERVAL_DAYS * DAY_MS;
-  const due = candidates
-    .filter(({ site }) => {
-      const last = lastBySite.get(site.id);
-      return last === undefined || !Number.isFinite(last) || last < cutoff;
-    })
-    .slice(0, GOOGLE_SYNC_BATCH);
+  const due = selectDueSites(
+    rows.map((r) => ({ site: r.site, attemptAt: dateOrNull(r.attemptAt), billedAt: dateOrNull(r.billedAt) })),
+    now,
+    GOOGLE_SYNC_BATCH,
+  );
 
   let processed = 0;
   for (const { site } of due) {
+    if (pastDeadline(opts)) break;
     try {
       const outcome = await syncGoogleProfile(site.id, { now });
       if (outcome.status === "done") processed += 1;
       else if (outcome.status === "error") console.error(`[google-profile] ${site.slug} : ${outcome.message}`);
     } catch (err) {
       console.error(`[google-profile] ${site.slug} :`, errorMessage(err));
+      // Échec hors du service (base, réseau) : la tentative compte pour l'échéancier
+      await recordGoogleUsage(db, site.id, "sync_attempt", 0, 0, now).catch(() => undefined);
     }
   }
   return { task: "sync-google-profiles", processed };
 }
 
-/** Tâches d'avis en attente : fetchReviewsTask → upsert des avis, puis recomputeGoogleAudit + analyzeGoogleReviews. */
-export async function collectGoogleReviewTasks(now = new Date()): Promise<TickReport> {
+/**
+ * Tâches d'avis en attente : fetchReviewsTask → upsert des avis, puis
+ * recomputeGoogleAudit + analyzeGoogleReviews. Une tâche encore en attente
+ * après GOOGLE_REVIEW_TASK_MAX_AGE_DAYS est abandonnée. S'arrête avant la
+ * tâche suivante une fois `opts.deadline` dépassée.
+ */
+export async function collectGoogleReviewTasks(now = new Date(), opts: TickOptions = {}): Promise<TickReport> {
   const db = getDb();
   const tasks = await db.query.googleReviewTasks.findMany({
     where: eq(googleReviewTasks.status, "pending"),
@@ -672,10 +933,10 @@ export async function collectGoogleReviewTasks(now = new Date()): Promise<TickRe
       .set({ status: "error", error: error.slice(0, ERROR_MESSAGE_MAX), completedAt: now })
       .where(eq(googleReviewTasks.id, taskId));
   };
-  /** Encore en attente : une tentative de plus, abandon au-delà de GOOGLE_REVIEW_TASK_MAX_ATTEMPTS. */
-  const retryLater = async (task: { id: string; attempts: number }, reason: string | null) => {
+  /** Encore en attente : une lecture de plus, abandon sur l'âge de la tâche. */
+  const retryLater = async (task: { id: string; attempts: number; createdAt: Date }, reason: string | null) => {
     const attempts = task.attempts + 1;
-    if (attempts >= GOOGLE_REVIEW_TASK_MAX_ATTEMPTS) {
+    if (isReviewTaskExpired(task.createdAt, now)) {
       await db
         .update(googleReviewTasks)
         .set({ status: "error", attempts, error: reason ?? "Délai dépassé : la tâche n'a jamais abouti", completedAt: now })
@@ -686,6 +947,7 @@ export async function collectGoogleReviewTasks(now = new Date()): Promise<TickRe
   };
 
   for (const task of tasks) {
+    if (pastDeadline(opts)) break;
     try {
       const loaded = await loadSite(db, task.siteId);
       if (!loaded) {
@@ -711,7 +973,8 @@ export async function collectGoogleReviewTasks(now = new Date()): Promise<TickRe
       }
       const source = provider.mode === "mock" ? "mock" : "dataforseo";
       await upsertReviews(db, site.id, result.data.reviews, source, now);
-      if (prospect) {
+      // Fiche praticien : jamais depuis des avis factices
+      if (prospect && source !== "mock") {
         const patch: Partial<Pick<Prospect, "googleRating" | "googleReviewCount">> = {};
         if (result.data.rating !== null) patch.googleRating = result.data.rating;
         if (result.data.total !== null) patch.googleReviewCount = result.data.total;
@@ -738,30 +1001,53 @@ export async function collectGoogleReviewTasks(now = new Date()): Promise<TickRe
   return { task: "collect-google-reviews", processed };
 }
 
-/** Mots-clés actifs non relevés depuis GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS : runGoogleScan(scheduled). Lots de 20. */
-export async function runScheduledGoogleScans(now = new Date()): Promise<TickReport> {
+/**
+ * Mots-clés actifs (sites éligibles, fiche reliée avec position connue, au
+ * plus GOOGLE_KEYWORDS_MAX par site) dont la dernière tentative de relevé —
+ * tous statuts — date de plus de GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS
+ * (`selectDueKeywords`) : runGoogleScan(scheduled). Lots de GOOGLE_SCAN_BATCH,
+ * jamais relevés d'abord. S'arrête avant le mot-clé suivant une fois
+ * `opts.deadline` dépassée.
+ */
+export async function runScheduledGoogleScans(now = new Date(), opts: TickOptions = {}): Promise<TickReport> {
   const db = getDb();
-  const cutoff = new Date(now.getTime() - GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS * DAY_MS);
+  const lastScans = db
+    .select({ keywordId: googleRankScans.keywordId, last: sql<string | Date | null>`max(${googleRankScans.scannedAt})`.as("last_scan") })
+    .from(googleRankScans)
+    .groupBy(googleRankScans.keywordId)
+    .as("last_scans");
   const rows = await db
-    .select({ keyword: googleKeywords, site: sites })
+    .select({ keyword: googleKeywords, site: sites, attemptAt: lastScans.last })
     .from(googleKeywords)
     .innerJoin(sites, eq(sites.id, googleKeywords.siteId))
     .innerJoin(prospects, eq(prospects.id, sites.prospectId))
+    .leftJoin(lastScans, eq(lastScans.keywordId, googleKeywords.id))
     .where(
       and(
         eq(googleKeywords.active, true),
         isNotNull(prospects.googlePlaceId),
         ne(sites.status, "archived"),
-        or(isNull(googleKeywords.lastScannedAt), lt(googleKeywords.lastScannedAt, cutoff)),
+        googleAccessCondition(),
+        // Position de la fiche connue : le dernier audit du site porte un instantané avec `location`
+        sql`exists (
+          select 1 from ${googleProfileAudits} a
+          where a.site_id = ${sites.id}
+          and a.snapshot -> 'location' is not null
+          and a.created_at = (select max(b.created_at) from ${googleProfileAudits} b where b.site_id = a.site_id)
+        )`,
       ),
-    )
-    .orderBy(sql`${googleKeywords.lastScannedAt} asc nulls first`);
-  const due = rows.filter((r) => hasGoogleProfileAccess(r.site)).slice(0, GOOGLE_SCAN_BATCH);
+    );
+  const due = selectDueKeywords(
+    rows.map((r) => ({ keyword: r.keyword, site: r.site, siteId: r.site.id, position: r.keyword.position, attemptAt: dateOrNull(r.attemptAt) })),
+    now,
+    GOOGLE_SCAN_BATCH,
+  );
 
   let processed = 0;
   for (const { keyword, site } of due) {
+    if (pastDeadline(opts)) break;
     try {
-      const outcome = await runGoogleScan(site.id, keyword.id, "scheduled", { now });
+      const outcome = await runGoogleScan(site.id, keyword.id, "scheduled");
       if (outcome.status === "done") processed += 1;
       else if (outcome.status === "error") console.error(`[google-scan] ${site.slug} « ${keyword.keyword} » : ${outcome.message}`);
     } catch (err) {

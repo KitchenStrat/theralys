@@ -111,6 +111,8 @@ function syncMessage(outcome: Awaited<ReturnType<typeof syncGoogleProfile>>): Sy
       return { error: BUDGET_REACHED };
     case "no_access":
       return { error: NOT_INCLUDED };
+    case "no_provider":
+      return { error: "La synchronisation de la fiche n'est pas encore activée sur cette plateforme." };
   }
 }
 
@@ -140,28 +142,36 @@ export async function linkGoogleProfile(input: unknown): Promise<SyncResult> {
   return result;
 }
 
-/** « Actualiser » : synchronisation forcée, au plus une fois par 24 h (refus explicite sinon). */
+/**
+ * « Actualiser » : synchronisation forcée, au plus une fois par 24 h (refus
+ * explicite sinon). L'intervalle se mesure sur `snapshot.fetchedAt` du
+ * dernier audit — la date du dernier appel fournisseur, que les recalculs
+ * (après des avis ou un relevé) recopient sans la changer.
+ */
 export async function refreshGoogleProfile(): Promise<SyncResult> {
   const session = await requireClient();
   const site = await getSite(session.siteId);
   if (!googleAccess(site)) return { error: NOT_INCLUDED };
 
   const now = new Date();
-  let latest: { createdAt: Date } | undefined;
+  let latest: { createdAt: Date; fetchedAt: string | null } | undefined;
   try {
     latest = await getDb().query.googleProfileAudits.findFirst({
       where: eq(googleProfileAudits.siteId, site.id),
       orderBy: [desc(googleProfileAudits.createdAt)],
       columns: { createdAt: true },
+      extras: { fetchedAt: sql<string | null>`${googleProfileAudits.snapshot} ->> 'fetchedAt'`.as("fetched_at") },
     });
   } catch (err) {
     if (isMissingSchemaError(err)) return { error: "Cette section est en cours d'activation — réessayez dans quelques minutes." };
     throw err;
   }
-  if (latest && now.getTime() - latest.createdAt.getTime() < REFRESH_INTERVAL_MS) {
-    const next = new Date(latest.createdAt.getTime() + REFRESH_INTERVAL_MS);
+  const fetchedAt = latest?.fetchedAt ? new Date(latest.fetchedAt) : null;
+  const lastFetch = fetchedAt && !Number.isNaN(fetchedAt.getTime()) ? fetchedAt : (latest?.createdAt ?? null);
+  if (lastFetch && now.getTime() - lastFetch.getTime() < REFRESH_INTERVAL_MS) {
+    const next = new Date(lastFetch.getTime() + REFRESH_INTERVAL_MS);
     return {
-      error: `Votre fiche a déjà été actualisée le ${formatParisDateTime(latest.createdAt)}. Prochaine actualisation possible le ${formatParisDateTime(next)}.`,
+      error: `Votre fiche a déjà été actualisée le ${formatParisDateTime(lastFetch)}. Prochaine actualisation possible le ${formatParisDateTime(next)}.`,
     };
   }
 
