@@ -196,7 +196,11 @@ export async function duplicateDemo(siteId: string): Promise<void> {
   // Copie du contenu (pages, avis, articles, réglages du blog)
   const [sourcePages, sourceReviews, sourceArticles, sourceSettings] = await Promise.all([
     db.query.pages.findMany({ where: eq(pages.siteId, siteId) }),
-    db.query.googleReviews.findMany({ where: eq(googleReviews.siteId, siteId) }),
+    // Colonnes d'origine seulement : la duplication reste possible avant la migration 0003
+    db.query.googleReviews.findMany({
+      where: eq(googleReviews.siteId, siteId),
+      columns: { id: true, sourceReviewId: true, authorName: true, authorPhotoUrl: true, rating: true, text: true, reviewedAt: true, syncedAt: true },
+    }),
     db.query.blogArticles.findMany({ where: eq(blogArticles.siteId, siteId) }),
     db.query.blogSettings.findFirst({ where: eq(blogSettings.siteId, siteId) }),
   ]);

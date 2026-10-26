@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import type { GoogleReview, Site } from "@theralys/db";
+
+/** Avis tel que lu pour le site public (colonnes d'origine seulement, voir lib/site-data.ts). */
+export type PublicReview = Pick<
+  GoogleReview,
+  "id" | "siteId" | "sourceReviewId" | "authorName" | "authorPhotoUrl" | "rating" | "text" | "reviewedAt" | "syncedAt"
+>;
 import {
   futureBodyText,
   isSectionVisible,
@@ -19,7 +25,7 @@ import { RdvButton } from "./rdv-button";
 export type SectionContext = {
   site: Site;
   prefix: string;
-  reviews: GoogleReview[];
+  reviews: PublicReview[];
   googleRating: number | null;
   googleReviewCount: number | null;
   /** Fiche Google reliée (avis réels) : identifiant, nom, adresse et photo */

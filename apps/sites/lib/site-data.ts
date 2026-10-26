@@ -94,12 +94,28 @@ export async function getMotifPage(
   return null;
 }
 
+/**
+ * Avis affichés sur le site public. Colonnes listées explicitement : la page
+ * publique doit rester servie même si la base n'a pas encore reçu les
+ * colonnes ajoutées par une migration (réponse du propriétaire, analyse…).
+ */
 export async function getReviews(siteId: string) {
   const db = getDb();
   return db.query.googleReviews.findMany({
     where: eq(googleReviews.siteId, siteId),
     orderBy: [desc(googleReviews.syncedAt)],
     limit: 12,
+    columns: {
+      id: true,
+      siteId: true,
+      sourceReviewId: true,
+      authorName: true,
+      authorPhotoUrl: true,
+      rating: true,
+      text: true,
+      reviewedAt: true,
+      syncedAt: true,
+    },
   });
 }
 
