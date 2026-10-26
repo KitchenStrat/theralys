@@ -10,6 +10,7 @@ import {
   estimateScanCostUsd,
   findOwnListing,
   gridPoints,
+  isDistinctiveTitle,
   rankTone,
   summarizeScan,
   usageMonthKey,
@@ -42,12 +43,27 @@ describe("grille de visibilité", () => {
     const points = [1, 2, 3, 8, 15, null].map((rank, i) => ({ lat: i, lng: i, rank, top: [] }));
     const summary = summarizeScan(points);
     expect(summary).toMatchObject({ found: 5, total: 6, top3: 3, top10: 4 });
+    expect(summary.missing).toBeUndefined();
     expect(summary.avgRank).toBe(5.8);
     expect(summary.visibility).toBe(Math.round(((20 + 19 + 18 + 13 + 6) / 20 / 6) * 100));
     expect(rankTone(2)).toBe("top");
     expect(rankTone(9)).toBe("good");
     expect(rankTone(14)).toBe("weak");
     expect(rankTone(null)).toBe("none");
+  });
+
+  it("points en échec (missing) : comptés à part, hors du total et de la visibilité", () => {
+    const points = [
+      { lat: 0, lng: 0, rank: 1, top: [] },
+      { lat: 1, lng: 1, rank: null, top: [] },
+      { lat: 2, lng: 2, rank: null, top: [], missing: true },
+      { lat: 3, lng: 3, rank: null, top: [], missing: true },
+    ];
+    const summary = summarizeScan(points);
+    expect(summary).toEqual({ found: 1, total: 2, avgRank: 1, top3: 1, top10: 1, visibility: 50, missing: 2 });
+    expect(summarizeScan([{ lat: 0, lng: 0, rank: null, top: [], missing: true }])).toEqual({
+      found: 0, total: 0, avgRank: null, top3: 0, top10: 0, visibility: 0, missing: 1,
+    });
   });
 });
 
@@ -71,11 +87,25 @@ describe("concurrents", () => {
     expect(findOwnListing(l, { title: "Inconnu" })).toBeNull();
   });
 
+  it("titre : égalité normalisée toujours, inclusion seulement avec deux mots significatifs", () => {
+    const l = [listing(1, "Pause Zen Thérapies", "c1"), listing(2, "Zen", "c2"), listing(3, "Espace Respire — Albi", "c3")];
+    // Un seul mot : égalité stricte uniquement (pas d'attribution par inclusion)
+    expect(findOwnListing(l, { title: "Zen" })?.rank).toBe(2);
+    expect(findOwnListing([l[0]!], { title: "Zen" })).toBeNull();
+    expect(findOwnListing(l, { title: "Le Zen" })).toBeNull();
+    // Deux mots de ≥ 3 lettres : inclusion acceptée
+    expect(findOwnListing(l, { title: "Espace Respire" })?.rank).toBe(3);
+    expect(findOwnListing(l, { title: "Pause zen" })?.rank).toBe(1);
+    expect(isDistinctiveTitle("le zen")).toBe(false);
+    expect(isDistinctiveTitle("claire dupont")).toBe(true);
+    expect(isDistinctiveTitle("")).toBe(false);
+  });
+
   it("agrège le podium de chaque point, hors le cabinet, trié par apparitions", () => {
     const own = { cid: "own" };
     const p1 = [listing(1, "A", "a", 40), listing(2, "Moi", "own"), listing(3, "B", "b", 20), listing(4, "C", "c")];
     const p2 = [listing(1, "B", "b", 20), listing(2, "A", "a", 40), listing(3, "C", "c", 5)];
-    const competitors = aggregateCompetitors([p1, p2], own);
+    const competitors = aggregateCompetitors([p1, null, p2], own);
     expect(competitors.map((c) => c.title)).toEqual(["A", "B", "C"]);
     expect(competitors[0]).toMatchObject({ appearances: 2, avgRank: 1.5 });
     expect(competitors[2]).toMatchObject({ appearances: 1, avgRank: 3 });

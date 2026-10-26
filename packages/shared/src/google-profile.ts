@@ -28,6 +28,12 @@ export const GOOGLE_POST_REQUESTS_PER_MONTH = 10;
 export const GOOGLE_REVIEWS_SYNC_DEPTH = 50;
 /** Intervalle entre deux synchronisations complètes de la fiche (jours). */
 export const GOOGLE_PROFILE_SYNC_INTERVAL_DAYS = 30;
+/**
+ * Points de grille en échec tolérés par relevé : au-delà, le fournisseur
+ * annule les requêtes en vol et le relevé passe en erreur (le coût des points
+ * aboutis reste inscrit).
+ */
+export const GOOGLE_SCAN_MAX_MISSING_POINTS = 10;
 
 /** Coûts unitaires DataForSEO (USD) pour estimer avant d'appeler ; le coût réel vient de la réponse. */
 export const DATAFORSEO_UNIT_COSTS = {
@@ -119,42 +125,54 @@ export function estimateScanCostUsd(rows = GOOGLE_GRID.rows, cols = GOOGLE_GRID.
   return Math.round(rows * cols * DATAFORSEO_UNIT_COSTS.mapsLive * 10000) / 10000;
 }
 
-/** Résultat d'un point de la grille : rang du cabinet (null = absent des 20 premiers) et podium local. */
+/**
+ * Résultat d'un point de la grille : rang du cabinet (null = absent des 20
+ * premiers) et podium local. `missing: true` = requête en échec pour ce point
+ * (rang inconnu, podium vide) : hors du résumé.
+ */
 export type GoogleGridPoint = GeoPoint & {
   rank: number | null;
   top: { title: string; cid: string | null; rating: number | null; votes: number | null }[];
+  missing?: boolean;
 };
 
 export type GoogleScanSummary = {
   /** Points où le cabinet apparaît */
   found: number;
+  /** Points connus (hors points en échec) */
   total: number;
   /** Rang moyen sur les points où il apparaît */
   avgRank: number | null;
   /** Points où le cabinet est dans les 3 premiers (le « pack local ») */
   top3: number;
   top10: number;
-  /** Part de visibilité 0..100 : moyenne de max(0, 21 − rang) / 20 sur tous les points */
+  /** Part de visibilité 0..100 : moyenne de max(0, 21 − rang) / 20 sur les points connus */
   visibility: number;
+  /** Points de grille en échec (requête fournisseur sans réponse), absent si aucun */
+  missing?: number;
 };
 
+/** Résumé d'un relevé sur les points connus ; les points `missing` sont comptés à part. */
 export function summarizeScan(points: GoogleGridPoint[]): GoogleScanSummary {
-  const ranks = points.map((p) => p.rank).filter((r): r is number => r !== null);
+  const known = points.filter((p) => !p.missing);
+  const missing = points.length - known.length;
+  const ranks = known.map((p) => p.rank).filter((r): r is number => r !== null);
   const visibility =
-    points.length === 0
+    known.length === 0
       ? 0
       : Math.round(
-          (points.reduce((sum, p) => sum + (p.rank === null ? 0 : Math.max(0, 21 - p.rank) / 20), 0) /
-            points.length) *
+          (known.reduce((sum, p) => sum + (p.rank === null ? 0 : Math.max(0, 21 - p.rank) / 20), 0) /
+            known.length) *
             100,
         );
   return {
     found: ranks.length,
-    total: points.length,
+    total: known.length,
     avgRank: ranks.length > 0 ? Math.round((ranks.reduce((a, b) => a + b, 0) / ranks.length) * 10) / 10 : null,
     top3: ranks.filter((r) => r <= 3).length,
     top10: ranks.filter((r) => r <= 10).length,
     visibility,
+    ...(missing > 0 ? { missing } : {}),
   };
 }
 
@@ -203,7 +221,13 @@ export type GoogleMapsListing = {
   isClaimed: boolean | null;
 };
 
-/** Le cabinet lui-même dans une liste : par place_id, par cid, sinon par titre normalisé. */
+/**
+ * Le cabinet lui-même dans une liste : par place_id, par cid, sinon par titre
+ * normalisé — égalité stricte, ou inclusion seulement quand le titre propre
+ * compte au moins deux mots significatifs (≥ 3 lettres) : « Claire Dupont »
+ * reconnaît « Claire Dupont — Sophrologue », mais « Zen » ne s'attribue pas
+ * « Pause Zen Thérapies ».
+ */
 export function findOwnListing(
   listings: GoogleMapsListing[],
   own: { placeId?: string | null; cid?: string | null; title?: string | null },
@@ -214,7 +238,15 @@ export function findOwnListing(
   if (byId) return byId;
   const title = fold(own.title ?? "");
   if (title === "") return null;
-  return listings.find((l) => fold(l.title) === title || fold(l.title).includes(title)) ?? null;
+  const exact = listings.find((l) => fold(l.title) === title);
+  if (exact) return exact;
+  if (!isDistinctiveTitle(title)) return null;
+  return listings.find((l) => fold(l.title).includes(title)) ?? null;
+}
+
+/** Au moins deux mots de 3 lettres ou plus (titre normalisé par `fold`). */
+export function isDistinctiveTitle(folded: string): boolean {
+  return folded.split(" ").filter((word) => word.length >= 3).length >= 2;
 }
 
 function fold(text: string): string {
@@ -224,14 +256,16 @@ function fold(text: string): string {
 /**
  * Concurrents agrégés sur tous les points d'un relevé (établissements du
  * podium, hors le cabinet), triés par apparitions puis rang moyen ; au plus 8.
+ * Un point `null` (requête en échec chez le fournisseur) est ignoré.
  */
 export function aggregateCompetitors(
-  pointsListings: GoogleMapsListing[][],
+  pointsListings: (GoogleMapsListing[] | null)[],
   own: { placeId?: string | null; cid?: string | null; title?: string | null },
   limit = 8,
 ): GoogleCompetitor[] {
   const map = new Map<string, GoogleCompetitor & { rankSum: number }>();
   for (const listings of pointsListings) {
+    if (listings === null) continue;
     const self = findOwnListing(listings, own);
     for (const l of listings.slice(0, 3)) {
       if (self && l === self) continue;

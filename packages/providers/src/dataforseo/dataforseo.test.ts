@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { gridPoints } from "@theralys/shared";
 import {
   DATAFORSEO_BASE,
+  DataForSeoError,
   DataForSeoProvider,
   MockLocalSearchProvider,
   attributeLabel,
   createLocalSearchProvider,
+  httpUrlOrNull,
+  isRetryableRequest,
   mapConcurrent,
   parseDataForSeoDate,
+  reviewFromItem,
   type DfsBusinessItem,
   type DfsMapsItem,
 } from "./index";
@@ -190,6 +194,70 @@ describe("DataForSeoProvider — requêtes", () => {
     expect(calls).toHaveLength(2);
   });
 
+  it("un point sur 49 en échec : les autres sont relevés, coût des appels aboutis connu, failedPoints = 1", async () => {
+    const points = gridPoints({ lat: 43.9289, lng: 2.1464 }, 5);
+    const failingCoordinate = `${points[6]!.lat},${points[6]!.lng},14z`;
+    const { calls, impl } = stubFetch((call) => {
+      const [task] = call.body as { location_coordinate: string }[];
+      // Le point 7 échoue deux fois (5xx puis 5xx) : null, sans arrêter la grille
+      if (task!.location_coordinate === failingCoordinate) return new Response("Bad gateway", { status: 502 });
+      return jsonResponse(dfs({ cost: 0.002, result: [{ items: [mapsItem(1, { title: task!.location_coordinate })] }] }));
+    });
+    const provider = new DataForSeoProvider(LOGIN, PASSWORD, impl, { concurrency: 4 });
+    const out = await provider.mapsSearch(points.map((point) => ({ keyword: "x", point, zoom: 14, depth: 20 })));
+    expect(out.failedPoints).toBe(1);
+    expect(out.data[6]).toBeNull();
+    expect(out.data.filter((d) => d !== null)).toHaveLength(48);
+    expect(out.data[5]![0]!.title).toBe(`${points[5]!.lat},${points[5]!.lng},14z`);
+    expect(out.costUsd).toBeCloseTo(48 * 0.002, 6);
+    // Le point en échec a été retenté une fois
+    expect(calls).toHaveLength(50);
+  });
+
+  it("tous les points en échec : DataForSeoError portant le coût déjà facturé (tâches refusées avec coût)", async () => {
+    const { calls, impl } = stubFetch(() =>
+      jsonResponse({ ...dfs({}), tasks: [{ id: "t", status_code: 40501, status_message: "Invalid Field: 'keyword'.", cost: 0.002 }] }),
+    );
+    const provider = new DataForSeoProvider(LOGIN, PASSWORD, impl, { concurrency: 4 });
+    const inputs = Array.from({ length: 5 }, (_, i) => ({ keyword: "x", point: { lat: i, lng: i }, zoom: 14 }));
+    const promise = provider.mapsSearch(inputs);
+    await expect(promise).rejects.toBeInstanceOf(DataForSeoError);
+    await promise.catch((err: DataForSeoError) => {
+      expect(err.message).toBe("DataForSEO /serp/google/maps/live/advanced 40501: Invalid Field: 'keyword'.");
+      expect(err.costUsd).toBeCloseTo(0.01, 6);
+    });
+    expect(calls).toHaveLength(5);
+  });
+
+  it("au-delà de 10 échecs : les requêtes en vol sont annulées et les points restants ne sont plus lancés", async () => {
+    const { calls, impl } = stubFetch(() => new Response("Service unavailable", { status: 503 }));
+    const provider = new DataForSeoProvider(LOGIN, PASSWORD, impl, { concurrency: 4 });
+    const points = gridPoints({ lat: 43.9289, lng: 2.1464 }, 5);
+    const promise = provider.mapsSearch(points.map((point) => ({ keyword: "x", point, zoom: 14 })));
+    await expect(promise).rejects.toBeInstanceOf(DataForSeoError);
+    // 11 échecs suffisent (2 tentatives chacun, concurrence 4) : bien moins que 2 × 49 appels
+    expect(calls.length).toBeLessThan(2 * 49);
+    expect(calls.length).toBeGreaterThanOrEqual(11);
+  });
+
+  it("task_post : jamais de nouvelle tentative sur 5xx ni sur erreur réseau (la tâche a pu être créée et facturée)", async () => {
+    expect(isRetryableRequest("/business_data/google/reviews/task_post", "POST")).toBe(false);
+    expect(isRetryableRequest("/serp/google/maps/live/advanced", "POST")).toBe(true);
+    expect(isRetryableRequest("/business_data/google/my_business_info/live", "POST")).toBe(true);
+    expect(isRetryableRequest("/business_data/google/reviews/task_get/abc", "GET")).toBe(true);
+    const { calls, impl } = stubFetch(() => new Response("Bad gateway", { status: 502 }));
+    const provider = new DataForSeoProvider(LOGIN, PASSWORD, impl);
+    await expect(provider.postReviewsTask({ placeId: "p", cid: null, near: null, depth: 50 })).rejects.toThrow(
+      "DataForSEO /business_data/google/reviews/task_post 502: Bad gateway",
+    );
+    expect(calls).toHaveLength(1);
+    const network = stubFetch(() => Promise.reject(new TypeError("fetch failed")));
+    await expect(
+      new DataForSeoProvider(LOGIN, PASSWORD, network.impl).postReviewsTask({ placeId: "p", cid: null, near: null, depth: 50 }),
+    ).rejects.toThrow("réseau");
+    expect(network.calls).toHaveLength(1);
+  });
+
   it("mapConcurrent : ordre conservé, arrêt des lancements à la première erreur", async () => {
     const order = await mapConcurrent([3, 1, 2], 2, async (n) => {
       await new Promise((resolve) => setTimeout(resolve, n * 3));
@@ -306,6 +374,26 @@ describe("DataForSeoProvider — fiche d'établissement", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("URL tierces : http(s) seulement ; image principale sur un hôte Google uniquement", async () => {
+    expect(httpUrlOrNull("https://exemple.fr/x")).toBe("https://exemple.fr/x");
+    expect(httpUrlOrNull("javascript:alert(1)")).toBeNull();
+    expect(httpUrlOrNull("data:image/png;base64,AAAA")).toBeNull();
+    expect(httpUrlOrNull("exemple.fr")).toBeNull();
+    expect(httpUrlOrNull("https://lh3.googleusercontent.com/p/x", ["googleusercontent.com"])).toBe("https://lh3.googleusercontent.com/p/x");
+    expect(httpUrlOrNull("https://evil.example/googleusercontent.com", ["googleusercontent.com"])).toBeNull();
+    expect(httpUrlOrNull("https://notgoogleusercontent.com/x", ["googleusercontent.com"])).toBeNull();
+    const { impl } = stubFetch(() =>
+      jsonResponse(
+        dfs({
+          cost: 0.0054,
+          result: [{ items: [{ ...item, url: "javascript:alert(1)", book_online_url: "https://rdv.exemple.fr", main_image: "https://evil.example/photo.jpg" }] }],
+        }),
+      ),
+    );
+    const out = await new DataForSeoProvider(LOGIN, PASSWORD, impl).businessInfo({ placeId: "p", cid: null, title: null, near: null });
+    expect(out.data).toMatchObject({ website: null, bookOnlineUrl: "https://rdv.exemple.fr", mainImage: null });
+  });
+
   it("libellés d'attributs : dictionnaire français, sinon identifiant humanisé", () => {
     expect(attributeLabel("wheelchair_accessible_entrance")).toBe("Entrée accessible PMR");
     expect(attributeLabel("ONLINE_CARE")).toBe("Consultations à distance");
@@ -395,6 +483,22 @@ describe("DataForSeoProvider — avis (tâches)", () => {
     expect(lost.data).toEqual({ status: "error", message: "40401: Task Not Found." });
 
     await expect(provider.fetchReviewsTask("../autre")).rejects.toThrow("identifiant de tâche invalide");
+  });
+
+  it("avis sans note ignoré (jamais de 5 inventé) ; photo d'auteur et lien d'avis hors hôtes Google écartés", () => {
+    expect(reviewFromItem({ review_id: "r1", review_text: "Bien", rating: null })).toBeNull();
+    expect(reviewFromItem({ review_id: "r2", review_text: "Bien" })).toBeNull();
+    const kept = reviewFromItem({
+      review_id: "r3",
+      review_text: "Bien",
+      rating: { value: 4.4 },
+      profile_image_url: "https://evil.example/a.png",
+      review_url: "javascript:alert(1)",
+    });
+    expect(kept).toMatchObject({ rating: 4, authorPhotoUrl: null, reviewUrl: null });
+    expect(reviewFromItem({ review_id: "r4", rating: { value: 5 }, review_url: "https://www.google.com/maps/reviews/x" })?.reviewUrl).toBe(
+      "https://www.google.com/maps/reviews/x",
+    );
   });
 
   it("parseDataForSeoDate : format DataForSEO, ISO, invalide", () => {

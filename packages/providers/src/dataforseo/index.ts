@@ -11,7 +11,12 @@
  * `tasks[].cost`) : Maps live advanced ≈ 0,002 $/tâche ; my_business_info
  * live ≈ 0,0054 $ ; avis ≈ 0,00075 $ par tranche de 10 (file standard).
  * `ProviderResult.costUsd` est le coût **réel** renvoyé par l'API (0 en mock),
- * à inscrire dans `google_usage` par l'appelant.
+ * à inscrire dans `google_usage` par l'appelant — y compris en échec partiel
+ * (`MapsSearchResult.failedPoints`) ou total (`DataForSeoError.costUsd`).
+ *
+ * Données tierces : les URL renvoyées (site, réservation, image principale,
+ * photo d'auteur, lien d'avis) ne sont gardées qu'en http(s), les images et
+ * liens d'avis seulement sur les hôtes Google (`httpUrlOrNull`).
  *
  * Endpoints :
  * - POST /serp/google/maps/live/advanced  — tableau de tâches
@@ -30,7 +35,7 @@
  *   review_text, owner_answer, owner_timestamp, review_url).
  */
 
-import type { GeoPoint, GoogleMapsListing, GoogleProfileSnapshot } from "@theralys/shared";
+import { GOOGLE_SCAN_MAX_MISSING_POINTS, type GeoPoint, type GoogleMapsListing, type GoogleProfileSnapshot } from "@theralys/shared";
 
 // ─── Résultats ───────────────────────────────────────────────────────────────
 
@@ -42,6 +47,28 @@ export type ProviderResult<T> = {
   costUsd: number;
   mode: ProviderMode;
 };
+
+/**
+ * Résultat d'un relevé : une liste par point, `null` pour un point dont la
+ * requête a échoué (rang inconnu). `costUsd` couvre tous les appels aboutis
+ * (retentatives comprises) ; `failedPoints` compte les points sans réponse.
+ */
+export type MapsSearchResult = ProviderResult<(GoogleMapsListing[] | null)[]> & { failedPoints?: number };
+
+/**
+ * Erreur fournisseur portant le coût déjà facturé par DataForSEO avant
+ * l'échec (ex. relevé dont tous les points ont échoué après quelques appels
+ * aboutis) : l'appelant l'inscrit dans `google_usage` même en échec.
+ */
+export class DataForSeoError extends Error {
+  readonly costUsd: number;
+
+  constructor(message: string, costUsd = 0) {
+    super(message);
+    this.name = "DataForSeoError";
+    this.costUsd = costUsd;
+  }
+}
 
 export type MapsSearchInput = {
   keyword: string;
@@ -92,16 +119,20 @@ export type ReviewsTaskResult =
 /**
  * Fournisseur « recherche locale » : une implémentation réelle (DataForSEO)
  * et un mock déterministe de même forme. Toute méthode peut lever (réseau,
- * 4xx/5xx, solde insuffisant) : l'appelant journalise et n'inscrit aucun coût.
+ * 4xx/5xx, solde insuffisant) : l'appelant journalise ; une `DataForSeoError`
+ * porte le coût déjà facturé avant l'échec, à inscrire malgré tout.
  */
 export interface LocalSearchProvider {
   readonly mode: ProviderMode;
   /**
-   * Plusieurs tâches Maps en un appel (grille) : même ordre que `inputs`.
-   * L'implémentation réelle découpe en lots (≤ 20 tâches par requête HTTP,
-   * concurrence limitée) et renvoie le coût total.
+   * Plusieurs tâches Maps en un appel (grille) : même ordre que `inputs`, un
+   * point en échec vaut `null` (`failedPoints` les compte). L'implémentation
+   * réelle lance une requête HTTP par point (concurrence limitée), continue
+   * malgré les échecs isolés, annule tout au-delà de
+   * GOOGLE_SCAN_MAX_MISSING_POINTS échecs, et lève une `DataForSeoError`
+   * (avec le coût déjà facturé) seulement si aucun point n'a abouti.
    */
-  mapsSearch(inputs: MapsSearchInput[]): Promise<ProviderResult<GoogleMapsListing[][]>>;
+  mapsSearch(inputs: MapsSearchInput[]): Promise<MapsSearchResult>;
   /** Fiche d'établissement complète, null si introuvable. */
   businessInfo(input: BusinessInfoInput): Promise<ProviderResult<GoogleProfileSnapshot | null>>;
   /** Lance la récupération des avis ; le résultat se lit avec fetchReviewsTask. */
@@ -143,7 +174,7 @@ export class MockLocalSearchProvider implements LocalSearchProvider {
 
   constructor(private readonly own: { placeId: string | null; cid: string | null; title: string | null } = MOCK_OWN_LISTING) {}
 
-  async mapsSearch(inputs: MapsSearchInput[]): Promise<ProviderResult<GoogleMapsListing[][]>> {
+  async mapsSearch(inputs: MapsSearchInput[]): Promise<MapsSearchResult> {
     const data = inputs.map((input, index) => {
       // Le cabinet est mieux classé près de son centre (index central de la grille) ; rang 1..20 ou absent
       const seed = hash31(`${input.keyword}|${input.point.lat.toFixed(3)}|${input.point.lng.toFixed(3)}`);
@@ -163,7 +194,7 @@ export class MockLocalSearchProvider implements LocalSearchProvider {
       }
       return listings;
     });
-    return { data, costUsd: 0, mode: "mock" };
+    return { data, costUsd: 0, mode: "mock", failedPoints: 0 };
   }
 
   async businessInfo(input: BusinessInfoInput): Promise<ProviderResult<GoogleProfileSnapshot | null>> {
@@ -400,6 +431,29 @@ function textOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
+/** Hôtes Google autorisés pour les images et liens d'avis renvoyés par l'API (sous-domaines compris). */
+const GOOGLE_URL_HOSTS = ["googleusercontent.com", "ggpht.com", "google.com", "gstatic.com"] as const;
+
+/**
+ * URL absolue en `http:`/`https:` seulement (jamais `javascript:` ni `data:`),
+ * restreinte aux hôtes `hosts` (ou leurs sous-domaines) quand ils sont donnés ;
+ * null sinon. Les données viennent d'un tiers : elles sont rendues telles quelles
+ * par le studio et le site public.
+ */
+export function httpUrlOrNull(value: unknown, hosts?: readonly string[]): string | null {
+  const text = textOrNull(value);
+  if (!text) return null;
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (hosts && !hosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) return null;
+  return text;
+}
+
 /** « lat,lng,14z » (Maps : zoom de 3z à 21z). */
 function mapsCoordinate(point: GeoPoint, zoom: number): string {
   return `${point.lat},${point.lng},${Math.max(3, Math.min(21, Math.round(zoom)))}z`;
@@ -521,7 +575,7 @@ export function snapshotFromBusinessItem(item: DfsBusinessItem, fetchedAt: Date)
       .map((c) => c.trim()),
     address: textOrNull(item.address),
     phone: textOrNull(item.phone),
-    website: textOrNull(item.url),
+    website: httpUrlOrNull(item.url),
     isClaimed: typeof item.is_claimed === "boolean" ? item.is_claimed : null,
     rating: numberOrNull(item.rating?.value),
     votes: numberOrNull(item.rating?.votes_count),
@@ -530,45 +584,49 @@ export function snapshotFromBusinessItem(item: DfsBusinessItem, fetchedAt: Date)
     hasHours,
     hours: hours && Object.keys(hours).length > 0 ? hours : null,
     attributes,
-    bookOnlineUrl: textOrNull(item.book_online_url),
-    mainImage: textOrNull(item.main_image),
+    bookOnlineUrl: httpUrlOrNull(item.book_online_url),
+    mainImage: httpUrlOrNull(item.main_image, GOOGLE_URL_HOSTS),
     location: lat !== null && lng !== null ? { lat, lng } : null,
   };
 }
 
-/** Item « google_reviews_search » → avis normalisé ; null sans `review_id`. */
+/** Item « google_reviews_search » → avis normalisé ; null sans `review_id` ou sans note (jamais de note inventée). */
 export function reviewFromItem(item: DfsReviewItem): GoogleReviewItem | null {
   const id = textOrNull(item.review_id);
   if (!id || (item.type !== undefined && item.type !== "google_reviews_search")) return null;
-  const rating = Math.round(numberOrNull(item.rating?.value) ?? 5);
+  const value = numberOrNull(item.rating?.value);
+  if (value === null) return null;
   return {
     sourceReviewId: id,
     authorName: textOrNull(item.profile_name) ?? "Client Google",
-    authorPhotoUrl: textOrNull(item.profile_image_url),
-    rating: Math.max(1, Math.min(5, rating)),
+    authorPhotoUrl: httpUrlOrNull(item.profile_image_url, GOOGLE_URL_HOSTS),
+    rating: Math.max(1, Math.min(5, Math.round(value))),
     text: typeof item.review_text === "string" ? item.review_text.trim() : "",
     reviewedAt: parseDataForSeoDate(item.timestamp),
     ownerReply: textOrNull(item.owner_answer),
     ownerRepliedAt: parseDataForSeoDate(item.owner_timestamp),
-    reviewUrl: textOrNull(item.review_url),
+    reviewUrl: httpUrlOrNull(item.review_url, GOOGLE_URL_HOSTS),
   };
 }
 
 /**
  * Applique `fn` à chaque élément avec au plus `limit` exécutions simultanées ;
  * résultats dans l'ordre des entrées. À la première erreur, plus aucune tâche
- * n'est lancée et l'erreur est propagée.
+ * n'est lancée et l'erreur est propagée. Avec `signal`, plus aucune tâche
+ * n'est lancée une fois le signal annulé (les éléments restants gardent
+ * `undefined` : à l'appelant de les traiter).
  */
 export async function mapConcurrent<T, R>(
   items: T[],
   limit: number,
   fn: (item: T, index: number) => Promise<R>,
+  options: { signal?: AbortSignal } = {},
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   let failed = false;
   const worker = async () => {
-    while (!failed) {
+    while (!failed && !options.signal?.aborted) {
       const index = next++;
       if (index >= items.length) return;
       try {
@@ -588,6 +646,16 @@ function describeError(err: unknown): string {
   return String(err).slice(0, 200);
 }
 
+/**
+ * Une nouvelle tentative n'est permise que si la requête est idempotente côté
+ * facturation : endpoints « live » (la réponse arrive dans le même appel) et
+ * GET (`task_get`). Jamais pour `task_post` : la tâche a pu être créée et
+ * facturée malgré un 5xx ou un délai dépassé (M9).
+ */
+export function isRetryableRequest(endpoint: string, method: "GET" | "POST"): boolean {
+  return method === "GET" || /\/live(\/|$)/.test(endpoint);
+}
+
 // ─── Client ──────────────────────────────────────────────────────────────────
 
 export type DataForSeoOptions = {
@@ -601,10 +669,17 @@ export type DataForSeoOptions = {
  * Client DataForSEO réel. Chaque endpoint « live » n'accepte qu'une tâche par
  * appel HTTP : une grille de 49 points = 49 appels, lancés avec une
  * concurrence bornée (résultats dans l'ordre des entrées). Délai de 60 s par
- * requête, une nouvelle tentative sur erreur 5xx ou réseau. Les erreurs sont
+ * requête, une nouvelle tentative sur erreur 5xx ou réseau pour les endpoints
+ * « live » et les GET seulement (`isRetryableRequest`). Les erreurs sont
  * explicites (`DataForSEO <endpoint> <statut>: <message>`) et ne contiennent
  * jamais les identifiants. Le coût rendu est la somme des `tasks[].cost`
  * renvoyés par l'API.
+ *
+ * Limite connue : si la première tentative d'un appel « live » dépasse le
+ * délai mais a été servie (et facturée) côté DataForSEO, puis que la seconde
+ * aboutit, le coût rendu est celui de la seconde seulement — l'API ne permet
+ * pas de retrouver le coût d'une réponse jamais reçue. Les montants en jeu
+ * (≈ 0,002 $ par point) restent sous le plafond mensuel.
  */
 export class DataForSeoProvider implements LocalSearchProvider {
   readonly mode = "dataforseo" as const;
@@ -627,16 +702,25 @@ export class DataForSeoProvider implements LocalSearchProvider {
 
   /**
    * Un appel HTTP (JSON) : délai, une nouvelle tentative sur 5xx ou erreur
-   * réseau, statut général vérifié (20000). Renvoie les tâches et le coût total.
+   * réseau si la requête est retentable (`isRetryableRequest`), statut général
+   * vérifié (20000). Renvoie les tâches et le coût total de la réponse reçue
+   * (voir la limite connue sur une première tentative servie mais non reçue).
+   * `signal` (facultatif) annule l'appel en cours sans nouvelle tentative :
+   * une grille dont trop de points échouent interrompt ses requêtes en vol.
    */
   protected async request<R>(
     endpoint: string,
     init: { method: "GET" | "POST"; body?: unknown },
+    signal?: AbortSignal,
   ): Promise<{ tasks: DfsTask<R>[]; cost: number }> {
+    const attempts = isRetryableRequest(endpoint, init.method) ? 2 : 1;
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (signal?.aborted) throw new Error(`DataForSEO ${endpoint}: annulé`);
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const abort = () => controller.abort();
+      signal?.addEventListener("abort", abort, { once: true });
+      const timer = setTimeout(abort, this.timeoutMs);
       try {
         let response: Response;
         try {
@@ -651,6 +735,7 @@ export class DataForSeoProvider implements LocalSearchProvider {
             signal: controller.signal,
           });
         } catch (err) {
+          if (signal?.aborted) throw new Error(`DataForSEO ${endpoint}: annulé`);
           lastError = new Error(`DataForSEO ${endpoint} réseau: ${describeError(err)}`);
           continue;
         }
@@ -671,6 +756,7 @@ export class DataForSeoProvider implements LocalSearchProvider {
         return { tasks, cost: round6(tasks.reduce((sum, task) => sum + (numberOrNull(task.cost) ?? 0), 0)) };
       } finally {
         clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
       }
     }
     throw lastError ?? new Error(`DataForSEO ${endpoint}: échec`);
@@ -691,30 +777,65 @@ export class DataForSeoProvider implements LocalSearchProvider {
     );
   }
 
-  async mapsSearch(inputs: MapsSearchInput[]): Promise<ProviderResult<GoogleMapsListing[][]>> {
+  /**
+   * Une requête par point, concurrence bornée. Un point en échec (réseau,
+   * 5xx après retentative, tâche refusée) vaut `null` et n'arrête pas les
+   * autres ; au-delà de GOOGLE_SCAN_MAX_MISSING_POINTS échecs, les requêtes
+   * en vol sont annulées et les points restants ne sont plus lancés. Le coût
+   * rendu est la somme de tous les appels aboutis (une tâche refusée peut
+   * aussi porter un coût). Si aucun point n'aboutit : `DataForSeoError`
+   * portant ce coût.
+   */
+  async mapsSearch(inputs: MapsSearchInput[]): Promise<MapsSearchResult> {
     const endpoint = "/serp/google/maps/live/advanced";
-    const results = await mapConcurrent(inputs, this.concurrency, async (input) => {
-      const depth = Math.max(1, Math.min(100, input.depth ?? 20));
-      const { tasks, cost } = await this.request<DfsMapsResult>(endpoint, {
-        method: "POST",
-        body: [
-          {
-            keyword: input.keyword,
-            location_coordinate: mapsCoordinate(input.point, input.zoom),
-            language_code: "fr",
-            depth,
-          },
-        ],
-      });
-      const task = tasks[0];
-      if (!task || task.status_code !== STATUS_OK) throw this.taskError(endpoint, task);
-      return { listings: normalizeMapsItems(task.result?.[0]?.items ?? [], depth), cost };
-    });
-    return {
-      data: results.map((r) => r.listings),
-      costUsd: round6(results.reduce((sum, r) => sum + r.cost, 0)),
-      mode: "dataforseo",
+    const controller = new AbortController();
+    const state: { failed: number; firstError: Error | null } = { failed: 0, firstError: null };
+    const noteFailure = (err: Error) => {
+      state.failed += 1;
+      state.firstError ??= err;
+      if (state.failed > GOOGLE_SCAN_MAX_MISSING_POINTS) controller.abort();
     };
+    const results = await mapConcurrent(
+      inputs,
+      this.concurrency,
+      async (input): Promise<{ listings: GoogleMapsListing[] | null; cost: number }> => {
+        const depth = Math.max(1, Math.min(100, input.depth ?? 20));
+        try {
+          const { tasks, cost } = await this.request<DfsMapsResult>(
+            endpoint,
+            {
+              method: "POST",
+              body: [
+                {
+                  keyword: input.keyword,
+                  location_coordinate: mapsCoordinate(input.point, input.zoom),
+                  language_code: "fr",
+                  depth,
+                },
+              ],
+            },
+            controller.signal,
+          );
+          const task = tasks[0];
+          if (!task || task.status_code !== STATUS_OK) {
+            noteFailure(this.taskError(endpoint, task));
+            return { listings: null, cost };
+          }
+          return { listings: normalizeMapsItems(task.result?.[0]?.items ?? [], depth), cost };
+        } catch (err) {
+          noteFailure(err instanceof Error ? err : new Error(String(err)));
+          return { listings: null, cost: 0 };
+        }
+      },
+      { signal: controller.signal },
+    );
+    const data = inputs.map((_input, i) => results[i]?.listings ?? null);
+    const costUsd = round6(results.reduce((sum, r) => sum + (r?.cost ?? 0), 0));
+    const failedPoints = data.filter((listings) => listings === null).length;
+    if (inputs.length > 0 && failedPoints === inputs.length) {
+      throw new DataForSeoError(state.firstError?.message ?? `DataForSEO ${endpoint}: aucun point relevé`, costUsd);
+    }
+    return { data, costUsd, mode: "dataforseo", failedPoints };
   }
 
   async businessInfo(input: BusinessInfoInput): Promise<ProviderResult<GoogleProfileSnapshot | null>> {
