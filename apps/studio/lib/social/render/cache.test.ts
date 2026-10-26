@@ -119,3 +119,22 @@ describe("renderSlideCached : rendu dégradé", () => {
     expect((await renderSlideCached(input)).cached).toBe("memory");
   });
 });
+
+describe("tables de contenus (social_posts / google_posts)", () => {
+  it("préfixe Blob par table, clé historique conservée pour le social", async () => {
+    const { blobPathname, renderKey } = await import("./cache");
+    expect(blobPathname("s", "p", "square:0:preview")).toBe("social/s/p/square-0-preview.jpg");
+    expect(blobPathname("s", "p", "landscape:0:full", "google")).toBe("google/s/p/landscape-0-full.jpg");
+    const base: CachedRenderInput = {
+      post: postWithPhoto("https://example.com/photo.jpg"),
+      ctx: smokeContext("chaleureux"),
+      size: "landscape",
+      slideIndex: 0,
+      preview: false,
+      reviewRating: null,
+    };
+    const social = renderKey(base);
+    expect(renderKey({ ...base, post: { ...base.post, table: "social" } })).toBe(social);
+    expect(renderKey({ ...base, post: { ...base.post, table: "google" } })).not.toBe(social);
+  });
+});

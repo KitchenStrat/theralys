@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
   // dans le bundle serverless (elles ne sont pas détectées par le traçage).
   outputFileTracingIncludes: {
     "/api/social/**": ["./assets/fonts/**"],
+    "/api/google-posts/**": ["./assets/fonts/**"],
   },
   experimental: {
     serverActions: {
