@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GOOGLE_REPLY_MAX, buildSocialBrief, slugify, socialSlotsForMonth, type SocialSiteBrief } from "@theralys/shared";
 import type { GenerationInput } from "./types";
-import { mockGenerateHome, mockGenerateReviews } from "./mock/generator";
+import { mockGenerateArticles, mockGenerateHome, mockGenerateReviews } from "./mock/generator";
 import { resolveProfession } from "./mock/catalog";
 import {
   GOOGLE_REVIEWS_BATCH,
@@ -9,7 +9,9 @@ import {
   cleanGoogleSummary,
   createGooglePostGenerator,
   createGoogleReviewsAnalyzer,
+  dedupeGooglePosts,
   detectReviewTopics,
+  fallbackReviewAnalysis,
   finalizeReviewsAnalysis,
   googleReviewsAnalysisSchema,
   googleReviewsSystemPrompt,
@@ -17,6 +19,7 @@ import {
   mockReviewReply,
   replySignature,
   reviewerFirstName,
+  topicKey,
   type ReviewForAnalysis,
   type ReviewPromptRow,
 } from "./google-profile";
@@ -27,7 +30,8 @@ import type { SocialPlan } from "./social";
 const env = { AI_MOCK: "1" } as NodeJS.ProcessEnv;
 const NOW = new Date("2026-10-26T09:00:00Z");
 
-function brief(): SocialSiteBrief {
+/** Brief de test ; avec `articles`, les articles du mock (publiés, hors du mois planifié) nourrissent les piliers conseil/article. */
+function brief(opts: { articles?: boolean } = {}): SocialSiteBrief {
   const input: GenerationInput = {
     firstName: "Claire",
     lastName: "Dupont",
@@ -39,6 +43,18 @@ function brief(): SocialSiteBrief {
   };
   const home = mockGenerateHome(input);
   const reviews = mockGenerateReviews(input).map((r, i) => ({ id: `r${i + 1}`, ...r }));
+  const articles = opts.articles
+    ? mockGenerateArticles(input, home.motifsPlan).map((a, i) => ({
+        id: `a${i + 1}`,
+        slug: a.slug,
+        title: a.title,
+        excerpt: a.excerpt,
+        content: a.content,
+        imageUrl: null,
+        status: "published",
+        publishAt: new Date(Date.UTC(2026, 8, 1 + i * 7, 8)),
+      }))
+    : [];
   return buildSocialBrief({
     site: {
       id: "site-1",
@@ -50,7 +66,7 @@ function brief(): SocialSiteBrief {
     },
     prospect: { firstName: "Claire", lastName: "Dupont", profession: "Sophrologue", city: "Albi", gender: "feminin", googleRating: 4.9, googleReviewCount: 27 },
     pages: [{ id: "home-1", type: "home", slug: "", title: "Accueil", metaDescription: home.metaDescription, sections: home.sections }],
-    articles: [],
+    articles,
     reviews,
     voice: null,
     practiceName: resolveProfession("Sophrologue").practiceName,
@@ -96,6 +112,33 @@ describe("posts Google (mock, via le générateur social)", () => {
     expect(chooseGoogleCta("conseil", links, null)).toEqual({ type: "BOOK", url: "https://rdv.fr" });
     expect(chooseGoogleCta("article", links, "https://s.fr/blog/x")).toEqual({ type: "LEARN_MORE", url: "https://s.fr/blog/x" });
     expect(chooseGoogleCta("coulisses", { siteUrl: "https://s.fr", bookingUrl: null }, null)).toEqual({ type: "LEARN_MORE", url: "https://s.fr" });
+    // Lien de réservation « tel: » : bouton « Appeler »
+    expect(chooseGoogleCta("conseil", { siteUrl: "https://s.fr", bookingUrl: "tel:+33563000000" }, null)).toEqual({ type: "CALL", url: "tel:+33563000000" });
+    expect(chooseGoogleCta("coulisses", { siteUrl: "https://s.fr", bookingUrl: "tel:+33563000000" }, null)).toEqual({ type: "LEARN_MORE", url: "https://s.fr" });
+  });
+
+  it("mois complet (5 créneaux, carrousels et stories compris) → 5 posts, sujets distincts, visuel unique", async () => {
+    const b = brief({ articles: true });
+    const generator = createGooglePostGenerator(env);
+    // Décembre 2026 compte 5 mardis
+    const slots = socialSlotsForMonth({ year: 2026, month: 12, today: NOW, articles: [], postDays: [2] });
+    expect(slots).toHaveLength(5);
+    const posts = await generator.planMonth(b, { month: "2026-12", slots, recentTopics: [], photosById: {}, refsById: {} }, { siteUrl: "https://s.fr", bookingUrl: null });
+    expect(posts).toHaveLength(5);
+    expect(new Set(posts.map((p) => topicKey(p.topic))).size).toBe(5);
+    expect(posts.map((p) => p.scheduledFor)).toEqual(slots.map((s) => s.date));
+    for (const post of posts) {
+      expect(post.content.slide.role).toBe("single");
+      expect(["photo-titre", "affirmation", "question-reponse", "liste-conseils", "infos-pratiques", "avis"]).toContain(post.template);
+    }
+  });
+
+  it("dedupeGooglePosts : sujets égaux après normalisation → le premier est gardé", () => {
+    const post = (topic: string, scheduledFor: string) =>
+      ({ scheduledFor, template: "affirmation" as const, pillar: "conseil" as const, topic, content: {} as never });
+    const kept = dedupeGooglePosts([post("Respirer pour s'apaiser", "2026-12-01"), post("Respirer pour s’apaiser !", "2026-12-08"), post("Bien dormir", "2026-12-15")]);
+    expect(kept.map((p) => p.scheduledFor)).toEqual(["2026-12-01", "2026-12-15"]);
+    expect(topicKey("Éveil & Sérénité  ")).toBe("eveil serenite");
   });
 
   it("un post sur mesure : texte sans hashtags ni « bio », visuel unique, template statique", async () => {
@@ -207,6 +250,39 @@ describe("analyse des avis (mode anthropic)", () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]![0])).toContain("réponse écartée pour l'avis r2");
     expect(String(warn.mock.calls[0]![0])).toContain("promesse de guérison");
+  });
+
+  it("écriture lot par lot : onBatch après chaque lot, le lot 2 en erreur conserve le lot 1 ; analyse de repli", async () => {
+    const b = brief();
+    let call = 0;
+    const complete = vi.fn(async (_options: unknown, _system: string, user: string) => {
+      call += 1;
+      if (call === 2) throw new Error("modèle indisponible");
+      const ids = [...user.matchAll(/"id":"(a\d+)"/g)].map((m) => m[1]!);
+      return {
+        // Le dernier avis du lot n'a pas de réponse : écarté
+        analyses: ids.slice(0, -1).map((id) => ({ id, sentiment: "positif" as const, topics: [], suggestedReply: `Merci pour ce retour chaleureux (${id}), au plaisir de vous retrouver au cabinet.` })),
+      };
+    });
+    const analyzer = createGoogleReviewsAnalyzer(LIVE_ENV, { complete: complete as never });
+    const written: { ids: string[]; batch: string[] }[] = [];
+    const reviews = Array.from({ length: 30 }, (_, i) => review(`id-${i + 1}`));
+    await expect(
+      analyzer.analyze({ brief: b, reviews, now: NOW }, { onBatch: (analyses, batch) => { written.push({ ids: Object.keys(analyses), batch: batch.map((r) => r.id) }); } }),
+    ).rejects.toThrow("modèle indisponible");
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(written).toHaveLength(1);
+    expect(written[0]!.batch).toHaveLength(GOOGLE_REVIEWS_BATCH);
+    expect(written[0]!.ids).toHaveLength(GOOGLE_REVIEWS_BATCH - 1);
+    expect(written[0]!.ids).not.toContain("id-20");
+    const fallback = fallbackReviewAnalysis({ rating: 2 }, b.voice, "anthropic", NOW);
+    expect(fallback).toEqual({ sentiment: "negatif", topics: [], suggestedReply: "", generatedAt: NOW.toISOString(), generator: "anthropic", voice: b.voice });
+
+    // Mock : mêmes lots, même crochet
+    const mockWritten: number[] = [];
+    const out = await createGoogleReviewsAnalyzer(env).analyze({ brief: b, reviews: reviews.slice(0, 25), now: NOW }, { onBatch: (a) => { mockWritten.push(Object.keys(a).length); } });
+    expect(mockWritten).toEqual([20, 5]);
+    expect(Object.keys(out)).toHaveLength(25);
   });
 
   it("analyseur anthropic : appel bouchonné par lots de 20, effort medium, analyses par id", async () => {

@@ -6,13 +6,15 @@
  * L'audit et le plan d'action sont déterministes (`auditGoogleProfile`,
  * `@theralys/shared`) : aucun appel IA.
  *
- * Mode réel : `completeStructured` (effort « medium »), ≤ 20 avis par appel,
+ * Mode réel : `completeStructured` (effort « medium »), lots de 20 avis
+ * (crochet `onBatch` après chaque lot : l'appelant écrit au fur et à mesure),
  * réponses relues par `checkEthicalCompliance` (les fautives sont écartées et
- * journalisées) ; posts Google via la variante « google » des prompts
- * sociaux (`socialSystemPrompt`/`socialMonthUserPrompt`) puis `finalizePlan`
- * et `toGooglePost`. Mode mock : règles simples sur la note et le
- * vocabulaire, réponses assemblées avec les briques de voix, toujours passées
- * par les garde-fous éthiques.
+ * journalisées ; `fallbackReviewAnalysis` fournit alors une analyse minimale) ;
+ * posts Google via la variante « google » des prompts sociaux
+ * (`socialSystemPrompt`/`socialMonthUserPrompt`) puis `finalizePlan`,
+ * `toGooglePost` et `dedupeGooglePosts`. Mode mock : règles simples sur la
+ * note et le vocabulaire, réponses assemblées avec les briques de voix,
+ * toujours passées par les garde-fous éthiques.
  */
 
 import { z } from "zod";
@@ -77,11 +79,46 @@ export type ReviewsAnalysisInput = {
   now: Date;
 };
 
+export type ReviewsAnalysisHooks = {
+  /**
+   * Appelé après chaque lot (≤ GOOGLE_REVIEWS_BATCH avis) avec les analyses
+   * obtenues et les avis transmis au modèle : l'appelant écrit lot par lot,
+   * si bien qu'une erreur sur un lot suivant ne défait pas les précédents.
+   * Les avis du lot absents des analyses ont été écartés (garde-fous).
+   */
+  onBatch?: (analyses: Record<string, GoogleReviewAnalysis>, batch: ReviewForAnalysis[]) => Promise<void> | void;
+};
+
 export type GoogleReviewsAnalyzer = {
   mode: "anthropic" | "mock";
-  /** Une analyse par avis (clé = id), ≤ 20 avis par appel ; les avis dont la réponse enfreint les garde-fous sont omis. */
-  analyze(input: ReviewsAnalysisInput): Promise<Record<string, GoogleReviewAnalysis>>;
+  /**
+   * Une analyse par avis (clé = id), par lots de GOOGLE_REVIEWS_BATCH ; les
+   * avis dont la réponse enfreint les garde-fous sont omis. Une erreur du
+   * modèle est propagée après les crochets `onBatch` des lots déjà traités.
+   */
+  analyze(input: ReviewsAnalysisInput, hooks?: ReviewsAnalysisHooks): Promise<Record<string, GoogleReviewAnalysis>>;
 };
+
+/**
+ * Analyse minimale d'un avis dont aucune réponse n'a pu être proposée
+ * (réponse écartée par les garde-fous) : sentiment d'après la note, aucun
+ * thème, réponse vide — pour ne pas renvoyer l'avis au modèle indéfiniment.
+ */
+export function fallbackReviewAnalysis(
+  review: Pick<ReviewForAnalysis, "rating">,
+  voice: SocialVoice,
+  generator: GoogleReviewAnalysis["generator"],
+  now: Date,
+): GoogleReviewAnalysis {
+  return {
+    sentiment: sentimentFromRating(review.rating),
+    topics: [],
+    suggestedReply: "",
+    generatedAt: now.toISOString(),
+    generator,
+    voice,
+  };
+}
 
 const TOPIC_PATTERNS: Record<GoogleReviewTopic, RegExp> = {
   accueil: /accueil|chaleureu|bienveill|souriant|gentil/i,
@@ -147,9 +184,10 @@ export function mockReviewReply(review: ReviewForAnalysis, voice: SocialVoice, b
   return text.length > GOOGLE_REPLY_MAX ? truncateAtSentence(text, GOOGLE_REPLY_MAX) : text;
 }
 
+/** Analyses mock d'un lot d'avis (sans limite de taille : l'appelant découpe). */
 export function mockReviewsAnalysis(input: ReviewsAnalysisInput): Record<string, GoogleReviewAnalysis> {
   const out: Record<string, GoogleReviewAnalysis> = {};
-  for (const review of input.reviews.slice(0, 20)) {
+  for (const review of input.reviews) {
     const suggestedReply = mockReviewReply(review, input.brief.voice, input.brief);
     if (!checkEthicalCompliance(suggestedReply).ok) continue;
     out[review.id] = {
@@ -162,6 +200,15 @@ export function mockReviewsAnalysis(input: ReviewsAnalysisInput): Record<string,
     };
   }
   return out;
+}
+
+/** Lots de GOOGLE_REVIEWS_BATCH avis, dans l'ordre. */
+function reviewBatches(reviews: ReviewForAnalysis[]): ReviewForAnalysis[][] {
+  const batches: ReviewForAnalysis[][] = [];
+  for (let start = 0; start < reviews.length; start += GOOGLE_REVIEWS_BATCH) {
+    batches.push(reviews.slice(start, start + GOOGLE_REVIEWS_BATCH));
+  }
+  return batches;
 }
 
 // ─── Mode réel : schéma, prompts, finalisation ───────────────────────────────
@@ -355,7 +402,20 @@ export function createGoogleReviewsAnalyzer(
   deps: GoogleReviewsAnalyzerDeps = {},
 ): GoogleReviewsAnalyzer {
   const mode = resolveAiMode(env);
-  if (mode === "mock") return { mode, analyze: async (input) => mockReviewsAnalysis(input) };
+  if (mode === "mock") {
+    return {
+      mode,
+      analyze: async (input, hooks = {}) => {
+        const out: Record<string, GoogleReviewAnalysis> = {};
+        for (const batch of reviewBatches(input.reviews)) {
+          const analyses = mockReviewsAnalysis({ ...input, reviews: batch });
+          await hooks.onBatch?.(analyses, batch);
+          Object.assign(out, analyses);
+        }
+        return out;
+      },
+    };
+  }
   const complete = deps.complete ?? completeStructured;
   const options: AnthropicClientOptions = {
     apiKey: env.ANTHROPIC_API_KEY!,
@@ -364,20 +424,20 @@ export function createGoogleReviewsAnalyzer(
   };
   return {
     mode,
-    analyze: async (input) => {
+    analyze: async (input, hooks = {}) => {
       const brief = sanitizeSocialBrief(input.brief);
       const out: Record<string, GoogleReviewAnalysis> = {};
-      for (let start = 0; start < input.reviews.length; start += GOOGLE_REVIEWS_BATCH) {
-        const rows: ReviewPromptRow[] = input.reviews
-          .slice(start, start + GOOGLE_REVIEWS_BATCH)
-          .map((review, i) => ({ alias: `a${i + 1}`, review }));
+      for (const batch of reviewBatches(input.reviews)) {
+        const rows: ReviewPromptRow[] = batch.map((review, i) => ({ alias: `a${i + 1}`, review }));
         const parsed = await complete(
           options,
           googleReviewsSystemPrompt(brief),
           googleReviewsUserPrompt(brief, rows),
           googleReviewsAnalysisSchema,
         );
-        Object.assign(out, finalizeReviewsAnalysis(googleReviewsAnalysisSchema.parse(parsed), rows, brief, input.now));
+        const analyses = finalizeReviewsAnalysis(googleReviewsAnalysisSchema.parse(parsed), rows, brief, input.now);
+        await hooks.onBatch?.(analyses, batch);
+        Object.assign(out, analyses);
       }
       return out;
     },
@@ -422,10 +482,16 @@ export type GooglePostGenerator = {
   generateRequest(brief: SocialSiteBrief, input: GoogleRequestInput, links: GooglePostLinks): Promise<FinalizedGooglePost>;
 };
 
-/** Bouton d'action selon le pilier et les liens disponibles. */
+/**
+ * Bouton d'action selon le pilier et les liens disponibles : lien de l'article
+ * annoncé, sinon prise de rendez-vous (« Réserver », ou « Appeler » quand le
+ * lien de réservation est un numéro `tel:`), sinon le site.
+ */
 export function chooseGoogleCta(pillar: SocialPillar, links: GooglePostLinks, articleHref: string | null): { type: GooglePostCta; url: string | null } {
   if ((pillar === "article" || pillar === "nouvel_article") && articleHref) return { type: "LEARN_MORE", url: articleHref };
-  if (links.bookingUrl && pillar !== "idee_recue" && pillar !== "coulisses") return { type: "BOOK", url: links.bookingUrl };
+  if (links.bookingUrl && pillar !== "idee_recue" && pillar !== "coulisses") {
+    return { type: /^tel:/i.test(links.bookingUrl.trim()) ? "CALL" : "BOOK", url: links.bookingUrl };
+  }
   return { type: "LEARN_MORE", url: links.siteUrl };
 }
 
@@ -450,13 +516,20 @@ export function cleanGoogleSummary(text: string): string {
 }
 
 /**
- * Publication sociale (format static) → post Google : texte sans hashtags ni
- * « lien dans ma bio », première diapositive comme visuel 4:3, bouton d'action.
+ * Publication sociale (tout format : la première diapositive d'un carrousel
+ * ou d'une story devient le visuel unique) → post Google : texte sans
+ * hashtags ni « lien dans ma bio », visuel 4:3, bouton d'action. Un template
+ * hors GOOGLE_POST_TEMPLATES devient « photo-titre » si la diapositive a une
+ * photo, sinon « affirmation ».
  */
 export function toGooglePost(post: FinalizedPost, links: GooglePostLinks): FinalizedGooglePost {
   const slide = post.content.slides[0] ?? { role: "single" as const, title: post.topic, body: "" };
   const articleHref = post.content.sourceRefs.find((r) => r.kind === "article" && r.href)?.href ?? null;
-  const template: SocialTemplate = GOOGLE_POST_TEMPLATES.includes(post.template) ? post.template : "affirmation";
+  const template: SocialTemplate = GOOGLE_POST_TEMPLATES.includes(post.template)
+    ? post.template
+    : slide.imageUrl
+      ? "photo-titre"
+      : "affirmation";
   const summary = cleanGoogleSummary(captionToGoogleSummary(post.content.caption, SOCIAL_BIO_LINE));
   const content: GooglePostContent = {
     pillar: post.pillar,
@@ -478,17 +551,46 @@ export function isGoogleCta(value: string): value is GooglePostCta {
   return GOOGLE_POST_CTAS.some((c) => c.id === value);
 }
 
+/** Clé de comparaison d'un sujet : sans accents ni ponctuation, minuscules, espaces simples. */
+export function topicKey(topic: string): string {
+  return topic
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Posts d'un même plan dédoublonnés par sujet normalisé (le premier est
+ * gardé ; son créneau reste pourvu, les autres restent libres) : le mock
+ * social peut reprendre un sujet quand le mois est long, et « Compléter le
+ * mois » rappelle le plan avec la même graine.
+ */
+export function dedupeGooglePosts(posts: FinalizedGooglePost[]): FinalizedGooglePost[] {
+  const seen = new Set<string>();
+  return posts.filter((post) => {
+    const key = topicKey(post.topic);
+    if (key !== "" && seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export type GooglePostGeneratorDeps = {
   /** Appel au modèle (injectable pour les tests) */
   complete?: typeof completeStructured;
 };
 
 /**
- * Générateur de posts Google. Mode mock : le générateur social (format
- * static) puis `toGooglePost`. Mode live : la variante « google » des prompts
- * sociaux (un visuel, texte de 300 à 1 200 caractères, sans hashtag ni « lien
- * dans ma bio », bouton d'action laissé au code), même schéma de sortie et
- * même `finalizePlan`, puis `toGooglePost` (qui nettoie encore le texte).
+ * Générateur de posts Google. Mode mock : le générateur social (tous formats :
+ * carrousels et stories sont ramenés à leur première diapositive) puis
+ * `toGooglePost` et `dedupeGooglePosts`. Mode live : la variante « google »
+ * des prompts sociaux (un visuel, texte de 300 à 1 200 caractères, sans
+ * hashtag ni « lien dans ma bio », bouton d'action laissé au code), même
+ * schéma de sortie et même `finalizePlan`, puis `toGooglePost` (qui nettoie
+ * encore le texte) — la variante impose déjà le statique, la conversion est
+ * alors sans effet.
  */
 export function createGooglePostGenerator(
   env: NodeJS.ProcessEnv = process.env,
@@ -500,7 +602,7 @@ export function createGooglePostGenerator(
       mode: social.mode,
       planMonth: async (brief, input, links) => {
         const posts = await social.planMonth(brief, { ...input, slots: input.slots, month: input.month });
-        return posts.filter((p) => p.format === "static").map((p) => toGooglePost(p, links));
+        return dedupeGooglePosts(posts.map((p) => toGooglePost(p, links)));
       },
       generateRequest: async (brief, input, links) => {
         const post = await social.generateRequest(brief, { ...input, format: "static" });
@@ -526,7 +628,7 @@ export function createGooglePostGenerator(
         complete,
       );
       const posts = finalizePlan(plan, brief, { kind: "month", ...input, generator: "anthropic" });
-      return posts.filter((p) => p.format === "static").map((p) => toGooglePost(p, links));
+      return dedupeGooglePosts(posts.map((p) => toGooglePost(p, links)));
     },
     generateRequest: async (rawBrief, input, links) => {
       const brief = sanitizeSocialBrief(rawBrief);
