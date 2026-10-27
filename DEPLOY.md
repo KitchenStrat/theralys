@@ -107,7 +107,9 @@ En plus, sur **harmony-admin** :
 | `ANTHROPIC_MODEL` | `claude-opus-5` (défaut ; repli automatique sur `claude-opus-4-8` si une requête est déclinée par les garde-fous) |
 | `ANTHROPIC_EFFORT` | Profondeur de réflexion du modèle : `low` / `medium` / `high` (défaut) / `xhigh` / `max` — plus c'est haut, plus c'est lent et coûteux |
 | `CRON_SECRET` | votre second secret |
-| `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer |
+| `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer (liens des e-mails et de l'impersonation) |
+| `RESEND_API_KEY` | clé [resend.com](https://resend.com) — **nécessaire** pour les e-mails envoyés par les jobs (« Vos contenus de la semaine » chaque lundi, « Préparez votre mois » le 25) et les invitations client ; sans clé, rien ne part (mode mock journalisé) |
+| `MAIL_FROM` | expéditeur, ex. `Harmony <bonjour@harmony-web.fr>` (domaine vérifié chez Resend) |
 
 En plus, sur **harmony-studio** :
 
@@ -162,8 +164,16 @@ chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 `apps/admin/vercel.json` déclare le cron sur `/api/jobs/tick`
 (calendrier éditorial, rédaction J-7, publication auto, syncs Google : stats,
 avis, puis fiche Google du studio — audit mensuel, collecte des tâches d'avis
-DataForSEO, relevés de visibilité tous les 14 jours).
+DataForSEO, relevés de visibilité tous les 14 jours — et les e-mails aux
+praticiens : « Vos contenus de la semaine » chaque lundi, « Préparez votre
+mois » le 25, jours civils Europe/Paris).
 Vercel envoie automatiquement `Authorization: Bearer <CRON_SECRET>`.
+
+Les e-mails exigent `RESEND_API_KEY` + `MAIL_FROM` sur **harmony-admin** et la
+migration `0004_social_followup` (table `notification_log`, qui garantit qu'un
+cron relancé n'envoie pas deux fois : une ligne par site, type et période).
+Sans clé Resend, les ticks tournent en mock : les lignes `notification_log`
+sont écrites avec `sent = false` et rien ne part.
 
 Cadence : **quotidienne à 6h UTC** (compatible plan Hobby — les articles étant
 rédigés 7 jours à l'avance, c'est suffisant). Une fois en Pro, vous pouvez
@@ -183,7 +193,7 @@ répondre `{"ok":true,…}`.
 |---|---|---|
 | Images fal.ai | `FAL_API_KEY` ([fal.ai/dashboard](https://fal.ai/dashboard)) | admin + studio |
 | Photos téléversées (éditeur) | `BLOB_READ_WRITE_TOKEN` — projet **harmony-studio** → onglet Storage → Create Database → **Blob** (la variable est créée automatiquement) | studio |
-| E-mails d'invitation client | `RESEND_API_KEY` ([resend.com](https://resend.com), gratuit jusqu'à 100 e-mails/jour) + `MAIL_FROM` (ex. `Harmony <bonjour@harmony-web.fr>`, domaine à vérifier chez Resend). Sans clé : le lien d'invitation s'affiche dans l'admin, à envoyer soi-même. | admin |
+| E-mails (invitations client, contenus de la semaine, rappel mensuel) | `RESEND_API_KEY` ([resend.com](https://resend.com), gratuit jusqu'à 100 e-mails/jour) + `MAIL_FROM` (ex. `Harmony <bonjour@harmony-web.fr>`, domaine à vérifier chez Resend) — déjà listées à l'étape 3, à ne pas oublier. Sans clé : le lien d'invitation s'affiche dans l'admin, à envoyer soi-même, et les e-mails des jobs ne partent pas. | admin |
 | Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
 | Google (GSC + fiche) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` | studio + admin |
 | Avis Google réels (Places API New) | `GOOGLE_PLACES_API_KEY` (Google Cloud, « Places API (New) » activée) | studio + admin |
@@ -231,13 +241,22 @@ Paramétrage est en cours d'activation ». Appliquez-les alors sans attendre.
 
    ```sql
    select id, created_at from drizzle.__drizzle_migrations order by id;
-   -- 3 lignes : 1784128836899 (0000_soft_scrambler), 1792775462436 (0001_social_posts),
-   --            1792937442640 (0002_social_settings)
+   -- 5 lignes : 1784128836899 (0000_soft_scrambler), 1792775462436 (0001_social_posts),
+   --            1792937442640 (0002_social_settings), 1793027017675 (0003_google_profile),
+   --            1793105824269 (0004_social_followup)
    select count(*) from social_posts;
    -- 0 juste après la migration : la table existe, les contenus arrivent avec les praticiens
    select count(*) from social_settings;
    -- 0 aussi : une ligne apparaît quand un praticien enregistre son « Paramétrage »
+   select count(*) from notification_log;
+   -- 0 : une ligne par e-mail des jobs (contenus de la semaine, rappel mensuel) ensuite
    ```
+
+   La migration `0004_social_followup` ajoute `analytics_events.source`
+   (provenance des visites : Instagram, Facebook, Google…, affichée sur
+   l'accueil du studio) et la table `notification_log`. Sans elle, l'ingestion
+   du tracking et les ticks d'e-mail échouent (erreur journalisée, les autres
+   ticks continuent) : appliquez-la avant de déployer.
 
    Une ligne par entrée du journal (`created_at` = champ `when` de
    `packages/db/drizzle/meta/_journal.json`). Fusionnez/déployez ensuite, puis
@@ -248,8 +267,8 @@ Paramétrage est en cours d'activation ». Appliquez-les alors sans attendre.
 ont été poussées à la main) : rien de particulier à faire. La migration `0000`
 est rejouable — chaque instruction est gardée par `IF NOT EXISTS` ou
 `DO $$ … EXCEPTION WHEN duplicate_object` — donc `pnpm db:migrate` passe sur les
-objets existants sans les toucher, applique ce qui manque (`0001`, `0002`) et
-inscrit les trois lignes du journal. Relancer `pnpm db:migrate` est toujours sans effet
+objets existants sans les toucher, applique ce qui manque (`0001` à `0004`) et
+inscrit les cinq lignes du journal. Relancer `pnpm db:migrate` est toujours sans effet
 (no-op). Ne lancez jamais `drizzle-kit push` contre la base de production : elle
 a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQL
 (gardes conservées) → commit → `pnpm db:migrate`.
@@ -265,4 +284,5 @@ a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQ
 | `pnpm db:seed` s'arrête sur « SEED_…_PASSWORD manquante / égale à un mot de passe par défaut » | Base distante : passer `SEED_ADMIN_PASSWORD` et `SEED_CLIENT_PASSWORD` sur la ligne de commande comme à l'étape 2.3 (rien n'a été écrit, relancez la commande complète) |
 | Page Réseaux sociaux « Cette section est en cours d'activation » | Migration `0001_social_posts` non appliquée sur Neon → section « Mettre à jour le schéma en production » |
 | Paramétrage des réseaux sociaux « L'option Paramétrage est en cours d'activation » | Migration `0002_social_settings` non appliquée sur Neon → même section |
+| Aucun e-mail « Vos contenus de la semaine » le lundi | `RESEND_API_KEY` / `MAIL_FROM` absentes sur **harmony-admin** (lignes `notification_log` avec `sent = false`), ou migration `0004_social_followup` non appliquée (tick en erreur dans le log du cron) |
 | Sites clients 404 sur leur domaine | Domaine non ajouté au projet **harmony-sites** |

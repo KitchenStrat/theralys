@@ -25,7 +25,7 @@ packages/
               articles avec « voix » du client, images (fal.ai FLUX.1 + mock),
               garde-fous « marketing éthique »
   jobs/       Moteur éditorial + ticks planifiés (rédaction J-7, publication
-              auto, sync Search Console) + seed
+              auto, syncs Google, e-mails hebdomadaire et mensuel) + seed
   analytics/  Tracking maison (consentement CNIL, agrégation des stats)
   providers/  Facturation (Stripe Billing), registrar (OVH), hébergement
               (Vercel Domains) — chacun avec mock par défaut sans clé
@@ -65,12 +65,30 @@ compte déjà seedé garde un mot de passe par défaut, le seed exige
 `.env` est ignoré), refuse les valeurs par défaut et remplace celles encore en
 place (`packages/jobs/src/seed-guard.ts`).
 
-Les jobs planifiés (calendrier éditorial, rédaction J-7, publication auto, sync
-Search Console et avis, fiche Google du studio : audit, tâches d'avis DataForSEO,
-relevés de visibilité) s'exécutent avec `pnpm --filter @theralys/jobs tick` — en
-production, un cron appelle ce point d'entrée (état porté par Postgres, ticks
-idempotents, un tick en erreur ne bloque pas les suivants). Test de fumée de la
-fiche Google en mode mock : `pnpm --filter @theralys/jobs exec tsx scripts/google-smoke.mts`.
+Les jobs planifiés s'exécutent avec `pnpm --filter @theralys/jobs tick` — en
+production, un cron quotidien (6 h UTC) appelle ce point d'entrée (état porté
+par Postgres, ticks idempotents, un tick en erreur ne bloque pas les suivants).
+Ticks, dans l'ordre (`packages/jobs/src/ticks.ts`) :
+
+| Tick | Rôle |
+|---|---|
+| `editorial-calendar` | complète le calendrier de sujets du blog (horizon 6 semaines) |
+| `generate-articles` | rédige les articles J-7 (Claude ou mock) + image |
+| `publish-articles` | publie les articles planifiés à l'échéance |
+| `sync-google` | stats Search Console (mock tant que l'OAuth n'est pas branché) |
+| `sync-google-reviews` | avis des fiches reliées (Places API ; mock pour les démos) |
+| `sync-google-profiles` | fiche Google du studio : instantané + audit tous les 30 jours |
+| `collect-google-reviews` | tâches d'avis DataForSEO terminées → avis, audit, analyse IA |
+| `scheduled-google-scans` | relevés de visibilité planifiés (14 jours) |
+| `weekly-content-digests` | lundi (Europe/Paris) : e-mail « Vos contenus de la semaine » (réseaux sociaux + fiche Google, textes à coller et liens profonds) |
+| `month-reminders` | le 25 (Europe/Paris) : e-mail « Préparez votre mois » si le mois suivant n'a aucun contenu sur un canal accessible |
+
+Les deux ticks d'e-mail passent par `packages/providers/src/mail` (Resend avec
+`RESEND_API_KEY` + `MAIL_FROM`, sinon mock) et sont idempotents par
+`notification_log` (site, type, période). Tests de fumée en mode mock :
+`pnpm --filter @theralys/jobs exec tsx scripts/google-smoke.mts` (fiche Google)
+et `pnpm --filter @theralys/jobs exec tsx scripts/notifications-smoke.mts`
+(e-mails générés, idempotence, nettoyage de ses lignes).
 
 ### Brancher la vraie clé Anthropic
 
@@ -156,8 +174,13 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   (fiche, avis complets avec réponses, grille de positions Maps 7×7), repli
   Places API pour la fiche ; audit déterministe, analyse des avis et posts par
   l&apos;IA ; budget vérifié avant chaque appel facturé (≤ 5 $ par site et par mois).
-- **Jobs en production** : cron Vercel horaire → `GET /api/jobs/tick` (admin),
+- **Jobs en production** : cron Vercel quotidien → `GET /api/jobs/tick` (admin),
   protégé par `CRON_SECRET`.
+- **Suivi des réseaux sociaux** : e-mail hebdomadaire des contenus prêts
+  (lundi) et rappel « Préparez votre mois » (le 25) ; provenance des visites
+  (Instagram, Facebook, LinkedIn, Google, accès direct, autres sites) mesurée
+  par le referrer et le lien de bio tracé (`?src=ig`), affichée sur l'accueil
+  du studio.
 
 ### Déploiement (Vercel — décision kickoff Phase 3)
 

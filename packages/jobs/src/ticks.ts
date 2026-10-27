@@ -13,12 +13,18 @@
  *                              tous les 30 jours, tâche d'avis DataForSEO
  * - collectGoogleReviewTasks : tâches d'avis terminées → avis, audit, analyse IA
  * - runScheduledGoogleScans  : relevés de visibilité planifiés (14 jours)
+ * - sendWeeklyContentDigests : lundi (Europe/Paris), e-mail « Vos contenus de
+ *                              la semaine » (réseaux sociaux + fiche Google)
+ * - sendMonthReminders       : le 25 (Europe/Paris), e-mail « Préparez votre
+ *                              mois » si le mois suivant est vide
  *
  * `runAllTicks` enchaîne les ticks avec un try/catch par tick : un tick en
  * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants. Les
- * ticks de la fiche Google (appels fournisseur longs) reçoivent une échéance
- * (TICK_DEADLINE_MS après `now`) et n'entament plus d'élément au-delà, pour
- * rester sous la durée maximale de la route cron (800 s).
+ * ticks de la fiche Google (appels fournisseur longs) et les notifications
+ * reçoivent une échéance (TICK_DEADLINE_MS après `now`) et n'entament plus
+ * d'élément au-delà, pour rester sous la durée maximale de la route cron
+ * (800 s). Les notifications sont idempotentes par `notification_log`
+ * (site, kind, période) : un cron relancé n'envoie pas deux fois.
  */
 
 import { and, eq, inArray, isNotNull, lte, ne } from "drizzle-orm";
@@ -59,6 +65,7 @@ import {
   runScheduledGoogleScans,
   syncGoogleProfiles,
 } from "./google-profile";
+import { sendMonthReminders, sendWeeklyContentDigests } from "./notifications";
 
 const HORIZON_WEEKS = 6;
 /** L'IA rédige chaque article 7 jours avant sa date de publication. */
@@ -426,12 +433,15 @@ const ALL_TICKS: { task: string; run: (now: Date, opts: TickOptions) => Promise<
   { task: "sync-google-profiles", run: syncGoogleProfiles },
   { task: "collect-google-reviews", run: collectGoogleReviewTasks },
   { task: "scheduled-google-scans", run: runScheduledGoogleScans },
+  { task: "weekly-content-digests", run: sendWeeklyContentDigests },
+  { task: "month-reminders", run: sendMonthReminders },
 ];
 
 /**
  * Tous les ticks, dans l'ordre ; un tick en erreur est journalisé et ne
  * bloque pas les suivants. L'échéance commune (`now` + TICK_DEADLINE_MS) est
- * transmise à chaque tick ; seuls ceux de la fiche Google la lisent.
+ * transmise à chaque tick ; seuls ceux de la fiche Google et des
+ * notifications la lisent.
  */
 export async function runAllTicks(now = new Date()): Promise<TickReport[]> {
   const reports: TickReport[] = [];
