@@ -1,22 +1,34 @@
-import { sourceFromReferrer, type AnalyticsSource } from "@theralys/shared";
+import { SOCIAL_SOURCE_PARAMS, sourceFromReferrer, type AnalyticsSource } from "@theralys/shared";
 
 /**
- * Provenance d'une page vue à l'ingestion (`/api/track`) :
- * - pages suivantes de la session (ni `referrer` ni `src` dans le payload) et
- *   clics RDV → null (non renseigné) ;
+ * Provenance d'un événement à l'ingestion (`/api/track`).
+ *
+ * Page vue :
+ * - pages suivantes de la session (ni `referrer` ni `src` dans le payload)
+ *   → null (non renseigné) ;
  * - referrer sur l'un des hôtes du site lui-même (navigation interne, retour
  *   depuis une page du site) → null, jamais « autres sites » ;
- * - sinon `sourceFromReferrer` : le `src` du lien de bio l'emporte, puis
- *   l'hôte du referrer, et un referrer vide vaut accès direct.
+ * - sinon `sourceFromReferrer` : le `src` (lien de bio, annonce Google)
+ *   l'emporte, puis l'hôte du referrer, et un referrer vide vaut accès direct.
+ *
+ * Clics (RDV, appel) : le `src` de session mémorisé par le navigateur s'il
+ * correspond à une provenance connue (`SOCIAL_SOURCE_PARAMS`), sinon null —
+ * jamais « accès direct », le referrer n'étant pas significatif pour un clic.
  */
 export function resolveTrackSource(
   payload: { type: "pageview" | "rdv_click" | "call_click"; referrer?: string | undefined; src?: string | undefined },
   ownHosts: readonly string[],
 ): AnalyticsSource | null {
-  if (payload.type !== "pageview") return null;
+  if (payload.type !== "pageview") return clickSource(payload.src);
   if (payload.referrer === undefined && payload.src === undefined) return null;
   if (!payload.src && isOwnHost(payload.referrer, ownHosts)) return null;
   return sourceFromReferrer(payload.referrer, payload.src);
+}
+
+/** Provenance d'un clic d'après le `src` de session : connue ou null, jamais « direct ». */
+export function clickSource(src: string | undefined): AnalyticsSource | null {
+  const key = src?.trim().toLowerCase();
+  return key ? (SOCIAL_SOURCE_PARAMS[key] ?? null) : null;
 }
 
 /** Le referrer pointe-t-il sur le site lui-même ? (comparaison d'hôtes, sans port, insensible à la casse) */

@@ -2,6 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { conversionKindOf } from "@/lib/conversions";
+import { clickedTarget, landingSource, rememberSessionSource, sendClickEvent } from "@/lib/track-client";
 
 /** Clé sessionStorage : la provenance (referrer, `src`) n'est envoyée qu'une fois par session. */
 const REFERRER_SENT_KEY = "hy_ref_sent";
@@ -12,10 +14,17 @@ const REFERRER_SENT_KEY = "hy_ref_sent";
  * sans consentement l'événement est anonyme (pas de traceur).
  *
  * Provenance : sur la première page vue de la session seulement, le
- * `document.referrer` et le paramètre `src` du lien de bio (`?src=ig`) sont
- * joints ; le serveur en déduit la source (Instagram, Google, accès direct…).
- * Sans sessionStorage (navigation privée stricte), chaque page vue est
- * traitée comme une première page : au pire une provenance recomptée.
+ * `document.referrer` et le `src` sont joints — paramètre du lien de bio
+ * (`?src=ig`) ou, sans `src` explicite, `ads` quand l'URL porte la signature
+ * d'une annonce Google (gclid…) ; le serveur en déduit la source (Instagram,
+ * Google, Google Ads, accès direct…). Le `src` envoyé est mémorisé
+ * (sessionStorage `hy_src`) pour rattacher à la même provenance les clics RDV
+ * et les appels de la session. Sans sessionStorage (navigation privée
+ * stricte), chaque page vue est traitée comme une première page : au pire une
+ * provenance recomptée, et des clics sans provenance.
+ *
+ * Appels : tout clic sur un lien `tel:` (en-tête, sections, pied de page) est
+ * compté par délégation globale (`call_click`, sendBeacon).
  */
 export function Tracker({ siteId }: { siteId: string }) {
   const pathname = usePathname();
@@ -24,8 +33,11 @@ export function Tracker({ siteId }: { siteId: string }) {
     const payload: Record<string, string> = { siteId, type: "pageview", path: pathname };
     if (firstPageOfSession()) {
       payload.referrer = document.referrer.slice(0, 500);
-      const src = new URLSearchParams(window.location.search).get("src");
-      if (src) payload.src = src.slice(0, 20);
+      const src = landingSource(window.location.search);
+      if (src) {
+        payload.src = src;
+        rememberSessionSource(src);
+      }
     }
     void fetch("/api/track", {
       method: "POST",
@@ -34,6 +46,15 @@ export function Tracker({ siteId }: { siteId: string }) {
       keepalive: true,
     });
   }, [siteId, pathname]);
+
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (conversionKindOf(clickedTarget(event.target)) === "call") sendClickEvent(siteId, "call_click");
+    };
+    // Phase de capture : le clic est vu même si un gestionnaire interne l'arrête
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [siteId]);
 
   return null;
 }

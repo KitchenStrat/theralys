@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ConsentBanner } from "@/components/consent-banner";
+import { ConversionEvents } from "@/components/conversion-events";
 import { EditorBridge } from "@/components/editor-bridge";
 import { ScrollReveal } from "@/components/scroll-reveal";
 import { SiteFooter } from "@/components/site-footer";
@@ -115,6 +116,8 @@ export default async function SiteLayout({ children, params }: Props) {
           {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
           <Tracker siteId={site.id} />
           <TrackingScripts tracking={site.theme.tracking ?? {}} />
+          {/* Conversions Google Ads (clic RDV, appel, e-mail) : après consentement, comme les traceurs */}
+          <ConversionEvents tracking={site.theme.tracking ?? {}} />
         </>
       )}
       {/* Pont avec l'éditeur : seulement dans l'aperçu authentifié (jeton signé) */}

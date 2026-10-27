@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { summarizePeriod, summarizeSources, type EventLike, type SourceEventLike } from "./aggregate";
+import {
+  summarizeAdsResults,
+  summarizePeriod,
+  summarizeSources,
+  type EventLike,
+  type SourceEventLike,
+} from "./aggregate";
 import { parseConsent } from "./consent";
 import { trackEventSchema } from "./events";
 
@@ -28,6 +34,20 @@ describe("summarizePeriod", () => {
       ev("rdv_click", null, "2026-07-09T11:00:00Z"),
     ];
     expect(summarizePeriod(events, from, to).rdvClicks).toBe(2);
+  });
+
+  it("les clics sur le téléphone (call_click) ne comptent ni en clics RDV ni en visiteurs", () => {
+    const events = [
+      ev("call_click", "v1", "2026-07-09T10:00:00Z"),
+      ev("call_click", null, "2026-07-09T11:00:00Z"),
+      ev("rdv_click", "v1", "2026-07-09T12:00:00Z"),
+      ev("call_click", "v2", "2026-07-02T10:00:00Z"), // période précédente
+    ];
+    const stats = summarizePeriod(events, from, to);
+    expect(stats.rdvClicks).toBe(1);
+    expect(stats.rdvClicksChangePct).toBeNull();
+    expect(stats.visitors).toBe(0);
+    expect(stats.daily.reduce((sum, d) => sum + d.rdvClicks, 0)).toBe(1);
   });
 
   it("calcule la variation vs période précédente", () => {
@@ -115,6 +135,68 @@ describe("summarizeSources", () => {
   it("vide sans aucune provenance", () => {
     expect(summarizeSources([])).toEqual({ total: 0, unit: "views", rows: [] });
   });
+
+  it("ignore les clics sur le téléphone (call_click)", () => {
+    expect(summarizeSources([src("google_ads", "v1", "call_click"), src("google_ads", "v2")])).toEqual({
+      total: 1,
+      unit: "visitors",
+      rows: [{ source: "google_ads", count: 1, share: 100 }],
+    });
+  });
+});
+
+describe("summarizeAdsResults", () => {
+  const ev = (type: SourceEventLike["type"], visitorId: string | null, source: string | null = "google_ads"): SourceEventLike => ({
+    type,
+    visitorId,
+    source,
+  });
+
+  it("ne compte que la provenance google_ads : visiteurs distincts, clics RDV et appels par événement", () => {
+    const results = summarizeAdsResults([
+      ev("pageview", "v1"),
+      ev("pageview", "v1"), // même visiteur, deuxième page
+      ev("pageview", "v2"),
+      ev("rdv_click", "v1"),
+      ev("rdv_click", "v1"), // deux clics du même visiteur : deux clics
+      ev("call_click", "v2"),
+      ev("call_click", null), // clic sans identifiant : compté
+      ev("pageview", "v3", "google"), // recherche naturelle : exclue
+      ev("rdv_click", "v3", "google"),
+      ev("call_click", "v4", "instagram"),
+      ev("pageview", "v5", null),
+      ev("rdv_click", "v6", null),
+    ]);
+    expect(results).toEqual({ visits: 2, rdvClicks: 2, callClicks: 2, unit: "visitors" });
+  });
+
+  it("sans identifiant visiteur, compte les pages vues", () => {
+    expect(summarizeAdsResults([ev("pageview", null), ev("pageview", null), ev("rdv_click", null)])).toEqual({
+      visits: 2,
+      rdvClicks: 1,
+      callClicks: 0,
+      unit: "views",
+    });
+  });
+
+  it("mélange : les visiteurs identifiés comptent une fois, les vues anonymes s'ajoutent", () => {
+    expect(summarizeAdsResults([ev("pageview", "v1"), ev("pageview", "v1"), ev("pageview", null)])).toEqual({
+      visits: 2,
+      rdvClicks: 0,
+      callClicks: 0,
+      unit: "visitors",
+    });
+  });
+
+  it("vide sans visite venue des annonces", () => {
+    expect(summarizeAdsResults([])).toEqual({ visits: 0, rdvClicks: 0, callClicks: 0, unit: "views" });
+    expect(summarizeAdsResults([ev("pageview", "v1", "direct"), ev("rdv_click", "v1", "direct")])).toEqual({
+      visits: 0,
+      rdvClicks: 0,
+      callClicks: 0,
+      unit: "views",
+    });
+  });
 });
 
 describe("consentement", () => {
@@ -148,6 +230,15 @@ describe("validation des événements entrants", () => {
     expect(
       trackEventSchema.parse({ siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "rdv_click" }).referrer,
     ).toBeUndefined();
+    // Clic sur le téléphone, avec le src de session (annonce Google)
+    const call = trackEventSchema.parse({
+      siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f",
+      type: "call_click",
+      path: "/",
+      src: "ads",
+    });
+    expect(call.type).toBe("call_click");
+    expect(call.src).toBe("ads");
     expect(() =>
       trackEventSchema.parse({ siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "pageview", referrer: "x".repeat(501) }),
     ).toThrow();

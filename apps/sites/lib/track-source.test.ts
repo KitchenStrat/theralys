@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOwnHost, ownHostsFor, resolveTrackSource } from "./track-source";
+import { clickSource, isOwnHost, ownHostsFor, resolveTrackSource } from "./track-source";
 
 const OWN = ["demo.harmony-web.fr", "claire-sophrologie.fr"];
 
@@ -21,9 +21,33 @@ describe("resolveTrackSource", () => {
     expect(isOwnHost("android-app://com.instagram.android", OWN)).toBe(false);
   });
 
-  it("pages suivantes (sans referrer ni src) et clics RDV : non renseigné", () => {
+  it("annonce Google : src=ads envoyé par le site → google_ads, même avec un referrer Google", () => {
+    expect(resolveTrackSource({ type: "pageview", referrer: "https://www.google.fr/", src: "ads" }, OWN)).toBe("google_ads");
+    expect(resolveTrackSource({ type: "pageview", referrer: "", src: "ads" }, OWN)).toBe("google_ads");
+  });
+
+  it("pages suivantes (sans referrer ni src) : non renseigné", () => {
     expect(resolveTrackSource({ type: "pageview" }, OWN)).toBeNull();
-    expect(resolveTrackSource({ type: "rdv_click", referrer: "https://l.instagram.com/", src: "ig" }, OWN)).toBeNull();
+  });
+
+  it("clics RDV et appels : le src de session s'il est connu, sinon null — jamais accès direct", () => {
+    expect(resolveTrackSource({ type: "rdv_click", src: "ads" }, OWN)).toBe("google_ads");
+    expect(resolveTrackSource({ type: "call_click", src: "ads" }, OWN)).toBe("google_ads");
+    expect(resolveTrackSource({ type: "rdv_click", src: "ig" }, OWN)).toBe("instagram");
+    expect(resolveTrackSource({ type: "call_click", src: "GBP" }, OWN)).toBe("google");
+    // Le referrer ne compte pas pour un clic, même vide ou externe
+    expect(resolveTrackSource({ type: "rdv_click", referrer: "" }, OWN)).toBeNull();
+    expect(resolveTrackSource({ type: "call_click", referrer: "https://l.instagram.com/" }, OWN)).toBeNull();
+    expect(resolveTrackSource({ type: "rdv_click" }, OWN)).toBeNull();
+    expect(resolveTrackSource({ type: "rdv_click", src: "newsletter" }, OWN)).toBeNull();
+    expect(resolveTrackSource({ type: "call_click", src: "" }, OWN)).toBeNull();
+  });
+
+  it("clickSource : provenance connue ou null", () => {
+    expect(clickSource("fb")).toBe("facebook");
+    expect(clickSource(" li ")).toBe("linkedin");
+    expect(clickSource("inconnu")).toBeNull();
+    expect(clickSource(undefined)).toBeNull();
   });
 
   it("referrer sur le site lui-même : navigation interne → null, pas « autres sites »", () => {

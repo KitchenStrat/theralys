@@ -73,7 +73,11 @@ export function configuredTrackers(tracking: SiteTracking | null | undefined): {
     list.push({ name: "Google Tag Manager", vendor: "Google Ireland Ltd", purpose: "gestion des balises" });
   }
   if (tracking?.googleAdsId) {
-    list.push({ name: "Google Ads", vendor: "Google Ireland Ltd", purpose: "mesure des conversions publicitaires" });
+    list.push({
+      name: "Google Ads",
+      vendor: "Google Ireland Ltd",
+      purpose: "mesure des conversions publicitaires (clics sur la prise de rendez-vous, le téléphone et l'e-mail)",
+    });
   }
   if (tracking?.metaPixelId) {
     list.push({ name: "Meta Pixel", vendor: "Meta Platforms Ireland Ltd", purpose: "mesure des conversions publicitaires" });
@@ -190,7 +194,7 @@ function confidentialite(input: LegalPageInput): string {
     `Le responsable du traitement des données collectées sur ce site est ${fullName}, ${clean(p.profession).toLowerCase()}${clean(input.address) ? `, ${clean(input.address)}` : ""}.`,
     `## Données collectées et finalités`,
     [
-      `- **Mesure d'audience intégrée au site :** pages consultées et clics sur le bouton de prise de rendez-vous, sans donnée nominative. Un identifiant de visite anonyme n'est enregistré qu'après votre acceptation dans le bandeau cookies.`,
+      `- **Mesure d'audience intégrée au site :** pages consultées, clics sur le bouton de prise de rendez-vous et sur le numéro de téléphone, sans donnée nominative. Un identifiant de visite anonyme n'est enregistré qu'après votre acceptation dans le bandeau cookies.`,
       ...(bookingHost
         ? [
             `- **Prise de rendez-vous :** les informations que vous saisissez pour réserver sont traitées par le service ${bookingHost}, selon sa propre politique de confidentialité.`,
@@ -224,7 +228,7 @@ function cookies(input: LegalPageInput): string {
     `## Cookies utilisés sur ce site`,
     [
       `- **${CONSENT_COOKIE_NAME}** — mémorise votre choix dans le bandeau cookies (accepté ou refusé) pendant ${CONSENT_MAX_AGE_MONTHS} mois.`,
-      `- **Mesure d'audience intégrée** — identifiant de visite anonyme, enregistré uniquement après acceptation, pour compter les visites et les clics sur « Prendre rendez-vous ». Aucune donnée nominative.`,
+      `- **Mesure d'audience intégrée** — identifiant de visite anonyme, enregistré uniquement après acceptation, pour compter les visites, les clics sur « Prendre rendez-vous » et sur le numéro de téléphone. Aucune donnée nominative.`,
       ...trackers.map((t) => `- **${t.name}** (${t.vendor}) — ${t.purpose}. Dépose ses propres cookies, décrits dans la politique de confidentialité de son éditeur.`),
     ].join("\n"),
     `## Votre consentement`,

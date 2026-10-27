@@ -12,7 +12,13 @@ import {
   sites,
   type Site,
 } from "@theralys/db";
-import { summarizePeriod, summarizeSources, type PeriodStats, type SourceSummary } from "@theralys/analytics";
+import {
+  summarizePeriod,
+  summarizeSources,
+  type AnalyticsEventType,
+  type PeriodStats,
+  type SourceSummary,
+} from "@theralys/analytics";
 
 export type Period = "7j" | "30j" | "6m";
 
@@ -53,7 +59,8 @@ export async function getDashboardStats(siteId: string, period: Period): Promise
   const { from, to } = periodRange(period);
   const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
   const where = and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom));
-  let events: { type: "pageview" | "rdv_click"; visitorId: string | null; occurredAt: Date; source: string | null }[];
+  // `call_click` (appels) est porté par les événements mais n'entre pas dans les clics RDV (summarizePeriod)
+  let events: { type: AnalyticsEventType; visitorId: string | null; occurredAt: Date; source: string | null }[];
   try {
     events = await db.query.analyticsEvents.findMany({
       where,

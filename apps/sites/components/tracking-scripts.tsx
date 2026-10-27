@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { SiteTracking } from "@theralys/shared";
+import { ensureGtag, type TrackingWindow as GtagWindow } from "@/lib/gtag";
+import { useTrackingAllowed } from "./tracking-consent";
 
 type FbqFn = {
   (...args: unknown[]): void;
@@ -12,17 +14,10 @@ type FbqFn = {
   push: (...args: unknown[]) => void;
 };
 
-type TrackingWindow = Window & {
-  dataLayer?: unknown[];
-  gtag?: (...args: unknown[]) => void;
+type TrackingWindow = GtagWindow & {
   fbq?: FbqFn;
   _fbq?: FbqFn;
 };
-
-function readConsent(): string | null {
-  const match = document.cookie.match(/(?:^|; )tl_consent=([^;]*)/);
-  return match?.[1] ?? null;
-}
 
 /**
  * Charge les traceurs configurés dans le studio (Paramètres → Tracking) :
@@ -33,16 +28,7 @@ function readConsent(): string | null {
  * qu'une fois, même si le consentement arrive après coup.
  */
 export function TrackingScripts({ tracking }: { tracking: SiteTracking }) {
-  const [allowed, setAllowed] = useState(false);
-  const bannerOff = tracking.cookieBanner === false;
-
-  useEffect(() => {
-    const check = () => setAllowed(bannerOff || readConsent() === "granted");
-    check();
-    // Le bandeau émet cet événement quand le visiteur fait son choix
-    window.addEventListener("tl:consent", check);
-    return () => window.removeEventListener("tl:consent", check);
-  }, [bannerOff]);
+  const allowed = useTrackingAllowed(tracking.cookieBanner === false);
 
   useEffect(() => {
     if (!allowed) return;
@@ -52,13 +38,10 @@ export function TrackingScripts({ tracking }: { tracking: SiteTracking }) {
     const gtmId = tracking.googleTagManagerId;
     const pixelId = tracking.metaPixelId;
 
-    // Google Analytics + Google Ads partagent la balise gtag
+    // Google Analytics + Google Ads partagent la balise gtag (amorce officielle :
+    // les commandes attendent dans dataLayer sous forme d'objet `arguments`)
     if ((gaId || adsId) && !document.getElementById("tl-gtag")) {
-      w.dataLayer = w.dataLayer ?? [];
-      const gtag = (...args: unknown[]) => {
-        w.dataLayer?.push(args);
-      };
-      w.gtag = gtag;
+      const gtag = ensureGtag(w);
       gtag("js", new Date());
       if (gaId) gtag("config", gaId);
       if (adsId) gtag("config", adsId);

@@ -1,14 +1,16 @@
 /**
  * Agrégation des événements en statistiques (visiteurs uniques, clics RDV,
  * variation vs période précédente, série journalière, provenance des
- * visites). Fonctions pures, utilisées par le dashboard client (Phase 2) et
- * testées dès la Phase 1.
+ * visites, résultats Google Ads). Fonctions pures, utilisées par le dashboard
+ * client (Phase 2) et testées dès la Phase 1. Les clics sur le téléphone
+ * (`call_click`) n'entrent jamais dans les clics RDV.
  */
 
 import { ANALYTICS_SOURCES, type AnalyticsSource } from "@theralys/shared";
+import type { AnalyticsEventType } from "./events";
 
 export type EventLike = {
-  type: "pageview" | "rdv_click";
+  type: AnalyticsEventType;
   visitorId: string | null;
   occurredAt: Date;
 };
@@ -62,7 +64,7 @@ export function summarizePeriod(
 // ─── Provenance des visites ──────────────────────────────────────────────────
 
 export type SourceEventLike = {
-  type: "pageview" | "rdv_click";
+  type: AnalyticsEventType;
   visitorId: string | null;
   /** AnalyticsSource enregistrée à l'ingestion ; null = non renseignée (navigation interne, événement antérieur à la mesure) */
   source: string | null;
@@ -122,6 +124,45 @@ export function summarizeSources(events: SourceEventLike[]): SourceSummary {
   for (const row of rows) row.share = total > 0 ? Math.round((row.count / total) * 100) : 0;
   rows.sort((a, b) => b.count - a.count || SOURCE_ORDER.get(a.source)! - SOURCE_ORDER.get(b.source)!);
   return { total, unit: hasVisitorId ? "visitors" : "views", rows };
+}
+
+// ─── Résultats Google Ads ────────────────────────────────────────────────────
+
+export type AdsResults = {
+  /** Visites venues des annonces : visiteurs distincts (ou pages vues, voir `unit`) */
+  visits: number;
+  /** Clics « Prendre rendez-vous » venus des annonces (un par clic) */
+  rdvClicks: number;
+  /** Clics sur le numéro de téléphone venus des annonces (un par clic) */
+  callClicks: number;
+  /** `visitors` dès qu'un identifiant visiteur existe, sinon `views` */
+  unit: "visitors" | "views";
+};
+
+/**
+ * Résultats des annonces Google (studio → Google Ads → Paramétrage & suivi) :
+ * seuls les événements de provenance `google_ads` comptent. Un visiteur
+ * identifié compte une visite quel que soit son nombre de pages vues ; chaque
+ * page vue sans identifiant compte pour une. Les clics sont comptés par
+ * événement, même sans identifiant.
+ */
+export function summarizeAdsResults(events: SourceEventLike[]): AdsResults {
+  const ids = new Set<string>();
+  let views = 0;
+  let rdvClicks = 0;
+  let callClicks = 0;
+  for (const e of events) {
+    if (e.source !== "google_ads") continue;
+    if (e.type === "pageview") {
+      if (e.visitorId) ids.add(e.visitorId);
+      else views++;
+    } else if (e.type === "rdv_click") {
+      rdvClicks++;
+    } else if (e.type === "call_click") {
+      callClicks++;
+    }
+  }
+  return { visits: ids.size + views, rdvClicks, callClicks, unit: ids.size > 0 ? "visitors" : "views" };
 }
 
 /** Visiteurs uniques = identifiants distincts (consentis) sur la période. */

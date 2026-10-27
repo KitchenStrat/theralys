@@ -1,8 +1,12 @@
 "use client";
 
+import { sendClickEvent } from "@/lib/track-client";
+
 /**
  * Bouton « Prendre Rendez-Vous » : chaque clic est compté (tracking maison,
- * sans identifiant — les clics sont comptés même sans consentement).
+ * sans identifiant — les clics sont comptés même sans consentement), avec la
+ * provenance de la session (lien de bio, annonce Google). `data-track="rdv"`
+ * sert aussi aux conversions Google Ads (ConversionEvents), après consentement.
  */
 export function RdvButton({
   siteId,
@@ -18,23 +22,11 @@ export function RdvButton({
   const href = bookingUrl ?? "#contact";
   const external = Boolean(bookingUrl && !bookingUrl.startsWith("#"));
 
-  function onClick() {
-    const payload = JSON.stringify({
-      siteId,
-      type: "rdv_click",
-      path: window.location.pathname,
-    });
-    try {
-      navigator.sendBeacon("/api/track", new Blob([payload], { type: "application/json" }));
-    } catch {
-      void fetch("/api/track", { method: "POST", body: payload, keepalive: true });
-    }
-  }
-
   return (
     <a
       href={href}
-      onClick={onClick}
+      onClick={() => sendClickEvent(siteId, "rdv_click")}
+      data-track="rdv"
       target={external ? "_blank" : undefined}
       rel={external ? "noopener noreferrer" : undefined}
       className={
