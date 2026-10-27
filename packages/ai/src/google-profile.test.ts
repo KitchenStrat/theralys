@@ -24,7 +24,8 @@ import {
   type ReviewPromptRow,
 } from "./google-profile";
 import { checkEthicalCompliance } from "./guardrails";
-import { socialSystemPrompt } from "./social-prompts";
+import { rotatePillars, socialMonthUserPrompt, socialSystemPrompt } from "./social-prompts";
+import { createSocialGenerator } from "./social";
 import type { SocialPlan } from "./social";
 
 const env = { AI_MOCK: "1" } as NodeJS.ProcessEnv;
@@ -412,5 +413,55 @@ describe("posts Google", () => {
     expect(one.scheduledFor).toBe("2026-11-10");
     expect(one.content.summary).not.toMatch(/bio/i);
     expect(complete).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ligne éditoriale Google (référencement local)", () => {
+  it("rotation Google distincte du social pour le même mois, piliers pratiques en tête", () => {
+    const b = brief({ articles: true });
+    const social = rotatePillars(b, "2026-12", "social");
+    const google = rotatePillars(b, "2026-12", "google");
+    expect(google).not.toEqual(social);
+    expect(google[0]).not.toBe(social[0]);
+    // La liste Google ne contient que des piliers disponibles pour ce site
+    expect(google.every((p) => social.includes(p))).toBe(true);
+  });
+
+  it("le prompt Google porte les règles de référencement local et les mots-clés suivis", () => {
+    const b = brief();
+    const system = socialSystemPrompt(b, { variant: "google" });
+    expect(system).toContain("RÉFÉRENCEMENT LOCAL");
+    expect(system).toContain("Sophrologue à Albi");
+    expect(socialSystemPrompt(b)).not.toContain("RÉFÉRENCEMENT LOCAL");
+    const slots = socialSlotsForMonth({ year: 2026, month: 12, today: NOW, articles: [], postDays: [2] });
+    const user = socialMonthUserPrompt(b, { month: "2026-12", slots, recentTopics: [] }, { variant: "google", keywords: ["sophrologue albi", "<b>x</b>"] });
+    expect(user).toContain("MOTS-CLÉS SUIVIS");
+    expect(user).toContain("« sophrologue albi »");
+    expect(user).not.toContain("<b>");
+    expect(user).toContain("« b x /b »");
+    expect(socialMonthUserPrompt(b, { month: "2026-12", slots, recentTopics: [] })).not.toContain("MOTS-CLÉS SUIVIS");
+  });
+
+  it("mois Google (mock) : première ligne locale, mots-clés repris, aucun hashtag, sujets différents du mois social", async () => {
+    const b = brief({ articles: true });
+    const slots = socialSlotsForMonth({ year: 2026, month: 12, today: NOW, articles: [], postDays: [2] });
+    const google = await createGooglePostGenerator(env).planMonth(
+      b,
+      { month: "2026-12", slots, recentTopics: [], photosById: {}, refsById: {}, keywords: ["sophrologue albi"] },
+      { siteUrl: "https://s.fr", bookingUrl: null },
+    );
+    expect(google.length).toBeGreaterThanOrEqual(4);
+    for (const post of google) {
+      const firstLine = post.content.summary.split("\n")[0] ?? "";
+      expect(firstLine.toLowerCase()).toContain("albi");
+      expect(post.content.summary).not.toMatch(/#\w+/);
+      expect(post.content.summary).not.toMatch(/bio/i);
+      expect(post.content.summary.length).toBeLessThanOrEqual(1500);
+    }
+    expect(google.some((p) => p.content.summary.includes("« sophrologue albi »"))).toBe(true);
+    // Le mois social du même mois ne commence pas par les mêmes sujets
+    const socialSlots = socialSlotsForMonth({ year: 2026, month: 12, today: NOW, articles: [] });
+    const social = await createSocialGenerator(env).planMonth(b, { month: "2026-12", slots: socialSlots, recentTopics: [], photosById: {}, refsById: {} });
+    expect(social[0]?.topic).not.toBe(google[0]?.topic);
   });
 });

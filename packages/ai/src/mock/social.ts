@@ -967,7 +967,10 @@ const STORY_EXCLUDED: readonly SocialPillar[] = ["conseil", "article", "avis"];
 /** Au-delà d'un tour complet des piliers : ceux dont le contenu varie d'un créneau à l'autre. */
 const WRAP_PILLARS: readonly SocialPillar[] = ["specialite", "idee_recue", "projection", "conseil"];
 
-export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthInput): SocialPlan {
+export type MockSocialOptions = { variant?: "social" | "google" };
+
+export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthInput, opts: MockSocialOptions = {}): SocialPlan {
+  const google = opts.variant === "google";
   // Les articles annoncés par un créneau « nouvel_article » ne sont pas repris ailleurs dans le mois
   const announced = input.slots
     .filter((s) => s.kind === "nouvel_article")
@@ -975,7 +978,7 @@ export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthIn
     .filter((t) => t !== "");
   const seed = socialSeed(brief, input.month);
   const ctx = makeCtx(brief, [...input.recentTopics, ...announced], seed);
-  const rotated = rotatePillars(brief, input.month);
+  const rotated = rotatePillars(brief, input.month, google ? "google" : "social");
   const cadence = input.slots.filter((s) => s.kind === "cadence");
   const n = cadence.length;
 
@@ -1000,12 +1003,13 @@ export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthIn
   }
 
   // Formats : carrousels (conseil, article ; sans article, le 1er specialite dès 6 créneaux), 1 story
-  const formats: SocialFormat[] = pillars.map((p) => (CAROUSEL_PILLARS.includes(p) ? "carousel" : "static"));
-  if (n >= 6 && formats.filter((f) => f === "carousel").length < 2) {
+  // Fiche Google : un seul visuel par post, jamais de carrousel ni de story
+  const formats: SocialFormat[] = pillars.map((p) => (!google && CAROUSEL_PILLARS.includes(p) ? "carousel" : "static"));
+  if (!google && n >= 6 && formats.filter((f) => f === "carousel").length < 2) {
     const extra = pillars.findIndex((p, k) => p === "specialite" && formats[k] === "static");
     if (extra >= 0) formats[extra] = "carousel";
   }
-  if (n >= 6) {
+  if (!google && n >= 6) {
     const storyAt = pillars.findIndex((p, k) => k >= 3 && !STORY_EXCLUDED.includes(p) && formats[k] === "static");
     if (storyAt >= 0) formats[storyAt] = "story";
   }

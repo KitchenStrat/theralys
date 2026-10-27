@@ -47,11 +47,13 @@ import {
   completeSocialPlan,
   createSocialGenerator,
   finalizePlan,
+  keepCompliant,
   sanitizeSocialBrief,
   type FinalizedPost,
   type SocialGenerationContext,
   type SocialGenerator,
 } from "./social";
+import { mockSocialMonth } from "./mock/social";
 import {
   instructionsBlock,
   neutralizeTags,
@@ -460,6 +462,8 @@ export type GoogleMonthInput = SocialGenerationContext & {
   month: string;
   /** Créneaux libres (socialSlotsForMonth avec postDays [GOOGLE_POST_DAY]) */
   slots: SocialSlot[];
+  /** Mots-clés suivis dans l'onglet Visibilité (≤ 3) : référencement local des posts */
+  keywords?: string[];
 };
 
 export type GoogleRequestInput = SocialGenerationContext & {
@@ -467,7 +471,39 @@ export type GoogleRequestInput = SocialGenerationContext & {
   accentHex: string | null;
   /** "YYYY-MM-DD" */
   scheduledFor: string;
+  keywords?: string[];
 };
+
+/**
+ * Mock : ligne éditoriale locale d'un post Google — première ligne « Métier à
+ * Ville : … » et, un post sur deux, un mot-clé suivi en toutes lettres (le
+ * mode live applique les mêmes règles par le prompt).
+ */
+export function localizeMockGooglePost(
+  post: FinalizedGooglePost,
+  brief: SocialSiteBrief,
+  keywords: readonly string[] | undefined,
+  index: number,
+): FinalizedGooglePost {
+  const { profession, city } = brief.practitioner;
+  const paragraphs = post.content.summary.split(/\n{2,}/);
+  const first = paragraphs[0] ?? "";
+  const local = `${profession} à ${city}`;
+  const firstLocal = first.toLowerCase().includes(city.toLowerCase())
+    ? first
+    : `${local} : ${first.charAt(0).toLowerCase()}${first.slice(1)}`;
+  const keyword = keywords?.[index % Math.max(1, keywords.length)];
+  const keywordLine =
+    keyword && index % 2 === 0
+      ? `Vous cherchez « ${keyword} » ? Le cabinet vous accueille sur rendez-vous, en toute simplicité.`
+      : null;
+  const rest = paragraphs.slice(1);
+  const summary = [firstLocal, ...rest.slice(0, Math.max(0, rest.length - 1)), ...(keywordLine ? [keywordLine] : []), ...rest.slice(-1)]
+    .filter((p) => p.trim() !== "")
+    .join("\n\n")
+    .slice(0, GOOGLE_POST_SUMMARY_MAX);
+  return { ...post, content: { ...post.content, summary } };
+}
 
 /** Liens disponibles pour le bouton d'action (choisi par le code, jamais par le modèle). */
 export type GooglePostLinks = {
@@ -609,13 +645,16 @@ export function createGooglePostGenerator(
   if (social.mode === "mock") {
     return {
       mode: social.mode,
-      planMonth: async (brief, input, links) => {
-        const posts = await social.planMonth(brief, { ...input, slots: input.slots, month: input.month });
-        return dedupeGooglePosts(posts.map((p) => toGooglePost(p, links)));
+      planMonth: async (rawBrief, input, links) => {
+        const brief = sanitizeSocialBrief(rawBrief);
+        const plan = mockSocialMonth(brief, input, { variant: "google" });
+        const posts = keepCompliant(finalizePlan(plan, brief, { kind: "month", ...input, generator: "mock" }));
+        return dedupeGooglePosts(posts.map((p, i) => localizeMockGooglePost(toGooglePost(p, links), brief, input.keywords, i)));
       },
-      generateRequest: async (brief, input, links) => {
+      generateRequest: async (rawBrief, input, links) => {
+        const brief = sanitizeSocialBrief(rawBrief);
         const post = await social.generateRequest(brief, { ...input, format: "static" });
-        return toGooglePost(post, links);
+        return localizeMockGooglePost(toGooglePost(post, links), brief, input.keywords, 0);
       },
     };
   }
@@ -632,7 +671,7 @@ export function createGooglePostGenerator(
       const plan = await completeSocialPlan(
         options,
         brief,
-        socialMonthUserPrompt(brief, input, { variant: "google" }),
+        socialMonthUserPrompt(brief, input, { variant: "google", keywords: input.keywords }),
         "google",
         complete,
       );
@@ -642,7 +681,13 @@ export function createGooglePostGenerator(
     generateRequest: async (rawBrief, input, links) => {
       const brief = sanitizeSocialBrief(rawBrief);
       const request = { ...input, format: "static" as const };
-      const plan = await completeSocialPlan(options, brief, socialRequestUserPrompt(brief, request), "google", complete);
+      const plan = await completeSocialPlan(
+        options,
+        brief,
+        socialRequestUserPrompt(brief, request, { variant: "google", keywords: input.keywords }),
+        "google",
+        complete,
+      );
       const [post] = finalizePlan(plan, brief, { kind: "request", ...request, generator: "anthropic" });
       return toGooglePost(post!, links);
     },

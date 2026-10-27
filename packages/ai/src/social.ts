@@ -922,7 +922,7 @@ export function finalizePlan(
  * enfreint une règle) est écartée — son créneau reste libre — plutôt que de
  * perdre tout le mois ; erreur seulement s'il ne reste rien.
  */
-function keepCompliant(posts: FinalizedPost[]): FinalizedPost[] {
+export function keepCompliant(posts: FinalizedPost[]): FinalizedPost[] {
   const kept = posts.filter((post) => checkSocialCompliance(post).ok);
   if (kept.length === 0) {
     const { violations } = checkSocialCompliance(posts);

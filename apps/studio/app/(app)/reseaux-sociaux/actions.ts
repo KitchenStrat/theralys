@@ -41,9 +41,19 @@ import {
   isMissingSchemaError,
 } from "@/lib/social/data";
 import { ownedSocialPost } from "@/lib/social/post-access";
+import { recentGoogleTopics } from "@/lib/google/posts";
 import { getSocialSettings } from "@/lib/social/settings";
 
 const PATH = "/reseaux-sociaux";
+
+/** Sujets récents des deux canaux (réseaux sociaux et posts Google) : jamais le même thème le même mois. */
+async function recentTopicsAcrossChannels(siteId: string, now: Date): Promise<string[]> {
+  const [social, google] = await Promise.all([
+    recentSocialTopics(siteId, now),
+    recentGoogleTopics(siteId, now).catch(() => [] as string[]),
+  ]);
+  return [...new Set([...social, ...google])].slice(0, 60);
+}
 const NOT_INCLUDED = "Les contenus réseaux sociaux ne sont pas inclus dans votre formule.";
 
 /** Les démos présentent l'offre complète ; les clients suivent leur formule (Scale). */
@@ -131,7 +141,7 @@ export async function planSocialMonth(
       .filter((id): id is string => typeof id === "string" && id !== "");
     const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
       loadSocialBrief(site.id, { includeArticleIds: articleIds, settings }),
-      recentSocialTopics(site.id, now),
+      recentTopicsAcrossChannels(site.id, now),
     ]);
     const generator = createSocialGenerator();
     const posts = await generator.planMonth(brief, {
@@ -279,7 +289,7 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
 
     const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
       loadSocialBrief(site.id),
-      recentSocialTopics(site.id, now),
+      recentTopicsAcrossChannels(site.id, now),
     ]);
     const post = await generator.generateRequest(brief, {
       topic,

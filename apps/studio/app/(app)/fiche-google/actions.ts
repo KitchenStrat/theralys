@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   getDb,
@@ -54,7 +54,7 @@ import {
 } from "@/lib/google/posts";
 import { getScanUsage } from "@/lib/google/scans";
 import { loadSocialBrief } from "@/lib/social/brief";
-import { isMissingSchemaError, type DbTransaction } from "@/lib/social/data";
+import { isMissingSchemaError, recentSocialTopics, type DbTransaction } from "@/lib/social/data";
 import { connectGooglePlace } from "../actions";
 
 const PATH = "/fiche-google";
@@ -430,6 +430,24 @@ export async function generateReviewReply(input: unknown): Promise<{ error?: str
   }
 }
 
+// ─── Posts Google : contexte de génération ───────────────────────────────────
+
+/** Mots-clés suivis (actifs) du site, par position : référencement local des posts. */
+async function activeKeywordTexts(siteId: string): Promise<string[]> {
+  const rows = await getDb().query.googleKeywords.findMany({
+    where: and(eq(googleKeywords.siteId, siteId), eq(googleKeywords.active, true)),
+    orderBy: [asc(googleKeywords.position), asc(googleKeywords.createdAt)],
+    columns: { keyword: true },
+  });
+  return rows.map((r) => r.keyword).slice(0, GOOGLE_KEYWORDS_MAX);
+}
+
+/** Sujets récents des deux canaux (posts Google et réseaux sociaux) : jamais le même thème le même mois. */
+async function recentTopicsAcrossChannels(siteId: string, now: Date): Promise<string[]> {
+  const [google, social] = await Promise.all([recentGoogleTopics(siteId, now), recentSocialTopics(siteId, now)]);
+  return [...new Set([...google, ...social])].slice(0, 60);
+}
+
 // ─── Posts Google : préparation du mois ──────────────────────────────────────
 
 const planSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
@@ -472,13 +490,14 @@ export async function planGoogleMonth(input: unknown): Promise<{ error?: string;
     if (initial.slots.length === 0) return { error: MONTH_OVER };
     if (initial.freeSlots.length === 0) return { error: MONTH_PREPARED };
 
-    const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
+    const [{ brief, photosById, refsById }, recentTopics, keywords] = await Promise.all([
       loadSocialBrief(site.id),
-      recentGoogleTopics(site.id, now),
+      recentTopicsAcrossChannels(site.id, now),
+      activeKeywordTexts(site.id),
     ]);
     const generator = createGooglePostGenerator();
     const links = { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl };
-    const posts = await generator.planMonth(brief, { month, slots: initial.freeSlots, recentTopics, photosById, refsById }, links);
+    const posts = await generator.planMonth(brief, { month, slots: initial.freeSlots, recentTopics, photosById, refsById, keywords }, links);
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
@@ -597,13 +616,14 @@ export async function requestGooglePost(input: unknown): Promise<{ error?: strin
     });
     if (duplicate) return { postId: duplicate.id };
 
-    const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
+    const [{ brief, photosById, refsById }, recentTopics, keywords] = await Promise.all([
       loadSocialBrief(site.id),
-      recentGoogleTopics(site.id, now),
+      recentTopicsAcrossChannels(site.id, now),
+      activeKeywordTexts(site.id),
     ]);
     const post = await generator.generateRequest(
       brief,
-      { topic, accentHex: accentColor, scheduledFor: day, recentTopics, photosById, refsById },
+      { topic, accentHex: accentColor, scheduledFor: day, recentTopics, photosById, refsById, keywords },
       { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
     );
 
@@ -700,9 +720,10 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
     if (usage.remaining === 0) {
       return { error: `Vous avez utilisé vos ${GOOGLE_POST_REGENERATIONS_PER_MONTH} régénérations du mois.` };
     }
-    const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
+    const [{ brief, photosById, refsById }, recentTopics, keywords] = await Promise.all([
       loadSocialBrief(site.id),
-      recentGoogleTopics(site.id, now),
+      recentTopicsAcrossChannels(site.id, now),
+      activeKeywordTexts(site.id),
     ]);
     // Les instructions du post s'ajoutent aux consignes permanentes du praticien (même bloc du prompt)
     const merged = cleanSocialInstructions([brief.instructions, instructions].filter((t) => t && t !== "").join("\n"));
@@ -716,6 +737,7 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
         recentTopics: recentTopics.filter((t) => t !== post.topic),
         photosById,
         refsById,
+        keywords,
       },
       { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
     );
