@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
@@ -16,6 +17,7 @@ export function SetupTab({
   plan,
   keywords,
   tracking,
+  cookieBanner,
   results,
   resultsDays,
   siteDomain,
@@ -24,6 +26,8 @@ export function SetupTab({
   plan: GoogleAdsPlan | null;
   keywords: GoogleAdsKeywordSet | null;
   tracking: AdsTrackingForm;
+  /** Bandeau cookies du site actif ; sinon la balise part sans consentement (avertissement) */
+  cookieBanner: boolean;
   results: AdsResults;
   resultsDays: number;
   siteDomain: string;
@@ -50,7 +54,7 @@ export function SetupTab({
         </div>
       </Card>
 
-      <TrackingForm initial={tracking} siteDomain={siteDomain} />
+      <TrackingForm initial={tracking} cookieBanner={cookieBanner} siteDomain={siteDomain} />
 
       <ResultsCard results={results} days={resultsDays} tracked={tracking.googleAdsId !== ""} />
     </div>
@@ -153,8 +157,8 @@ function CopyBlock({
     }
     return (
       <ul className="mt-3 space-y-2" aria-label="Mots-clés par groupe">
-        {plan.adGroups.map((g) => (
-          <li key={g.name} className="flex flex-wrap items-center gap-2 text-sm">
+        {plan.adGroups.map((g, i) => (
+          <li key={`${i}-${g.name}`} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="font-medium text-ink-900">{g.name}</span>
             <span className="text-xs text-ink-500">→ {siteDomain}{g.landingPath}</span>
             <CopyButton text={formatAdsKeywordList(g.keywords)} label={`Copier (${g.keywords.length})`} variant="ghost" />
@@ -167,11 +171,11 @@ function CopyBlock({
     if (!plan) return <p className="mt-3 text-sm text-ink-500">Les annonces sont rédigées avec le plan d&apos;action.</p>;
     return (
       <ul className="mt-3 space-y-2" aria-label="Annonces par groupe">
-        {plan.adGroups.map((g) => {
+        {plan.adGroups.map((g, i) => {
           const ad = g.ads[0];
           if (!ad) return null;
           return (
-            <li key={g.name} className="flex flex-wrap items-center gap-2 text-sm">
+            <li key={`${i}-${g.name}`} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="font-medium text-ink-900">{g.name}</span>
               <CopyButton text={formatAdsLines(ad.headlines)} label={`Titres (${ad.headlines.length})`} variant="ghost" />
               <CopyButton text={formatAdsLines(ad.descriptions)} label={`Descriptions (${ad.descriptions.length})`} variant="ghost" />
@@ -192,7 +196,7 @@ function CopyBlock({
   );
 }
 
-function TrackingForm({ initial, siteDomain }: { initial: AdsTrackingForm; siteDomain: string }) {
+function TrackingForm({ initial, cookieBanner, siteDomain }: { initial: AdsTrackingForm; cookieBanner: boolean; siteDomain: string }) {
   const router = useRouter();
   const [form, setForm] = useState<AdsTrackingForm>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -228,8 +232,18 @@ function TrackingForm({ initial, siteDomain }: { initial: AdsTrackingForm; siteD
       <h2 className="text-xl font-semibold">Suivi des conversions</h2>
       <p className="mt-1 text-sm text-ink-500">
         Votre site ({siteDomain}) charge la balise Google Ads et envoie une conversion à chaque clic « Prendre rendez-vous », sur votre
-        numéro de téléphone et sur votre adresse e-mail. Laissez vide pour désactiver.
+        numéro de téléphone et sur votre adresse e-mail — après consentement, si le bandeau cookies est actif. Laissez vide pour
+        désactiver.
       </p>
+      {!cookieBanner ? (
+        <p className="mt-4 rounded-xl bg-warning-100 px-4 py-3 text-sm text-ink-900" role="alert">
+          Votre bandeau cookies est désactivé : la balise et les conversions partent dès l&apos;arrivée du visiteur. Réactivez-le dans{" "}
+          <Link href="/editor" className="font-medium text-primary-700 underline">
+            l&apos;éditeur
+          </Link>{" "}
+          (Paramètres → Tracking) pour rester conforme.
+        </p>
+      ) : null}
       <form onSubmit={onSubmit} className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Label htmlFor="ads-id">Identifiant Google Ads</Label>
@@ -284,8 +298,9 @@ function TrackingForm({ initial, siteDomain }: { initial: AdsTrackingForm; siteD
         </div>
       </form>
       <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">
-        RGPD : la balise Google Ads est chargée uniquement après le consentement donné dans le bandeau cookies de votre site ; sans
-        consentement, aucune donnée n&apos;est envoyée à Google. Jamais chargée dans l&apos;aperçu de l&apos;éditeur.
+        RGPD : la balise Google Ads et les conversions ne partent qu&apos;après le consentement donné dans le bandeau cookies de votre
+        site, si ce bandeau est actif ; sans consentement, aucune donnée n&apos;est envoyée à Google. Jamais chargée dans l&apos;aperçu de
+        l&apos;éditeur.
       </p>
     </Card>
   );

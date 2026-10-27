@@ -6,6 +6,8 @@ import { Button, Modal, Spinner } from "@theralys/ui";
 import { GOOGLE_ADS_INSTRUCTIONS_MAX } from "@theralys/shared";
 import { regenerateAdsPlan } from "./actions";
 
+const noop = () => undefined;
+
 /**
  * Instructions + Régénérer le plan d'action : même pattern que la
  * régénération d'un post Google (instructions libres, quota mensuel, message
@@ -52,7 +54,8 @@ function ModalBody({ onClose, remaining: initialRemaining, currentInstructions }
   return (
     <Modal
       open
-      onClose={onClose}
+      // Pendant la génération, ni Échap ni le clic hors boîte ne ferment la modale (le résultat s'affiche ici)
+      onClose={pending ? noop : onClose}
       title="Instructions pour le plan d'action"
       footer={
         <>

@@ -57,6 +57,7 @@ import { requireClient } from "@/lib/auth";
 import { isGenerationStale } from "@/lib/editor/page-groups";
 import { siteUrl } from "@/lib/data";
 import { firstSocialError, normalizeSocialLinks } from "@/lib/editor/social-links";
+import { conversionLabelsFor } from "@/lib/google-ads/tracking";
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
@@ -860,9 +861,10 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
     faviconUrl: data.faviconUrl !== undefined ? faviconUrl : fresh.faviconUrl,
     shareImageUrl: data.seoImageUrl !== undefined ? shareImageUrl : fresh.shareImageUrl,
     // Les libellés de conversion Google Ads (section Google Ads) ne sont pas édités ici : conservés
+    // tant que l'identifiant AW-… reste renseigné, retirés avec lui (pas de libellés orphelins)
     tracking:
       data.tracking !== undefined
-        ? { ...tracking, googleAdsConversions: fresh.tracking?.googleAdsConversions }
+        ? { ...tracking, googleAdsConversions: conversionLabelsFor(tracking?.googleAdsId, fresh.tracking?.googleAdsConversions) }
         : fresh.tracking,
     legal: data.legal !== undefined ? legal : fresh.legal,
     social: data.social !== undefined ? social : fresh.social,

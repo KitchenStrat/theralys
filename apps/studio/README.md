@@ -185,10 +185,14 @@ le praticien paramètre lui-même sa campagne. Onglets
   accordéon (11 étapes, boutons Copier reprenant le plan), formulaire « Suivi
   des conversions » (`saveAdsTracking` : identifiant AW-… et libellés rdv /
   call / email dans `site.theme.tracking`, validation
-  `lib/google-ads/tracking.ts`), bloc Résultats sur 30 jours
-  (`lib/google-ads/results.ts`, visites, clics RDV et appels de source
-  `google_ads`).
-- **Données** : `lib/google-ads/data.ts` (`getGoogleAdsData`).
+  `lib/google-ads/tracking.ts`, avertissement si le bandeau cookies du site
+  est désactivé), bloc Résultats sur 30 jours (`getAdsResults` dans
+  `lib/google-ads/data.ts` → `summarizeAdsResults` de `@theralys/analytics` :
+  visites, clics RDV et appels de source `google_ads`).
+- **Données** : `lib/google-ads/data.ts` (`getGoogleAdsData` ; une analyse
+  `running` plus ancienne que `GOOGLE_ADS_ANALYSIS_STALE_MINUTES` de
+  `@theralys/jobs` est affichée comme interrompue), `lib/google-ads/keywords.ts`
+  (exemple de requête « sans ville »).
 - **Tests** : `lib/google-ads/*.test.ts` (config `lib/vitest.config.ts`).
 
 ## Développement local

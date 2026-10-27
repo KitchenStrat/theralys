@@ -67,6 +67,19 @@ export function validateAdsTracking(input: unknown): AdsTrackingValidation {
   return { ok: true, value: { googleAdsId: googleAdsId || null, labels: hasLabels ? labels : null } };
 }
 
+/**
+ * Libellés de conversion à conserver quand les réglages du site (éditeur)
+ * réécrivent le suivi : sans identifiant AW-…, le site n'a plus de balise et
+ * des libellés orphelins seraient réaffichés à la prochaine saisie d'un
+ * identifiant — ils sont donc retirés avec lui.
+ */
+export function conversionLabelsFor(
+  googleAdsId: string | undefined,
+  labels: GoogleAdsConversionLabels | undefined,
+): GoogleAdsConversionLabels | undefined {
+  return googleAdsId ? labels : undefined;
+}
+
 /** Valeurs initiales du formulaire depuis le suivi du site. */
 export function adsTrackingForm(tracking: { googleAdsId?: string; googleAdsConversions?: GoogleAdsConversionLabels } | undefined): AdsTrackingForm {
   const labels = tracking?.googleAdsConversions ?? {};

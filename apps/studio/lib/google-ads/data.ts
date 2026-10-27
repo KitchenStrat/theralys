@@ -8,7 +8,7 @@
 
 import { and, desc, eq, gte } from "drizzle-orm";
 import { analyticsEvents, getDb, googleAdsAnalyses, type Site } from "@theralys/db";
-import { getGoogleAdsUsage, googleBudget, type GoogleBudget } from "@theralys/jobs";
+import { GOOGLE_ADS_ANALYSIS_STALE_MINUTES, getGoogleAdsUsage, googleBudget, type GoogleBudget } from "@theralys/jobs";
 import {
   GOOGLE_ADS_ANALYSIS_COST_USD,
   type GoogleAdsAnalysisStatus,
@@ -23,13 +23,19 @@ import { adsTrackingForm, type AdsTrackingForm } from "./tracking";
 
 /** Fenêtre du bloc « Résultats » (jours). */
 export const ADS_RESULTS_DAYS = 30;
-/** Analyse `running` plus ancienne : le processus est mort, elle est affichée comme interrompue. */
-export const ADS_RUNNING_STALE_MS = 10 * 60 * 1000;
+/**
+ * Analyse `running` dont `updatedAt` est plus ancien : le processus est mort,
+ * elle est affichée comme interrompue — même seuil et même horodatage que le
+ * service (`GOOGLE_ADS_ANALYSIS_STALE_MINUTES` de `@theralys/jobs`).
+ */
+export const ADS_RUNNING_STALE_MS = GOOGLE_ADS_ANALYSIS_STALE_MINUTES * 60_000;
 export const ADS_INTERRUPTED = "Analyse interrompue avant la fin — relancez-la.";
 
 export type GoogleAdsAnalysisView = {
   id: string;
   status: GoogleAdsAnalysisStatus;
+  /** Ville des graines (normalisée par `buildAdsSeeds`) : distingue les requêtes « sans ville » */
+  seedCity: string;
   keywords: GoogleAdsKeywordSet | null;
   forecast: GoogleAdsForecast | null;
   diagnostic: GoogleAdsDiagnostic | null;
@@ -55,6 +61,8 @@ export type GoogleAdsData = {
   budget: GoogleBudget;
   analysisCostUsd: number;
   tracking: AdsTrackingForm;
+  /** Bandeau cookies du site actif (`theme.tracking.cookieBanner !== false`) ; sinon la balise part sans consentement */
+  cookieBanner: boolean;
   results: AdsResults;
   resultsDays: number;
 };
@@ -78,6 +86,7 @@ function toView(row: AnalysisRow, now: Date): GoogleAdsAnalysisView {
   return {
     id: row.id,
     status: shown.status,
+    seedCity: row.seed.city,
     keywords: row.keywords ?? null,
     forecast: row.forecast ?? null,
     diagnostic: row.diagnostic ?? null,
@@ -142,6 +151,7 @@ export async function getGoogleAdsData(site: Site, now = new Date()): Promise<Go
     budget,
     analysisCostUsd: GOOGLE_ADS_ANALYSIS_COST_USD,
     tracking: adsTrackingForm(site.theme.tracking),
+    cookieBanner: site.theme.tracking?.cookieBanner !== false,
     results,
     resultsDays: ADS_RESULTS_DAYS,
   };

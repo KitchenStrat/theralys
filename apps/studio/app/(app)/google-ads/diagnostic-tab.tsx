@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, Spinner } from "@theralys/ui";
 import {
   GOOGLE_ADS_ANALYSES_PER_MONTH,
   GOOGLE_ADS_CORE_MAX,
+  usdToEur,
   type GoogleAdsBudgetEstimate,
   type GoogleAdsCheckId,
   type GoogleAdsDemand,
   type GoogleAdsDiagnostic,
+  type GoogleAdsForecast,
   type GoogleAdsReadinessCheck,
   type GoogleAdsReadinessStatus,
   type GoogleAdsVerdict,
@@ -27,6 +29,10 @@ const usd = (value: number) => `${value.toLocaleString("fr-FR", { minimumFractio
 const eur = (value: number, digits = 0) =>
   `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 const num = (value: number) => value.toLocaleString("fr-FR");
+
+const ANALYSIS_FAILED_FALLBACK = "L'analyse a échoué : réessayez dans un instant.";
+/** Analyse lancée ailleurs (autre onglet, autre session) : la page se relit à cet intervalle jusqu'à la fin */
+const RUNNING_REFRESH_MS = 10_000;
 
 /** Couleurs et libellés du verdict — jetons du thème (`packages/ui/src/styles.css`). */
 const VERDICT: Record<GoogleAdsVerdict, { color: string; tone: "success" | "warning" | "danger"; label: string }> = {
@@ -90,9 +96,17 @@ export function DiagnosticTab({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const runningElsewhere = latest?.status === "running" && !pending;
   const running = pending || latest?.status === "running";
   const canLaunch = usage.analysesRemaining > 0 && budget.remainingUsd >= analysisCostUsd;
   const diagnostic = current?.diagnostic ?? null;
+
+  // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin
+  useEffect(() => {
+    if (!runningElsewhere) return;
+    const timer = setInterval(() => router.refresh(), RUNNING_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [runningElsewhere, router]);
 
   function launch() {
     setError(null);
@@ -100,7 +114,13 @@ export function DiagnosticTab({
     startTransition(async () => {
       const result = await launchAdsAnalysis();
       if (result.error) {
-        setError(result.error);
+        const remaining =
+          typeof result.remaining === "number"
+            ? ` Il vous reste ${result.remaining} analyse${result.remaining > 1 ? "s" : ""} ce mois-ci.`
+            : "";
+        setError(`${result.error}${remaining}`);
+        // La ligne en erreur et le quota consommé sont relus
+        router.refresh();
         return;
       }
       setMessage(result.message ?? "Analyse terminée.");
@@ -142,15 +162,31 @@ export function DiagnosticTab({
           · Budget restant : <strong className="text-ink-700">{usd(budget.remainingUsd)}</strong> sur {usd(budget.budgetUsd)} · Une analyse ≈{" "}
           {usd(analysisCostUsd)}, comprise dans votre formule.
         </p>
-        {running && !pending ? (
-          <p className="mt-3 flex items-center gap-2 text-sm text-ink-700" aria-live="polite">
-            <Spinner /> Une analyse est en cours : les résultats s&apos;afficheront dans un instant.
+        {/* Région vivante permanente : les messages d'attente y apparaissent et sont annoncés */}
+        <div aria-live="polite">
+          {pending ? (
+            <p className="mt-3 flex items-center gap-2 text-sm text-ink-700">
+              <Spinner /> Analyse en cours, jusqu&apos;à une minute : recherche des mots-clés, prévision, diagnostic puis plan d&apos;action…
+            </p>
+          ) : null}
+          {runningElsewhere ? (
+            <p className="mt-3 flex items-center gap-2 text-sm text-ink-700">
+              <Spinner /> Une analyse est en cours : les résultats s&apos;afficheront dans un instant.
+            </p>
+          ) : null}
+        </div>
+        {latest?.status === "error" && !error ? (
+          <p className="mt-3 text-sm text-danger-500" role="alert">
+            {latest.error?.trim() ? `La dernière analyse a échoué : ${latest.error.trim()}` : ANALYSIS_FAILED_FALLBACK}
+            {current ? " — les résultats affichés sont ceux de l'analyse précédente." : ""}
           </p>
         ) : null}
-        {latest?.status === "error" && latest.error ? (
-          <p className="mt-3 text-sm text-danger-500" role="alert">
-            La dernière analyse a échoué : {latest.error}
-            {current ? " — les résultats affichés sont ceux de l'analyse précédente." : ""}
+        {current && !current.plan && !pending ? (
+          <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">
+            {current.error?.trim() ? current.error.trim() : "Le plan d'action n'a pas pu être généré."} Mots-clés et diagnostic sont là :{" "}
+            <button type="button" onClick={() => onSelectTab("plan")} className="font-medium text-primary-700 underline">
+              générer le plan d&apos;action →
+            </button>
           </p>
         ) : null}
         {error ? (
@@ -172,7 +208,7 @@ export function DiagnosticTab({
           <div className="space-y-6">
             <VerdictCard diagnostic={diagnostic} />
             <DemandCard demand={diagnostic.demand} onSelectTab={onSelectTab} />
-            <BudgetCard budget={diagnostic.budget} />
+            <BudgetCard budget={diagnostic.budget} forecast={current?.forecast ?? null} />
           </div>
           <ChecksCard checks={diagnostic.checks} onSelectTab={onSelectTab} />
         </div>
@@ -295,7 +331,7 @@ const BASIS_LABEL: Record<GoogleAdsBudgetEstimate["basis"], (cpc: string) => str
   none: (cpc) => `Estimation par défaut (coût par clic ${cpc}) : la demande n'a pas pu être chiffrée.`,
 };
 
-function BudgetCard({ budget }: { budget: GoogleAdsBudgetEstimate }) {
+function BudgetCard({ budget, forecast }: { budget: GoogleAdsBudgetEstimate; forecast: GoogleAdsForecast | null }) {
   return (
     <Card className="p-6">
       <h2 className="text-xl font-semibold">Budget</h2>
@@ -310,7 +346,27 @@ function BudgetCard({ budget }: { budget: GoogleAdsBudgetEstimate }) {
         <Stat label="Prises de contact" value={`${num(budget.contactsMin)} – ${num(budget.contactsMax)}`} hint="rendez-vous, appels, e-mails" />
       </dl>
       <p className="mt-3 text-xs text-ink-500">{BASIS_LABEL[budget.basis](eur(budget.cpcEur, 2))}</p>
+      {forecast ? <ForecastNote forecast={forecast} /> : null}
     </Card>
+  );
+}
+
+/**
+ * Prévision Google Ads : un agrégat sur l'ensemble des mots-clés cœur
+ * (`rows` n'est jamais parcourue — une seule ligne, sans mot-clé) : clics,
+ * coût (converti en €) et enchère maximale envoyée.
+ */
+function ForecastNote({ forecast }: { forecast: GoogleAdsForecast }) {
+  const cost = usdToEur(forecast.totalCostUsd);
+  const bid = usdToEur(forecast.bidUsd);
+  return (
+    <p className="mt-2 text-xs text-ink-500">
+      Prévision Google Ads pour le mois prochain, sur l&apos;ensemble des mots-clés cœur : environ {num(forecast.totalClicks)} clic
+      {forecast.totalClicks > 1 ? "s" : ""}
+      {cost !== null ? ` pour ${eur(cost)}` : ""}
+      {bid !== null ? `, avec une enchère maximale de ${eur(bid, 2)} par clic` : ""}
+      {forecast.source === "mock" ? " (données de démonstration)" : ""}.
+    </p>
   );
 }
 

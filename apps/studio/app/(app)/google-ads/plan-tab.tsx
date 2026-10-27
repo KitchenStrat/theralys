@@ -1,31 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, Card } from "@theralys/ui";
+import { Badge, Button, Card, Spinner } from "@theralys/ui";
 import { GOOGLE_ADS_RSA, intentLabel, type GoogleAdsAd, type GoogleAdsAdGroup, type GoogleAdsPlan } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import { formatAdsKeywordList, formatAdsLines, formatAdsNegativeList } from "@/lib/google-ads/clipboard";
+import { regenerateAdsPlan } from "./actions";
 import { CopyButton } from "./copy-button";
 import { PlanRegenerateModal } from "./plan-regenerate-modal";
 import type { AdsTab } from "./tabs";
 
 const eur = (value: number, digits = 0) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 
+const PLAN_FAILED_FALLBACK = "Le plan d'action n'a pas pu être généré.";
+
 export function PlanTab({
   plan,
+  analysisReady,
+  planError,
   instructions,
   regenRemaining,
   siteDomain,
   onSelectTab,
 }: {
   plan: GoogleAdsPlan | null;
+  /** Analyse aboutie (mots-clés et diagnostic présents) : sans plan, il peut être généré seul */
+  analysisReady: boolean;
+  /** Message d'erreur de l'analyse (plan IA en échec), déjà en français */
+  planError: string | null;
   instructions: string | null;
   regenRemaining: number;
   siteDomain: string;
   onSelectTab: (tab: AdsTab) => void;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
+
+  if (!plan && analysisReady) {
+    return <MissingPlanCard error={planError} remaining={regenRemaining} onSelectTab={onSelectTab} />;
+  }
 
   if (!plan) {
     return (
@@ -108,8 +122,8 @@ export function PlanTab({
               <p className="mt-1 text-sm text-ink-500">Aucun : ajoutez des pages de spécialités à votre site.</p>
             ) : (
               <ul className="mt-1 space-y-1 text-sm text-ink-700">
-                {plan.extensions.sitelinks.map((s) => (
-                  <li key={`${s.title}-${s.path}`}>
+                {plan.extensions.sitelinks.map((s, i) => (
+                  <li key={`${i}-${s.title}-${s.path}`}>
                     <span className="font-medium text-ink-900">{s.title}</span> <span className="text-ink-500">→ {siteDomain}{s.path}</span>
                   </li>
                 ))}
@@ -122,8 +136,8 @@ export function PlanTab({
               <CopyButton text={formatAdsLines(plan.extensions.callouts)} label="Copier" variant="ghost" />
             </div>
             <ul className="mt-1 flex flex-wrap gap-1.5">
-              {plan.extensions.callouts.map((c) => (
-                <li key={c}>
+              {plan.extensions.callouts.map((c, i) => (
+                <li key={`${i}-${c}`}>
                   <Badge tone="neutral">{c}</Badge>
                 </li>
               ))}
@@ -140,15 +154,15 @@ export function PlanTab({
         <h2 className="text-xl font-semibold">Jalons</h2>
         <p className="mt-1 text-sm text-ink-500">Ce qu&apos;il faut faire et mesurer, semaine après semaine.</p>
         <ol className="mt-4 grid gap-4 sm:grid-cols-2" aria-label="Jalons">
-          {plan.milestones.map((m) => (
-            <li key={m.horizon} className="rounded-2xl border border-cream-200 bg-cream-50 p-4">
+          {plan.milestones.map((m, i) => (
+            <li key={`${i}-${m.horizon}`} className="rounded-2xl border border-cream-200 bg-cream-50 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="primary">{m.horizon}</Badge>
                 <h3 className="font-semibold text-ink-900">{m.title}</h3>
               </div>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-700">
-                {m.actions.map((a) => (
-                  <li key={a}>{a}</li>
+                {m.actions.map((a, j) => (
+                  <li key={`${j}-${a}`}>{a}</li>
                 ))}
               </ul>
               {m.kpis.length > 0 ? (
@@ -166,8 +180,8 @@ export function PlanTab({
         <Card className="p-6">
           <h2 className="text-xl font-semibold">Conseils</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-700">
-            {plan.tips.map((t) => (
-              <li key={t}>{t}</li>
+            {plan.tips.map((t, i) => (
+              <li key={`${i}-${t}`}>{t}</li>
             ))}
           </ul>
         </Card>
@@ -175,6 +189,70 @@ export function PlanTab({
 
       <PlanRegenerateModal open={modalOpen} onClose={() => setModalOpen(false)} remaining={regenRemaining} currentInstructions={instructions} />
     </div>
+  );
+}
+
+/**
+ * Analyse aboutie sans plan (plan IA en échec) : mots-clés et diagnostic sont
+ * là, le plan se génère seul — même action que la régénération, sans
+ * instructions, décomptée du même quota mensuel.
+ */
+function MissingPlanCard({ error, remaining, onSelectTab }: { error: string | null; remaining: number; onSelectTab: (tab: AdsTab) => void }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ error?: string; message?: string }>({});
+
+  function generate() {
+    setResult({});
+    startTransition(async () => {
+      const outcome = await regenerateAdsPlan({});
+      if (outcome.error) {
+        setResult({ error: outcome.error });
+        return;
+      }
+      setResult({ message: "Plan d'action généré : campagne, groupes d'annonces et annonces prêts." });
+      router.refresh();
+    });
+  }
+
+  return (
+    <Card className="p-8 text-center text-ink-500">
+      <p className="font-medium text-ink-700">{error?.trim() ? error.trim() : PLAN_FAILED_FALLBACK}</p>
+      <p className="mt-1 text-sm">
+        Vos mots-clés et votre diagnostic sont bien enregistrés : générez le plan d&apos;action (structure de campagne, groupes
+        d&apos;annonces, annonces, budget et jalons) sans relancer l&apos;analyse.
+      </p>
+      <div className="mt-5 flex flex-wrap justify-center gap-3">
+        <Button onClick={generate} disabled={pending || remaining <= 0} title={remaining <= 0 ? "Quota mensuel de générations atteint" : undefined}>
+          {pending ? (
+            <>
+              <Spinner className="text-white" /> Génération…
+            </>
+          ) : (
+            "✦ Générer le plan d'action"
+          )}
+        </Button>
+        <Button variant="secondary" onClick={() => onSelectTab("diagnostic")}>
+          Aller au diagnostic
+        </Button>
+      </div>
+      <div aria-live="polite">
+        {pending ? <p className="mt-3 text-sm text-ink-700">Génération en cours, jusqu&apos;à une minute…</p> : null}
+        {result.error ? (
+          <p className="mt-3 text-sm text-danger-500" role="alert">
+            {result.error}
+          </p>
+        ) : null}
+        {result.message ? (
+          <p className="mt-3 text-sm text-success-500" role="status">
+            {result.message}
+          </p>
+        ) : null}
+      </div>
+      <p className="mt-3 text-xs">
+        {remaining} génération{remaining > 1 ? "s" : ""} restante{remaining > 1 ? "s" : ""} ce mois-ci.
+      </p>
+    </Card>
   );
 }
 

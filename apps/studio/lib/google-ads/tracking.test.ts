@@ -3,6 +3,7 @@ import {
   ADS_ID_ERROR,
   ADS_LABELS_WITHOUT_ID_ERROR,
   adsTrackingForm,
+  conversionLabelsFor,
   normalizeAdsId,
   normalizeConversionLabel,
   validateAdsTracking,
@@ -57,6 +58,14 @@ describe("normalisations", () => {
   it("normalizeConversionLabel garde la partie après la barre oblique", () => {
     expect(normalizeConversionLabel("AW-1234567890/AbCdEf-ghIJ")).toBe("AbCdEf-ghIJ");
     expect(normalizeConversionLabel(" AbCdEf-ghIJ ")).toBe("AbCdEf-ghIJ");
+  });
+
+  it("conversionLabelsFor retire les libellés quand l'identifiant AW-… est retiré dans l'éditeur", () => {
+    const labels = { rdv: "AbCdEfGhIj", call: "XyZ_12345" };
+    expect(conversionLabelsFor("AW-1234567890", labels)).toEqual(labels);
+    expect(conversionLabelsFor(undefined, labels)).toBeUndefined();
+    expect(conversionLabelsFor("", labels)).toBeUndefined();
+    expect(conversionLabelsFor("AW-1234567890", undefined)).toBeUndefined();
   });
 
   it("adsTrackingForm reflète le suivi du site, vide par défaut", () => {

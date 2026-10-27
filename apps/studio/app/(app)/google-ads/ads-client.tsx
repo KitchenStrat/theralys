@@ -88,10 +88,14 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
             onSelectTab={select}
           />
         ) : null}
-        {tab === "mots-cles" ? <KeywordsTab keywords={current?.keywords ?? null} analysisReady={analysisReady} onSelectTab={select} /> : null}
+        {tab === "mots-cles" ? (
+          <KeywordsTab keywords={current?.keywords ?? null} city={current?.seedCity ?? ""} analysisReady={analysisReady} onSelectTab={select} />
+        ) : null}
         {tab === "plan" ? (
           <PlanTab
             plan={current?.plan ?? null}
+            analysisReady={analysisReady}
+            planError={current?.error ?? null}
             instructions={current?.instructions ?? null}
             regenRemaining={data.usage.planRegenRemaining}
             siteDomain={site.domain}
@@ -103,6 +107,7 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
             plan={current?.plan ?? null}
             keywords={current?.keywords ?? null}
             tracking={data.tracking}
+            cookieBanner={data.cookieBanner}
             results={data.results}
             resultsDays={data.resultsDays}
             siteDomain={site.domain}

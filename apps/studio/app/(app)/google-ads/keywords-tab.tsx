@@ -11,6 +11,7 @@ import {
 } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import { formatAdsKeywordList, formatAdsNegativeList } from "@/lib/google-ads/clipboard";
+import { nationalQueryExample } from "@/lib/google-ads/keywords";
 import { CopyButton } from "./copy-button";
 import type { AdsTab } from "./tabs";
 
@@ -25,10 +26,13 @@ const eur = (value: number | null) => (value === null ? "—" : `${value.toLocal
 
 export function KeywordsTab({
   keywords,
+  city,
   analysisReady,
   onSelectTab,
 }: {
   keywords: GoogleAdsKeywordSet | null;
+  /** Ville des graines de l'analyse (`seed.city`), pour l'exemple de requête « sans ville » */
+  city: string;
   analysisReady: boolean;
   onSelectTab: (tab: AdsTab) => void;
 }) {
@@ -56,6 +60,7 @@ export function KeywordsTab({
 
   const core = keywords.keywords.filter((k) => k.core);
   const coreText = formatAdsKeywordList(core.map((k) => ({ text: k.keyword, match: k.match })));
+  const nationalExample = nationalQueryExample(keywords, city);
 
   return (
     <div className="space-y-6">
@@ -81,9 +86,9 @@ export function KeywordsTab({
           </li>
         </ul>
         <p className="mt-3 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
-          Les volumes des requêtes sans ville (« {keywords.seeds[1] ?? "votre métier"} ») sont nationaux : diffusées autour du cabinet grâce au
-          ciblage géographique, elles touchent bien moins de personnes que ce chiffre — mais ce sont souvent elles qui amènent les patients
-          proches.
+          Les volumes des requêtes sans ville{nationalExample ? ` (« ${nationalExample} »)` : ""} sont nationaux : diffusées autour du cabinet
+          grâce au ciblage géographique, elles touchent bien moins de personnes que ce chiffre — mais ce sont souvent elles qui amènent les
+          patients proches.
         </p>
       </Card>
 
