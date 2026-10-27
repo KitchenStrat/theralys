@@ -68,11 +68,6 @@ export default async function AccountPage() {
                   : "— Blog automatisé non inclus"}
               </li>
               <li>{plan.searchConsoleAccess ? "✓ Suivi des mots-clés Google" : "— Suivi des mots-clés non inclus"}</li>
-              <li>
-                {plan.keywordResearch
-                  ? "✓ Outil de recherche des mots-clés SEO"
-                  : "— Outil de recherche des mots-clés non inclus"}
-              </li>
               <li>{plan.academy ? "✓ Académie" : "— Académie non incluse"}</li>
               <li>
                 {plan.socialMedia
@@ -83,6 +78,11 @@ export default async function AccountPage() {
                 {plan.googleProfile
                   ? "✓ Fiche Google : audit, visibilité locale, avis et posts"
                   : "— Fiche Google (audit, visibilité locale, avis et posts) non incluse"}
+              </li>
+              <li>
+                {plan.googleAds
+                  ? "✓ Google Ads : analyse, mots-clés et plan d'action"
+                  : "— Google Ads (analyse, mots-clés et plan d'action) non inclus"}
               </li>
               <li>✓ Avis Google synchronisés · statistiques · hébergement</li>
             </ul>

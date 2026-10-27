@@ -11,19 +11,21 @@ describe("providerCostsEur", () => {
 });
 
 describe("summarizeProviderUsage", () => {
-  it("ne compte que les appels DataForSEO (fiche, avis, relevés), pas les registres de quota", () => {
+  it("ne compte que les appels DataForSEO (fiche, avis, relevés, mots-clés Google Ads), pas les registres de quota", () => {
     const usage = summarizeProviderUsage([
       { kind: "business_info", costUsd: 0.005, requests: 1 },
       { kind: "reviews", costUsd: 0.004, requests: 1 },
       { kind: "scan", costUsd: 0.1, requests: 49 },
+      { kind: "ads_keywords", costUsd: 0.18, requests: 2 },
+      { kind: "ads_plan", costUsd: 0, requests: 1 },
       // Registres de quota (IA, régénérations) et d'échéancier : ni requête ni coût fournisseur
       { kind: "reply_ai", costUsd: 0, requests: 12 },
       { kind: "post_regen", costUsd: 0, requests: 5 },
       { kind: "social_regen", costUsd: 0, requests: 7 },
       { kind: "sync_attempt", costUsd: 0, requests: 3 },
     ]);
-    expect(usage.requests).toBe(51);
-    expect(usage.costUsd).toBeCloseTo(0.109, 6);
+    expect(usage.requests).toBe(53);
+    expect(usage.costUsd).toBeCloseTo(0.289, 6);
   });
 
   it("tolère les sommes SQL renvoyées en texte et un mois vide", () => {

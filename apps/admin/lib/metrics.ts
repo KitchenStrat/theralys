@@ -67,11 +67,12 @@ export function providerCostsEur(costUsd: number): number {
 }
 
 /**
- * Kinds de `google_usage` qui correspondent à un appel DataForSEO facturé.
- * Les autres lignes (`reply_ai`, `post_regen`, `social_regen`, `sync_attempt`…)
+ * Kinds de `google_usage` qui correspondent à un appel DataForSEO facturé
+ * (fiche, avis, relevés, idées de mots-clés Google Ads).
+ * Les autres lignes (`reply_ai`, `post_regen`, `social_regen`, `ads_plan`, `sync_attempt`…)
  * sont des registres de quota ou d'échéancier, pas des requêtes fournisseur.
  */
-export const DATAFORSEO_BILLED_KINDS = ["business_info", "reviews", "scan"] as const;
+export const DATAFORSEO_BILLED_KINDS = ["business_info", "reviews", "scan", "ads_keywords"] as const;
 
 export type ProviderUsageRow = { kind: string; costUsd: number; requests: number };
 

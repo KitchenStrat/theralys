@@ -27,6 +27,7 @@ import type {
   GoogleScanGrid,
   GoogleScanSummary,
 } from "@theralys/shared";
+import { getGoogleConnection, getGoogleVisibility, type GoogleVisibility } from "../data";
 import { isGridRadius } from "./keywords";
 import { getGoogleMonth, getGoogleRequestUsage, getRegenerationUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
 import { summarizeReviews, type GoogleReviewView, type ReviewsSummary } from "./reviews";
@@ -101,6 +102,8 @@ export type GoogleProfileData = {
   postUsage: GoogleRequestUsage;
   /** Régénérations de posts (instructions) restantes ce mois-ci */
   regenRemaining: number;
+  /** Carte « Visibilité Google » (Search Console) : compte connecté et impressions du mois */
+  searchVisibility: { connected: boolean; visibility: GoogleVisibility | null };
 };
 
 /** Fiche reliée (prospect) : null tant que `googlePlaceId` est vide. */
@@ -251,6 +254,13 @@ export async function countGoogleReviews(siteId: string): Promise<number> {
   return row?.total ?? 0;
 }
 
+/** Compte Google connecté (Search Console) et visibilité du mois, pour la carte en tête de l'onglet Visibilité. */
+async function getSearchVisibility(siteId: string): Promise<GoogleProfileData["searchVisibility"]> {
+  const connection = await getGoogleConnection(siteId);
+  if (!connection) return { connected: false, visibility: null };
+  return { connected: true, visibility: await getGoogleVisibility(siteId) };
+}
+
 /** Toutes les données de la section, en parallèle. */
 export async function getGoogleProfileData(
   site: Site,
@@ -258,7 +268,7 @@ export async function getGoogleProfileData(
   calendar: { year: number; month: number },
   now = new Date(),
 ): Promise<GoogleProfileData> {
-  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage, replyUsed, settings, regen] = await Promise.all([
+  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage, replyUsed, settings, regen, searchVisibility] = await Promise.all([
     getLatestGoogleAudit(site.id),
     getScoreHistory(site.id),
     getGoogleKeywords(site.id, now),
@@ -271,6 +281,7 @@ export async function getGoogleProfileData(
     monthlyReplyGenerations(getDb(), site.id, now),
     getSocialSettings(site.id),
     getRegenerationUsage(site.id, now),
+    getSearchVisibility(site.id),
   ]);
   return {
     linked: linkedProfileOf(prospect, { realProviders: hasRealGoogleProvider() }),
@@ -287,5 +298,6 @@ export async function getGoogleProfileData(
     regenRemaining: regen.remaining,
     posts,
     postUsage,
+    searchVisibility,
   };
 }

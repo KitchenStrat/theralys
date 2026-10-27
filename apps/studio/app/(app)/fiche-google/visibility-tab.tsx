@@ -16,9 +16,10 @@ import {
 } from "@theralys/shared";
 import type { GoogleBudget } from "@theralys/jobs";
 import { formatDayFr } from "@/lib/calendar";
-import type { GoogleKeywordView, GoogleScanView } from "@/lib/google/data";
+import type { GoogleKeywordView, GoogleProfileData, GoogleScanView } from "@/lib/google/data";
 import { KEYWORD_MAX, radiusLabel } from "@/lib/google/keywords";
 import type { ScanUsage } from "@/lib/google/scans";
+import { GoogleVisibilityCard } from "../google-visibility-card";
 import { addGoogleKeyword, removeGoogleKeyword, scanGoogleKeyword } from "./actions";
 import { TONE_COLOR, TONE_LABEL } from "./tones";
 
@@ -43,12 +44,15 @@ export function VisibilityTab({
   scanUsage,
   budget,
   own,
+  searchVisibility,
 }: {
   linked: boolean;
   keywords: GoogleKeywordView[];
   scanUsage: ScanUsage;
   budget: GoogleBudget;
   own: OwnListing;
+  /** Carte « Visibilité Google » (Search Console), en tête de l'onglet */
+  searchVisibility: GoogleProfileData["searchVisibility"];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -104,6 +108,8 @@ export function VisibilityTab({
 
   return (
     <div className="space-y-6">
+      <GoogleVisibilityCard gscAccess connected={searchVisibility.connected} visibility={searchVisibility.visibility} />
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Card className="p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">

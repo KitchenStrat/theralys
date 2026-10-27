@@ -35,8 +35,6 @@ export type PlanDefinition = {
   blogArticlesPerYear: number;
   /** Suivi des mots-clés Google (Search Console) */
   searchConsoleAccess: boolean;
-  /** Outil de recherche de mots-clés SEO (studio) */
-  keywordResearch: boolean;
   /** Académie (formations du studio) */
   academy: boolean;
   /** Toujours inclus, toutes formules */
@@ -61,7 +59,6 @@ const STARTER: PlanDefinition = {
   blogArticlesPerWeek: 0,
   blogArticlesPerYear: 0,
   searchConsoleAccess: false,
-  keywordResearch: false,
   academy: false,
   googleReviewsSync: true,
   socialMedia: false,
@@ -81,7 +78,6 @@ const SCALE: PlanDefinition = {
   blogArticlesPerWeek: 4,
   blogArticlesPerYear: 208,
   searchConsoleAccess: true,
-  keywordResearch: true,
   academy: true,
   googleReviewsSync: true,
   socialMedia: true,
@@ -118,11 +114,6 @@ export function hasBlog(plan: PlanId): boolean {
 
 export function hasSearchConsole(plan: PlanId): boolean {
   return PLANS[plan].searchConsoleAccess;
-}
-
-/** Outil de recherche de mots-clés SEO (page Mots-clés du studio). */
-export function hasKeywordResearch(plan: PlanId): boolean {
-  return PLANS[plan].keywordResearch;
 }
 
 /** Académie (formations du studio). */

@@ -111,6 +111,7 @@ export function GoogleClient({
               votes: data.latestAudit?.snapshot.votes ?? data.linked?.reviewCount ?? null,
               photos: data.latestAudit?.snapshot.totalPhotos ?? null,
             }}
+            searchVisibility={data.searchVisibility}
           />
         ) : null}
         {tab === "avis" ? (

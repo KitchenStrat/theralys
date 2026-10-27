@@ -80,7 +80,7 @@ export function Presence() {
                     <Brand />
                   </p>
                   <div className="mt-3 space-y-1.5">
-                    {["Accueil", "Éditeur", "Publications", "Mots-clés", "Compte"].map(
+                    {["Accueil", "Éditeur", "Publications", "Google Ads", "Compte"].map(
                       (item, i) => (
                         <p
                           key={item}

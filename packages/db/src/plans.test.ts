@@ -5,8 +5,8 @@ import {
   canAddMotifPage,
   hasAcademy,
   hasBlog,
+  hasGoogleAds,
   hasGoogleProfile,
-  hasKeywordResearch,
   hasSearchConsole,
   hasSocialMedia,
   motifPagesAllowance,
@@ -53,9 +53,7 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(hasSearchConsole("scale")).toBe(true);
   });
 
-  it("outil de recherche de mots-clés et Académie réservés à Scale", () => {
-    expect(hasKeywordResearch("starter")).toBe(false);
-    expect(hasKeywordResearch("scale")).toBe(true);
+  it("Académie réservée à Scale", () => {
     expect(hasAcademy("starter")).toBe(false);
     expect(hasAcademy("scale")).toBe(true);
   });
@@ -66,7 +64,7 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(motifPagesAllowance("boost")).toBe(6);
     expect(hasBlog("boost")).toBe(true);
     expect(hasSearchConsole("boost")).toBe(true);
-    expect(hasKeywordResearch("boost")).toBe(true);
+    expect(hasGoogleAds("boost")).toBe(true);
     expect(hasAcademy("boost")).toBe(true);
     expect(PLANS.boost.label).toBe("Scale");
   });
@@ -91,5 +89,12 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(hasGoogleProfile("scale")).toBe(true);
     expect(hasGoogleProfile("boost")).toBe(true);
     expect(PLANS.starter.googleProfile).toBe(false);
+  });
+
+  it("Google Ads : réservé à Scale (et à l'héritage Boost), pas à Starter ; plus de drapeau « recherche de mots-clés »", () => {
+    expect(hasGoogleAds("starter")).toBe(false);
+    expect(hasGoogleAds("scale")).toBe(true);
+    expect(PLANS.starter.googleAds).toBe(false);
+    expect("keywordResearch" in PLANS.scale).toBe(false);
   });
 });

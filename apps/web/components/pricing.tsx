@@ -14,10 +14,10 @@ export type PlanCard = {
   blogArticlesPerWeek: number;
   blogArticlesPerYear: number;
   searchConsoleAccess: boolean;
-  keywordResearch: boolean;
   academy: boolean;
   socialMedia: boolean;
   googleProfile: boolean;
+  googleAds: boolean;
 };
 
 const TAGLINES: Record<string, string> = {
@@ -142,12 +142,6 @@ function featureList(plan: PlanCard): Feature[] {
     },
     { text: "Avis Google synchronisés sur votre site", included: true, highlight: false, icon: "star" },
     { text: "Statistiques de visites et d'appels", included: true, highlight: false, icon: "chart" },
-    {
-      text: "Outil de recherche des mots-clefs SEO",
-      included: plan.keywordResearch,
-      highlight: plan.keywordResearch,
-      icon: "bulb",
-    },
     { text: "Académie", included: plan.academy, highlight: plan.academy, icon: "cap" },
     {
       text: "Contenus réseaux sociaux prêts à poster",
@@ -160,6 +154,12 @@ function featureList(plan: PlanCard): Feature[] {
       included: plan.googleProfile,
       highlight: plan.googleProfile,
       icon: "pin",
+    },
+    {
+      text: "Google Ads : analyse, mots-clés et plan d'action",
+      included: plan.googleAds,
+      highlight: plan.googleAds,
+      icon: "bulb",
     },
     { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];

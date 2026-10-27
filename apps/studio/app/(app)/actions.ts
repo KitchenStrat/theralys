@@ -208,6 +208,8 @@ export async function connectGoogle(): Promise<{ error?: string } | void> {
   await syncGoogleData();
   await completeOnboardingTask("connect_google");
   revalidatePath("/");
+  // La carte « Visibilité Google » vit en tête de l'onglet Visibilité de Fiche Google
+  revalidatePath("/fiche-google");
 }
 
 // ─── Paramètres du blog ───────────────────────────────────────────────────────
@@ -857,7 +859,11 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
     cabinets: data.cabinets !== undefined ? cabinets : fresh.cabinets,
     faviconUrl: data.faviconUrl !== undefined ? faviconUrl : fresh.faviconUrl,
     shareImageUrl: data.seoImageUrl !== undefined ? shareImageUrl : fresh.shareImageUrl,
-    tracking: data.tracking !== undefined ? tracking : fresh.tracking,
+    // Les libellés de conversion Google Ads (section Google Ads) ne sont pas édités ici : conservés
+    tracking:
+      data.tracking !== undefined
+        ? { ...tracking, googleAdsConversions: fresh.tracking?.googleAdsConversions }
+        : fresh.tracking,
     legal: data.legal !== undefined ? legal : fresh.legal,
     social: data.social !== undefined ? social : fresh.social,
     footer: data.footer !== undefined ? footer : fresh.footer,
