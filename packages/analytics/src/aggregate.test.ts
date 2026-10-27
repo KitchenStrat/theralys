@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarizePeriod, type EventLike } from "./aggregate";
+import { summarizePeriod, summarizeSources, type EventLike, type SourceEventLike } from "./aggregate";
 import { parseConsent } from "./consent";
 import { trackEventSchema } from "./events";
 
@@ -61,6 +61,62 @@ describe("summarizePeriod", () => {
   });
 });
 
+describe("summarizeSources", () => {
+  const src = (source: string | null, visitorId: string | null, type: SourceEventLike["type"] = "pageview"): SourceEventLike => ({
+    type,
+    visitorId,
+    source,
+  });
+
+  it("compte les visiteurs uniques par source, parts en %, tri décroissant", () => {
+    const summary = summarizeSources([
+      src("instagram", "v1"),
+      src("instagram", "v1"), // même visiteur : une seule fois
+      src("instagram", "v2"),
+      src("google", "v3"),
+      src("direct", "v4"),
+      src("instagram", "v5"),
+    ]);
+    expect(summary.unit).toBe("visitors");
+    expect(summary.total).toBe(5);
+    expect(summary.rows).toEqual([
+      { source: "instagram", count: 3, share: 60 },
+      { source: "google", count: 1, share: 20 },
+      { source: "direct", count: 1, share: 20 },
+    ]);
+  });
+
+  it("exclut les événements sans source (historique, navigation interne), les clics RDV et les valeurs inconnues", () => {
+    const summary = summarizeSources([
+      src(null, "v1"),
+      src(null, "v2"),
+      src("instagram", "v3", "rdv_click"),
+      src("myspace", "v4"),
+      src("facebook", "v5"),
+    ]);
+    expect(summary.total).toBe(1);
+    expect(summary.rows).toEqual([{ source: "facebook", count: 1, share: 100 }]);
+  });
+
+  it("sans identifiant visiteur, compte les vues", () => {
+    const summary = summarizeSources([src("google", null), src("google", null), src("other", null)]);
+    expect(summary.unit).toBe("views");
+    expect(summary.rows).toEqual([
+      { source: "google", count: 2, share: 67 },
+      { source: "other", count: 1, share: 33 },
+    ]);
+  });
+
+  it("à égalité, suit l'ordre des sources (réseaux d'abord, accès direct et autres sites en fin)", () => {
+    const summary = summarizeSources([src("other", "a"), src("direct", "b"), src("linkedin", "c"), src("google", "d")]);
+    expect(summary.rows.map((r) => r.source)).toEqual(["linkedin", "google", "direct", "other"]);
+  });
+
+  it("vide sans aucune provenance", () => {
+    expect(summarizeSources([])).toEqual({ total: 0, unit: "views", rows: [] });
+  });
+});
+
 describe("consentement", () => {
   it("ne reconnaît que granted/denied", () => {
     expect(parseConsent("granted")).toBe("granted");
@@ -78,6 +134,26 @@ describe("validation des événements entrants", () => {
       path: "/motifs/massage-sportif",
     });
     expect(parsed.type).toBe("pageview");
+  });
+
+  it("accepte referrer et src facultatifs, bornés en longueur", () => {
+    const parsed = trackEventSchema.parse({
+      siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f",
+      type: "pageview",
+      referrer: "https://l.instagram.com/",
+      src: "ig",
+    });
+    expect(parsed.referrer).toBe("https://l.instagram.com/");
+    expect(parsed.src).toBe("ig");
+    expect(
+      trackEventSchema.parse({ siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "rdv_click" }).referrer,
+    ).toBeUndefined();
+    expect(() =>
+      trackEventSchema.parse({ siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "pageview", referrer: "x".repeat(501) }),
+    ).toThrow();
+    expect(() =>
+      trackEventSchema.parse({ siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "pageview", src: "x".repeat(21) }),
+    ).toThrow();
   });
 
   it("rejette un type inconnu ou un siteId invalide", () => {

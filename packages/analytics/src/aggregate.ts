@@ -1,8 +1,11 @@
 /**
  * Agrégation des événements en statistiques (visiteurs uniques, clics RDV,
- * variation vs période précédente, série journalière). Fonctions pures,
- * utilisées par le dashboard client (Phase 2) et testées dès la Phase 1.
+ * variation vs période précédente, série journalière, provenance des
+ * visites). Fonctions pures, utilisées par le dashboard client (Phase 2) et
+ * testées dès la Phase 1.
  */
+
+import { ANALYTICS_SOURCES, type AnalyticsSource } from "@theralys/shared";
 
 export type EventLike = {
   type: "pageview" | "rdv_click";
@@ -54,6 +57,71 @@ export function summarizePeriod(
     rdvClicksChangePct: changePct(prevRdvClicks, rdvClicks),
     daily,
   };
+}
+
+// ─── Provenance des visites ──────────────────────────────────────────────────
+
+export type SourceEventLike = {
+  type: "pageview" | "rdv_click";
+  visitorId: string | null;
+  /** AnalyticsSource enregistrée à l'ingestion ; null = non renseignée (navigation interne, événement antérieur à la mesure) */
+  source: string | null;
+};
+
+export type SourceShare = {
+  source: AnalyticsSource;
+  /** Visiteurs uniques (ou vues, voir `unit`) venus de cette source */
+  count: number;
+  /** Part en % du total mesuré, arrondie */
+  share: number;
+};
+
+export type SourceSummary = {
+  /** Total mesuré (somme des `count`) ; 0 = aucune provenance renseignée */
+  total: number;
+  /** `visitors` dès qu'un identifiant visiteur existe, sinon `views` */
+  unit: "visitors" | "views";
+  /** Sources présentes, triées par `count` décroissant puis ordre d'ANALYTICS_SOURCES */
+  rows: SourceShare[];
+};
+
+const SOURCE_ORDER = new Map<string, number>(ANALYTICS_SOURCES.map((s, i) => [s, i]));
+
+function isAnalyticsSource(value: string): value is AnalyticsSource {
+  return SOURCE_ORDER.has(value);
+}
+
+/**
+ * Répartition des pages vues par provenance. Seules les pages vues dont la
+ * `source` est renseignée comptent : les événements sans source (navigation
+ * interne, historique antérieur à la mesure) sont exclus du total pour ne pas
+ * fausser les parts. Par source, un visiteur identifié compte une fois ;
+ * chaque page vue sans identifiant compte pour une.
+ */
+export function summarizeSources(events: SourceEventLike[]): SourceSummary {
+  const visitors = new Map<AnalyticsSource, Set<string>>();
+  const anonymous = new Map<AnalyticsSource, number>();
+  let hasVisitorId = false;
+  for (const e of events) {
+    if (e.type !== "pageview" || e.source === null || !isAnalyticsSource(e.source)) continue;
+    if (e.visitorId) {
+      hasVisitorId = true;
+      const ids = visitors.get(e.source) ?? new Set<string>();
+      ids.add(e.visitorId);
+      visitors.set(e.source, ids);
+    } else {
+      anonymous.set(e.source, (anonymous.get(e.source) ?? 0) + 1);
+    }
+  }
+  const rows: SourceShare[] = [];
+  for (const source of ANALYTICS_SOURCES) {
+    const count = (visitors.get(source)?.size ?? 0) + (anonymous.get(source) ?? 0);
+    if (count > 0) rows.push({ source, count, share: 0 });
+  }
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  for (const row of rows) row.share = total > 0 ? Math.round((row.count / total) * 100) : 0;
+  rows.sort((a, b) => b.count - a.count || SOURCE_ORDER.get(a.source)! - SOURCE_ORDER.get(b.source)!);
+  return { total, unit: hasVisitorId ? "visitors" : "views", rows };
 }
 
 /** Visiteurs uniques = identifiants distincts (consentis) sur la période. */

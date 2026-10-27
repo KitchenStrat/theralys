@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@theralys/ui";
-import { hasBlog } from "@theralys/db";
+import { hasBlog, hasSocialMedia } from "@theralys/db";
 import { formatDateFr } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import {
@@ -48,6 +48,7 @@ export default async function HomePage({ searchParams }: Props) {
 
   const site = await getSite(session.siteId);
   const blog = site.type === "demo" || hasBlog(site.plan);
+  const socialAccess = site.type === "demo" || hasSocialMedia(site.plan);
   const [stats, upcoming] = await Promise.all([
     getDashboardStats(site.id, period),
     blog ? getUpcoming(site.id) : Promise.resolve([]),
@@ -69,6 +70,8 @@ export default async function HomePage({ searchParams }: Props) {
               rdvClicksChangePct: stats.rdvClicksChangePct,
               daily: stats.daily,
             }}
+            sources={stats.sources}
+            socialAccess={socialAccess}
           />
         </Card>
 

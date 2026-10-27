@@ -3,8 +3,11 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { ANALYTICS_SOURCE_LABELS, type AnalyticsSource } from "@theralys/shared";
 
 type Daily = { day: string; visitors: number; rdvClicks: number };
+
+export type SourceRow = { source: AnalyticsSource; count: number; share: number };
 
 type Props = {
   firstName: string;
@@ -16,6 +19,10 @@ type Props = {
     rdvClicksChangePct: number | null;
     daily: Daily[];
   };
+  /** Provenance des visites de la période (sources renseignées seulement) */
+  sources: { total: number; unit: "visitors" | "views"; rows: SourceRow[] };
+  /** Le site a accès à la section Réseaux sociaux (lien de bio tracé disponible) */
+  socialAccess: boolean;
 };
 
 const PERIODS = [
@@ -24,7 +31,7 @@ const PERIODS = [
   { key: "6m", label: "6m", caption: "sur 6 mois" },
 ] as const;
 
-export function StatsPanel({ firstName, period, stats }: Props) {
+export function StatsPanel({ firstName, period, stats, sources, socialAccess }: Props) {
   const [metric, setMetric] = useState<"visitors" | "rdvClicks">("visitors");
   const caption = PERIODS.find((p) => p.key === period)!.caption;
 
@@ -80,7 +87,93 @@ export function StatsPanel({ firstName, period, stats }: Props) {
           label={metric === "visitors" ? "Visiteurs" : "Clics RDV"}
         />
       </div>
+
+      <SourcesBlock sources={sources} caption={caption} socialAccess={socialAccess} />
     </div>
+  );
+}
+
+/** Sources dont les visites arrivent par le lien de bio tracé (`?src=`) — mention sous le libellé. */
+const BIO_LINK_SOURCES: ReadonlySet<AnalyticsSource> = new Set<AnalyticsSource>(["instagram", "facebook"]);
+
+/**
+ * « Provenance des visites » : barres simples (divs), une ligne par source
+ * mesurée, part en %. État vide pédagogique : la mesure commence avec le lien
+ * de bio tracé (Réseaux sociaux → Paramétrage) et les referrers.
+ */
+function SourcesBlock({
+  sources,
+  caption,
+  socialAccess,
+}: {
+  sources: Props["sources"];
+  caption: string;
+  socialAccess: boolean;
+}) {
+  const unitLabel = sources.unit === "visitors" ? "visiteurs" : "vues";
+  return (
+    <section className="mt-7 border-t border-cream-300 pt-5" aria-labelledby="sources-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="sources-title" className="text-base font-semibold text-ink-900">
+          Provenance des visites
+        </h2>
+        {sources.total > 0 ? (
+          <p className="text-xs text-ink-500">
+            {sources.total} {unitLabel} {caption}
+          </p>
+        ) : null}
+      </div>
+
+      {sources.rows.length > 0 ? (
+        <ul className="mt-3 space-y-2.5">
+          {sources.rows.map((row) => (
+            <li key={row.source}>
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="text-ink-900">
+                  {ANALYTICS_SOURCE_LABELS[row.source]}
+                  {BIO_LINK_SOURCES.has(row.source) ? (
+                    <span className="ml-1.5 text-xs text-ink-500">depuis le lien de votre bio</span>
+                  ) : null}
+                </span>
+                <span className="whitespace-nowrap text-ink-700">
+                  <span className="font-semibold text-ink-900">{row.share} %</span>
+                  <span className="ml-1.5 text-xs text-ink-500">
+                    ({row.count} {row.count > 1 ? unitLabel : unitLabel.slice(0, -1)})
+                  </span>
+                </span>
+              </div>
+              <div
+                className="mt-1 h-2 w-full overflow-hidden rounded-full bg-cream-200"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={row.share}
+                aria-label={`${ANALYTICS_SOURCE_LABELS[row.source]} : ${row.share} %`}
+              >
+                <div className="h-full rounded-full bg-primary-400" style={{ width: `${Math.max(2, row.share)}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="mt-3 rounded-2xl bg-cream-100 px-4 py-3.5 text-sm text-ink-700">
+          <p>
+            Aucune provenance mesurée pour l&apos;instant : elle apparaît dès les prochaines visites
+            (Instagram, Facebook, Google, accès direct…).
+          </p>
+          {socialAccess ? (
+            <p className="mt-1.5 text-ink-500">
+              Pour savoir ce que vos réseaux vous apportent, mettez votre lien de bio tracé dans
+              Instagram et Facebook :{" "}
+              <Link href="/reseaux-sociaux" className="font-medium text-primary-700 hover:underline">
+                Réseaux sociaux → Paramétrage
+              </Link>
+              .
+            </p>
+          ) : null}
+        </div>
+      )}
+    </section>
   );
 }
 

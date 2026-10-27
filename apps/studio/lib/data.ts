@@ -12,7 +12,7 @@ import {
   sites,
   type Site,
 } from "@theralys/db";
-import { summarizePeriod, type PeriodStats } from "@theralys/analytics";
+import { summarizePeriod, summarizeSources, type PeriodStats, type SourceSummary } from "@theralys/analytics";
 
 export type Period = "7j" | "30j" | "6m";
 
@@ -38,16 +38,26 @@ export async function getProspect(site: Site) {
   );
 }
 
+export type DashboardStats = PeriodStats & {
+  /**
+   * Provenance des visites de la période (pages vues dont la source est
+   * renseignée ; les événements antérieurs à la mesure, sans source, sont
+   * exclus du calcul plutôt que comptés en accès direct).
+   */
+  sources: SourceSummary;
+};
+
 /** Statistiques du dashboard (tracking maison) sur la période + la précédente. */
-export async function getDashboardStats(siteId: string, period: Period): Promise<PeriodStats> {
+export async function getDashboardStats(siteId: string, period: Period): Promise<DashboardStats> {
   const db = getDb();
   const { from, to } = periodRange(period);
   const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
   const events = await db.query.analyticsEvents.findMany({
     where: and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom)),
-    columns: { type: true, visitorId: true, occurredAt: true },
+    columns: { type: true, visitorId: true, occurredAt: true, source: true },
   });
-  return summarizePeriod(events, from, to);
+  const current = events.filter((e) => e.occurredAt >= from && e.occurredAt < to);
+  return { ...summarizePeriod(events, from, to), sources: summarizeSources(current) };
 }
 
 

@@ -9,6 +9,7 @@ import {
 } from "@theralys/analytics";
 import { analyticsEvents, getDb, sites } from "@theralys/db";
 import { eq } from "drizzle-orm";
+import { ownHostsFor, resolveTrackSource } from "@/lib/track-source";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export const dynamic = "force-dynamic";
  *   (IP + navigateur + sel secret) qui tourne chaque jour, à la façon des
  *   outils de mesure d'audience exemptés de consentement. Impossible à
  *   recouper d'un jour sur l'autre, mais les visiteurs comptent quand même.
+ * - Provenance (`source`) : déduite du referrer et du `src` du lien de bio
+ *   envoyés avec la première page vue de la session ; un referrer sur le
+ *   site lui-même vaut navigation interne (null). Les clics RDV n'en ont pas.
  */
 const BOT_UA = /bot|crawl|spider|slurp|lighthouse|headless|prerender|vercel-screenshot|monitor/i;
 
@@ -71,11 +75,14 @@ export async function POST(request: NextRequest) {
     visitorId = anonymousVisitorId(request, site.id);
   }
 
+  const source = resolveTrackSource(payload, ownHostsFor(request.headers.get("host"), site));
+
   await db.insert(analyticsEvents).values({
     siteId: site.id,
     type: payload.type,
     visitorId,
     path: payload.path,
+    source,
   });
 
   const response = NextResponse.json({ ok: true });
