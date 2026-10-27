@@ -29,6 +29,13 @@
       "when": 1793027017675,
       "tag": "0003_google_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793105824269,
+      "tag": "0004_social_followup",
+      "breakpoints": true
     }
   ]
 }

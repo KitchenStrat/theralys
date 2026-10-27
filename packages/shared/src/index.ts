@@ -11,3 +11,4 @@ export * from "./social";
 export * from "./social-text";
 export * from "./social-brief";
 export * from "./google-profile";
+export * from "./social-captions";

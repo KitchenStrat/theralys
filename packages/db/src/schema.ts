@@ -271,9 +271,36 @@ export const analyticsEvents = pgTable(
     // Identifiant de visiteur (cookie first-party, uniquement après consentement)
     visitorId: text("visitor_id"),
     path: text("path").notNull().default("/"),
+    /** Provenance (AnalyticsSource : instagram | facebook | linkedin | google | direct | other), null avant 0004 */
+    source: text("source"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("analytics_site_type_time_idx").on(t.siteId, t.type, t.occurredAt)],
+);
+
+/**
+ * Journal des notifications envoyées par les jobs (e-mail hebdomadaire des
+ * contenus, rappel de préparation du mois…) : une ligne par site, par type et
+ * par période, l'unicité garantit qu'un cron relancé n'envoie pas deux fois.
+ */
+export const notificationLog = pgTable(
+  "notification_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** social_weekly | social_month_reminder | … */
+    kind: text("kind").notNull(),
+    /** Période couverte : "2026-W44", "2026-11"… */
+    periodKey: text("period_key").notNull(),
+    /** Destinataire (e-mail) */
+    recipient: text("recipient").notNull(),
+    /** true si l'envoi a réellement eu lieu (fournisseur réel), false en mock */
+    sent: boolean("sent").notNull().default(false),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("notification_log_site_kind_period_idx").on(t.siteId, t.kind, t.periodKey)],
 );
 
 // ─── Google (OAuth par client, Phase 2) ──────────────────────────────────────
@@ -628,3 +655,4 @@ export type GooglePost = typeof googlePosts.$inferSelect;
 export type NewGooglePost = typeof googlePosts.$inferInsert;
 export type GoogleUsage = typeof googleUsage.$inferSelect;
 export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;
+export type NotificationLogEntry = typeof notificationLog.$inferSelect;

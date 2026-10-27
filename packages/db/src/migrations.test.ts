@@ -49,12 +49,13 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler, 0001_social_posts, 0002_social_settings puis 0003_google_profile, fichiers présents", () => {
+  it("référence 0000_soft_scrambler, 0001_social_posts, 0002_social_settings, 0003_google_profile puis 0004_social_followup, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
       "0002_social_settings",
       "0003_google_profile",
+      "0004_social_followup",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -187,5 +188,22 @@ describe("0003_google_profile : tables de la section Fiche Google et colonnes d'
       expect(stmt, col).toBeDefined();
       expect(stmt).not.toContain("NOT NULL");
     }
+  });
+});
+
+describe("0004_social_followup : provenance des visites et journal des notifications", () => {
+  const statements = statementsOf("0004_social_followup");
+
+  it("table notification_log, colonne source, clé étrangère gardée et index unique — rien d'autre", () => {
+    expect(statements).toHaveLength(4);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "notification_log"'));
+    expect(table).toContain('"period_key" text NOT NULL');
+    expect(table).toContain('"sent" boolean DEFAULT false NOT NULL');
+    expect(statements.some((s) => s === 'ALTER TABLE "analytics_events" ADD COLUMN IF NOT EXISTS "source" text;')).toBe(true);
+    expect(
+      statements.some((s) =>
+        s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "notification_log_site_kind_period_idx" ON "notification_log"'),
+      ),
+    ).toBe(true);
   });
 });
