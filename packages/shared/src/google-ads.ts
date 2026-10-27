@@ -98,13 +98,15 @@ function intentMeta(intent: GoogleAdsIntent): { weight: number; match: GoogleAds
 
 // ─── Normalisation ───────────────────────────────────────────────────────────
 
-/** Minuscules, accents retirés, apostrophes et traits d'union en espaces, espaces repliés. */
+/** Minuscules, accents et ligatures retirés, apostrophes et traits d'union en espaces, espaces repliés. */
 export function normalizeAdsText(text: string): string {
   return text
     .toLowerCase()
+    .replace(/œ/g, "oe")
+    .replace(/æ/g, "ae")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[’'`´\-_/]/g, " ")
+    .replace(/[’‘'`´\-_/]/g, " ")
     .replace(/[^a-z0-9 ]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -112,6 +114,69 @@ export function normalizeAdsText(text: string): string {
 
 function words(text: string): string[] {
   return normalizeAdsText(text).split(" ").filter(Boolean);
+}
+
+const STOP_WORDS = new Set(["de", "du", "des", "la", "le", "les", "et", "en", "au", "aux", "pour", "par", "sur", "un", "une", "a", "d", "l", "votre", "vos", "mon", "ma", "mes", "the", "of"]);
+
+/** Mots d'intitulé qui ne désignent pas la pratique elle-même (« praticienne en hypnose », « professeur de yoga », « méthode Feldenkrais »). */
+const GENERIC_JOB_WORDS = new Set([
+  "praticien", "praticienne", "praticiens", "praticiennes",
+  "therapeute", "therapeutes",
+  "specialiste", "specialistes",
+  "conseiller", "conseillere", "conseillers", "conseilleres",
+  "professeur", "professeure", "professeurs", "prof",
+  "instructeur", "instructrice", "moniteur", "monitrice", "animateur", "animatrice",
+  "enseignant", "enseignante", "formateur", "formatrice", "educateur", "educatrice",
+  "intervenant", "intervenante", "accompagnant", "accompagnante", "accompagnateur", "accompagnatrice",
+  "expert", "experte", "methode", "cabinet", "centre", "atelier", "soin", "soins", "seance", "seances",
+]);
+
+/**
+ * Racines trop générales pour signer un métier au milieu d'un mot
+ * (« art-thérapeute », « kinésithérapeute » ne sont pas des psychopraticiens) :
+ * elles ne comptent qu'en début de mot, et seulement comme tête de l'intitulé
+ * pour reconnaître le métier (« thérapeute de couple », pas « art-thérapeute »).
+ */
+const WORD_START_ROOTS: ReadonlySet<string> = new Set(["therapeute"]);
+
+/** Une racine signe un texte normalisé : en début de mot pour les racines courtes ou générales, n'importe où sinon. */
+function hasRoot(normalized: string, root: string): boolean {
+  if (root === "") return false;
+  if (root.length < 4 || WORD_START_ROOTS.has(root)) return normalized.split(" ").some((w) => w.startsWith(root));
+  return normalized.includes(root);
+}
+
+/** Premier mot significatif d'un intitulé (hors mots vides et mots génériques de fonction). */
+function headWord(text: string): string {
+  const candidates = words(text).filter((w) => !STOP_WORDS.has(w) && !GENERIC_JOB_WORDS.has(w));
+  return candidates.find((w) => w.length >= 3) ?? candidates[0] ?? words(text)[0] ?? "";
+}
+
+/** Racine (≤ 6 caractères) du premier mot significatif, « » si aucun. */
+function genericRoot(text: string): string {
+  return headWord(text).slice(0, 6);
+}
+
+/**
+ * Terme utilisable dans une graine : partie avant un « / » (« Hypnothérapie /
+ * hypnose ericksonienne »), parenthèses retirées (« EFT (libération
+ * émotionnelle) »), ponctuation refusée par Google Ads supprimée, minuscules.
+ */
+function cleanTerm(raw: string): string {
+  return (raw.split("/")[0] ?? "")
+    .replace(/\([^)]*\)?/g, " ")
+    .replace(/[^\p{L}\p{N}\s'’-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** Formes normalisées d'une ville acceptées dans une requête : telle quelle, et sans son article (« L'Isle-Jourdain » → « isle jourdain », « Le Mans » → « mans »). */
+function cityForms(city: string): string[] {
+  const norm = normalizeAdsText(city);
+  if (norm === "") return [];
+  const stripped = norm.replace(/^(?:l|le|la|les) /, "");
+  return unique([norm, stripped].filter((c) => c.length >= 3));
 }
 
 function containsPhrase(haystack: string, phrase: string): boolean {
@@ -124,6 +189,19 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+/** Dédoublonne des textes sur leur forme normalisée (« définition » et « definition »), en gardant la première graphie. */
+function uniqueNormalized(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = normalizeAdsText(value);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -133,6 +211,12 @@ function median(values: number[]): number | null {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/** Médiane d'un montant en euros, au centime (évite le bruit flottant dans le JSON stocké). */
+function roundedMedian(values: number[]): number | null {
+  const value = median(values);
+  return value === null ? null : round2(value);
 }
 
 function round10(value: number): number {
@@ -235,20 +319,31 @@ const REPUTATION_MARKERS: readonly string[] = ["avis", "meilleur", "meilleure", 
 const TARIF_MARKERS: readonly string[] = ["tarif", "tarifs", "prix", "combien", "cout", "pas cher", "remboursement"];
 const PROXIMITY_MARKERS: readonly string[] = ["pres de", "proche", "autour", "a cote", "a proximite", "chez moi", "alentours"];
 
-/** Famille du métier (racines, synonymes, négatifs) ; repli générique sur le premier mot significatif. */
+/**
+ * Famille du métier (racines, synonymes, négatifs) ; repli générique sur le
+ * premier mot significatif de l'intitulé (« Praticien en lithothérapie » →
+ * « lithot », « EFT (libération émotionnelle) » → « eft »).
+ */
 export function adsProfessionFamily(profession: string): AdsProfessionFamily {
   const normalized = normalizeAdsText(profession);
+  const head = words(profession).find((w) => !STOP_WORDS.has(w)) ?? "";
   for (const family of FAMILIES) {
-    if (family.roots.some((root) => normalized.includes(root))) return family;
+    if (family.roots.some((root) => (WORD_START_ROOTS.has(root) ? head.startsWith(root) : hasRoot(normalized, root)))) return family;
   }
-  const first = words(profession).find((w) => w.length >= 4) ?? normalized;
-  const root = first.slice(0, Math.min(first.length, 6));
+  const root = genericRoot(profession);
   return {
     key: "generic",
     roots: root ? [root] : [],
-    synonyms: [profession.trim().toLowerCase()].filter(Boolean),
+    synonyms: [cleanTerm(profession)].filter(Boolean),
     negatives: [],
   };
+}
+
+/** Négatifs applicables à un métier : liste commune (moins ceux qui nomment la pratique, ex. « cours » pour « cours de yoga ») et liste propre. */
+function familyNegatives(family: AdsProfessionFamily): string[] {
+  const own = family.synonyms.map(normalizeAdsText);
+  const generic = GOOGLE_ADS_GENERIC_NEGATIVES.filter((n) => !own.some((s) => containsPhrase(s, n)));
+  return uniqueNormalized([...generic, ...family.negatives]);
 }
 
 // ─── Graines ─────────────────────────────────────────────────────────────────
@@ -278,20 +373,43 @@ export type GoogleAdsSeed = {
   specialtyRoots: string[];
 };
 
-const STOP_WORDS = new Set(["de", "du", "des", "la", "le", "les", "et", "en", "au", "aux", "pour", "par", "sur", "un", "une", "a", "d", "l", "votre", "vos", "mon", "ma", "mes", "the", "of"]);
+const SPECIALTY_MAX = 40;
 
-function cleanSpecialty(raw: string, professionRoots: string[]): string | null {
-  const text = raw.replace(/\s+/g, " ").trim().toLowerCase();
-  if (text.length < 3 || text.length > 60) return null;
-  if (words(text).length > 6) return null;
-  // Une spécialité qui n'est que le métier lui-même n'apporte rien de plus
-  const normalized = normalizeAdsText(text);
-  if (professionRoots.some((root) => normalized === root || normalized.startsWith(`${root} `) && words(normalized).length <= 1)) return null;
-  return text.slice(0, 40).trim();
+/** Le mot porte une racine du métier (« sophrologie » pour « sophro », « thérapie » pour « therapeute ») : il ne distingue pas une spécialité. */
+function carriesRoot(word: string, professionRoots: string[]): boolean {
+  return professionRoots.some((root) => root !== "" && (word.startsWith(root) || root.startsWith(word.slice(0, 6))));
 }
 
-function specialtyRoot(specialty: string): string | null {
-  const significant = words(specialty).filter((w) => !STOP_WORDS.has(w) && w.length >= 4);
+/**
+ * Titre de page → spécialité : ponctuation retirée, ≤ 40 caractères coupés sur
+ * un mot (sans mot vide pendant). Une page qui n'est que le métier lui-même
+ * (« Sophrologie », « Massages ») n'apporte rien de plus.
+ */
+function cleanSpecialty(raw: string, professionRoots: string[]): string | null {
+  const text = cleanTerm(raw);
+  if (text.length < 3 || text.length > 60) return null;
+  const ws = words(text);
+  if (ws.length === 0 || ws.length > 6) return null;
+  if (ws.length === 1 && carriesRoot(ws[0]!, professionRoots)) return null;
+  if (text.length <= SPECIALTY_MAX) return text;
+  const lastSpace = text.lastIndexOf(" ", SPECIALTY_MAX);
+  const parts = (lastSpace > 0 ? text.slice(0, lastSpace) : text.slice(0, SPECIALTY_MAX)).split(" ");
+  while (parts.length > 1 && STOP_WORDS.has(normalizeAdsText(parts[parts.length - 1]!))) parts.pop();
+  return parts.join(" ").trim();
+}
+
+/** Mots de titre de page qui ne désignent pas le sujet de la spécialité (« Accompagnement du sommeil » → « sommeil »). */
+const SPECIALTY_GENERIC_WORDS = new Set([
+  "accompagnement", "accompagnements", "gestion", "prise", "charge", "aide", "soutien", "traitement", "traitements",
+  "soulager", "soulagement", "preparation", "technique", "techniques", "approche", "approches", "pratique", "pratiques",
+  "trouble", "troubles", "probleme", "problemes", "bilan", "consultation", "consultations", "rendez", "vous",
+]);
+
+/** Racine de la spécialité : premier mot significatif qui n'est ni le métier ni un mot générique (« sophrologie et gestion du stress » → « stress »). */
+function specialtyRoot(specialty: string, professionRoots: string[]): string | null {
+  const significant = words(specialty).filter(
+    (w) => !STOP_WORDS.has(w) && !GENERIC_JOB_WORDS.has(w) && !SPECIALTY_GENERIC_WORDS.has(w) && w.length >= 4 && !carriesRoot(w, professionRoots),
+  );
   const first = significant[0];
   return first ? first.slice(0, Math.min(first.length, 6)) : null;
 }
@@ -310,13 +428,18 @@ function validSeed(keyword: string): boolean {
 export function buildAdsSeeds(input: GoogleAdsSeedInput, max = GOOGLE_ADS_SEEDS_MAX): GoogleAdsSeed {
   const family = adsProfessionFamily(input.profession);
   const profession = input.profession.replace(/\s+/g, " ").trim().toLowerCase();
-  const city = input.city.replace(/\s+/g, " ").trim().toLowerCase();
-  const professionTerms = unique([profession, ...family.synonyms.map((s) => s.toLowerCase())].filter(Boolean)).slice(0, 3);
-  const professionRoots = unique([...family.roots, ...(family.key === "generic" ? [] : [])]);
+  const city = cleanTerm(input.city);
+  // Terme des graines : « Réflexologie (plantaire, palmaire, faciale) » → « réflexologie »
+  const term = cleanTerm(input.profession);
+  const professionTerms = uniqueNormalized([term, ...family.synonyms.map((s) => s.toLowerCase())].filter(Boolean)).slice(0, 3);
+  // Le mot par lequel le praticien se désigne signe aussi le métier quand la famille ne le couvre pas (« Tuina (massage chinois) » → « tuina »)
+  const own = headWord(term);
+  const ownRoot = family.roots.some((root) => hasRoot(own, root)) ? "" : genericRoot(term);
+  const professionRoots = unique([...family.roots, ownRoot].filter(Boolean));
   const specialties = unique(
     input.specialties.map((s) => cleanSpecialty(s, professionRoots)).filter((s): s is string => s !== null),
   ).slice(0, 6);
-  const specialtyRoots = unique(specialties.map(specialtyRoot).filter((r): r is string => r !== null));
+  const specialtyRoots = unique(specialties.map((s) => specialtyRoot(s, professionRoots)).filter((r): r is string => r !== null));
 
   const main = professionTerms[0] ?? profession;
   const candidates: string[] = [];
@@ -416,22 +539,20 @@ export type SelectAdsKeywordsOptions = {
 type Relatedness = { hasRoot: boolean; hasCity: boolean; hasSpecialty: boolean };
 
 function relatedness(normalized: string, seed: GoogleAdsSeed): Relatedness {
-  const cityNorm = normalizeAdsText(seed.city);
   return {
-    hasRoot: seed.professionRoots.some((root) => normalized.includes(root)),
-    hasCity: cityNorm !== "" && containsPhrase(normalized, cityNorm),
-    hasSpecialty: seed.specialtyRoots.some((root) => normalized.includes(root)),
+    hasRoot: seed.professionRoots.some((root) => hasRoot(normalized, root)),
+    hasCity: cityForms(seed.city).some((city) => containsPhrase(normalized, city)),
+    hasSpecialty: seed.specialtyRoots.some((root) => hasRoot(normalized, root)),
   };
 }
 
-/** Raison d'exclusion d'une idée, null si elle peut être ciblée. */
+/** Raison d'exclusion d'une idée (informationnelle, négative, hors sujet, trop longue ou vide), null si elle peut être ciblée. */
 export function adsKeywordExclusion(keyword: string, seed: GoogleAdsSeed): "negative" | "informational" | "unrelated" | "too_long" | null {
   const normalized = normalizeAdsText(keyword);
   if (normalized === "" || keyword.length > 80 || words(keyword).length > 10) return "too_long";
-  const family = adsProfessionFamily(seed.profession);
-  const negatives = [...GOOGLE_ADS_GENERIC_NEGATIVES, ...family.negatives];
-  if (negatives.some((n) => containsPhrase(normalized, n))) return "negative";
   if (INFO_MARKERS.some((m) => containsPhrase(normalized, m))) return "informational";
+  const negatives = familyNegatives(adsProfessionFamily(seed.profession));
+  if (negatives.some((n) => containsPhrase(normalized, n))) return "negative";
   const rel = relatedness(normalized, seed);
   if (!(rel.hasRoot || (rel.hasSpecialty && rel.hasCity))) return "unrelated";
   return null;
@@ -468,12 +589,15 @@ function dedupeIdeas(raw: GoogleAdsKeywordData[]): GoogleAdsKeywordData[] {
  * Sélection : dédoublonnage, exclusion (négatifs, informationnel, hors sujet),
  * volume minimal (sauf graines et mots-clés suivis), intention, score
  * (log10(volume + 1) + 0,3) × poids de l'intention × 1,15 si la ville est
- * citée × 1,5 si suivi ; les `max` meilleurs sont conservés, les `coreMax`
- * premiers forment le cœur. Les négatifs rassemblent les listes communes et du
- * métier, plus les requêtes informationnelles écartées ayant du volume.
+ * citée × 1,5 si suivi ; les `max` meilleurs sont conservés (les mots-clés
+ * suivis toujours, dans la limite de `max`), les `coreMax` premiers forment le
+ * cœur. `dropped` compte tout ce qui n'est pas retenu (doublons compris) :
+ * `rawCount − dropped` = nombre de mots-clés. Les négatifs rassemblent les
+ * listes communes et du métier, plus les requêtes informationnelles écartées
+ * ayant du volume.
  */
 export function selectAdsKeywords(raw: GoogleAdsKeywordData[], seed: GoogleAdsSeed, opts: SelectAdsKeywordsOptions): GoogleAdsKeywordSet {
-  const max = opts.max ?? GOOGLE_ADS_KEYWORDS_MAX;
+  const max = Math.max(0, opts.max ?? GOOGLE_ADS_KEYWORDS_MAX);
   const coreMax = opts.coreMax ?? GOOGLE_ADS_CORE_MAX;
   const trackedKeys = new Set((opts.tracked ?? []).map(normalizeAdsText).filter(Boolean));
   const seedKeys = new Set(seed.keywords.map(normalizeAdsText));
@@ -482,7 +606,7 @@ export function selectAdsKeywords(raw: GoogleAdsKeywordData[], seed: GoogleAdsSe
   const ideas = dedupeIdeas(raw);
   const suggestedNegatives: string[] = [];
   const kept: GoogleAdsKeyword[] = [];
-  let dropped = 0;
+  let dropped = raw.length - ideas.length;
 
   for (const idea of ideas) {
     const normalized = normalizeAdsText(idea.keyword);
@@ -518,8 +642,13 @@ export function selectAdsKeywords(raw: GoogleAdsKeywordData[], seed: GoogleAdsSe
     });
   }
 
-  kept.sort((a, b) => b.score - a.score || (b.searchVolume ?? 0) - (a.searchVolume ?? 0) || a.keyword.localeCompare(b.keyword, "fr"));
-  const selected = kept.slice(0, max);
+  const byRank = (a: GoogleAdsKeyword, b: GoogleAdsKeyword) =>
+    b.score - a.score || (b.searchVolume ?? 0) - (a.searchVolume ?? 0) || a.keyword.localeCompare(b.keyword, "fr");
+  kept.sort(byRank);
+  // Les mots-clés suivis ne sont jamais évincés par de meilleurs scores (dans la limite de `max`)
+  const trackedKept = kept.filter((k) => k.tracked).slice(0, max);
+  const others = kept.filter((k) => !k.tracked).slice(0, max - trackedKept.length);
+  const selected = [...trackedKept, ...others].sort(byRank);
   dropped += kept.length - selected.length;
   selected.forEach((k, i) => {
     k.core = i < coreMax;
@@ -534,11 +663,11 @@ export function selectAdsKeywords(raw: GoogleAdsKeywordData[], seed: GoogleAdsSe
       label: intent.label,
       keywords: members.map((k) => k.keyword),
       totalVolume: members.reduce((sum, k) => sum + (k.searchVolume ?? 0), 0),
-      medianCpcEur: median(members.map((k) => k.cpcEur).filter((v): v is number => v !== null)),
+      medianCpcEur: roundedMedian(members.map((k) => k.cpcEur).filter((v): v is number => v !== null)),
     });
   }
 
-  const negatives = unique([...GOOGLE_ADS_GENERIC_NEGATIVES, ...family.negatives, ...suggestedNegatives]).slice(0, 80);
+  const negatives = uniqueNormalized([...familyNegatives(family), ...suggestedNegatives]).slice(0, 80);
 
   return {
     version: 1,
@@ -712,7 +841,7 @@ export function summarizeDemand(keywords: GoogleAdsKeywordSet | null): GoogleAds
     keywordsCount: keywords.keywords.length,
     cpcMinEur: cpcs.length ? Math.min(...cpcs) : null,
     cpcMaxEur: cpcs.length ? Math.max(...cpcs) : null,
-    cpcMedianEur: median(cpcs),
+    cpcMedianEur: roundedMedian(cpcs),
     competition: medianIndex === null ? null : medianIndex >= 67 ? "forte" : medianIndex >= 34 ? "moyenne" : "faible",
   };
 }
@@ -815,7 +944,7 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
       "Avis Google rassurants",
       reviewsStatus,
       reviewsStatus === "ok"
-        ? `${p.votes} avis, note ${p.rating} : vos annonces inspireront confiance.`
+        ? `${p.votes} avis, note ${(p.rating ?? 0).toLocaleString("fr-FR")} : vos annonces inspireront confiance.`
         : reviewsStatus === "unknown"
           ? "Synchronisez votre fiche pour connaître votre note et votre nombre d'avis."
           : `Visez au moins ${minVotes} avis et une note ≥ 4,3 avant d'investir : les patients comparent les fiches avant d'appeler.`,
@@ -825,14 +954,22 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
       "hours",
       "Horaires renseignés",
       p.hasHours === null ? "unknown" : p.hasHours ? "ok" : "todo",
-      p.hasHours === false ? "Renseignez vos horaires sur la fiche : Google Ads les reprend dans l'extension de lieu." : "Horaires visibles dans les annonces avec l'extension de lieu.",
+      p.hasHours === false
+        ? "Renseignez vos horaires sur la fiche : Google Ads les reprend dans l'extension de lieu."
+        : p.hasHours === null
+          ? "Synchronisez votre fiche pour vérifier que vos horaires sont renseignés."
+          : "Horaires visibles dans les annonces avec l'extension de lieu.",
       false,
     ),
     check(
       "photos",
       "Photos de la fiche",
       p.photos === null ? "unknown" : p.photos >= 5 ? "ok" : "todo",
-      p.photos !== null && p.photos < 5 ? "Ajoutez au moins 5 photos (cabinet, salle, praticien) : la fiche est consultée après le clic." : "Assez de photos pour rassurer après le clic.",
+      p.photos === null
+        ? "Synchronisez votre fiche pour connaître le nombre de photos publiées."
+        : p.photos < 5
+          ? "Ajoutez au moins 5 photos (cabinet, salle, praticien) : la fiche est consultée après le clic."
+          : "Assez de photos pour rassurer après le clic.",
       false,
     ),
     check(
