@@ -14,7 +14,13 @@ import {
 import { resolveAiMode } from "@theralys/ai";
 import { usageMonthKey } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
-import { computeMrr, estimateAiCosts, providerCostsEur, type SubscriptionLike } from "@/lib/metrics";
+import {
+  computeMrr,
+  estimateAiCosts,
+  providerCostsEur,
+  summarizeProviderUsage,
+  type SubscriptionLike,
+} from "@/lib/metrics";
 
 export const metadata = { title: "Vue d'ensemble" };
 export const dynamic = "force-dynamic";
@@ -66,14 +72,17 @@ export default async function OverviewPage() {
         .select({ value: count() })
         .from(sites)
         .where(and(eq(sites.type, "demo"), gte(sites.createdAt, monthStart))),
-      // Fournisseurs facturés en dollars (DataForSEO) : coûts réels inscrits par les jobs
+      // Fournisseurs facturés en dollars (DataForSEO) : coûts réels inscrits par
+      // les jobs, par kind — seuls les appels facturés comptent (summarizeProviderUsage)
       db
         .select({
+          kind: googleUsage.kind,
           costUsd: sql<number>`coalesce(sum(${googleUsage.costUsd}), 0)`,
           requests: sql<number>`coalesce(sum(${googleUsage.requests}), 0)`,
         })
         .from(googleUsage)
-        .where(eq(googleUsage.month, usageMonthKey(now))),
+        .where(eq(googleUsage.month, usageMonthKey(now)))
+        .groupBy(googleUsage.kind),
     ]);
 
   const mrr = computeMrr(subs as SubscriptionLike[]);
@@ -92,8 +101,9 @@ export default async function OverviewPage() {
     imagesGenerated: monthImages[0]?.value ?? 0,
     demosGenerated: monthDemos[0]?.value ?? 0,
   });
-  const providerUsd = Number(monthProviders[0]?.costUsd ?? 0);
-  const providerRequests = Number(monthProviders[0]?.requests ?? 0);
+  const providerUsage = summarizeProviderUsage(monthProviders);
+  const providerUsd = providerUsage.costUsd;
+  const providerRequests = providerUsage.requests;
   const providerEur = providerCostsEur(providerUsd);
   const jobsHealthy = erroredSites.length === 0 && lateCount === 0;
   const aiMode = resolveAiMode();

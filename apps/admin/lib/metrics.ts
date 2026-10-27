@@ -66,6 +66,30 @@ export function providerCostsEur(costUsd: number): number {
   return Math.round(Math.max(0, costUsd) * USD_TO_EUR * 100) / 100;
 }
 
+/**
+ * Kinds de `google_usage` qui correspondent à un appel DataForSEO facturé.
+ * Les autres lignes (`reply_ai`, `post_regen`, `social_regen`, `sync_attempt`…)
+ * sont des registres de quota ou d'échéancier, pas des requêtes fournisseur.
+ */
+export const DATAFORSEO_BILLED_KINDS = ["business_info", "reviews", "scan"] as const;
+
+export type ProviderUsageRow = { kind: string; costUsd: number; requests: number };
+
+export type ProviderUsage = { requests: number; costUsd: number };
+
+/** Requêtes et coût DataForSEO du mois, en ne comptant que les kinds facturés. */
+export function summarizeProviderUsage(rows: ProviderUsageRow[]): ProviderUsage {
+  const billed = new Set<string>(DATAFORSEO_BILLED_KINDS);
+  let requests = 0;
+  let costUsd = 0;
+  for (const row of rows) {
+    if (!billed.has(row.kind)) continue;
+    requests += Number(row.requests) || 0;
+    costUsd += Number(row.costUsd) || 0;
+  }
+  return { requests, costUsd };
+}
+
 export type AiUsage = {
   articlesGenerated: number;
   imagesGenerated: number;
