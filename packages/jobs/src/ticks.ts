@@ -20,11 +20,13 @@
  *
  * `runAllTicks` enchaîne les ticks avec un try/catch par tick : un tick en
  * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants. Les
- * ticks de la fiche Google (appels fournisseur longs) et les notifications
- * reçoivent une échéance (TICK_DEADLINE_MS après `now`) et n'entament plus
- * d'élément au-delà, pour rester sous la durée maximale de la route cron
- * (800 s). Les notifications sont idempotentes par `notification_log`
- * (site, kind, période) : un cron relancé n'envoie pas deux fois.
+ * notifications passent en tête (cron quotidien à 6 h UTC : les e-mails du
+ * lundi et du 25 partent avant les appels fournisseur longs). Les ticks de
+ * la fiche Google et les notifications reçoivent une échéance
+ * (TICK_DEADLINE_MS après `now`) et n'entament plus d'élément au-delà, pour
+ * rester sous la durée maximale de la route cron (800 s). Les notifications
+ * sont idempotentes par `notification_log` (site, kind, période) : un cron
+ * relancé n'envoie pas deux fois.
  */
 
 import { and, eq, inArray, isNotNull, lte, ne } from "drizzle-orm";
@@ -424,7 +426,10 @@ async function upsertPlacesReviews(
   return withId.length;
 }
 
-const ALL_TICKS: { task: string; run: (now: Date, opts: TickOptions) => Promise<TickReport> }[] = [
+export const ALL_TICKS: readonly { task: string; run: (now: Date, opts: TickOptions) => Promise<TickReport> }[] = [
+  // E-mails d'abord : ils ne dépendent pas des syncs du jour et ne doivent pas attendre les appels fournisseur
+  { task: "weekly-content-digests", run: sendWeeklyContentDigests },
+  { task: "month-reminders", run: sendMonthReminders },
   { task: "editorial-calendar", run: ensureEditorialCalendars },
   { task: "generate-articles", run: generateDueArticles },
   { task: "publish-articles", run: publishDueArticles },
@@ -433,8 +438,6 @@ const ALL_TICKS: { task: string; run: (now: Date, opts: TickOptions) => Promise<
   { task: "sync-google-profiles", run: syncGoogleProfiles },
   { task: "collect-google-reviews", run: collectGoogleReviewTasks },
   { task: "scheduled-google-scans", run: runScheduledGoogleScans },
-  { task: "weekly-content-digests", run: sendWeeklyContentDigests },
-  { task: "month-reminders", run: sendMonthReminders },
 ];
 
 /**

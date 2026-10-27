@@ -15,7 +15,12 @@
  * `on conflict do nothing` ; si elle existe déjà (cron relancé, deux
  * instances), rien ne part. `sent` est mis à jour avec le résultat du
  * fournisseur (false en mock ou en échec : pas de seconde tentative). Une
- * exception pendant l'envoi libère la réservation pour un passage suivant.
+ * exception du fournisseur (429, 5xx, délai) libère la réservation pour un
+ * passage suivant seulement si aucun e-mail n'est parti ; après au moins un
+ * envoi réussi, la réservation reste (`sent = true`) et l'échec restant est
+ * journalisé — jamais de doublon. Les envois sont espacés de
+ * SEND_SPACING_MS (limite de débit du fournisseur). La colonne `recipient`
+ * ne porte que des identifiants de comptes (`user:<id>`), jamais d'adresse.
  *
  * Les décisions (jour, bornes de période, contenus, déjà envoyé), le tri par
  * jour et le rendu texte/HTML sont des fonctions pures, testées sans base.
@@ -43,8 +48,10 @@ import type { TickOptions, TickReport } from "./ticks";
 
 /** Fuseau des praticiens : jour civil des envois et bornes des périodes. */
 export const PARIS_TZ = "Europe/Paris";
-/** Sites traités au plus par passage de chaque tick de notification. */
-export const NOTIFICATION_BATCH = 200;
+/** Sites traités au plus par passage de chaque tick de notification (cron quotidien : tout le parc en un passage). */
+export const NOTIFICATION_BATCH = 1000;
+/** Espacement minimal entre deux envois (ms) : limite de débit du fournisseur. */
+export const SEND_SPACING_MS = 500;
 /** `notification_log.kind` de l'e-mail hebdomadaire (période "YYYY-Www"). */
 export const WEEKLY_DIGEST_KIND = "content_weekly";
 /** `notification_log.kind` du rappel mensuel (période "YYYY-MM" du mois suivant). */
@@ -380,6 +387,15 @@ const HTML_STYLE = {
   muted: "margin:24px 0 0;font-size:13px;color:#6b7280",
 } as const;
 
+/**
+ * Lien général de l'e-mail hebdomadaire, selon les canaux présents : la page
+ * Réseaux sociaux dès qu'un contenu social figure dans la semaine, sinon
+ * (fiche Google seule) l'onglet Posts de la fiche Google.
+ */
+export function digestStudioLink(studioUrl: string, monthKey: string, items: readonly Pick<DigestItem, "kind">[]): string {
+  return items.some((item) => item.kind === "social") ? socialMonthUrl(studioUrl, monthKey) : googleMonthUrl(studioUrl, monthKey);
+}
+
 /** « Vos contenus de la semaine » : texte + HTML sobre (inline, sans framework). */
 export function renderWeeklyDigest(input: {
   firstName: string;
@@ -391,7 +407,7 @@ export function renderWeeklyDigest(input: {
   const days = groupDigestByDay(input.items);
   const range = weekRangeLabel(input.week);
   const subject = `Vos contenus de la semaine (${range})`;
-  const studioLink = `${input.studioUrl}/reseaux-sociaux?mois=${input.week.monday.slice(0, 7)}`;
+  const studioLink = digestStudioLink(input.studioUrl, input.week.monday.slice(0, 7), input.items);
 
   const text: string[] = [
     `Bonjour ${input.firstName},`,
@@ -484,11 +500,15 @@ export function renderMonthReminder(input: {
 /** Options des ticks de notification : fournisseur e-mail et environnement injectables (tests de fumée). */
 export type NotificationOptions = TickOptions & { mail?: MailProvider; env?: NodeJS.ProcessEnv };
 
-type Recipient = { email: string; name: string };
+type Recipient = { id: string; email: string; name: string };
 type SiteRecipients = { siteId: string; type: "demo" | "client"; plan: PlanId; recipients: Recipient[] };
 
 function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
   return opts.deadline !== undefined && nowMs > opts.deadline.getTime();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -497,7 +517,7 @@ function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
  */
 async function loadSiteRecipients(db: Database): Promise<SiteRecipients[]> {
   const rows = await db
-    .select({ siteId: sites.id, type: sites.type, plan: sites.plan, email: users.email, name: users.name })
+    .select({ siteId: sites.id, type: sites.type, plan: sites.plan, userId: users.id, email: users.email, name: users.name })
     .from(users)
     .innerJoin(sites, eq(sites.id, users.siteId))
     .where(and(eq(users.role, "client"), isNotNull(users.siteId), ne(sites.status, "archived")))
@@ -505,7 +525,7 @@ async function loadSiteRecipients(db: Database): Promise<SiteRecipients[]> {
   const bySite = new Map<string, SiteRecipients>();
   for (const row of rows) {
     const entry = bySite.get(row.siteId) ?? { siteId: row.siteId, type: row.type, plan: row.plan, recipients: [] };
-    entry.recipients.push({ email: row.email, name: row.name });
+    entry.recipients.push({ id: row.userId, email: row.email, name: row.name });
     bySite.set(row.siteId, entry);
   }
   return [...bySite.values()];
@@ -541,8 +561,12 @@ async function reserveNotification(
 
 /**
  * Envoie un e-mail à chaque destinataire du site sous la réservation `logId`
- * et inscrit le résultat (`sent` = au moins un envoi réel). Une exception du
- * fournisseur libère la réservation (le passage suivant réessaiera).
+ * (envois espacés de SEND_SPACING_MS) et inscrit le résultat (`sent` = au
+ * moins un envoi réel). Une exception du fournisseur libère la réservation
+ * (le passage suivant réessaiera) tant qu'aucun e-mail n'est parti ; après
+ * un premier envoi réussi, la réservation est confirmée (`sent = true`) et
+ * l'échec des destinataires restants est journalisé, sans nouvelle tentative
+ * — un site ne reçoit jamais deux fois le même e-mail.
  */
 async function deliver(
   db: Database,
@@ -554,22 +578,30 @@ async function deliver(
 ): Promise<boolean> {
   let sent = false;
   try {
-    for (const recipient of recipients) {
+    for (const [index, recipient] of recipients.entries()) {
+      if (index > 0) await sleep(SEND_SPACING_MS);
       const message = render(recipient);
       const result = await mail.send({ to: recipient.email, subject: message.subject, text: message.text, html: message.html });
       sent = sent || result.sent;
       if (result.error) console.warn(`[notifications] envoi refusé par le fournisseur : ${result.error}`);
     }
   } catch (err) {
-    await db.delete(notificationLog).where(eq(notificationLog.id, logId));
-    throw err;
+    if (!sent) {
+      await db.delete(notificationLog).where(eq(notificationLog.id, logId));
+      throw err;
+    }
+    console.error(
+      `[notifications] envoi partiel (réservation ${logId} conservée, destinataires restants non servis) :`,
+      err instanceof Error ? err.message : err,
+    );
   }
   await db.update(notificationLog).set({ sent, sentAt: now }).where(eq(notificationLog.id, logId));
   return sent;
 }
 
-function recipientList(recipients: Recipient[]): string {
-  return recipients.map((r) => r.email).join(", ");
+/** Valeur de `notification_log.recipient` : identifiants de comptes, jamais d'adresse e-mail (RGPD). */
+export function recipientList(recipients: readonly { id: string }[]): string {
+  return recipients.map((r) => `user:${r.id}`).join(", ");
 }
 
 /**

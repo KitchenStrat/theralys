@@ -5,10 +5,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 800;
 
 /**
- * Point d'entrée des jobs planifiés (calendrier éditorial, rédaction J-7,
- * publication auto, sync Search Console + avis Google).
- * Appelé toutes les heures par le cron Vercel (voir vercel.json) ; protégé
- * par CRON_SECRET. Les ticks sont idempotents, l'état vit en base.
+ * Point d'entrée des jobs planifiés (e-mails hebdomadaire et mensuel,
+ * calendrier éditorial, rédaction J-7, publication auto, sync Search Console
+ * + avis Google, fiche Google). Appelé une fois par jour, à 6 h UTC, par le
+ * cron Vercel (voir vercel.json) ; protégé par CRON_SECRET. Les ticks sont
+ * idempotents, l'état vit en base.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;

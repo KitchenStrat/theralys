@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_STUDIO_BASE_URL,
+  NOTIFICATION_BATCH,
+  SEND_SPACING_MS,
   decideMonthReminder,
   decideWeeklyDigest,
   digestItemFromGoogle,
   digestItemFromSocial,
+  digestStudioLink,
   escapeHtml,
   firstNameOf,
   googleMonthUrl,
@@ -15,6 +18,7 @@ import {
   nextMonthOf,
   parisDay,
   parisDayOfMonth,
+  recipientList,
   renderMonthReminder,
   renderWeeklyDigest,
   socialMonthUrl,
@@ -24,6 +28,7 @@ import {
   weekRangeLabel,
   type DigestItem,
 } from "./notifications";
+import { ALL_TICKS } from "./ticks";
 
 // Lundi 2 novembre 2026, 6 h UTC (7 h à Paris) : l'heure du cron
 const MONDAY = new Date("2026-11-02T06:00:00Z");
@@ -259,6 +264,32 @@ describe("rendu des e-mails", () => {
     expect(mail.html).toContain("Sommeil &lt;réparateur&gt; &quot;test&quot;");
     expect(mail.html).toContain("Respiration &amp; détente");
     expect(mail.html).not.toContain("<réparateur>");
+  });
+
+  it("e-mail hebdomadaire : le lien général suit les canaux présents (social → Réseaux sociaux, fiche Google seule → onglet Posts)", () => {
+    const week = isoWeekOf("2026-11-02");
+    const [google, social] = items();
+    expect(digestStudioLink(BASE, "2026-11", [google!, social!])).toBe("https://app.harmony-web.fr/reseaux-sociaux?mois=2026-11");
+    expect(digestStudioLink(BASE, "2026-11", [social!])).toBe("https://app.harmony-web.fr/reseaux-sociaux?mois=2026-11");
+    expect(digestStudioLink(BASE, "2026-11", [google!])).toBe("https://app.harmony-web.fr/fiche-google?onglet=posts&mois=2026-11");
+    const googleOnly = renderWeeklyDigest({ firstName: "Claire", week, items: [google!], studioUrl: BASE });
+    expect(googleOnly.text).toContain("Tous vos contenus : https://app.harmony-web.fr/fiche-google?onglet=posts&mois=2026-11");
+    expect(googleOnly.html).toContain('href="https://app.harmony-web.fr/fiche-google?onglet=posts&amp;mois=2026-11"');
+    expect(googleOnly.text).not.toContain("reseaux-sociaux?mois=");
+    const mixed = renderWeeklyDigest({ firstName: "Claire", week, items: items(), studioUrl: BASE });
+    expect(mixed.text).toContain("Tous vos contenus : https://app.harmony-web.fr/reseaux-sociaux?mois=2026-11");
+  });
+
+  it("journal : identifiants de comptes, jamais d'adresse e-mail (RGPD)", () => {
+    expect(recipientList([{ id: "u1" }, { id: "u2" }])).toBe("user:u1, user:u2");
+    expect(recipientList([])).toBe("");
+  });
+
+  it("ticks : e-mails en tête du passage, lot large pour un cron quotidien, envois espacés", () => {
+    expect(ALL_TICKS.slice(0, 2).map((t) => t.task)).toEqual(["weekly-content-digests", "month-reminders"]);
+    expect(ALL_TICKS.map((t) => t.task)).toContain("scheduled-google-scans");
+    expect(NOTIFICATION_BATCH).toBe(1000);
+    expect(SEND_SPACING_MS).toBe(500);
   });
 
   it("e-mail hebdomadaire : rien d'autre que le prénom comme donnée personnelle", () => {

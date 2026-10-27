@@ -7,10 +7,10 @@ jour le schéma en production » à chaque nouvelle migration).
 
 > **Plan Vercel** : le plan **Pro (20 $/mois)** est nécessaire en production —
 > la génération IA d'une démo dure ~4-5 min (fonctions jusqu'à 800 s — plan Pro avec Fluid compute, configuré
-> dans le code) et le cron des jobs doit tourner **toutes les heures** (le plan
-> gratuit Hobby limite les fonctions à 60 s et les crons à 1/jour). Vous pouvez
-> faire tous les tests en Hobby avec le mode mock, puis passer Pro au moment de
-> brancher la clé Anthropic.
+> dans le code ; le plan gratuit Hobby limite les fonctions à 60 s). Le cron des
+> jobs est **quotidien (6 h UTC)**, compatible Hobby. Vous pouvez faire tous les
+> tests en Hobby avec le mode mock, puis passer Pro au moment de brancher la
+> clé Anthropic.
 
 ---
 
@@ -117,6 +117,7 @@ En plus, sur **harmony-studio** :
 |---|---|
 | `ANTHROPIC_API_KEY` | la même clé (régénérations depuis l'espace client) |
 | `ANTHROPIC_MODEL` | la même valeur que sur admin |
+| `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer (liens vers le studio dans l'export agenda ICS des réseaux sociaux ; même valeur que sur admin) |
 
 ⚠️ Ne définissez `AI_MOCK` nulle part (il forcerait le mode mock).
 Les intégrations non configurées (fal.ai, Google, Stripe, OVH) restent en mock
@@ -155,7 +156,8 @@ Puis **mettez à jour les variables** (Settings → Environment Variables de
 chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 
 - `SITES_BASE_URL` = `https://demo.harmony-web.fr` (sur les 3 projets) ;
-- `STUDIO_BASE_URL` = `https://app.harmony-web.fr` (sur admin) ;
+- `STUDIO_BASE_URL` = `https://app.harmony-web.fr` (sur admin — e-mails des
+  jobs, impersonation — et sur studio — liens de l'export agenda ICS) ;
 - sur **harmony-sites**, ajoutez aussi `DEMO_HOST` = `harmony-sites.vercel.app`
   pour que les anciens liens de démo `.vercel.app` déjà envoyés restent valides.
 
@@ -177,7 +179,9 @@ sont écrites avec `sent = false` et rien ne part.
 
 Cadence : **quotidienne à 6h UTC** (compatible plan Hobby — les articles étant
 rédigés 7 jours à l'avance, c'est suffisant). Une fois en Pro, vous pouvez
-passer à l'horaire en changeant `"schedule"` en `"0 * * * *"` dans ce fichier.
+passer à l'horaire en changeant `"schedule"` en `"0 * * * *"` dans ce fichier
+(les e-mails restent envoyés une fois par site et par période). Les deux ticks
+d'e-mail passent en premier dans chaque passage, avant les appels fournisseur.
 Chaque tick est isolé : un tick en erreur est journalisé (`processed: 0`) sans
 bloquer les suivants. Les ticks de la fiche Google ne dépensent rien sans
 `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (mock) et respectent le plafond de

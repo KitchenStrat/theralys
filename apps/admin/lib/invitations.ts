@@ -33,6 +33,7 @@ export async function createClientInvitation(client: {
 
   const mail = createMailProvider();
   const firstName = client.name.split(" ")[0] ?? client.name;
+  // Un échec transitoire du fournisseur (429, 5xx, délai) ne bloque pas l'invitation : le lien reste affiché à l'admin
   const result = await mail.send({
     to: client.email,
     subject: "Créez votre accès à votre espace praticien Harmony",
@@ -67,6 +68,9 @@ export async function createClientInvitation(client: {
         <p>À très vite,<br/>L'équipe Harmony</p>
       </div>
     `,
+  }).catch((err: unknown) => {
+    console.warn("[invitations] envoi de l'e-mail impossible :", err instanceof Error ? err.message : err);
+    return { sent: false, error: err instanceof Error ? err.message : String(err) };
   });
 
   return { setupUrl, emailSent: result.sent, mailMode: mail.mode };

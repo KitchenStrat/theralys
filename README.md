@@ -72,6 +72,8 @@ Ticks, dans l'ordre (`packages/jobs/src/ticks.ts`) :
 
 | Tick | Rôle |
 |---|---|
+| `weekly-content-digests` | lundi (Europe/Paris) : e-mail « Vos contenus de la semaine » (réseaux sociaux + fiche Google, textes à coller et liens profonds) |
+| `month-reminders` | le 25 (Europe/Paris) : e-mail « Préparez votre mois » si le mois suivant n'a aucun contenu sur un canal accessible |
 | `editorial-calendar` | complète le calendrier de sujets du blog (horizon 6 semaines) |
 | `generate-articles` | rédige les articles J-7 (Claude ou mock) + image |
 | `publish-articles` | publie les articles planifiés à l'échéance |
@@ -80,8 +82,6 @@ Ticks, dans l'ordre (`packages/jobs/src/ticks.ts`) :
 | `sync-google-profiles` | fiche Google du studio : instantané + audit tous les 30 jours |
 | `collect-google-reviews` | tâches d'avis DataForSEO terminées → avis, audit, analyse IA |
 | `scheduled-google-scans` | relevés de visibilité planifiés (14 jours) |
-| `weekly-content-digests` | lundi (Europe/Paris) : e-mail « Vos contenus de la semaine » (réseaux sociaux + fiche Google, textes à coller et liens profonds) |
-| `month-reminders` | le 25 (Europe/Paris) : e-mail « Préparez votre mois » si le mois suivant n'a aucun contenu sur un canal accessible |
 
 Les deux ticks d'e-mail passent par `packages/providers/src/mail` (Resend avec
 `RESEND_API_KEY` + `MAIL_FROM`, sinon mock) et sont idempotents par
