@@ -19,7 +19,7 @@ import {
   mockGenerateMotifPage,
   mockGenerateReviews,
 } from "./mock/generator";
-import { mockSocialMonth, mockSocialRequest } from "./mock/social";
+import { mockSocialMonth, mockSocialRequest, seasonalHookVariants } from "./mock/social";
 import {
   SOCIAL_ARTICLE_CTA_TITLE,
   SOCIAL_BIO_LINE,
@@ -28,6 +28,7 @@ import {
   SOCIAL_NEW_ARTICLE_BADGE,
   checkSocialCompliance,
   createSocialGenerator,
+  dedupeSubjects,
   finalizePlan,
   reviewSlide,
   sanitizeSocialBrief,
@@ -35,14 +36,18 @@ import {
   socialPlanSchema,
   socialPostSchema,
   socialWelcomeLine,
+  subjectKeys,
+  topicKey,
   type FinalizeInput,
   type FinalizedPost,
   type SocialPostDraft,
 } from "./social";
 import {
+  MONTH_CONTEXT,
   PILLAR_HELP,
   availablePillars,
   instructionsBlock,
+  monthContext,
   normalizeInstructions,
   normalizeRequestTopic,
   rotatePillars,
@@ -431,8 +436,16 @@ describe("mock — mois", () => {
         expect(infos).toContain(reader === "tu" ? "N'hésite pas à" : "N'hésitez pas à");
         expect(infos).toContain(designation === "je" ? "me contacter" : "nous contacter");
         expect(infos).toContain(designation === "je" ? "je réponds" : designation === "nous" ? "nous répondons" : "on répond");
+        // L'accroche varie (trois variantes par pilier) : c'est le développement, écrit par le mock, qui porte la voix
         const specialite = voicedPosts.find((p) => p.pillar === "specialite")!.content.caption;
-        expect(specialite.startsWith(reader === "tu" ? "Un temps pour toi, rien que pour toi" : "Un temps pour vous, rien que pour vous")).toBe(true);
+        expect(specialite).toContain(reader === "tu" ? "à ton rythme" : "à votre rythme");
+        expect(specialite).toContain(
+          designation === "je"
+            ? (reader === "tu" ? "je t'accompagne" : "je vous accompagne")
+            : designation === "nous"
+              ? (reader === "tu" ? "nous t'accompagnons" : "nous vous accompagnons")
+              : (reader === "tu" ? "on t'accompagne" : "on vous accompagne"),
+        );
       }
     }
   });
@@ -571,8 +584,9 @@ describe("finalizePlan — dates, format, template", () => {
   it("mois : au plus un avis (client), le second devient projection", () => {
     const client = fixture(CLAIRE, "client");
     const review = client.brief.reviews[0]!;
-    const avis = () => draft({ pillar: "avis", template: "avis", slides: [{ title: `« ${review.text.slice(0, 40)} »`, body: `${review.authorName} · Avis Google` }], sourceRefs: [review.id] });
-    const posts = finalizePlan({ posts: [avis(), draft({ pillar: "conseil" }), avis()] }, client.brief, monthFinalize(client, cadenceSlots(client, 3)));
+    // Sujets distincts : un même sujet serait écarté comme doublon (un sujet par mois) avant la règle « au plus un avis »
+    const avis = (topic: string) => draft({ pillar: "avis", template: "avis", topic, slides: [{ title: `« ${review.text.slice(0, 40)} »`, body: `${review.authorName} · Avis Google` }], sourceRefs: [review.id] });
+    const posts = finalizePlan({ posts: [avis("Merci Marie"), draft({ pillar: "conseil", topic: "Un exercice" }), avis("Encore merci")] }, client.brief, monthFinalize(client, cadenceSlots(client, 3)));
     expect(posts.map((p) => p.pillar)).toEqual(["avis", "conseil", "projection"]);
     expect(posts[0]!.template).toBe("avis");
     expect(posts[2]!.template).toBe("affirmation");
@@ -1240,12 +1254,263 @@ describe("mock : créneau « nouvel article », accroche et sujets [35][58]", ()
     const posts = await generator.planMonth(f.brief, monthInput(f));
     const conseil = posts.find((p) => p.pillar === "conseil" && p.format === "carousel")!;
     const pages = conseil.content.slides.filter((s) => s.role === "page").map((s) => [s.title, s.body]);
+    // Sophrologue : respiration abdominale 4-6 (exerciseFor), reprise de l'article mock
     expect(pages).toEqual([
       ["Asseyez-vous confortablement", "**Pieds à plat** sur le sol"],
-      ["Fermez les yeux", "Posez vos mains sur **vos cuisses**."],
+      ["Posez une main sur le ventre", "**L'autre sur** la poitrine"],
+      ["Inspirez par le nez pendant 4 secondes", "**En laissant** le ventre se gonfler"],
+      ["Expirez lentement par la bouche pendant 6 secondes", "**Le ventre se** relâche"],
+      ["Répétez 6 fois", "**En laissant les épaules** descendre à chaque expiration"],
+    ]);
+    // Autre pratique (reiki) : respiration 4-2-6, attaque de l'étape en titre et suite en body
+    const reiki = fixture(PROFESSIONS[6]!);
+    const reikiPages = (await generator.planMonth(reiki.brief, monthInput(reiki)))
+      .find((p) => p.pillar === "conseil" && p.format === "carousel")!
+      .content.slides.filter((s) => s.role === "page")
+      .map((s) => [s.title, s.body]);
+    expect(reikiPages.slice(2, 4)).toEqual([
       ["Inspirez lentement", "Par le nez **pendant 4 secondes**."],
       ["Retenez l'air", "**2 secondes**."],
-      ["Expirez lentement", "Par la bouche **pendant 6 secondes**."],
     ]);
+  });
+});
+
+// ─── Ancrage temporel, un sujet par mois, variété des accroches ──────────────
+
+describe("ancrage temporel : monthContext et prompts", () => {
+  const f = fixture(CLAIRE);
+
+  it("monthContext : saison et repères du mois (« YYYY-MM » ou « YYYY-MM-DD »), inconnu sinon", () => {
+    expect(MONTH_CONTEXT).toHaveLength(12);
+    expect(MONTH_CONTEXT.map((m) => m.month)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(monthContext("2026-01")).toMatchObject({ month: 1, name: "janvier", season: "hiver" });
+    expect(monthContext("2026-01")!.cues.join(" ")).toMatch(/nouvelle année.*résolutions, sans injonction/);
+    expect(monthContext("2026-03")).toMatchObject({ name: "mars", season: "printemps" });
+    expect(monthContext("2026-03")!.cues.join(" ")).toContain("changement d'heure");
+    expect(monthContext("2026-06")!.cues.join(" ")).toMatch(/examens.*été/);
+    expect(monthContext("2026-09-15")).toMatchObject({ month: 9, name: "septembre", season: "automne" });
+    expect(monthContext("2026-09-15")!.cues.join(" ")).toContain("rentrée");
+    expect(monthContext("2026-11")!.cues.join(" ")).toContain("baisse de lumière");
+    expect(monthContext("2026-12")).toMatchObject({ name: "décembre", season: "hiver" });
+    expect(monthContext("2026-12")!.cues.join(" ")).toMatch(/fêtes de fin d'année.*bilan/);
+    expect(monthContext("2026-13")).toBeUndefined();
+    expect(monthContext("2026-00")).toBeUndefined();
+    expect(monthContext("novembre")).toBeUndefined();
+    expect(checkSocialCompliance(MONTH_CONTEXT).ok).toBe(true);
+  });
+
+  it("prompt système : règle d'ancrage (1 à 2 contenus, jamais tous, aucun événement inventé) et mois visé quand il est donné", () => {
+    const base = socialSystemPrompt(f.brief);
+    expect(base).toContain("ANCRAGE DANS LE TEMPS ET LE LIEU");
+    expect(base).toContain("Ancre 1 à 2 contenus du mois dans ce contexte (saison, rythme du moment), jamais tous");
+    expect(base).toContain("n'invente jamais d'événement précis, de date ni d'actualité locale");
+    expect(base).not.toContain("Mois visé");
+    expect(socialSystemPrompt(f.brief, { month: "2026-11" })).toContain("Mois visé : novembre (automne) — repères du mois en France : baisse de lumière, jours courts");
+    expect(socialSystemPrompt(f.brief, { variant: "google", month: "2027-03-10" })).toContain("Mois visé : mars (printemps)");
+    expect(socialSystemPrompt(f.brief, { variant: "google" })).toContain("ANCRAGE DANS LE TEMPS ET LE LIEU");
+  });
+
+  it("prompts utilisateur : contexte du mois (mois) et du mois de publication (requête), variantes social et google", () => {
+    const month = socialMonthUserPrompt(f.brief, monthInput(f));
+    expect(month).toContain("CONTEXTE DU MOIS : novembre (automne) — repères du mois en France : baisse de lumière, jours courts");
+    expect(month).toContain("Ancre 1 à 2 contenus du mois dans ce contexte");
+    expect(socialMonthUserPrompt(f.brief, monthInput(f, [], "2027-09"), { variant: "google" })).toContain("CONTEXTE DU MOIS : septembre (automne) — repères du mois en France : rentrée scolaire");
+    expect(socialMonthUserPrompt(f.brief, monthInput(f, [], "n'importe quoi"))).toContain("CONTEXTE DU MOIS : inconnu.");
+    const request = socialRequestUserPrompt(f.brief, requestInput(f, "x", "static", { scheduledFor: "2026-12-18" }));
+    expect(request).toContain("CONTEXTE DU MOIS DE PUBLICATION : décembre (hiver) — repères du mois en France : fêtes de fin d'année");
+    expect(request).toContain("sans inventer d'événement précis ni de date");
+    expect(socialRequestUserPrompt(f.brief, requestInput(f, "x", "static", { scheduledFor: "2026-06-02" }), { variant: "google" })).toContain("juin (été)");
+  });
+
+  it("prompts : jamais deux fois le même sujet, sujets déjà pris dans le plan, photo-titre, ouvertures variées, ligne bio inchangée", () => {
+    const month = socialMonthUserPrompt(f.brief, monthInput(f));
+    expect(month).toContain("JAMAIS DEUX FOIS LE MÊME SUJET DANS LE MOIS : chaque spécialité (section:home:specialties:… / page:…), chaque article et chaque question fréquente au plus une fois");
+    const titleOf = (id: string) => f.brief.articles.find((a) => a.id === id)!.title;
+    expect(month).toContain(`SUJETS DÉJÀ PRIS DANS CE PLAN (créneaux imposés) : article:a1 « ${titleOf("article:a1")} » · article:a2 « ${titleOf("article:a2")} »`);
+    expect(socialMonthUserPrompt(f.brief, { ...monthInput(f), slots: cadenceSlots(f, 3) })).toContain("SUJETS DÉJÀ PRIS DANS CE PLAN (créneaux imposés) : aucun");
+    for (const variant of ["social", "google"] as const) {
+      expect(socialSystemPrompt(f.brief, { variant })).toContain(
+        "Quand une photo du site correspond au sujet (spécialité, cabinet, praticien), préfère le template photo-titre : une vraie photo génère plus d'engagement qu'une carte illustrée.",
+      );
+    }
+    const social = socialSystemPrompt(f.brief);
+    expect(social).toContain("350 à 900 caractères");
+    expect(social).toContain("Varie les ouvertures d'une publication à l'autre : question, constat, anecdote de cabinet (sans détail identifiant), chiffre du site, citation d'avis…");
+    expect(social).toContain("Les formules « Un temps pour vous, rien que pour vous » et « parlons de » n'ouvrent jamais plus d'une légende par mois.");
+    expect(social).toContain("« Pour prendre rendez-vous, le lien est dans ma bio. »");
+    expect(socialSystemPrompt(f.brief, { variant: "google" })).not.toContain("Varie les ouvertures");
+  });
+});
+
+describe("un sujet par mois : finalizePlan", () => {
+  const f = fixture(CLAIRE);
+
+  it("subjectKeys / dedupeSubjects : même sujet normalisé ou même source de spécialité → le second est écarté", () => {
+    expect(topicKey("Respirer pour s’apaiser !")).toBe("respirer pour s apaiser");
+    expect(subjectKeys({ topic: "Spécialité : Sommeil", sourceRefs: ["section:home:specialties:sommeil", "page:m2", "page:m2:faq:1", "article:a1"] })).toEqual([
+      "specialite sommeil",
+      "section:home:specialties:sommeil",
+      "page:m2",
+    ]);
+    const items = [
+      { topic: "A", sourceRefs: ["page:m1"] },
+      { topic: "B", sourceRefs: ["section:home:specialties:x", "page:m1"] },
+      { topic: "a !", sourceRefs: ["section:home:hero"] },
+      { topic: "C", sourceRefs: ["section:home:hero"] },
+    ];
+    expect(dedupeSubjects(items, (i) => i).map((i) => i.topic)).toEqual(["A", "C"]);
+    // Un élément fixe est toujours gardé et ses clés comptent dès le départ ; un élément écarté ne réserve pas les siennes
+    expect(dedupeSubjects(items, (i) => i, (i) => i.topic === "B").map((i) => i.topic)).toEqual(["B", "a !", "C"]);
+  });
+
+  it("mois : deux publications sur la même spécialité ou le même sujet → la seconde écartée, créneau laissé libre", () => {
+    const slots = cadenceSlots(f, 4);
+    const posts = finalizePlan(
+      {
+        posts: [
+          draft({ topic: "Gestion du stress", sourceRefs: ["section:home:specialties:gestion-du-stress", "page:m1"] }),
+          draft({ pillar: "conseil", topic: "Un exercice simple" }),
+          draft({ topic: "Respirer : gestion du stress", sourceRefs: ["page:m1"] }),
+          draft({ pillar: "projection", topic: "Gestion du stress !", sourceRefs: ["section:home:hero"] }),
+        ],
+      },
+      f.brief,
+      monthFinalize(f, slots),
+    );
+    expect(posts.map((p) => [p.scheduledFor, p.topic])).toEqual([
+      [slots[0]!.date, "Gestion du stress"],
+      [slots[1]!.date, "Un exercice simple"],
+    ]);
+    // Le créneau « nouvel article » est toujours pourvu, même quand un contenu de cadence reprend son sujet
+    const article = f.slots.find((s) => s.kind === "nouvel_article")!;
+    const mixed = finalizePlan(
+      { posts: [draft({ slot: 0, topic: "Même sujet" }), draft({ slot: 1, topic: "Même sujet" })] },
+      f.brief,
+      monthFinalize(f, [slots[0]!, article]),
+    );
+    expect(mixed.map((p) => p.pillar)).toEqual(["nouvel_article"]);
+    // Une requête n'est jamais dédoublonnée
+    expect(finalizePlan({ posts: [draft({ topic: "Seul" })] }, f.brief, requestFinalize(f))).toHaveLength(1);
+  });
+});
+
+describe("mock : un sujet par mois, accroches saisonnières et variées, photos du cabinet", () => {
+  /** Neuf créneaux de cadence : les mardis et vendredis de novembre, plus le lundi 30. */
+  const nineSlots = (f: Fixture): SocialSlot[] => [...cadenceSlots(f, 8), { date: "2026-11-30", kind: "cadence" }];
+  const opening = (post: FinalizedPost) => post.content.caption.split("\n\n")[0] ?? "";
+
+  it.each(PROFESSIONS)("$profession à $city : 9 créneaux sans sujet ni spécialité en double, une accroche saisonnière, « parlons de » au plus une fois", async (input) => {
+    const client = fixture(input, "client");
+    const slots = nineSlots(client);
+    const plan = mockSocialMonth(client.brief, { ...monthInput(client), slots });
+    expect(plan.posts).toHaveLength(9);
+    const keys = plan.posts.flatMap((p) => subjectKeys(p));
+    expect(new Set(keys).size).toBe(keys.length);
+    const posts = await generator.planMonth(client.brief, { ...monthInput(client), slots });
+    expect(posts).toHaveLength(9);
+    for (const post of posts) expectWellFormed(post, client.brief);
+    const specialties = posts.flatMap((p) => p.content.sourceRefs.map((r) => r.id).filter((id) => id.startsWith("section:home:specialties:")));
+    expect(new Set(specialties).size).toBe(specialties.length);
+    expect(new Set(posts.map((p) => topicKey(p.topic))).size).toBe(posts.length);
+    // Une accroche saisonnière de novembre (liste du mois), sur un seul contenu, jamais un avis ni une question
+    const variants = seasonalHookVariants("2026-11", client.brief);
+    expect(variants.length).toBeGreaterThanOrEqual(2);
+    const seasonal = posts.filter((p) => variants.includes(opening(p)));
+    expect(seasonal).toHaveLength(1);
+    expect(["specialite", "projection", "conseil", "coulisses", "infos_pratiques"]).toContain(seasonal[0]!.pillar);
+    // « Un temps pour vous, rien que pour vous : parlons de… » n'ouvre pas plus d'une légende
+    const paragraphs = posts.flatMap((p) => p.content.caption.split("\n\n").slice(0, 2));
+    expect(paragraphs.filter((p) => p.startsWith("Un temps pour")).length).toBeLessThanOrEqual(1);
+    expect(paragraphs.filter((p) => /parlons d/.test(p)).length).toBeLessThanOrEqual(1);
+  });
+
+  it("accroche saisonnière : issue de la liste du mois, différente d'un mois à l'autre pour un même site", async () => {
+    const f = fixture(CLAIRE);
+    const seen: string[] = [];
+    for (const month of ["2026-11", "2026-12", "2027-01", "2027-02"]) {
+      const variants = seasonalHookVariants(month, f.brief);
+      const posts = await generator.planMonth(f.brief, monthInput(f, [], month));
+      const seasonal = posts.map(opening).filter((line) => variants.includes(line));
+      expect(seasonal).toHaveLength(1);
+      expect(seasonal[0]!.length).toBeLessThanOrEqual(125);
+      seen.push(seasonal[0]!);
+    }
+    expect(new Set(seen).size).toBe(seen.length);
+    // Toutes les accroches saisonnières tiennent dans la première ligne, pour les deux adresses au lecteur
+    for (const reader of ["vous", "tu"] as const) {
+      const voiced: SocialSiteBrief = { ...f.brief, voice: { ...f.brief.voice, reader } };
+      for (let m = 1; m <= 12; m++) {
+        const variants = seasonalHookVariants(`2027-${String(m).padStart(2, "0")}`, voiced);
+        expect(variants.length).toBeGreaterThanOrEqual(2);
+        for (const v of variants) expect(v.length, v).toBeLessThanOrEqual(125);
+        expect(checkSocialCompliance(variants).ok).toBe(true);
+      }
+    }
+    // Sans mois (demande sur mesure) : aucune accroche saisonnière
+    expect(seasonalHookVariants("n'importe quoi", f.brief)).toEqual([]);
+    const request = await generator.generateRequest(f.brief, requestInput(f, "le sommeil", "static"));
+    expect(seasonalHookVariants("2026-11", f.brief)).not.toContain(opening(request));
+  });
+
+  it("accroches : au moins trois variantes par pilier au fil des mois, différentes entre sophrologue et hypnothérapeute, exercice propre au métier", async () => {
+    const months = Array.from({ length: 12 }, (_, i) => `2027-${String(i + 1).padStart(2, "0")}`);
+    const collect = async (input: GenerationInput) => {
+      const client = fixture(input, "client");
+      const byPillar = new Map<string, Set<string>>();
+      for (const month of months) {
+        const variants = seasonalHookVariants(month, client.brief);
+        for (const post of await generator.planMonth(client.brief, monthInput(client, [], month))) {
+          const hook = post.content.caption.split("\n\n").find((p) => !variants.includes(p)) ?? "";
+          byPillar.set(post.pillar, (byPillar.get(post.pillar) ?? new Set()).add(hook));
+        }
+      }
+      return byPillar;
+    };
+    const sophro = await collect(CLAIRE);
+    const hypno = await collect(PROFESSIONS[4]!);
+    for (const pillar of ["specialite", "conseil", "coulisses", "infos_pratiques", "projection", "idee_recue", "avis"]) {
+      expect(sophro.get(pillar)!.size, pillar).toBeGreaterThanOrEqual(3);
+      expect(hypno.get(pillar)!.size, pillar).toBeGreaterThanOrEqual(3);
+      for (const hook of sophro.get(pillar)!) expect(hypno.get(pillar)!.has(hook), `${pillar} : ${hook}`).toBe(false);
+    }
+    expect([...sophro.get("specialite")!].some((h) => h.includes("la sophrologie"))).toBe(true);
+    expect([...hypno.get("specialite")!].some((h) => h.includes("hypnose"))).toBe(true);
+    // Exercice « conseil » propre au métier (respiration abdominale / ancrage sensoriel)
+    const conseil = (input: GenerationInput) => generator.planMonth(fixture(input, "client").brief, monthInput(fixture(input, "client"))).then((posts) => posts.find((p) => p.pillar === "conseil")!.content.caption);
+    expect(await conseil(CLAIRE)).toContain("respiration abdominale");
+    expect(await conseil(PROFESSIONS[4]!)).toContain("ancrage sensoriel");
+    expect(await conseil(PROFESSIONS[3]!)).toMatch(/pause toute simple|verre d'eau|hydratation/);
+  });
+
+  it("grammaire : titres de motifs avec leur article dans les articles mock (« découvrir la gestion du stress »)", async () => {
+    const f = fixture(CLAIRE);
+    const posts = await generator.planMonth(f.brief, monthInput(f));
+    const announced = posts.find((p) => p.pillar === "nouvel_article" && p.content.sourceRefs[0]!.id === "article:a1")!;
+    expect(announced.content.caption).toContain("pour découvrir la gestion du stress,");
+    expect(announced.content.caption).not.toContain("découvrir gestion");
+    const generated = mockGenerateArticles(CLAIRE, mockGenerateHome(CLAIRE).motifsPlan);
+    expect(generated[1]!.excerpt).toContain("Voici comment une séance autour du sommeil et de la récupération peut vous aider à relâcher la pression.");
+    expect(generated[1]!.title).toBe("Corps tendu, esprit qui tourne en boucle : et si vous testiez le sommeil et la récupération ?");
+    expect(generated[0]!.excerpt).toContain("pour découvrir la gestion du stress,");
+  });
+
+  it("photos : spécialité et coulisses en photo-titre quand le brief a une photo qui convient", async () => {
+    const f = fixture(CLAIRE);
+    const coulisses = await generator.generateRequest(f.brief, requestInput(f, "petit tour en coulisses", "static"));
+    expect(coulisses.pillar).toBe("coulisses");
+    expect(coulisses.template).toBe("photo-titre");
+    expect(coulisses.content.slides[0]!.imageUrl).toBe(BLOB);
+    const story = await generator.generateRequest(f.brief, requestInput(f, "petit tour en coulisses", "story"));
+    expect(story.pillar).toBe("coulisses");
+    expect(story.content.slides[0]!.imageUrl).toBe(BLOB);
+    const specialite = await generator.generateRequest(f.brief, requestInput(f, "la gestion du stress", "static"));
+    expect(specialite.pillar).toBe("specialite");
+    expect(specialite.template).toBe("photo-titre");
+    expect(specialite.content.slides[0]!.imageUrl).toBe(PEXELS(1));
+    // Sans photo du praticien (téléversée) : les coulisses restent une liste
+    const noPortrait: SocialSiteBrief = { ...f.brief, photos: f.brief.photos.filter((p) => !p.portraitSafe) };
+    const list = await generator.generateRequest(noPortrait, requestInput(f, "petit tour en coulisses", "static"));
+    expect(list.pillar).toBe("coulisses");
+    expect(list.template).toBe("liste-conseils");
   });
 });

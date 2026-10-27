@@ -49,6 +49,7 @@ import {
   finalizePlan,
   keepCompliant,
   sanitizeSocialBrief,
+  topicKey,
   type FinalizedPost,
   type SocialGenerationContext,
   type SocialGenerator,
@@ -596,21 +597,15 @@ export function isGoogleCta(value: string): value is GooglePostCta {
   return GOOGLE_POST_CTAS.some((c) => c.id === value);
 }
 
-/** Clé de comparaison d'un sujet : sans accents ni ponctuation, minuscules, espaces simples. */
-export function topicKey(topic: string): string {
-  return topic
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
+// `topicKey` vit dans social.ts (un sujet par mois dès finalizePlan) ; ré-exporté ici pour les appelants existants
+export { topicKey };
 
 /**
  * Posts d'un même plan dédoublonnés par sujet normalisé (le premier est
- * gardé ; son créneau reste pourvu, les autres restent libres) : le mock
- * social peut reprendre un sujet quand le mois est long, et « Compléter le
- * mois » rappelle le plan avec la même graine.
+ * gardé ; son créneau reste pourvu, les autres restent libres) : garde-fou
+ * après `localizeMockGooglePost`, « Compléter le mois » rappelant le plan
+ * avec la même graine (finalizePlan a déjà écarté les doublons de sujet et de
+ * spécialité).
  */
 export function dedupeGooglePosts(posts: FinalizedGooglePost[]): FinalizedGooglePost[] {
   const seen = new Set<string>();
@@ -674,6 +669,7 @@ export function createGooglePostGenerator(
         socialMonthUserPrompt(brief, input, { variant: "google", keywords: input.keywords }),
         "google",
         complete,
+        { month: input.month },
       );
       const posts = finalizePlan(plan, brief, { kind: "month", ...input, generator: "anthropic" });
       return dedupeGooglePosts(posts.map((p) => toGooglePost(p, links)));
@@ -687,6 +683,7 @@ export function createGooglePostGenerator(
         socialRequestUserPrompt(brief, request, { variant: "google", keywords: input.keywords }),
         "google",
         complete,
+        { month: input.scheduledFor },
       );
       const [post] = finalizePlan(plan, brief, { kind: "request", ...request, generator: "anthropic" });
       return toGooglePost(post!, links);

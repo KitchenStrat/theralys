@@ -41,6 +41,7 @@ import {
   socialMonthUserPrompt,
   socialRequestUserPrompt,
   socialSystemPrompt,
+  type SocialPromptOptions,
   type SocialPromptVariant,
 } from "./social-prompts";
 import { voiceBricks, type BlogVoice } from "./voice";
@@ -822,6 +823,55 @@ function assignSlots(posts: SocialPostDraft[], slots: SocialSlot[]): Assigned[] 
   });
 }
 
+// ─── Un sujet par mois ───────────────────────────────────────────────────────
+
+/** Clé de comparaison d'un sujet : sans accents ni ponctuation, minuscules, espaces simples. */
+export function topicKey(topic: string): string {
+  return topic
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Source qui désigne une spécialité : `page:<id>` (page de motif) ou `section:home:specialties:<slug>`. */
+export function isSpecialtyRef(id: string): boolean {
+  return /^page:[^:]+$/.test(id) || id.startsWith("section:home:specialties:");
+}
+
+export type SubjectLike = { topic: string; sourceRefs: readonly string[] };
+
+/** Clés d'un brouillon : son sujet normalisé et ses sources de spécialité. */
+export function subjectKeys(post: SubjectLike): string[] {
+  const topic = topicKey(post.topic);
+  return [...(topic === "" ? [] : [topic]), ...post.sourceRefs.filter(isSpecialtyRef)];
+}
+
+/**
+ * Jamais deux fois la même spécialité ni le même sujet dans un plan : quand
+ * deux éléments partagent une clé (`subjectKeys`), le second est écarté — son
+ * créneau reste libre. Les éléments « fixes » (créneau nouvel_article) sont
+ * toujours gardés et leurs clés comptent dès le départ.
+ */
+export function dedupeSubjects<T>(
+  items: readonly T[],
+  subjectOf: (item: T) => SubjectLike,
+  isFixed: (item: T) => boolean = () => false,
+): T[] {
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (isFixed(item)) for (const key of subjectKeys(subjectOf(item))) seen.add(key);
+  }
+  return items.filter((item) => {
+    if (isFixed(item)) return true;
+    const keys = subjectKeys(subjectOf(item));
+    if (keys.some((key) => seen.has(key))) return false;
+    for (const key of keys) seen.add(key);
+    return true;
+  });
+}
+
 /** Mix du mois : au plus un avis, jamais deux piliers consécutifs identiques (échange si possible). */
 function applyMix(items: Assigned[], brief: SocialSiteBrief): void {
   let avisSeen = false;
@@ -873,8 +923,10 @@ function applyMix(items: Assigned[], brief: SocialSiteBrief): void {
  * 6. normalizeHashtags ; 7. photos (imageRef → imageUrl via photosById,
  *    portraitSafe) ; altText réécrit par le code (socialAltText) dès que le
  *    template, la photo ou la citation ont changé ; 8. sourceRefs (ids inconnus retirés, vide → section:home:hero,
- *    enrichis via refsById, requête → REQUEST_SOURCE_REF) ; 9. mix (piliers
- *    consécutifs, ≤ 1 avis) ; 10. accentRole conservé ; 11. `generator` recopié.
+ *    enrichis via refsById, requête → REQUEST_SOURCE_REF) ; 9. un sujet par
+ *    mois (`dedupeSubjects` : même sujet normalisé ou même source de spécialité
+ *    → le second est écarté, créneau libre) puis mix (piliers consécutifs,
+ *    ≤ 1 avis) ; 10. accentRole conservé ; 11. `generator` recopié.
  */
 export function finalizePlan(
   plan: SocialPlan,
@@ -899,7 +951,11 @@ export function finalizePlan(
     return [finalizeOne(draft, frame, ctx)];
   }
 
-  const items = assignSlots(plan.posts, input.slots);
+  const items = dedupeSubjects(
+    assignSlots(plan.posts, input.slots),
+    (item) => item.draft,
+    (item) => item.slot.kind === "nouvel_article",
+  );
   applyMix(items, brief);
   const out: FinalizedPost[] = [];
   for (const item of items) {
@@ -969,12 +1025,16 @@ export function createSocialGenerator(env: NodeJS.ProcessEnv = process.env): Soc
     mode,
     planMonth: async (rawBrief, input) => {
       const brief = sanitizeSocialBrief(rawBrief);
-      const plan = await completeSocialPlan(options, brief, socialMonthUserPrompt(brief, input));
+      const plan = await completeSocialPlan(options, brief, socialMonthUserPrompt(brief, input), "social", completeStructured, {
+        month: input.month,
+      });
       return finalizePlan(plan, brief, { kind: "month", ...input, generator: "anthropic" });
     },
     generateRequest: async (rawBrief, input) => {
       const brief = sanitizeSocialBrief(rawBrief);
-      const plan = await completeSocialPlan(options, brief, socialRequestUserPrompt(brief, input));
+      const plan = await completeSocialPlan(options, brief, socialRequestUserPrompt(brief, input), "social", completeStructured, {
+        month: input.scheduledFor,
+      });
       const [post] = finalizePlan(plan, brief, { kind: "request", ...input, generator: "anthropic" });
       return post!;
     },
@@ -987,7 +1047,8 @@ export function createSocialGenerator(env: NodeJS.ProcessEnv = process.env): Soc
  * que la valeur rendue est déjà la sortie de `schema.parse` : un second parse,
  * idempotent et sans coût notable, fixe le type sans conversion forcée.
  * Variante « google » (posts de la fiche Google, `google-profile.ts`) : même
- * appel avec le prompt système et le schéma de cette variante.
+ * appel avec le prompt système et le schéma de cette variante. `promptOpts`
+ * (facultatif) : mois visé pour l'ancrage temporel du prompt système.
  */
 export async function completeSocialPlan(
   options: AnthropicClientOptions,
@@ -995,11 +1056,12 @@ export async function completeSocialPlan(
   userPrompt: string,
   variant: SocialPromptVariant = "social",
   complete: typeof completeStructured = completeStructured,
+  promptOpts: Pick<SocialPromptOptions, "month"> = {},
 ): Promise<SocialPlan> {
   const schema = variant === "google" ? googlePlanSchema : socialPlanSchema;
   const parsed: z.input<typeof schema> = await complete(
     options,
-    socialSystemPrompt(brief, { variant }),
+    socialSystemPrompt(brief, { variant, ...promptOpts }),
     userPrompt,
     schema,
   );

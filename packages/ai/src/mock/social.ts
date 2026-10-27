@@ -8,6 +8,12 @@
  * Les textes sont assemblés avec les briques de voix (voice.ts) ; les
  * diapositives ne contiennent jamais d'emoji et chaque body porte exactement
  * un passage **gras** (sauf le template « avis », rendu en texte simple).
+ *
+ * Variété : chaque pilier dispose d'au moins trois accroches, colorées par la
+ * famille de pratique (sophrologie, hypnose…) et servies à tour de rôle dans
+ * le mois ; un contenu du mois s'ouvre sur une accroche saisonnière
+ * (SEASONAL_HOOKS) ; jamais deux fois le même sujet ni la même spécialité
+ * dans un mois (clés de `subjectKeys`, comme `finalizePlan`).
  */
 
 import {
@@ -25,8 +31,10 @@ import { emphasizeLead } from "../emphasis";
 import {
   articleRefId,
   hash31,
+  monthContext,
   rotatePillars,
   socialSeed,
+  type MonthContext,
 } from "../social-prompts";
 // Import circulaire avec ../social (qui importe ce module) : ces exports ne
 // sont utilisés qu'à l'intérieur des fonctions, jamais à l'initialisation.
@@ -37,11 +45,14 @@ import {
   numberWord,
   reviewSlide,
   socialAltText,
+  subjectKeys,
   type SocialPlan,
   type SocialPostDraft,
   type SocialSlideDraft,
 } from "../social";
 import { voiceBricks, type VoiceBricks } from "../voice";
+import { exerciseFor, practiceFamily, type PracticeFamily } from "./exercises";
+import { deArticle, elideDe, withArticle } from "./french";
 
 // ─── Contexte ────────────────────────────────────────────────────────────────
 
@@ -56,11 +67,22 @@ type Ctx = {
   practice: string;
   /** « La sophrologie » */
   practiceCap: string;
+  /** Famille de pratique : accroches et exercice propres au métier */
+  family: PracticeFamily;
   city: string;
+  /** Sujets récents (studio) et articles annoncés dans le mois, en minuscules */
   recent: string[];
+  /** Sujets déjà pris dans le mois en cours (topics et libellés des sources), en minuscules */
+  monthUsed: string[];
   seed: number;
   /** Consignes du praticien interprétées par le mock */
   wishes: MockWishes;
+  /** Contexte du mois planifié (saison, repères) ; absent pour une demande */
+  month?: MonthContext;
+  /** Accroches déjà servies par pilier dans le mois : la suivante est toujours différente */
+  hookUse: Map<string, number>;
+  /** Accroche saisonnière encore à placer (une par mois, sur le premier contenu qui s'y prête) */
+  seasonalPending: boolean;
 };
 
 /**
@@ -91,8 +113,9 @@ export function parseMockWishes(instructions: string | undefined): MockWishes {
   return { endWithQuestion, hashtags };
 }
 
-function makeCtx(brief: SocialSiteBrief, recent: string[], seed: number): Ctx {
+function makeCtx(brief: SocialSiteBrief, recent: string[], seed: number, month?: string): Ctx {
   const { firstName, profession, practiceName, city } = brief.practitioner;
+  const ctx = month ? monthContext(month) : undefined;
   return {
     brief,
     b: voiceBricks(brief.voice),
@@ -101,11 +124,29 @@ function makeCtx(brief: SocialSiteBrief, recent: string[], seed: number): Ctx {
     professionLower: profession.toLowerCase(),
     practice: practiceName,
     practiceCap: capitalize(practiceName),
+    family: practiceFamily(profession),
     city,
     recent: recent.map((t) => t.toLowerCase()),
+    monthUsed: [],
     seed,
     wishes: parseMockWishes(brief.instructions),
+    ...(ctx ? { month: ctx } : {}),
+    hookUse: new Map(),
+    seasonalPending: ctx !== undefined,
   };
+}
+
+/** État du contexte qui évolue au fil du mois (pour annuler un essai de contenu rejeté). */
+type CtxState = { monthUsed: number; hookUse: Map<string, number>; seasonalPending: boolean };
+
+function saveState(ctx: Ctx): CtxState {
+  return { monthUsed: ctx.monthUsed.length, hookUse: new Map(ctx.hookUse), seasonalPending: ctx.seasonalPending };
+}
+
+function restoreState(ctx: Ctx, state: CtxState): void {
+  ctx.monthUsed.length = state.monthUsed;
+  ctx.hookUse = state.hookUse;
+  ctx.seasonalPending = state.seasonalPending;
 }
 
 // ─── Aides texte ─────────────────────────────────────────────────────────────
@@ -116,11 +157,6 @@ function capitalize(s: string): string {
 
 function lowerFirst(s: string): string {
   return s.charAt(0).toLowerCase() + s.slice(1);
-}
-
-/** « de » élidé devant une voyelle : « parlons de … » → « parlons d'accompagnement ». */
-function de(word: string): string {
-  return /^[aeiouyàâäéèêëîïôöùûüœh]/i.test(word) ? `d'${word}` : `de ${word}`;
 }
 
 /** Texte d'une ligne, sans gras ni liens, espaces normalisés. */
@@ -157,10 +193,14 @@ function wholeText(text: string): string {
   return wholeSentences(text).join(" ");
 }
 
+/** Phrase terminée : « . » ajouté s'il manque une ponctuation finale. */
+function ended(text: string): string {
+  return /[.!?…]$/.test(text) ? text : `${text}.`;
+}
+
 /** Première phrase, terminée par un point. */
 function firstSentence(text: string): string {
-  const s = (sentences(text)[0] ?? inline(text)).replace(/\s*[:;,]$/, "");
-  return /[.!?…]$/.test(s) ? s : `${s}.`;
+  return ended((sentences(text)[0] ?? inline(text)).replace(/\s*[:;,]$/, ""));
 }
 
 /** Gras sur les premiers mots porteurs (3 au plus, mots-outils de fin exclus). */
@@ -277,18 +317,23 @@ function compliant(text: string): boolean {
   return checkSocialCompliance(text).ok;
 }
 
+/** Vrai si aucun des sujets de `taken` ne contient ce libellé. */
+function freshIn(taken: readonly string[], label: string): boolean {
+  const key = label.toLowerCase();
+  return key === "" || !taken.some((t) => t.includes(key));
+}
+
 /**
  * Choix stable d'un élément : seuls les éléments citables (texte conforme),
- * d'abord ceux absents des sujets récents, puis par graine.
+ * d'abord ceux absents des sujets récents et du mois en cours, puis ceux
+ * seulement absents des sujets récents, puis par graine.
  */
 function pick<T>(ctx: Ctx, candidates: readonly T[], k: number, labelOf: (item: T) => string, textOf: (item: T) => string = labelOf): T | undefined {
   const items = candidates.filter((item) => compliant(textOf(item)));
   if (items.length === 0) return undefined;
-  const fresh = items.filter((item) => {
-    const label = labelOf(item).toLowerCase();
-    return label === "" || !ctx.recent.some((t) => t.includes(label));
-  });
-  const pool = fresh.length > 0 ? fresh : items;
+  const notRecent = items.filter((item) => freshIn(ctx.recent, labelOf(item)));
+  const notUsed = notRecent.filter((item) => freshIn(ctx.monthUsed, labelOf(item)));
+  const pool = notUsed.length > 0 ? notUsed : notRecent.length > 0 ? notRecent : items;
   return pool[(ctx.seed + k) % pool.length];
 }
 
@@ -304,9 +349,172 @@ function heroTitle(brief: SocialSiteBrief): string {
   return raw.replace(new RegExp(`\\s+à\\s+${city}$`, "iu"), "");
 }
 
+/** « la sophrologie » → « sophrologie » ; « cette pratique de bien-être » → « bien-être ». */
+function practiceBare(practice: string): string {
+  return practice.replace(/^(cette pratique de|les|la|le|l['’])\s*/i, "");
+}
+
 /** « la sophrologie » → « #Sophrologie » ; « cette pratique de bien-être » → « #BienEtre ». */
 function practiceTag(practice: string): string {
-  return camelHashtag(practice.replace(/^(cette pratique de|les|la|le|l['’])\s*/i, ""));
+  return camelHashtag(practiceBare(practice));
+}
+
+/**
+ * « votre sophrologue » / « ton hypnothérapeute » / « ta masseuse bien-être » :
+ * possessif accordé au lecteur et au genre du praticien (« ton » devant une
+ * voyelle, même au féminin).
+ */
+function yourProfession(ctx: Ctx): string {
+  const feminine = ctx.brief.practitioner.gender === "feminin" && !/^[aeiouyàâäéèêëîïôöùûüœh]/i.test(ctx.professionLower);
+  return `${feminine ? ctx.b.yourAdjF : ctx.b.yourAdj} ${ctx.professionLower}`;
+}
+
+/** « un exercice de sophrologie », « un exercice d'auto-hypnose », « une pause bien-être », « un exercice de respiration ». */
+const EXERCISE_LABEL: Record<PracticeFamily, string> = {
+  sophrologie: "un exercice de sophrologie",
+  hypnose: "un exercice d'auto-hypnose",
+  naturopathie: "une pause bien-être",
+  massage: "un exercice de respiration",
+  osteopathie: "un exercice de respiration",
+  reflexologie: "un exercice de respiration",
+  reiki: "un exercice de respiration",
+  autre: "un exercice de respiration",
+};
+
+/** Photo qui peut représenter le praticien ou son cabinet (téléversée par le client) : « à propos » d'abord. */
+function portraitPhoto(brief: SocialSiteBrief): string | undefined {
+  const safe = brief.photos.filter((p) => p.portraitSafe);
+  return (safe.find((p) => p.kind === "about") ?? safe[0])?.id;
+}
+
+// ─── Accroches ───────────────────────────────────────────────────────────────
+
+/** Première ligne d'une légende (prompt : ≤ 125 caractères). */
+const HOOK_MAX = 125;
+
+/** Première variante qui tient dans la première ligne, sinon la plus courte. */
+function fit(...candidates: string[]): string {
+  return candidates.find((c) => c.length <= HOOK_MAX) ?? candidates.reduce((a, b) => (a.length <= b.length ? a : b));
+}
+
+type Shorten = (text: string, max: number) => string;
+
+/**
+ * « Titre. Suite. » qui tient dans la première ligne : le titre (phrase
+ * terminée) est raccourci par `shorten` (articleTitle, shortLine) au budget
+ * que la suite lui laisse — jamais un mot coupé en « … » quand une
+ * proposition entière tient.
+ */
+function leadThenTail(lead: string, tail: string, shorten: Shorten): string {
+  const full = `${ended(lead)} ${tail}`;
+  if (full.length <= HOOK_MAX) return full;
+  const budget = Math.max(20, HOOK_MAX - tail.length - 2);
+  return `${ended(shorten(lead, budget))} ${tail}`;
+}
+
+/** « Préfixe : titre suffixe » qui tient dans la première ligne (titre raccourci par `shorten`). */
+function prefixThenLead(prefix: string, lead: string, suffix: string, shorten: Shorten): string {
+  const full = `${prefix}${lead}${suffix}`;
+  if (full.length <= HOOK_MAX) return full;
+  const budget = Math.max(20, HOOK_MAX - prefix.length - suffix.length);
+  return `${prefix}${shorten(lead, budget)}${suffix}`;
+}
+
+/**
+ * Variante d'accroche d'un pilier : l'ordre des variantes tourne avec la
+ * graine, puis chaque usage du mois prend la suivante — deux contenus du même
+ * pilier dans un mois n'ouvrent jamais de la même façon, et deux mois (ou
+ * deux sites) n'ouvrent pas sur la même variante.
+ */
+function hookVariant(ctx: Ctx, key: string, variants: readonly string[]): string {
+  const use = ctx.hookUse.get(key) ?? 0;
+  ctx.hookUse.set(key, use + 1);
+  return variants[(ctx.seed + use) % variants.length] ?? variants[0] ?? "";
+}
+
+/** Une phrase sur la pratique, propre à sa famille (≤ 80 caractères). */
+const FAMILY_LINE: Record<PracticeFamily, (ctx: Ctx) => string> = {
+  sophrologie: () => "avec la sophrologie, le souffle et le corps deviennent des points d'appui.",
+  hypnose: (ctx) => `en hypnose, on s'appuie sur les ressources que ${ctx.b.reader("vous avez", "tu as")} déjà en ${ctx.b.reader("vous", "toi")}.`,
+  naturopathie: () => "en naturopathie, on regarde l'hygiène de vie dans son ensemble.",
+  massage: () => "sur la table, le corps relâche ce que la tête n'arrive pas à poser.",
+  osteopathie: () => "en ostéopathie, on écoute d'abord ce que le corps a à dire.",
+  reflexologie: () => "en réflexologie, tout commence par les pieds, et le reste du corps suit.",
+  reiki: () => "avec le reiki, on laisse le calme s'installer, sans rien forcer.",
+  autre: (ctx) => `avec ${ctx.practice}, on avance à ${ctx.b.yourAdj} rythme, sans rien forcer.`,
+};
+
+/** Piliers dont la légende peut s'ouvrir sur l'accroche saisonnière (jamais un avis, un article ni une question). */
+const SEASONAL_PILLARS: readonly SocialPillar[] = ["specialite", "projection", "conseil", "coulisses", "infos_pratiques"];
+
+/**
+ * Accroches saisonnières par mois (1 à 12), accordées à la voix : saison et
+ * repères du mois en France (MONTH_CONTEXT), sans date ni événement précis.
+ * Choisie par graine (site + mois) : un même mois ne s'ouvre pas de la même
+ * façon d'une année sur l'autre.
+ */
+export const SEASONAL_HOOKS: Record<number, readonly ((ctx: Ctx) => string)[]> = {
+  1: [
+    (c) => `Nouvelle année : pas de résolution impossible, juste l'envie de prendre un peu soin de ${c.b.reader("vous", "toi")}. ❄️`,
+    (c) => `Jours courts, froid dehors : janvier invite à ralentir et à ${c.b.reader("vous", "te")} poser, sans pression. ❄️`,
+  ],
+  2: [
+    (c) => `Au cœur de l'hiver, la fatigue de saison se fait sentir : un bon moment pour ${c.b.reader("vous offrir", "t'offrir")} une vraie pause. ☕`,
+    (c) => `Février, vacances d'hiver pour certains, rythme chargé pour d'autres : et ${c.b.reader("vous", "toi")}, où en ${c.b.reader("êtes-vous", "es-tu")} ? ☕`,
+  ],
+  3: [
+    (c) => `Le printemps arrive, la lumière revient : l'occasion de repartir du bon pied, à ${c.b.yourAdj} rythme. 🌸`,
+    () => "Changement d'heure, journées qui s'allongent : le corps a parfois besoin d'un coup de pouce pour suivre. 🌸",
+  ],
+  4: [
+    (c) => `La nature repart, et ${c.b.reader("vous", "toi")} ? Avril est une belle période pour ${c.b.reader("vous", "te")} remettre en mouvement en douceur. 🌱`,
+    (c) => `Vacances de printemps ou pas, c'est le moment de faire de la place à ce qui ${c.b.reader("vous", "te")} fait du bien. 🌱`,
+  ],
+  5: [
+    (c) => `Les beaux jours s'installent : et si mai devenait le mois où ${c.b.you} ${c.b.reader("preniez", "prenais")} enfin un peu de temps pour ${c.b.reader("vous", "toi")} ? ☀️`,
+    () => "Examens en vue, échéances qui approchent : quelques repères simples pour aborder le jour J plus posément. ☀️",
+  ],
+  6: [
+    () => "Bac, brevet, partiels : juin met la pression à toute la famille. Respirer un peu avant le jour J, ça compte. 📚",
+    () => "L'été approche, les journées s'allongent : un bon moment pour faire le point et alléger ce qui pèse. 📚",
+  ],
+  7: [
+    (c) => `L'été est là, le rythme ralentit : et si ${c.b.you} en ${c.b.reader("profitiez", "profitais")} pour ${c.b.reader("vous", "te")} retrouver vraiment ? 🌞`,
+    () => "Chaleur, vacances, temps long : juillet invite à lever le pied et à écouter ce que le corps demande. 🌞",
+  ],
+  8: [
+    () => "Au cœur de l'été, le corps apprécie la pause : de quoi arriver à la rentrée avec un peu plus d'air. 🌻",
+    () => "Préparer la rentrée en douceur, ça commence maintenant, sans rien forcer. 🌻",
+  ],
+  9: [
+    (c) => `C'est la rentrée : nouveau rythme, nouvelles échéances. Et si ${c.b.you} ${c.b.reader("gardiez", "gardais")} une place pour ${c.b.reader("vous", "toi")} dans l'agenda ? 🍂`,
+    () => "Septembre, ses bonnes résolutions et son agenda qui se remplit : commencer par souffler est une bonne idée. 🍂",
+  ],
+  10: [
+    () => "L'automne s'installe et la lumière baisse : le moment idéal pour cultiver le calme, chez soi comme au cabinet. 🍁",
+    () => "Changement d'heure, journées plus courtes : le corps met parfois quelques jours à suivre. On en parle ? 🍁",
+  ],
+  11: [
+    (c) => `Les jours raccourcissent, l'énergie baisse : novembre est le mois où prendre soin de ${c.b.reader("vous", "toi")} compte vraiment. 🍂`,
+    (c) => `Pluie, froid, envie de cocooning : et si ${c.b.you} ${c.b.reader("profitiez", "profitais")} de novembre pour ralentir un peu ? 🍂`,
+  ],
+  12: [
+    () => "Les fêtes approchent, l'agenda se remplit : s'accorder une pause avant la fin de l'année, c'est déjà un cadeau. ✨",
+    () => "Décembre, l'heure des bilans : un moment pour regarder le chemin parcouru, avec bienveillance. ✨",
+  ],
+};
+
+/** Accroche saisonnière du mois (par graine), ou undefined hors d'un mois planifié. */
+function seasonalHook(ctx: Ctx): string | undefined {
+  const variants = ctx.month ? SEASONAL_HOOKS[ctx.month.month] : undefined;
+  if (!variants || variants.length === 0) return undefined;
+  return variants[ctx.seed % variants.length]?.(ctx);
+}
+
+/** Accroches saisonnières possibles d'un mois (« YYYY-MM ») pour ce site, accordées à sa voix — tests et aperçu. */
+export function seasonalHookVariants(month: string, brief: SocialSiteBrief): string[] {
+  const ctx = makeCtx(brief, [], 0, month);
+  return (ctx.month ? (SEASONAL_HOOKS[ctx.month.month] ?? []) : []).map((variant) => variant(ctx));
 }
 
 // ─── Légende ─────────────────────────────────────────────────────────────────
@@ -331,16 +539,21 @@ function closingQuestion(ctx: Ctx, k: number): string {
 }
 
 /**
- * Accroche (≤ 125 caractères, 1 emoji) → développement → [prudence] →
- * [question finale si les consignes le demandent] → ligne « lien dans ma bio »
- * → signature « Prénom, métier à Ville » (même structure que le prompt live).
+ * [Accroche saisonnière, sur le premier contenu du mois qui s'y prête] →
+ * accroche du pilier (≤ 125 caractères, 1 emoji) → développement →
+ * [prudence] → [question finale si les consignes le demandent] → ligne
+ * « lien dans ma bio » → signature « Prénom, métier à Ville » (même structure
+ * que le prompt live).
  */
 function caption(ctx: Ctx, hook: string, development: string[], pillar: SocialPillar, k = 0): string {
   const dev = development.filter((p) => p.trim() !== "");
-  const mentionsCare = /sommeil|douleur/i.test([hook, ...dev].join(" "));
+  const seasonal = ctx.seasonalPending && SEASONAL_PILLARS.includes(pillar) ? seasonalHook(ctx) : undefined;
+  if (seasonal) ctx.seasonalPending = false;
+  const mentionsCare = /sommeil|douleur/i.test([seasonal ?? "", hook, ...dev].join(" "));
   const prudent = pillar === "conseil" || pillar === "article" || mentionsCare;
   return [
-    truncateAtWord(hook, 125),
+    ...(seasonal ? [truncateAtWord(seasonal, HOOK_MAX)] : []),
+    truncateAtWord(hook, HOOK_MAX),
     ...dev,
     ...(prudent ? [prudenceLine(ctx)] : []),
     ...(ctx.wishes.endWithQuestion ? [closingQuestion(ctx, k)] : []),
@@ -506,7 +719,26 @@ function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
   const refs = [spec.id, ...(spec.pageId ? [spec.pageId] : [])];
   const lower = lowerFirst(spec.title);
   const toi = b.reader("vous", "toi");
-  const hook = `Un temps pour ${toi}, rien que pour ${toi} : parlons ${de(lower)}. 🌿`;
+  const familyLine = FAMILY_LINE[ctx.family](ctx);
+  // Trois ouvertures, colorées par la pratique ; « Un temps pour vous… parlons de » ne sert qu'une fois par mois
+  const subject = capitalize(withArticle(lower));
+  const hook = hookVariant(ctx, "specialite", [
+    fit(
+      `Un temps pour ${toi}, rien que pour ${toi} : parlons ${deArticle(lower)} avec ${ctx.practice}. 🌿`,
+      `Un temps pour ${toi}, rien que pour ${toi} : parlons ${deArticle(lower)}. 🌿`,
+    ),
+    fit(
+      `${subject}, ça ${b.reader("vous", "te")} parle ? ${capitalize(familyLine)} 🌿`,
+      `${subject} : ${familyLine} 🌿`,
+      `${subject}, ça ${b.reader("vous", "te")} parle ? 🌿`,
+    ),
+    fit(
+      `Et si on regardait ${withArticle(lower)} autrement, avec ${ctx.practice} ? Un chemin à ${b.yourAdj} rythme, séance après séance. 🌿`,
+      `${subject} avec ${ctx.practice} : un chemin à ${b.yourAdj} rythme, séance après séance. 🌿`,
+      `${subject}, autrement : un chemin à ${b.yourAdj} rythme, séance après séance. 🌿`,
+      `${subject}, autrement ? 🌿`,
+    ),
+  ]);
   const development = [
     wholeText(spec.excerpt),
     `En séance, ${b.subj(b.reader("je vous accompagne", "je t'accompagne"), b.reader("nous vous accompagnons", "nous t'accompagnons"), b.reader("on vous accompagne", "on t'accompagne"))} pas à pas, à ${b.yourAdj} rythme, pour installer des repères simples à réutiliser au quotidien.`,
@@ -538,6 +770,7 @@ function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
       ],
     });
   }
+  // Une vraie photo (page de la spécialité) plutôt qu'une carte illustrée dès qu'elle existe
   const template: SocialTemplate = photo ? "photo-titre" : "affirmation";
   return draft(ctx, {
     ...base,
@@ -546,6 +779,13 @@ function specialitePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
     slides: [slide(title(spec.title), body(firstSentence(spec.excerpt), 200), { badge, imageRef: photo })],
   });
 }
+
+/** Hashtag thématique de l'exercice mock, par famille de pratique. */
+const EXERCISE_TAG: Partial<Record<PracticeFamily, string>> = {
+  sophrologie: "#RespirationAbdominale",
+  hypnose: "#Ancrage",
+  naturopathie: "#PauseBienEtre",
+};
 
 function conseilPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft {
   const { brief, b } = ctx;
@@ -556,58 +796,66 @@ function conseilPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
     (a) => a.title,
     (a) => [a.title, a.exerciseIntro ?? "", ...a.exerciseSteps].join("\n"),
   );
-  const steps = (article?.exerciseSteps ?? []).slice(0, 5);
-  const fromArticle = article !== undefined && steps.length >= 2;
-  const process = processSteps(ctx).length >= 2 ? processSteps(ctx) : fallbackProcess(ctx);
-  const refs = fromArticle ? [article.id] : ["section:home:process"];
+  const fromArticle = article !== undefined && article.exerciseSteps.length >= 2;
+  // Sans article : l'exercice propre à la famille de pratique (respiration abdominale, ancrage 5-4-3-2-1, pause hydratation…)
+  const exercise = exerciseFor(ctx.profession, brief.voice);
+  const steps = (fromArticle ? article.exerciseSteps : exercise.steps).slice(0, 5);
+  const intro = fromArticle
+    ? article.exerciseIntro
+      ? firstSentence(article.exerciseIntro)
+      : `Un exercice tiré de l'article « ${article.title} ».`
+    : firstSentence(exercise.intro.replace(/\s*:$/, "."));
+  const refs = fromArticle ? [article.id] : ["section:home:hero"];
   const site = b.subj("mon site", "notre site", "le site");
+  // « un exercice de sophrologie », « un exercice d'auto-hypnose », « une pause bien-être »… : l'accroche dit la pratique
+  const label = EXERCISE_LABEL[ctx.family];
+  const named = fromArticle ? `${capitalize(label)} tiré de l'article « ${articleTitle(article.title, 50)} »` : capitalize(exercise.name);
 
-  const hook = fromArticle
-    ? `Trois minutes, les yeux fermés : un exercice simple à glisser dans ${b.yourAdjF} journée. 🧘`
-    : `Comment se passe une séance ? ${capitalize(b.subj(b.reader("Je vous emmène", "Je t'emmène"), b.reader("Nous vous emmenons", "Nous t'emmenons"), b.reader("On vous emmène", "On t'emmène")))} dans les coulisses. ✨`;
+  const hook = hookVariant(ctx, "conseil", [
+    `Trois minutes, les yeux fermés : ${label} à glisser dans ${b.yourAdjF} journée. 🧘`,
+    fit(
+      `${named} : un repère simple à tester dès ce soir, sans rien préparer. 🧘`,
+      `${named}, à tester dès ce soir. 🧘`,
+      `${capitalize(label)} tiré de l'article, à tester dès ce soir. 🧘`,
+    ),
+    `Besoin de souffler entre deux rendez-vous ? Voici ${label} à refaire autant de fois que nécessaire. 🧘`,
+  ]);
   const development = fromArticle
     ? [
-        article.exerciseIntro ? firstSentence(article.exerciseIntro) : `Un exercice tiré de l'article « ${article.title} ».`,
+        intro,
         `${capitalize(b.reader("Vous le retrouverez", "Tu le retrouveras"))} en détail dans l'article « ${article.title} », sur ${site}. Un repère simple, à refaire dès que le besoin s'en fait sentir.`,
       ]
     : [
-        `${process.map((s) => lowerFirst(s.title)).join(", ")} : ${numberWord(process.length)} temps pour ${b.reader("vous poser", "te poser")}, à ${b.yourAdj} rythme.`,
-        `${capitalize(b.subj(b.reader("Je vous explique", "Je t'explique"), b.reader("Nous vous expliquons", "Nous t'expliquons"), b.reader("On vous explique", "On t'explique")))} chaque étape, et rien n'est jamais forcé.`,
+        intro,
+        `C'est un repère simple que ${b.subj("je propose", "nous proposons", "on propose")} souvent en séance, à refaire chez ${b.reader("vous", "toi")} dès que le besoin s'en fait sentir.`,
       ];
-  const tags = fromArticle ? ["#ExerciceDuJour", "#Respiration"] : ["#Coulisses", "#Seance"];
-  const topic = fromArticle ? "Un exercice simple à faire chez soi" : "Comment se passe une séance ?";
+  const tags = ["#ExerciceDuJour", fromArticle ? "#Respiration" : (EXERCISE_TAG[ctx.family] ?? "#Respiration")];
+  const topic = fromArticle ? "Un exercice simple à faire chez soi" : `Un exercice simple : ${exercise.name}`;
   const base = { pillar: "conseil" as const, topic, hook, development, tags, sourceRefs: refs, k };
+  const coverPhoto = (fromArticle ? article.photoId : undefined) ?? brief.photos.find((p) => p.kind === "hero")?.id;
 
   if (format === "carousel") {
-    const pages = fromArticle
-      ? steps.map((s, i) => stepSlide(s, i))
-      : process.slice(0, 5).map((s) => slide(title(s.title), body(s.description, 160)));
-    const cover = fromArticle
-      ? slide(
-          `${capitalize(numberWord(pages.length))} étapes pour relâcher la pression`,
-          body(article.exerciseIntro ?? `Un exercice simple, à faire assis, les yeux fermés.`, 160),
-          { imageRef: article.photoId ?? brief.photos.find((p) => p.kind === "hero")?.id },
-        )
-      : slide("Comment se passe une séance ?", body(`${capitalize(numberWord(pages.length))} temps, à ${b.yourAdj} rythme, sans rien à préparer.`, 160));
+    const pages = steps.map((s, i) => stepSlide(s, i));
+    const cover = slide(
+      fromArticle ? `${capitalize(numberWord(pages.length))} étapes pour relâcher la pression` : title(capitalize(exercise.name)),
+      body(intro, 160),
+      { imageRef: coverPhoto },
+    );
     return draft(ctx, { ...base, format, template: "carrousel-etapes", slides: [cover, ...pages] });
   }
   if (format === "story") {
-    const text = fromArticle
-      ? `${steps[0]} ${steps[1]}`
-      : `${process[0]?.description ?? ""}`;
     return draft(ctx, {
       ...base,
       format,
       template: "story-rappel",
-      slides: [slide(fromArticle ? "Un exercice simple à tester" : "Comment se passe une séance ?", body(text, 200), { imageRef: article?.photoId })],
+      slides: [slide("Un exercice simple à tester", body(`${steps[0]} ${steps[1]}`, 200), { imageRef: fromArticle ? article.photoId : undefined })],
     });
   }
-  const lines = fromArticle ? steps : process.map((s) => s.title);
   return draft(ctx, {
     ...base,
     format,
     template: "liste-conseils",
-    slides: [slide(fromArticle ? `Un exercice en ${numberWord(Math.min(3, lines.length))} étapes` : "Comment se passe une séance ?", bulletBody(lines, 200))],
+    slides: [slide(`Un exercice en ${numberWord(Math.min(3, steps.length))} étapes`, bulletBody(steps, 200))],
   });
 }
 
@@ -617,7 +865,13 @@ function articlePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDraft
   if (!article) return undefined;
   const site = b.subj("mon site", "notre site", "le site");
   const blog = b.subj("mon blog", "notre blog", "le blog");
-  const hook = `${truncateAtWord(article.title, 110)} 📖`;
+  // Titre entier quand il tient dans la première ligne, sinon raccourci proprement (question ou proposition, jamais un mot coupé)
+  const bare = practiceBare(ctx.practice);
+  const hook = hookVariant(ctx, "article", [
+    leadThenTail(article.title, `Le point de vue de ${yourProfession(ctx)}, en quelques lignes. 📖`, articleTitle),
+    prefixThenLead(`À lire sur ${blog} ${elideDe(bare)} : `, article.title, " 📖", articleTitle),
+    leadThenTail(article.title, `Trois idées à retenir, côté ${bare}. 📖`, articleTitle),
+  ]);
   const development = [
     wholeText(article.lead || article.excerpt),
     `${capitalize(b.reader("Vous y trouverez", "Tu y trouveras"))} ce qui se joue, ce que ${ctx.practice} peut apporter et quand consulter. L'article complet est sur ${site}.`,
@@ -659,7 +913,13 @@ function ideeRecuePost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
   ];
   const faq = pick(ctx, pool, k, (f) => f.question, (f) => `${f.question}\n${f.answer}`);
   if (!faq) return undefined;
-  const hook = `« ${title(faq.question, 90)} » : c'est une question qui revient souvent. 💬`;
+  const bare = practiceBare(ctx.practice);
+  const asked = title(faq.question, 160);
+  const hook = hookVariant(ctx, "idee_recue", [
+    prefixThenLead("« ", asked, ` » : une question qui revient souvent en ${bare}. 💬`, title),
+    prefixThenLead(`On ${b.subj("me", "nous", "nous")} demande souvent, en ${bare} : « `, asked, " » 💬", title),
+    prefixThenLead("« ", asked, ` » Bonne question : voici une réponse simple, côté ${bare}. 💬`, title),
+  ]);
   const development = [
     wholeText(faq.answer),
     `${capitalize(b.subj("Je prends", "Nous prenons", "On prend"))} toujours le temps d'y répondre en séance, simplement et sans jargon. ${b.reader("N'hésitez pas", "N'hésite pas")} à ${b.subj("me", "nous", "nous")} poser ${b.yourPl} questions avant ${b.yourAdjF} première séance.`,
@@ -708,7 +968,16 @@ function coulissesPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
     ...(about ? [about.id] : []),
   ];
   if (refs.length === 0) refs.push("section:home:hero");
-  const hook = `Comment se passe une séance ? Petit tour en coulisses. ✨`;
+  const toi = b.reader("vous", "toi");
+  const seance = `une séance ${elideDe(practiceBare(ctx.practice))}`;
+  const hook = hookVariant(ctx, "coulisses", [
+    `Comment se passe ${seance} ? Petit tour en coulisses. ✨`,
+    `Beaucoup ${b.subj("me", "nous", "nous")} demandent à quoi ressemble ${seance}. Voici le déroulé, étape par étape. ✨`,
+    fit(
+      `Pousser la porte du cabinet, s'installer, respirer : ${seance}, c'est d'abord un temps pour ${toi}. ✨`,
+      `Pousser la porte, s'installer, respirer : ${seance}, c'est d'abord un temps pour ${toi}. ✨`,
+    ),
+  ]);
   const development = [
     `${capitalize(process.map((s) => lowerFirst(s.title)).join(", "))} : ${numberWord(process.length)} temps pour ${b.reader("vous poser", "te poser")}, à ${b.yourAdj} rythme.`,
     about?.paragraphs[0]
@@ -717,6 +986,9 @@ function coulissesPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
   ];
   const tags = ["#Coulisses", "#Seance"];
   const base = { pillar: "coulisses" as const, topic: "Comment se passe une séance ?", hook, development, tags, sourceRefs: refs, k };
+  // Photo du cabinet ou du praticien (téléversée par le client) : une vraie photo plutôt qu'une carte
+  const photo = portraitPhoto(brief);
+  const summary = `${capitalize(numberWord(process.length))} temps, à ${b.yourAdj} rythme, sans rien à préparer.`;
 
   if (format === "carousel") {
     return draft(ctx, {
@@ -724,7 +996,7 @@ function coulissesPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
       format,
       template: "carrousel-etapes",
       slides: [
-        slide("Comment se passe une séance ?", body(`${capitalize(numberWord(process.length))} temps, à ${b.yourAdj} rythme, sans rien à préparer.`, 160)),
+        slide("Comment se passe une séance ?", body(summary, 160), { imageRef: photo }),
         ...process.slice(0, 5).map((s) => slide(title(s.title), body(s.description, 160))),
       ],
     });
@@ -734,7 +1006,15 @@ function coulissesPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDra
       ...base,
       format,
       template: "story-rappel",
-      slides: [slide("Comment se passe une séance ?", body(process[0]?.description ?? "", 200))],
+      slides: [slide("Comment se passe une séance ?", body(process[0]?.description ?? "", 200), { imageRef: photo })],
+    });
+  }
+  if (photo) {
+    return draft(ctx, {
+      ...base,
+      format,
+      template: "photo-titre",
+      slides: [slide("Comment se passe une séance ?", body(summary, 200), { badge: `${ctx.profession} à ${ctx.city}`, imageRef: photo })],
     });
   }
   return draft(ctx, {
@@ -765,7 +1045,12 @@ function infosPost(ctx: Ctx, k: number, format: SocialFormat, opts: { invite?: b
     ...(contact ? ["section:home:contact"] : []),
   ];
   if (refs.length === 0) refs.push("section:home:hero");
-  const hook = `Les infos pratiques avant de ${b.reader("vous", "te")} lancer, en un coup d'œil. 📌`;
+  const seance = `première séance ${elideDe(practiceBare(ctx.practice))}`;
+  const hook = hookVariant(ctx, "infos_pratiques", [
+    `Les infos pratiques avant ${b.yourAdjF} ${seance}, en un coup d'œil. 📌`,
+    `Une ${seance} se prépare sans stress : voici l'essentiel à savoir avant de venir. 📌`,
+    `${b.reader("Vous hésitez", "Tu hésites")} encore ? Les questions pratiques que l'on pose le plus à ${yourProfession(ctx)}, et leurs réponses. 📌`,
+  ]);
   const development = [
     cards.map((c) => `${c.title} : ${lowerFirst(c.text)}.`).join(" ") ||
       `${capitalize(b.subj(b.reader("Je vous reçois", "Je te reçois"), b.reader("Nous vous recevons", "Nous te recevons"), b.reader("On vous reçoit", "On te reçoit")))} sur rendez-vous, dans un cadre calme.`,
@@ -821,7 +1106,13 @@ function projectionPost(ctx: Ctx, k: number, format: SocialFormat): SocialPostDr
   const useFuture = future !== undefined && lines.length >= 2 && (ctx.seed + k) % 2 === 0;
   const refs = [...(useFuture ? ["section:home:future"] : ["section:home:hero"]), ...(future && !useFuture ? ["section:home:future"] : [])];
   const together = b.subj(b.reader("je vous accompagne", "je t'accompagne"), b.reader("nous vous accompagnons", "nous t'accompagnons"), b.reader("on vous accompagne", "on t'accompagne"));
-  const hook = `${truncateAtWord(inline(future?.title ?? hero?.title ?? `Et si ${b.you} ${b.reader("preniez", "prenais")} soin de ${b.reader("vous", "toi")} ?`), 118)} 🌱`;
+  const headline = inline(future?.title ?? hero?.title ?? `Et si ${b.you} ${b.reader("preniez", "prenais")} soin de ${b.reader("vous", "toi")} ?`);
+  // Titre entier quand il tient dans la première ligne, sinon raccourci à une proposition (shortLine)
+  const hook = hookVariant(ctx, "projection", [
+    leadThenTail(headline, `Pas à pas, avec ${ctx.practice}. 🌱`, shortLine),
+    leadThenTail(headline, `Un pas après l'autre, sans pression, avec ${yourProfession(ctx)}. 🌱`, shortLine),
+    leadThenTail(headline, `Avec ${ctx.practice}, c'est un chemin qui se fait ensemble. 🌱`, shortLine),
+  ]);
   const development = [
     lines.length >= 2
       ? `${lines.slice(0, 3).map((l) => l.replace(/[.;]$/, "")).join(". ")}.`
@@ -874,10 +1165,16 @@ function avisPost(ctx: Ctx, k: number): SocialPostDraft | undefined {
   const { brief, b } = ctx;
   const review = pick(ctx, brief.reviews, k, (r) => r.authorName, (r) => r.text);
   if (!review) return undefined;
-  const hook = `Merci ${review.authorName} pour ce retour qui ${b.subj("me", "nous", "nous")} touche. 💛`;
+  const me = b.subj("me", "nous", "nous");
+  const bare = practiceBare(ctx.practice);
+  const hook = hookVariant(ctx, "avis", [
+    `Merci ${review.authorName} pour ce retour qui ${me} touche, et qui parle si bien de ${ctx.practice}. 💛`,
+    `Un mot de ${review.authorName} sur ${b.subj("mes", "nos", "nos")} séances ${elideDe(bare)}, qui fait chaud au cœur. 💛`,
+    `${review.authorName} a pris le temps d'écrire ces quelques lignes après une séance ${elideDe(bare)}, et ça compte beaucoup. 💛`,
+  ]);
   const development = [
     `« ${review.text} »`,
-    `Ces mots ${b.subj("me", "nous", "nous")} rappellent pourquoi ${b.subj("j'ai choisi", "nous avons choisi", "on a choisi")} ${ctx.practice} : accompagner chacun, à son rythme, avec attention.`,
+    `Ces mots ${me} rappellent pourquoi ${b.subj("j'ai choisi", "nous avons choisi", "on a choisi")} ${ctx.practice} : accompagner chacun, à son rythme, avec attention.`,
   ];
   return draft(ctx, {
     pillar: "avis",
@@ -960,15 +1257,44 @@ const CAROUSEL_PILLARS: readonly SocialPillar[] = ["conseil", "article"];
 const STORY_EXCLUDED: readonly SocialPillar[] = ["conseil", "article", "avis"];
 
 /**
- * Un contenu par créneau : piliers disponibles en rotation (jamais deux fois
- * de suite le même, au plus un avis), carrousels sur conseil/article, une
- * story sur le 4e créneau de cadence dès 6 créneaux.
+ * Au-delà d'un tour complet des piliers : ceux dont le contenu varie d'un
+ * créneau à l'autre (une autre spécialité, une autre question, l'autre face
+ * de la projection). Le pilier « conseil » n'en fait pas partie : un seul
+ * exercice par mois.
  */
-/** Au-delà d'un tour complet des piliers : ceux dont le contenu varie d'un créneau à l'autre. */
-const WRAP_PILLARS: readonly SocialPillar[] = ["specialite", "idee_recue", "projection", "conseil"];
+const WRAP_PILLARS: readonly SocialPillar[] = ["specialite", "idee_recue", "projection"];
 
 export type MockSocialOptions = { variant?: "social" | "google" };
 
+/**
+ * Libellés d'un contenu accepté, mémorisés pour le reste du mois (`pick` les
+ * évite) : son sujet, puis les titres de spécialité, d'article, la question
+ * fréquente ou l'auteur d'avis de ses sources.
+ */
+function labelsOf(brief: SocialSiteBrief, post: SocialPostDraft): string[] {
+  const labels = [post.topic];
+  const faqs = [...brief.home.faq, ...brief.motifPages.flatMap((p) => p.faq)];
+  for (const id of post.sourceRefs) {
+    const spec = brief.home.specialties.find((s) => s.id === id || s.pageId === id);
+    if (spec) labels.push(spec.title);
+    const article = brief.articles.find((a) => a.id === id);
+    if (article) labels.push(article.title);
+    const faq = faqs.find((f) => f.id === id);
+    if (faq) labels.push(faq.question);
+    const review = brief.reviews.find((r) => r.id === id);
+    if (review) labels.push(review.authorName);
+  }
+  return labels.map((l) => l.toLowerCase());
+}
+
+/**
+ * Un contenu par créneau : piliers disponibles en rotation (jamais deux fois
+ * de suite le même, au plus un avis), carrousels sur conseil/article, une
+ * story sur le 4e créneau de cadence dès 6 créneaux. Jamais deux fois le même
+ * sujet ni la même spécialité dans le mois : un contenu dont les clés
+ * (`subjectKeys`) sont déjà prises est annulé et le créneau essaie un autre
+ * pilier (WRAP_PILLARS), avant de retomber sur une projection.
+ */
 export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthInput, opts: MockSocialOptions = {}): SocialPlan {
   const google = opts.variant === "google";
   // Les articles annoncés par un créneau « nouvel_article » ne sont pas repris ailleurs dans le mois
@@ -977,7 +1303,7 @@ export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthIn
     .map((s) => brief.articles.find((a) => a.id === articleRefId(s.articleId ?? ""))?.title ?? "")
     .filter((t) => t !== "");
   const seed = socialSeed(brief, input.month);
-  const ctx = makeCtx(brief, [...input.recentTopics, ...announced], seed);
+  const ctx = makeCtx(brief, [...input.recentTopics, ...announced], seed, input.month);
   const rotated = rotatePillars(brief, input.month, google ? "google" : "social");
   const cadence = input.slots.filter((s) => s.kind === "cadence");
   const n = cadence.length;
@@ -1015,18 +1341,39 @@ export function mockSocialMonth(brief: SocialSiteBrief, input: MockSocialMonthIn
   }
 
   const posts: SocialPostDraft[] = [];
+  /** Clés de sujet déjà prises dans le mois (sujet normalisé, sources de spécialité) */
+  const taken = new Set<string>();
+  const isFree = (post: SocialPostDraft) => !subjectKeys(post).some((key) => taken.has(key));
+  const accept = (post: SocialPostDraft, index: number) => {
+    posts.push({ ...post, slot: index, accentRole: ACCENTS[(seed + index) % ACCENTS.length] ?? "primary" });
+    for (const key of subjectKeys(post)) taken.add(key);
+    ctx.monthUsed.push(...labelsOf(brief, post));
+  };
+
   let k = 0;
   input.slots.forEach((slot, index) => {
-    let post: SocialPostDraft | undefined;
     if (slot.kind === "nouvel_article") {
-      post = newArticlePost(ctx, slot, index);
-    } else {
-      const pillar = pillars[k] ?? "projection";
-      const format = formats[k] ?? "static";
-      post = postFor(ctx, pillar, k, format) ?? projectionPost(ctx, k, format);
-      k += 1;
+      const post = newArticlePost(ctx, slot, index);
+      if (post) accept(post, index);
+      return;
     }
-    if (post) posts.push({ ...post, slot: index, accentRole: ACCENTS[(seed + index) % ACCENTS.length] ?? "primary" });
+    const planned = pillars[k] ?? "projection";
+    const format = formats[k] ?? "static";
+    const previous = posts.at(-1)?.pillar;
+    const candidates = [...new Set<SocialPillar>([planned, ...wrap.filter((p) => p !== planned && p !== previous), "projection"])];
+    let chosen: SocialPostDraft | undefined;
+    for (const pillar of candidates) {
+      const state = saveState(ctx);
+      const post = postFor(ctx, pillar, k, format);
+      if (post && isFree(post)) {
+        chosen = post;
+        break;
+      }
+      restoreState(ctx, state);
+    }
+    // Plus aucun sujet libre : projection quand même (finalizePlan écarte le doublon, le créneau reste libre)
+    accept(chosen ?? projectionPost(ctx, k, format), index);
+    k += 1;
   });
   return { posts };
 }

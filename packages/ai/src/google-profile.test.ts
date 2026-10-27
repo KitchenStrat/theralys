@@ -389,6 +389,8 @@ describe("posts Google", () => {
     const caption = "Comment se passe une première séance de sophrologie à Albi ?\n\nUn temps d'échange pour poser le cadre, puis des exercices simples de respiration et de relâchement, guidés par la voix. Chaque personne avance à son rythme, dans un cadre calme et bienveillant.\n\nPour prendre rendez-vous, le lien est dans ma bio. Je vous accueille sur rendez-vous au cabinet.\n\nClaire, sophrologue à Albi #Sophrologie";
     const complete = vi.fn(async (_options: unknown, system: string, user: string, schema: { parse: (v: unknown) => unknown }) => {
       expect(system).toContain("posts de la fiche Google");
+      // Le mois visé (mois du plan ou de la date de publication) est transmis au prompt système
+      expect(system).toContain("Mois visé : novembre (automne)");
       expect(user).toContain("<site>");
       const month = user.includes("CRÉNEAUX À REMPLIR");
       if (month) expect(user).toContain("tous les contenus en format static");
@@ -440,6 +442,13 @@ describe("ligne éditoriale Google (référencement local)", () => {
     expect(user).not.toContain("<b>");
     expect(user).toContain("« b x /b »");
     expect(socialMonthUserPrompt(b, { month: "2026-12", slots, recentTopics: [] })).not.toContain("MOTS-CLÉS SUIVIS");
+    // Ancrage dans le temps : contexte du mois dans le prompt utilisateur, mois visé dans le prompt système
+    expect(user).toContain("CONTEXTE DU MOIS : décembre (hiver) — repères du mois en France : fêtes de fin d'année");
+    expect(user).toContain("JAMAIS DEUX FOIS LE MÊME SUJET DANS LE MOIS");
+    expect(system).toContain("ANCRAGE DANS LE TEMPS ET LE LIEU");
+    expect(system).toContain("une saison peut être évoquée, jamais une date");
+    expect(socialSystemPrompt(b, { variant: "google", month: "2026-12" })).toContain("Mois visé : décembre (hiver)");
+    expect(system).toContain("préfère le template photo-titre : une vraie photo génère plus d'engagement qu'une carte illustrée");
   });
 
   it("mois Google (mock) : première ligne locale, mots-clés repris, aucun hashtag, sujets différents du mois social", async () => {

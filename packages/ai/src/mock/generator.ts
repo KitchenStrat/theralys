@@ -8,6 +8,7 @@ import { mockVoicedArticle } from "../article";
 import { stockQueryFor } from "../stock";
 import { emphasizeLead } from "../emphasis";
 import { COMMON_FAQ, resolveProfession, type ProfessionSeed, type SpecialtySeed } from "./catalog";
+import { deArticle, withArticle } from "./french";
 import type {
   GeneratedArticle,
   GeneratedHome,
@@ -362,14 +363,16 @@ export function mockGenerateArticles(
   motifs: MotifPlan[],
 ): GeneratedArticle[] {
   const picks = motifs.slice(0, 3);
+  // Titres de motifs insérés dans une phrase : avec leur article (« découvrir la gestion du stress », jamais « découvrir gestion du stress »)
   const templates = [
     (m: MotifPlan) => ({
       title: `${m.title} à ${input.city} : à quoi s'attendre lors d'une première séance ?`,
-      intro: `Vous envisagez de pousser la porte d'un cabinet pour découvrir ${m.title.toLowerCase()}, mais vous ne savez pas vraiment à quoi vous attendre ? C'est tout à fait normal — et c'est justement l'objet de cet article.`,
+      intro: `Vous envisagez de pousser la porte d'un cabinet pour découvrir ${withArticle(m.title.toLowerCase())}, mais vous ne savez pas vraiment à quoi vous attendre ? C'est tout à fait normal — et c'est justement l'objet de cet article.`,
     }),
     (m: MotifPlan) => ({
-      title: `Corps tendu, esprit qui tourne en boucle : et si vous testiez ${m.title.toLowerCase()} ?`,
-      intro: `Les épaules qui remontent, la mâchoire serrée, les pensées qui s'enchaînent sans pause… Ces signaux, nous les connaissons tous. Voici comment ${m.title.toLowerCase()} peut vous aider à relâcher la pression.`,
+      title: `Corps tendu, esprit qui tourne en boucle : et si vous testiez ${withArticle(m.title.toLowerCase())} ?`,
+      // Pas de « … » en fin de phrase : recopiée dans une diapositive, elle passerait pour une troncature
+      intro: `Les épaules qui remontent, la mâchoire serrée, les pensées qui s'enchaînent sans pause : ces signaux, nous les connaissons tous. Voici comment une séance autour ${deArticle(m.title.toLowerCase())} peut vous aider à relâcher la pression.`,
     }),
     (m: MotifPlan) => ({
       title: `5 gestes simples pour prolonger les bienfaits de votre séance de ${m.title.toLowerCase()}`,

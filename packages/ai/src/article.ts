@@ -10,6 +10,7 @@ import { completeStructured } from "./anthropic";
 import { resolveAiMode } from "./generate-site";
 import { checkEthicalComplianceDeep } from "./guardrails";
 import { resolveProfession } from "./mock/catalog";
+import { exerciseFor } from "./mock/exercises";
 import { ARTICLE_STRUCTURE } from "./prompts";
 import { stockQueryFor } from "./stock";
 import {
@@ -111,13 +112,15 @@ export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): Voiced
 
   const toneIntro: Record<BlogVoice["tone"], string> = {
     chaleureux: `Si ${you} ${voice.reader === "vous" ? "lisez" : "lis"} ces lignes, c'est sans doute que ${yourAdj} corps ${you} envoie des signaux. Bonne nouvelle : il existe des réponses douces, et cet article est là pour ${voice.reader === "vous" ? "vous" : "te"} guider.`,
-    rassurant: `Ce que ${you} ${feelYou} est fréquent, et il n'y a aucune raison de s'inquiéter outre mesure. Prenons le temps de comprendre ce qui se joue, calmement.`,
+    rassurant: `Ce que ${feelYou} est fréquent, et il n'y a aucune raison de s'inquiéter outre mesure. Prenons le temps de comprendre ce qui se joue, calmement.`,
     pose: `Prenons quelques minutes pour examiner ce sujet posément, loin des promesses toutes faites.`,
     direct: `Allons droit au but : voici ce qu'il faut savoir, et ce que ${canYou} mettre en place dès aujourd'hui.`,
     pedagogue: `Pour bien comprendre, commençons par le commencement : que se passe-t-il exactement dans ${yourAdj} corps, et comment agir ?`,
   };
 
   const title = brief.topic;
+  // Exercice propre à la famille de pratique (respiration abdominale, ancrage 5-4-3-2-1, pause hydratation, 4-2-6)
+  const exercise = exerciseFor(brief.profession, voice);
   const content = [
     toneIntro[voice.tone],
     "",
@@ -145,14 +148,9 @@ export function mockVoicedArticle(brief: ArticleBrief, voice: BlogVoice): Voiced
     "",
     `### Un exercice à essayer maintenant`,
     "",
-    `Voici une technique simple pour amorcer un relâchement, en trois minutes :`,
+    exercise.intro,
     "",
-    `1. ${capitalize(voice.reader === "vous" ? "Asseyez-vous" : "Assieds-toi")} confortablement, pieds à plat sur le sol.`,
-    `2. ${capitalize(voice.reader === "vous" ? "Fermez" : "Ferme")} les yeux et ${voice.reader === "vous" ? "posez vos" : "pose tes"} mains sur ${yourPl} cuisses.`,
-    `3. ${capitalize(voice.reader === "vous" ? "Inspirez" : "Inspire")} lentement par le nez pendant 4 secondes.`,
-    `4. ${capitalize(voice.reader === "vous" ? "Retenez" : "Retiens")} l'air 2 secondes.`,
-    `5. ${capitalize(voice.reader === "vous" ? "Expirez" : "Expire")} lentement par la bouche pendant 6 secondes.`,
-    `6. ${capitalize(voice.reader === "vous" ? "Répétez" : "Répète")} 6 fois, en relâchant les épaules à chaque expiration.`,
+    ...exercise.steps.map((step, i) => `${i + 1}. ${step}`),
     "",
     `## Quand consulter ?`,
     "",
