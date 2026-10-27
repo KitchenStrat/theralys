@@ -8,7 +8,7 @@ import {
   trackEventSchema,
 } from "@theralys/analytics";
 import { analyticsEvents, getDb, sites } from "@theralys/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { ownHostsFor, resolveTrackSource } from "@/lib/track-source";
 
 export const dynamic = "force-dynamic";
@@ -77,13 +77,17 @@ export async function POST(request: NextRequest) {
 
   const source = resolveTrackSource(payload, ownHostsFor(request.headers.get("host"), site));
 
-  await db.insert(analyticsEvents).values({
-    siteId: site.id,
-    type: payload.type,
-    visitorId,
-    path: payload.path,
-    source,
-  });
+  const row = { siteId: site.id, type: payload.type, visitorId, path: payload.path };
+  try {
+    await db.insert(analyticsEvents).values({ ...row, source });
+  } catch (err) {
+    // Déploiement avant la migration 0004 (colonne `source` absente) : la page vue compte quand même, sans provenance
+    if (!isMissingColumnError(err)) throw err;
+    // SQL explicite : drizzle liste toutes les colonnes du schéma (`source` comprise) même sans valeur
+    await db.execute(
+      sql`insert into analytics_events (site_id, type, visitor_id, path) values (${row.siteId}, ${row.type}, ${row.visitorId}, ${row.path})`,
+    );
+  }
 
   const response = NextResponse.json({ ok: true });
   if (setVisitorCookie && visitorId) {
@@ -95,4 +99,15 @@ export async function POST(request: NextRequest) {
     });
   }
   return response;
+}
+
+
+/** Erreur Postgres « column does not exist » (42703), directe ou en cause d'une erreur drizzle. */
+function isMissingColumnError(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
+    if ((current as { code?: unknown }).code === "42703") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }

@@ -52,12 +52,35 @@ export async function getDashboardStats(siteId: string, period: Period): Promise
   const db = getDb();
   const { from, to } = periodRange(period);
   const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
-  const events = await db.query.analyticsEvents.findMany({
-    where: and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom)),
-    columns: { type: true, visitorId: true, occurredAt: true, source: true },
-  });
+  const where = and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom));
+  let events: { type: "pageview" | "rdv_click"; visitorId: string | null; occurredAt: Date; source: string | null }[];
+  try {
+    events = await db.query.analyticsEvents.findMany({
+      where,
+      columns: { type: true, visitorId: true, occurredAt: true, source: true },
+    });
+  } catch (err) {
+    // Déploiement avant la migration 0004 (colonne `source` absente) : l'accueil reste servi, sans provenance
+    if (!isMissingColumnError(err)) throw err;
+    console.warn("[stats] colonne analytics_events.source absente — migration 0004 non appliquée ?");
+    const legacy = await db.query.analyticsEvents.findMany({
+      where,
+      columns: { type: true, visitorId: true, occurredAt: true },
+    });
+    events = legacy.map((e) => ({ ...e, source: null }));
+  }
   const current = events.filter((e) => e.occurredAt >= from && e.occurredAt < to);
   return { ...summarizePeriod(events, from, to), sources: summarizeSources(current) };
+}
+
+/** Erreur Postgres « column does not exist » (42703), directe ou en cause d'une erreur drizzle. */
+function isMissingColumnError(err: unknown): boolean {
+  let current: unknown = err;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth++) {
+    if ((current as { code?: unknown }).code === "42703") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 
