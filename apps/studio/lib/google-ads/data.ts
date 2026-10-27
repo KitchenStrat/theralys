@@ -18,7 +18,7 @@ import {
   type GoogleAdsPlan,
 } from "@theralys/shared";
 import { isMissingSchemaError } from "../social/data";
-import { summarizeAdsResults, type AdsResults } from "./results";
+import { summarizeAdsResults, type AdsResults } from "@theralys/analytics";
 import { adsTrackingForm, type AdsTrackingForm } from "./tracking";
 
 /** Fenêtre du bloc « Résultats » (jours). */

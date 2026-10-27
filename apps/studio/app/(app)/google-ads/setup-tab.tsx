@@ -5,7 +5,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
 import { GOOGLE_ADS_CONVERSION_KINDS, type GoogleAdsKeywordSet, type GoogleAdsPlan } from "@theralys/shared";
 import { formatAdsKeywordList, formatAdsLines, formatAdsNegativeList } from "@/lib/google-ads/clipboard";
-import type { AdsResults } from "@/lib/google-ads/results";
+import type { AdsResults } from "@theralys/analytics";
 import { validateAdsTracking, type AdsTrackingForm } from "@/lib/google-ads/tracking";
 import { saveAdsTracking } from "./actions";
 import { CopyButton } from "./copy-button";
