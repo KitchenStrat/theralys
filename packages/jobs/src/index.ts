@@ -5,3 +5,4 @@ export * from "./reviews-mock";
 export * from "./google-profile";
 export * from "./google-ads";
 export * from "./notifications";
+export * from "./google-ads";

@@ -59,10 +59,10 @@ export async function getDashboardStats(siteId: string, period: Period): Promise
   const { from, to } = periodRange(period);
   const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
   const where = and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom));
-  // `call_click` (appels) est porté par les événements mais n'entre pas dans les clics RDV (summarizePeriod)
-  let events: { type: AnalyticsEventType; visitorId: string | null; occurredAt: Date; source: string | null }[];
+  type EventRow = { type: AnalyticsEventType; visitorId: string | null; occurredAt: Date; source: string | null };
+  let rows: EventRow[];
   try {
-    events = await db.query.analyticsEvents.findMany({
+    rows = await db.query.analyticsEvents.findMany({
       where,
       columns: { type: true, visitorId: true, occurredAt: true, source: true },
     });
@@ -74,8 +74,10 @@ export async function getDashboardStats(siteId: string, period: Period): Promise
       where,
       columns: { type: true, visitorId: true, occurredAt: true },
     });
-    events = legacy.map((e) => ({ ...e, source: null }));
+    rows = legacy.map((e) => ({ ...e, source: null }));
   }
+  // Les clics sur le numéro (`call_click`, migration 0005) n'entrent ni dans les visiteurs ni dans les clics RDV
+  const events = rows.filter((e): e is EventRow & { type: "pageview" | "rdv_click" } => e.type === "pageview" || e.type === "rdv_click");
   const current = events.filter((e) => e.occurredAt >= from && e.occurredAt < to);
   return { ...summarizePeriod(events, from, to), sources: summarizeSources(current) };
 }

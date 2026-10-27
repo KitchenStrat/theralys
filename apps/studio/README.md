@@ -1,13 +1,17 @@
 # @theralys/studio — espace client (app.harmony-web.fr)
 
 Back-office des praticiens : statistiques de visite, publications du blog,
-mots-clés Google, académie et éditeur de site (WYSIWYG).
+fiche Google, Google Ads, académie et éditeur de site (WYSIWYG).
 
 ## Structure
 
 - `app/(app)/` — pages avec la barre latérale : Accueil, Publications,
-  Réseaux sociaux, Mots-clés, Académie, Compte. L'éditeur n'apparaît pas dans
-  la navigation : on y accède depuis la carte « Votre site » de l'Accueil.
+  Réseaux sociaux, Fiche Google, Google Ads, Académie, Compte. L'éditeur
+  n'apparaît pas dans la navigation : on y accède depuis la carte « Votre
+  site » de l'Accueil. L'ancienne route `/mots-cles` redirige vers
+  `/google-ads` ; la carte « Visibilité Google » (Search Console,
+  `google-visibility-card.tsx`) vit en tête de l'onglet Visibilité de Fiche
+  Google.
 - `app/(editor)/editor/` — éditeur plein écran du site (voir « Éditeur de
   site » ci-dessous ; `section-fields.tsx` contient le champ Paragraphe
   WYSIWYG : gras réel via Ctrl+B, lignes ✅, sérialisé vers le format
@@ -151,6 +155,41 @@ mot-clé, avis avec réponses proposées et posts Google — en lecture seule
   (`scripts/google-fixtures.mts`, site de démo seulement, idempotent) insère
   audits, mots-clés, relevés, analyses d'avis et posts en mock.
 - **Tests** : `lib/google/*.test.ts` (config `lib/vitest.config.ts`).
+
+## Google Ads
+
+Section `app/(app)/google-ads/` (formule Scale, `hasGoogleAds`, démos
+comprises ; repli « en cours d'activation » tant que la migration 0005 n'est
+pas appliquée) : « Google Ads est-il pertinent pour vous ? ». Harmony ne pilote
+pas de compte Google Ads : l'analyse, les mots-clés et le plan sont préparés,
+le praticien paramètre lui-même sa campagne. Onglets
+`?onglet=diagnostic|mots-cles|plan|parametrage` (`tabs.ts`).
+
+- **Diagnostic** (`diagnostic-tab.tsx`) : « Lancer l'analyse » →
+  `launchAdsAnalysis` → `runGoogleAdsAnalysis` de `@theralys/jobs` (idées de
+  mots-clés DataForSEO, prévision, `diagnoseGoogleAds`, plan IA ; 2 analyses
+  par mois, ≈ 0,18 $ réservés sur le budget `googleBudget`), verdict avec
+  jauge, demande, budget conseillé et check-list des points de préparation
+  (bloquants d'abord, liens vers Fiche Google, l'éditeur ou l'onglet
+  Paramétrage).
+- **Mots-clés** (`keywords-tab.tsx`) : groupes par intention (volume, CPC €,
+  concurrence, correspondance, badges « cœur » et « suivi »), négatifs,
+  boutons Copier au format Google Ads (`lib/google-ads/clipboard.ts` :
+  `"expression"`, `[exact]`, une ligne par mot-clé).
+- **Plan d'action** (`plan-tab.tsx`) : campagne, groupes avec mots-clés et
+  annonces responsives (aperçu type Google, compteurs de caractères, Copier),
+  extensions, jalons, conseils ; « Instructions & régénérer »
+  (`plan-regenerate-modal.tsx`, `regenerateAdsPlan`, 5 par mois,
+  `instructionsRefusal`).
+- **Paramétrage & suivi** (`setup-tab.tsx`, `tutorial.ts`) : tuto en
+  accordéon (11 étapes, boutons Copier reprenant le plan), formulaire « Suivi
+  des conversions » (`saveAdsTracking` : identifiant AW-… et libellés rdv /
+  call / email dans `site.theme.tracking`, validation
+  `lib/google-ads/tracking.ts`), bloc Résultats sur 30 jours
+  (`lib/google-ads/results.ts`, visites, clics RDV et appels de source
+  `google_ads`).
+- **Données** : `lib/google-ads/data.ts` (`getGoogleAdsData`).
+- **Tests** : `lib/google-ads/*.test.ts` (config `lib/vitest.config.ts`).
 
 ## Développement local
 

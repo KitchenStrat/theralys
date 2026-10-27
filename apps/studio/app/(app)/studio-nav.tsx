@@ -14,12 +14,15 @@ export function StudioNav({
   showPublications = true,
   showSocial = true,
   showGoogle = true,
+  showAds = true,
 }: {
   showPublications?: boolean;
   /** Section « Réseaux sociaux » (démos et formule Scale) */
   showSocial?: boolean;
   /** Section « Fiche Google » (démos et formule Scale) */
   showGoogle?: boolean;
+  /** Section « Google Ads » (démos et formule Scale) */
+  showAds?: boolean;
 }) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
@@ -62,7 +65,15 @@ export function StudioNav({
           },
         ]
       : []),
-    { href: "/mots-cles", label: "Mots-clés", active: pathname.startsWith("/mots-cles") },
+    ...(showAds
+      ? [
+          {
+            href: "/google-ads",
+            label: "Google Ads",
+            active: pathname.startsWith("/google-ads"),
+          },
+        ]
+      : []),
     { href: "/academie", label: "Académie", active: pathname.startsWith("/academie") },
     { href: "/compte", label: "Compte", active: pathname.startsWith("/compte") },
   ];
