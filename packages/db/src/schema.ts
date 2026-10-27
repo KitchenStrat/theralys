@@ -14,6 +14,12 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type {
+  GoogleAdsAnalysisStatus,
+  GoogleAdsDiagnostic,
+  GoogleAdsForecast,
+  GoogleAdsKeywordSet,
+  GoogleAdsPlan,
+  GoogleAdsSeed,
   GoogleAudit,
   GoogleCompetitor,
   GoogleGridPoint,
@@ -60,7 +66,7 @@ export const voiceToneEnum = pgEnum("voice_tone", [
   "direct",
   "pedagogue",
 ]);
-export const analyticsEventTypeEnum = pgEnum("analytics_event_type", ["pageview", "rdv_click"]);
+export const analyticsEventTypeEnum = pgEnum("analytics_event_type", ["pageview", "rdv_click", "call_click"]);
 export const planEnum = pgEnum("plan", ["starter", "boost", "scale"]);
 export const calendarEntryStatusEnum = pgEnum("calendar_entry_status", [
   "planned",
@@ -604,6 +610,43 @@ export const googleUsage = pgTable(
   (t) => [index("google_usage_site_month_idx").on(t.siteId, t.month)],
 );
 
+// ─── Google Ads (studio) ─────────────────────────────────────────────────────
+
+/**
+ * Analyse Google Ads d'un site : graines, idées de mots-clés sélectionnées
+ * (DataForSEO), prévision de trafic, diagnostic déterministe et plan d'action
+ * (IA). Une ligne par analyse (la plus récente fait foi) ; `status` running
+ * pendant les appels, `error` conservé avec le message. Coût réel inscrit
+ * aussi dans `google_usage` (kind ads_keywords) ; régénérations du plan
+ * comptées en kind ads_plan.
+ */
+export const googleAdsAnalyses = pgTable(
+  "google_ads_analyses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    status: text("status").$type<GoogleAdsAnalysisStatus>().notNull().default("running"),
+    seed: jsonb("seed").$type<GoogleAdsSeed>().notNull(),
+    keywords: jsonb("keywords").$type<GoogleAdsKeywordSet>(),
+    forecast: jsonb("forecast").$type<GoogleAdsForecast>(),
+    diagnostic: jsonb("diagnostic").$type<GoogleAdsDiagnostic>(),
+    plan: jsonb("plan").$type<GoogleAdsPlan>(),
+    /** Instructions du praticien pour le plan (dernière génération) */
+    instructions: text("instructions"),
+    /** dataforseo | mock */
+    provider: text("provider").notNull().default("mock"),
+    /** anthropic | mock */
+    generator: text("generator").notNull().default("mock"),
+    costUsd: real("cost_usd").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("google_ads_analyses_site_created_idx").on(t.siteId, t.createdAt)],
+);
+
 /** Tâches asynchrones « avis Google » (DataForSEO : task_post → task_get). */
 export const googleReviewTasks = pgTable(
   "google_review_tasks",
@@ -654,5 +697,7 @@ export type NewGoogleRankScan = typeof googleRankScans.$inferInsert;
 export type GooglePost = typeof googlePosts.$inferSelect;
 export type NewGooglePost = typeof googlePosts.$inferInsert;
 export type GoogleUsage = typeof googleUsage.$inferSelect;
+export type GoogleAdsAnalysis = typeof googleAdsAnalyses.$inferSelect;
+export type NewGoogleAdsAnalysis = typeof googleAdsAnalyses.$inferInsert;
 export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;
 export type NotificationLogEntry = typeof notificationLog.$inferSelect;

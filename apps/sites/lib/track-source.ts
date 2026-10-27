@@ -10,7 +10,7 @@ import { sourceFromReferrer, type AnalyticsSource } from "@theralys/shared";
  *   l'hôte du referrer, et un referrer vide vaut accès direct.
  */
 export function resolveTrackSource(
-  payload: { type: "pageview" | "rdv_click"; referrer?: string | undefined; src?: string | undefined },
+  payload: { type: "pageview" | "rdv_click" | "call_click"; referrer?: string | undefined; src?: string | undefined },
   ownHosts: readonly string[],
 ): AnalyticsSource | null {
   if (payload.type !== "pageview") return null;

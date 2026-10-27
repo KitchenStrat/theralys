@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const trackEventSchema = z.object({
   siteId: z.string().uuid(),
-  type: z.enum(["pageview", "rdv_click"]),
+  type: z.enum(["pageview", "rdv_click", "call_click"]),
   path: z.string().max(500).default("/"),
   /**
    * `document.referrer` de la première page vue de la session (vide si

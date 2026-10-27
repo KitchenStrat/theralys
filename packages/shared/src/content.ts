@@ -1,3 +1,4 @@
+import type { GoogleAdsConversionLabels } from "./google-ads";
 /**
  * Contenu des pages : sections typées (jamais de HTML libre).
  * Permet l'édition structurée (Phase 2) et la régénération partielle par IA.
@@ -345,6 +346,11 @@ export type SiteTracking = {
   googleAdsId?: string;
   /** Meta Pixel (identifiant numérique) */
   metaPixelId?: string;
+  /**
+   * Libellés de conversion Google Ads (clic RDV, appel, e-mail) : le site les
+   * envoie à la balise gtag (googleAdsId requis), après consentement.
+   */
+  googleAdsConversions?: GoogleAdsConversionLabels;
 };
 
 /** Formats attendus des identifiants de suivi (validation studio + serveur). */

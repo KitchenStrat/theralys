@@ -44,18 +44,21 @@ function isIdempotent(stmt: string): boolean {
   if (/^CREATE TABLE/.test(stmt)) return /^CREATE TABLE IF NOT EXISTS "/.test(stmt);
   if (/^CREATE (UNIQUE )?INDEX/.test(stmt)) return /^CREATE (UNIQUE )?INDEX IF NOT EXISTS "/.test(stmt);
   if (/^ALTER TABLE "[^"]+" ADD COLUMN/.test(stmt)) return / ADD COLUMN IF NOT EXISTS "/.test(stmt);
+  // Valeur d'enum : PostgreSQL ≥ 12 l'accepte dans la transaction du migrateur tant qu'elle n'y est pas utilisée
+  if (/^ALTER TYPE/.test(stmt)) return / ADD VALUE IF NOT EXISTS '/.test(stmt);
   // CREATE TYPE / ADD CONSTRAINT hors bloc DO : non rejouables
   return !/^(CREATE TYPE|ALTER TABLE "[^"]+" ADD CONSTRAINT)/.test(stmt);
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler, 0001_social_posts, 0002_social_settings, 0003_google_profile puis 0004_social_followup, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0004_social_followup puis 0005_google_ads, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
       "0002_social_settings",
       "0003_google_profile",
       "0004_social_followup",
+      "0005_google_ads",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
