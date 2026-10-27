@@ -28,6 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import { and, eq, gte, inArray } from "drizzle-orm";
+import { adsPlanIssues } from "@theralys/shared";
 import { getDb, googleAdsAnalyses, googleUsage, sites } from "@theralys/db";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +61,9 @@ console.log(`→ usage du mois : ${before.analysesUsed} analyse(s) (${before.ana
 const outcome = await runGoogleAdsAnalysis(db, site.id, { instructions: "Mettre en avant la gestion du stress", now: start });
 if (outcome.status !== "done") throw new Error(`runGoogleAdsAnalysis : ${JSON.stringify(outcome)}`);
 const analysis = await db.query.googleAdsAnalyses.findFirst({ where: eq(googleAdsAnalyses.id, outcome.analysisId) });
-if (!analysis || !analysis.keywords || !analysis.diagnostic || !analysis.plan) throw new Error("Analyse incomplète en base.");
+if (!analysis || !analysis.keywords || !analysis.diagnostic) throw new Error("Analyse incomplète en base.");
+if (!analysis.plan) throw new Error(`Plan absent : ${analysis.error ?? outcome.planError ?? "sans message"}`);
+if (analysis.error !== null) throw new Error(`Colonne error non vide sur une analyse aboutie : ${analysis.error}`);
 const { keywords, diagnostic, forecast, plan } = analysis;
 console.log(`✔ analyse ${analysis.id} (${analysis.status}, fournisseur ${analysis.provider}, générateur ${analysis.generator}) : coût ${outcome.costUsd} $`);
 console.log(`  diagnostic : ${diagnostic.verdict} (${diagnostic.score}/100) — ${diagnostic.headline}`);
@@ -70,14 +73,31 @@ console.log(`  mots-clés : ${keywords.keywords.length} retenus sur ${keywords.r
 for (const group of keywords.groups) {
   console.log(`    - ${group.label} : ${group.keywords.length} (${group.totalVolume} rech./mois, CPC médian ${group.medianCpcEur ?? "—"} €) : ${group.keywords.slice(0, 4).join(", ")}${group.keywords.length > 4 ? "…" : ""}`);
 }
-console.log(forecast ? `  prévision (${forecast.match}, enchère ${forecast.bidUsd} $) : ${forecast.totalClicks} clics, ${forecast.totalCostUsd} $ sur ${forecast.rows.length} mots-clés` : "  prévision : indisponible");
+// La prévision du fournisseur est agrégée : une ligne (keyword null) pour l'ensemble des mots-clés cœur envoyés
+const coreCount = keywords.keywords.filter((k) => k.core).length;
+console.log(
+  forecast
+    ? `  prévision agrégée (${forecast.match}, enchère ${forecast.bidUsd} $ entière) sur l'ensemble des ${coreCount} mots-clés cœur : ${forecast.totalClicks} clics, ${forecast.totalCostUsd} $ (${forecast.rows.length} ligne(s), mot-clé ${forecast.rows[0]?.keyword ?? "null = agrégat"})`
+    : "  prévision : indisponible",
+);
+if (!forecast || forecast.totalClicks <= 0 || forecast.totalCostUsd <= 0 || !Number.isInteger(forecast.bidUsd)) {
+  throw new Error(`Prévision agrégée attendue (clics et coût > 0, enchère entière) : ${JSON.stringify(forecast)}`);
+}
+if (diagnostic.budget.basis !== "forecast") throw new Error(`Le budget devrait se fonder sur la prévision, pas « ${diagnostic.budget.basis} ».`);
 console.log(`  plan : ${plan.adGroups.length} groupe(s) d'annonces [${plan.adGroups.map((g) => g.intent).join(", ")}], budget ${plan.campaign.dailyBudgetEur} €/j (${plan.campaign.monthlyBudgetEur} €/mois), ${plan.negatives.length} négatifs, ${plan.tips.length} conseil(s)`);
+const issues = adsPlanIssues(plan);
+if (issues.length > 0) throw new Error(`adsPlanIssues non vide : ${issues.join(" ; ")}`);
+console.log("  adsPlanIssues : aucun écart");
 
 // 4. Régénération du plan avec instruction
 const regen = await regenerateGoogleAdsPlan(db, site.id, { instructions: "Sans tarif", now: new Date() });
 if (regen.status !== "done") throw new Error(`regenerateGoogleAdsPlan : ${JSON.stringify(regen)}`);
-const regenerated = await db.query.googleAdsAnalyses.findFirst({ where: eq(googleAdsAnalyses.id, regen.analysisId), columns: { plan: true, instructions: true } });
-console.log(`✔ plan régénéré (${regen.remaining} régénération(s) restante(s)) : instructions « ${regenerated?.instructions ?? ""} », groupes [${regenerated?.plan?.adGroups.map((g) => g.intent).join(", ") ?? ""}]`);
+const regenerated = await db.query.googleAdsAnalyses.findFirst({ where: eq(googleAdsAnalyses.id, regen.analysisId), columns: { plan: true, instructions: true, error: true } });
+if (!regenerated?.plan) throw new Error("Plan régénéré absent en base.");
+const regenIssues = adsPlanIssues(regenerated.plan);
+if (regenIssues.length > 0) throw new Error(`adsPlanIssues non vide après régénération : ${regenIssues.join(" ; ")}`);
+if (regenerated.error !== null) throw new Error(`Colonne error non effacée après régénération : ${regenerated.error}`);
+console.log(`✔ plan régénéré (${regen.remaining} régénération(s) restante(s)) : instructions « ${regenerated.instructions ?? ""} », groupes [${regenerated.plan.adGroups.map((g) => g.intent).join(", ")}], adsPlanIssues : aucun écart`);
 
 // 5. Bilan
 const after = await getGoogleAdsUsage(db, site.id, new Date());

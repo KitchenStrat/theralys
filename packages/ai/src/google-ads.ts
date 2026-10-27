@@ -165,6 +165,44 @@ export const googleAdsPlanSchema = z.object({
 
 export type GoogleAdsPlanOutput = z.output<typeof googleAdsPlanSchema>;
 
+/**
+ * Dans les textes destinés au praticien, « diagnostic » désigne le bilan de
+ * préparation produit par l'outil, pas un acte médical : le mot devient
+ * « bilan » avant le contrôle de marketing éthique (`checkEthicalCompliance`
+ * refuse `diagnosti…`), majuscule et pluriel conservés. Les textes d'annonces
+ * (lus par les patients) ne passent jamais par ici.
+ */
+export function softenAdsWording(text: string): string {
+  return text.replace(/\bdiagnostic(s?)\b/gi, (match, plural: string) => `${match.charAt(0) === "D" ? "Bilan" : "bilan"}${plural}`);
+}
+
+/** Sortie du modèle dont les textes destinés au praticien sont adoucis (`softenAdsWording`) ; annonces, accroches et liens annexes inchangés. */
+export function softenAdsPlanWording(raw: GoogleAdsPlanOutput): GoogleAdsPlanOutput {
+  const soften = (text: string) => softenAdsWording(text);
+  return {
+    ...raw,
+    objective: soften(raw.objective),
+    summary: soften(raw.summary),
+    campaign: {
+      ...raw.campaign,
+      name: soften(raw.campaign.name),
+      schedule: soften(raw.campaign.schedule),
+      bidding: soften(raw.campaign.bidding),
+      geo: { ...raw.campaign.geo, note: soften(raw.campaign.geo.note) },
+    },
+    adGroups: raw.adGroups.map((g) => ({ ...g, name: soften(g.name) })),
+    milestones: raw.milestones.map((m) => ({ ...m, title: soften(m.title), actions: m.actions.map(soften), kpis: m.kpis.map(soften) })),
+    tips: raw.tips.map(soften),
+  };
+}
+
+/**
+ * Schéma passé au modèle : validation puis adoucissement des textes du plan,
+ * avant la relecture éthique de toute la sortie par `completeStructured` —
+ * un « diagnostic » dans un conseil ne fait plus échouer la génération.
+ */
+export const googleAdsPlanModelSchema = googleAdsPlanSchema.transform(softenAdsPlanWording);
+
 // ─── Règles Google Ads (en plus du marketing éthique) ────────────────────────
 
 /**
@@ -190,7 +228,8 @@ export const GOOGLE_ADS_FORBIDDEN_PATTERNS: { rule: string; pattern: RegExp }[] 
     rule: "urgence commerciale",
     pattern: /\bderni[èe]res?\s+places?\b|\boffre\s+limit[ée]e\b|\bpromo(?:tion)?s?\b|-\s?\d{1,2}\s?%/gi,
   },
-  { rule: "majuscules abusives", pattern: /\b[A-ZÀ-ÖØ-Þ]{5,}\b|\b[A-ZÀ-ÖØ-Þ]{3,}\s+[A-ZÀ-ÖØ-Þ]{3,}\b/g },
+  // Un mot entier en capitales dès 5 lettres ; les sigles de 4 lettres au plus (EFT, EMDR, MBSR, TCC, RNCP, ETP, RDV) sont légitimes
+  { rule: "majuscules abusives", pattern: /\b[A-ZÀ-ÖØ-Þ]{5,}\b/g },
 ];
 
 /** Marketing éthique (`checkEthicalCompliance`) + règles Google Ads, sur un texte d'annonce. */
@@ -292,10 +331,24 @@ function properKeyword(keyword: string, city: string): string {
   return text;
 }
 
-/** Titre d'annonce prêt : point d'exclamation retiré, ≤ 30 caractères, conforme ; null sinon. */
+/**
+ * Texte borné à `max` (`clampAdText`) ; null si la coupe tomberait en plein
+ * mot ou au milieu d'un mot composé (« Cabinet à Villefranche-de-Rouergue »
+ * ne devient jamais « Cabinet à Villefranche-de-Roue » ni « …-de ») :
+ * l'appelant essaie alors un autre candidat.
+ */
+function clampWholeWords(text: string, max: number): string | null {
+  const clean = text.replace(/\s+/g, " ").trim();
+  const clamped = clampAdText(clean, max);
+  if (clamped.length >= clean.length) return clamped;
+  const rest = clean.slice(clamped.length);
+  return /^(?:[\p{L}\p{N}]|-\p{L})/u.test(rest) ? null : clamped;
+}
+
+/** Titre d'annonce prêt : point d'exclamation retiré, ≤ 30 caractères sans mot coupé, conforme ; null sinon. */
 function cleanHeadline(text: string): string | null {
-  const clamped = clampAdText(text.replace(/!/g, "").replace(/\s+([,.;:])/g, "$1"), GOOGLE_ADS_RSA.headlineMax);
-  if (clamped.length < 2) return null;
+  const clamped = clampWholeWords(text.replace(/!/g, "").replace(/\s+([,.;:])/g, "$1"), GOOGLE_ADS_RSA.headlineMax);
+  if (clamped === null || clamped.length < 2) return null;
   return checkAdsCompliance(clamped).ok ? clamped : null;
 }
 
@@ -306,18 +359,24 @@ function cleanDescription(text: string): string | null {
   return checkAdsCompliance(clamped).ok ? clamped : null;
 }
 
-/** Texte court d'extension (accroche, lien annexe) : ≤ max, conforme ; null sinon. */
+/** Texte court d'extension (accroche, lien annexe) : ≤ max sans mot coupé, conforme ; null sinon. */
 function cleanShort(text: string, max: number): string | null {
-  const clamped = clampAdText(text.replace(/!/g, ""), max);
-  if (clamped.length < 2) return null;
+  const clamped = clampWholeWords(text.replace(/!/g, ""), max);
+  if (clamped === null || clamped.length < 2) return null;
   return checkAdsCompliance(clamped).ok ? clamped : null;
 }
 
-/** Texte du plan destiné au praticien (conseil, action, KPI…) : borné et conforme au marketing éthique ; null sinon. */
+/** Texte du plan destiné au praticien (conseil, action, KPI…) : « diagnostic » → « bilan », borné et conforme au marketing éthique ; null sinon. */
 function cleanPlanText(text: string, max: number, min = 1): string | null {
-  const clamped = clampText(text, max);
+  const clamped = clampText(softenAdsWording(text), max);
   if (clamped.length < min) return null;
   return checkEthicalCompliance(clamped).ok ? clamped : null;
+}
+
+/** Chemin comparable : minuscules, sans barre finale (« /Gestion-du-Stress/ » → « /gestion-du-stress »), « / » conservé. */
+function canonicalPath(path: string): string {
+  const trimmed = path.trim().toLowerCase().replace(/\/+$/, "");
+  return trimmed === "" ? "/" : trimmed;
 }
 
 function nonNull<T>(value: T | null | undefined): value is T {
@@ -411,7 +470,12 @@ function planContext(input: GoogleAdsPlanInput, city: string): PlanContext {
   };
 }
 
-/** Titres de secours (sans voix : mots-clés cœur, pages, cadre) — ≥ 8 candidats conformes. */
+/**
+ * Titres de secours (sans voix : mots-clés cœur, pages, cadre), jamais
+ * tronqués : un candidat qui ne tient pas entier (ville composée, page au
+ * titre long) est passé, les autres prennent le relais — ≥ 7 candidats fixes
+ * conformes, quel que soit le site.
+ */
 function fallbackHeadlines(ctx: PlanContext): string[] {
   const { input, city, bookingOk } = ctx;
   const core = input.keywords.keywords
@@ -420,7 +484,8 @@ function fallbackHeadlines(ctx: PlanContext): string[] {
     .map((k) => properKeyword(k.keyword, city));
   const candidates = [
     ...core,
-    city ? `Cabinet à ${city}` : "Cabinet sur rendez-vous",
+    ...(city ? [`Cabinet à ${city}`] : []),
+    "Cabinet sur rendez-vous",
     "Prendre rendez-vous",
     bookingOk ? "Réservation en ligne" : "Rendez-vous par téléphone",
     "Sur rendez-vous",
@@ -431,8 +496,17 @@ function fallbackHeadlines(ctx: PlanContext): string[] {
     "Un cadre calme et à l'écoute",
     "Séances individuelles",
     "Un temps pour vous",
+    "Accueil à l'écoute",
+    "Des séances à votre rythme",
   ];
-  return uniqueBy(candidates.map(cleanHeadline).filter(nonNull), key);
+  return uniqueBy(
+    candidates
+      .map((h) => fits(h, GOOGLE_ADS_RSA.headlineMax))
+      .filter(nonNull)
+      .map(cleanHeadline)
+      .filter(nonNull),
+    key,
+  );
 }
 
 /** Descriptions de secours (vouvoiement neutre) — ≥ 3 candidates conformes. */
@@ -705,8 +779,9 @@ export function googleAdsUserPrompt(brief: SocialSiteBrief, input: GoogleAdsPlan
     })
     .join("\n");
 
+  // La prévision du fournisseur est agrégée : un seul chiffre pour l'ensemble des mots-clés cœur, pas de détail par mot-clé
   const forecastLine = forecast
-    ? `Enchère ${forecast.bidUsd} $ (≈ ${fmtEur(usdToEur(forecast.bidUsd) ?? 0)}), correspondance ${forecast.match}, mois prochain sur les mots-clés cœur : ${forecast.totalClicks} clics pour ≈ ${fmtEur(usdToEur(forecast.totalCostUsd) ?? 0)}.`
+    ? `Enchère ${forecast.bidUsd} $ (≈ ${fmtEur(usdToEur(forecast.bidUsd) ?? 0)}), correspondance ${forecast.match}, mois prochain sur l'ensemble des mots-clés cœur (prévision agrégée, sans détail par mot-clé) : ${forecast.totalClicks} clics pour ≈ ${fmtEur(usdToEur(forecast.totalCostUsd) ?? 0)}.`
     : "Aucune prévision disponible (budget estimé d'après les CPC).";
 
   const pages = input.landingPages
@@ -843,7 +918,8 @@ export function finalizeAdsPlan(
   const city = raw.campaign.geo.city.trim() || cityFromSeeds(input);
   const ctx = planContext(input, city);
   const home = homePath(input);
-  const knownPaths = new Set<string>(["/", ...input.landingPages.map((p) => p.path)]);
+  // Chemins connus par forme canonique (casse, barre finale) → chemin exact du site
+  const knownPaths = new Map<string, string>([["/", "/"], ...input.landingPages.map((p) => [canonicalPath(p.path), p.path] as const)]);
   const known = new Map<string, GoogleAdsKeyword>();
   for (const k of input.keywords.keywords) known.set(key(k.keyword), k);
   const fallback: FallbackTexts = { headlines: fallbackHeadlines(ctx), descriptions: fallbackDescriptions(ctx) };
@@ -867,7 +943,7 @@ export function finalizeAdsPlan(
       keywords.push({ text: found?.keyword ?? kw.text.replace(/\s+/g, " ").trim().toLowerCase(), match: kw.match });
     }
     if (keywords.length === 0) continue;
-    const landingPath = knownPaths.has(group.landingPath) ? group.landingPath : home;
+    const landingPath = knownPaths.get(canonicalPath(group.landingPath)) ?? home;
     const ads = group.ads.map((ad) => finalizeAd(ad, fallback));
     adGroups.push({
       name: clampText(group.name, AD_GROUP_NAME_MAX) || intentLabel(group.intent),
@@ -927,9 +1003,8 @@ export function finalizeAdsPlan(
   // 6. Extensions
   let sitelinks = uniqueBy(
     raw.extensions.sitelinks
-      .filter((s) => knownPaths.has(s.path) && s.path !== home)
-      .map((s) => ({ title: cleanShort(s.title, SITELINK_TITLE_MAX), path: s.path }))
-      .filter((s): s is { title: string; path: string } => s.title !== null),
+      .map((s) => ({ title: cleanShort(s.title, SITELINK_TITLE_MAX), path: knownPaths.get(canonicalPath(s.path)) ?? null }))
+      .filter((s): s is { title: string; path: string } => s.title !== null && s.path !== null && s.path !== home),
     (s) => s.path,
   ).slice(0, SITELINKS_MAX);
   if (sitelinks.length === 0) sitelinks = defaultSitelinks(input);
@@ -1175,16 +1250,36 @@ const MOCK_INTENT_ORDER: readonly GoogleAdsIntent[] = ["metier_ville", "rendez_v
 const MOCK_GROUPS_MAX = 4;
 
 /**
+ * Groupe « spécialités » de l'analyse scindé par page d'atterrissage (dans
+ * l'ordre des pages du site, un mot-clé rejoint la première page dont la
+ * racine du titre apparaît dedans) ; les mots-clés sans page forment un
+ * dernier groupe sur l'accueil.
+ */
+function splitSpecialtyGroup(group: GoogleAdsKeywordGroup, keywords: GoogleAdsKeyword[], pages: readonly GoogleAdsLandingPage[]): MockGroupInput[] {
+  const out: MockGroupInput[] = [];
+  const used = new Set<GoogleAdsKeyword>();
+  for (const page of pages) {
+    const mine = keywords.filter((k) => !used.has(k) && pageForKeywords([k.keyword], [page]) !== null);
+    if (mine.length === 0) continue;
+    for (const k of mine) used.add(k);
+    out.push({ group, keywords: mine, page });
+  }
+  const rest = keywords.filter((k) => !used.has(k));
+  if (rest.length > 0) out.push({ group, keywords: rest, page: null });
+  return out;
+}
+
+/**
  * Plan mock déterministe (même brief + même entrée → même sortie), en
  * français et dans la voix du praticien : 2 à 4 groupes selon les intentions
- * présentes dans l'analyse (métier + ville, rendez-vous, spécialités, autour
- * du cabinet, puis tarifs et réputation), tous les mots-clés de chaque groupe,
- * page de spécialité choisie d'après les mots-clés, annonce par groupe
+ * présentes dans l'analyse (métier + ville, rendez-vous, spécialités — un
+ * groupe par page d'atterrissage —, autour du cabinet, puis tarifs et
+ * réputation), tous les mots-clés de chaque groupe, annonce par groupe
  * assemblée avec les briques de voix et le ton, extensions, jalons et
  * conseils écrits par le code. Instructions : « sans tarif » retire le groupe
- * tarif, « mettre en avant <spécialité> » place son groupe en premier avec sa
- * page, le reste est repris dans un conseil. La sortie passe ensuite par
- * `finalizeAdsPlan` comme en mode réel.
+ * tarif, « mettre en avant <spécialité> » place le groupe de sa page en
+ * premier, le reste est repris dans un conseil (neutralisé comme une donnée).
+ * La sortie passe ensuite par `finalizeAdsPlan` comme en mode réel.
  */
 export function mockAdsPlan(brief: SocialSiteBrief, input: GoogleAdsPlanInput): GoogleAdsPlanOutput {
   const v = mockVoice(brief);
@@ -1194,33 +1289,18 @@ export function mockAdsPlan(brief: SocialSiteBrief, input: GoogleAdsPlanInput): 
   const byKey = new Map(input.keywords.keywords.map((k) => [key(k.keyword), k] as const));
   const ctx = planContext(input, city);
 
-  // Groupes retenus, dans l'ordre de priorité ; spécialité mise en avant en premier
+  // Groupes retenus dans l'ordre de priorité, spécialités scindées par page ; page mise en avant en premier
   let groups = MOCK_INTENT_ORDER.map((intent) => input.keywords.groups.find((g) => g.intent === intent)).filter(nonNull);
   if (parsed.noTarif) groups = groups.filter((g) => g.intent !== "tarif");
-  if (parsed.featured) {
-    const specialite = groups.find((g) => g.intent === "specialite");
-    if (specialite) groups = [specialite, ...groups.filter((g) => g !== specialite)];
-  }
-  groups = groups.slice(0, MOCK_GROUPS_MAX);
-
-  const mockGroups: MockGroupInput[] = groups.map((group) => {
-    let keywords = group.keywords.map((text) => byKey.get(key(text))).filter(nonNull);
-    let page: GoogleAdsLandingPage | null = null;
-    if (group.intent === "specialite") {
-      if (parsed.featured) {
-        const root = pageRoot(parsed.featured.title);
-        const featured = root ? keywords.filter((k) => key(k.keyword).includes(root)) : [];
-        keywords = [...featured, ...keywords.filter((k) => !featured.includes(k))];
-        page = featured.length > 0 ? parsed.featured : pageForKeywords(keywords.map((k) => k.keyword), pages);
-      } else {
-        page = pageForKeywords(
-          keywords.map((k) => k.keyword),
-          pages,
-        );
-      }
-    }
-    return { group, keywords, page };
+  const mockGroups: MockGroupInput[] = groups.flatMap((group): MockGroupInput[] => {
+    const keywords = group.keywords.map((text) => byKey.get(key(text))).filter(nonNull);
+    return group.intent === "specialite" ? splitSpecialtyGroup(group, keywords, pages) : [{ group, keywords, page: null }];
   });
+  if (parsed.featured) {
+    const index = mockGroups.findIndex((g) => g.page?.path === parsed.featured?.path);
+    if (index > 0) mockGroups.unshift(...mockGroups.splice(index, 1));
+  }
+  mockGroups.splice(MOCK_GROUPS_MAX);
   // Analyse sans mot-clé : un groupe « métier + ville » sur les graines (retiré par la finalisation si rien ne tient)
   if (mockGroups.length === 0) {
     mockGroups.push({
@@ -1248,10 +1328,12 @@ export function mockAdsPlan(brief: SocialSiteBrief, input: GoogleAdsPlanInput): 
     .filter((s): s is { title: string; path: string } => s.title !== null);
   const callouts = defaultCallouts(ctx);
 
+  // Les phrases non reconnues sont des données écrites par le praticien : neutralisées (chevrons, guillemets, caractères de contrôle) comme dans le prompt
+  const otherInstructions = parsed.other.map((o) => dataText(o, 120)).filter((o) => o !== "");
   const tips = uniqueBy(
     [
-      ...defaultAdsTips(input).slice(0, parsed.other.length > 0 ? 3 : 4),
-      ...parsed.other.map((o) => clampText(`Instruction à appliquer lors du paramétrage : « ${o} ».`, TIP_MAX)),
+      ...defaultAdsTips(input).slice(0, otherInstructions.length > 0 ? 3 : 4),
+      ...otherInstructions.map((o) => clampText(`Instruction à appliquer lors du paramétrage : « ${o} ».`, TIP_MAX)),
       ...(parsed.noTarif ? ["Conformément à vos instructions, aucun tarif n'apparaît dans les annonces ni dans les groupes de mots-clés."] : []),
       ...(parsed.featured ? [`Conformément à vos instructions, « ${parsed.featured.title} » est le premier groupe d'annonces et le premier lien annexe.`] : []),
     ],
@@ -1315,10 +1397,10 @@ export function createGoogleAdsPlanner(env: NodeJS.ProcessEnv = process.env, dep
     mode,
     plan: async (rawBrief, input) => {
       const brief = sanitizeSocialBrief(rawBrief);
-      // `completeStructured` infère son type de retour depuis l'entrée du schéma
-      // (les `.default()` rendent des champs facultatifs) : un second parse,
-      // idempotent, fixe le type de sortie sans conversion forcée.
-      const parsed = await complete(options, googleAdsSystemPrompt(brief), googleAdsUserPrompt(brief, input), googleAdsPlanSchema);
+      // Le schéma « modèle » adoucit les textes du plan (« diagnostic » →
+      // « bilan ») avant la relecture éthique de `completeStructured` ; un
+      // second parse, idempotent, fixe le type de sortie sans conversion forcée.
+      const parsed = await complete(options, googleAdsSystemPrompt(brief), googleAdsUserPrompt(brief, input), googleAdsPlanModelSchema);
       const raw = googleAdsPlanSchema.parse(parsed);
       return finalizeAdsPlan(anchorToBrief(raw, brief), input, "anthropic");
     },
