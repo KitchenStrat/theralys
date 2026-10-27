@@ -120,7 +120,7 @@ export function VisibilityTab({
           </div>
           <p className="mt-1 text-sm text-ink-500">
             Les recherches que tapent vos futurs patients, par exemple « sophrologue albi ». Chaque relevé
-            interroge Google Maps depuis 49 points autour de votre cabinet.
+            interroge Google Maps depuis 49 emplacements autour de votre cabinet.
           </p>
 
           {keywords.length === 0 ? (
@@ -219,8 +219,8 @@ export function VisibilityTab({
         <Card className="p-6">
           {!keyword ? (
             <EmptyMap title="Votre carte de visibilité">
-              Ajoutez un mot-clé, puis lancez un relevé : vous verrez où votre fiche apparaît sur Google Maps, point par
-              point autour de votre cabinet. Un relevé ≈ {usd(estimateScanCostUsd())}, compris dans votre formule.
+              Ajoutez un mot-clé, puis lancez un relevé : vous verrez où votre fiche apparaît sur Google Maps, emplacement par
+              emplacement autour de votre cabinet. Un relevé ≈ {usd(estimateScanCostUsd())}, compris dans votre formule.
             </EmptyMap>
           ) : !scan ? (
             <EmptyMap title={`« ${keyword.keyword} » n'a pas encore été relevé`}>
@@ -230,7 +230,7 @@ export function VisibilityTab({
                 </span>
               ) : (
                 <>
-                  Lancez un premier relevé pour voir votre position sur les 49 points de la grille (
+                  Lancez un premier relevé pour voir votre position depuis les 49 emplacements de la grille (
                   {radiusLabel(keyword.radius)} autour du cabinet). Un relevé ≈ {usd(estimateScanCostUsd())}, compris dans votre
                   formule.
                   <span className="mt-3 block">
@@ -358,7 +358,11 @@ function ScanView({
         <div className="min-w-0">
           <h2 className="text-xl font-semibold">« {keyword.keyword} »</h2>
           <p className="text-xs text-ink-500">
-            {scan.grid.rows}×{scan.grid.cols} points · {radiusLabel(scan.grid.radius)} · relevé le {formatDayFr(scan.scannedAt, "day")}
+            {scan.grid.rows * scan.grid.cols} emplacements testés · {radiusLabel(scan.grid.radius)} · relevé le {formatDayFr(scan.scannedAt, "day")}
+          </p>
+          <p className="mt-1 text-sm text-ink-700">
+            Depuis chacun de ces emplacements autour de votre cabinet, nous notons la place de votre fiche dans les résultats
+            Google Maps pour « {keyword.keyword} ».
           </p>
         </div>
         {scans.length > 1 ? (
@@ -383,11 +387,18 @@ function ScanView({
       ) : null}
 
       {summary ? (
-        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Part de visibilité" value={`${summary.visibility} %`} hint="moyenne des positions, 100 % = 1er partout" />
-          <Stat label="Présence" value={`${summary.found} / ${summary.total}`} hint="points où la fiche apparaît (20 premiers)" />
-          <Stat label="Rang moyen" value={summary.avgRank === null ? "—" : summary.avgRank.toLocaleString("fr-FR")} hint="sur les points où elle apparaît" />
-          <Stat label="Dans le top 3" value={`${summary.top3} point${summary.top3 > 1 ? "s" : ""}`} hint="le « pack local » de Google" />
+        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat label="Part de visibilité" value={`${summary.visibility} %`} hint="100 % = première place partout, 0 % = absente partout" />
+          <Stat
+            label="Dans les 3 premiers"
+            value={`${summary.top3} sur ${summary.total}`}
+            hint="emplacements d'où Google Maps vous affiche parmi ses 3 fiches mises en avant"
+          />
+          <Stat
+            label="Place moyenne"
+            value={summary.avgRank === null ? "—" : summary.avgRank.toLocaleString("fr-FR")}
+            hint="là où votre fiche apparaît dans les 20 premiers résultats"
+          />
         </dl>
       ) : null}
 
@@ -423,7 +434,7 @@ function num(value: number | null, digits = 0): string {
   return value === null ? "—" : value.toLocaleString("fr-FR", { maximumFractionDigits: digits });
 }
 
-/** Concurrents du podium (agrégés sur les 49 points), votre fiche en tête pour comparer. */
+/** Concurrents du podium (agrégés sur les 49 emplacements), votre fiche en tête pour comparer. */
 function CompetitorsTable({ competitors, own, scan }: { competitors: GoogleCompetitor[]; own: OwnListing; scan: GoogleScanView }) {
   if (competitors.length === 0) return null;
   const ownTop3 = scan.summary?.top3 ?? scan.points.filter((p) => rankTone(p.rank) === "top").length;
@@ -452,10 +463,10 @@ function CompetitorsTable({ competitors, own, scan }: { competitors: GoogleCompe
                 Photos
               </th>
               <th scope="col" className="py-2 pr-3 text-right font-medium">
-                Top 3
+                Dans les 3 premiers
               </th>
               <th scope="col" className="py-2 text-right font-medium">
-                Rang moyen
+                Place moyenne
               </th>
             </tr>
           </thead>

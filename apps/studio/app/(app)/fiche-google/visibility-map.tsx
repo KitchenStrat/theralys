@@ -78,7 +78,7 @@ export function VisibilityMap({ grid, points, keyword }: { grid: GoogleScanGrid;
     <div
       ref={container}
       role="region"
-      aria-label={`Carte de visibilité pour « ${keyword} » : ${grid.rows}×${grid.cols} points sur ${grid.radiusKm} km autour du cabinet`}
+      aria-label={`Carte de visibilité pour « ${keyword} » : ${grid.rows * grid.cols} emplacements sur ${grid.radiusKm} km autour du cabinet`}
       className="h-[360px] w-full overflow-hidden rounded-2xl border border-cream-200 bg-cream-100 sm:h-[460px]"
     />
   );
