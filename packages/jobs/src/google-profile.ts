@@ -868,8 +868,8 @@ async function upsertReviews(
   );
 }
 
-/** Réponses générées « sur mesure » (ton choisi) ce mois-ci pour un site. */
-export async function monthlyReplyGenerations(db: Database, siteId: string, now = new Date()): Promise<number> {
+/** Réponses générées « sur mesure » (ton choisi) ce mois-ci pour un site (lecture sous transaction possible). */
+export async function monthlyReplyGenerations(db: DbExecutor, siteId: string, now = new Date()): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(*)`.mapWith(Number) })
     .from(googleUsage)
@@ -879,16 +879,19 @@ export async function monthlyReplyGenerations(db: Database, siteId: string, now 
 
 export type ReplyGenerationOutcome =
   | { status: "done"; analysis: GoogleReviewAnalysis; remaining: number }
-  | { status: "skipped"; reason: "not_found" | "no_text" | "quota" }
+  | { status: "skipped"; reason: "not_found" | "no_text" | "quota" | "busy" }
   | { status: "error"; message: string };
 
 /**
  * Génère (ou regénère) la réponse proposée d'un avis avec le ton demandé :
  * un appel IA pour cet avis seul, voix du praticien dont le ton est remplacé.
  * Quota GOOGLE_REPLY_GENERATIONS_PER_MONTH par site (ligne `google_usage`
- * kind "reply_ai", coût 0 : l'IA n'est pas un coût fournisseur mesuré ici).
- * Une réponse écartée par les garde-fous est une erreur lisible, l'analyse
- * précédente est conservée.
+ * kind "reply_ai", coût 0 : l'IA n'est pas un coût fournisseur mesuré ici),
+ * vérifié avant l'appel IA (sous verrou consultatif de l'avis : une
+ * génération à la fois) et recompté sous verrou par site dans la transaction
+ * qui inscrit la génération et enregistre l'analyse (garantie). Une réponse
+ * écartée par les garde-fous est une erreur lisible, l'analyse précédente
+ * est conservée (l'appel IA a eu lieu : il est décompté).
  */
 export async function generateGoogleReviewReply(
   siteId: string,
@@ -903,8 +906,14 @@ export async function generateGoogleReviewReply(
   });
   if (!review) return { status: "skipped", reason: "not_found" };
   if (review.text.trim() === "") return { status: "skipped", reason: "no_text" };
-  const used = await monthlyReplyGenerations(db, siteId, now);
-  if (used >= GOOGLE_REPLY_GENERATIONS_PER_MONTH) return { status: "skipped", reason: "quota" };
+  // Transaction courte : verrou consultatif de l'avis (génération déjà lancée ailleurs ?) et quota (message immédiat)
+  const initial = await db.transaction(async (tx) => {
+    const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`google-reply:${reviewId}`})) as locked`);
+    if (lock.rows[0]?.locked !== true) return null;
+    return monthlyReplyGenerations(tx, siteId, now);
+  });
+  if (initial === null) return { status: "skipped", reason: "busy" };
+  if (initial >= GOOGLE_REPLY_GENERATIONS_PER_MONTH) return { status: "skipped", reason: "quota" };
 
   try {
     const { brief } = await loadGoogleBrief(db, siteId, now);
@@ -924,16 +933,27 @@ export async function generateGoogleReviewReply(
       ],
       now,
     });
-    // L'appel IA a eu lieu : décompté même si la réponse est écartée
-    await db.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind: "reply_ai", costUsd: 0, requests: 1 });
     const analysis = analyses[review.id];
-    if (!analysis || analysis.suggestedReply.trim() === "") {
+    const usable = analysis !== undefined && analysis.suggestedReply.trim() !== "";
+    // Transaction courte sous verrou par site : quota recompté, génération inscrite et analyse enregistrée ensemble
+    const used = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${siteId}:google-reply`}))`);
+      const count = await monthlyReplyGenerations(tx, siteId, now);
+      if (count >= GOOGLE_REPLY_GENERATIONS_PER_MONTH) return null;
+      // L'appel IA a eu lieu : décompté même si la réponse est écartée
+      await tx.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind: "reply_ai", costUsd: 0, requests: 1 });
+      if (usable) {
+        await tx
+          .update(googleReviews)
+          .set({ analysis })
+          .where(and(eq(googleReviews.id, review.id), eq(googleReviews.siteId, siteId)));
+      }
+      return count;
+    });
+    if (used === null) return { status: "skipped", reason: "quota" };
+    if (!usable) {
       return { status: "error", message: "La réponse générée ne respectait pas nos règles de prudence — essayez un autre ton." };
     }
-    await db
-      .update(googleReviews)
-      .set({ analysis })
-      .where(and(eq(googleReviews.id, review.id), eq(googleReviews.siteId, siteId)));
     return { status: "done", analysis, remaining: Math.max(0, GOOGLE_REPLY_GENERATIONS_PER_MONTH - used - 1) };
   } catch (err) {
     const message = errorMessage(err);

@@ -147,6 +147,8 @@ function PostModalBody({
 
   const isCarousel = item.format === "carousel";
   const published = item.status === "published";
+  // Un contenu « nouvel article » est lié à son créneau : il se refait depuis « Préparer le mois », pas ici
+  const announcesArticle = item.pillar === "nouvel_article";
   // Chaque bascule démonte le bouton cliqué : le focus suit l'élément qui le remplace
   useFocusAfterToggle(dateOpen, actionsRef, (open) => (open ? "new-date" : "change-date"));
   useFocusAfterToggle(confirmRemove, actionsRef, (confirm) => (confirm ? "keep" : "remove"));
@@ -239,6 +241,14 @@ function PostModalBody({
   const download = (kind: "image" | "zip" | "pdf" | "caption" | "all") =>
     `/api/social/${item.id}/download?kind=${kind}${kind === "caption" ? "" : `&size=${size}`}`;
   const busy = pending || savingCaption || regenerating;
+  // Pourquoi « Régénérer » est désactivé (aide au survol), sinon undefined
+  const regenBlocked = announcesArticle
+    ? "Ce contenu annonce un nouvel article : il se régénère depuis « Préparer le mois » après l'avoir retiré."
+    : remaining <= 0
+      ? "Quota mensuel de régénérations atteint"
+      : captionDirty
+        ? "Enregistrez ou annulez votre légende avant de régénérer"
+        : undefined;
 
   return (
     <Modal open onClose={onClose} title={item.topic} size="xl">
@@ -407,7 +417,9 @@ function PostModalBody({
               </p>
             ) : null}
             <FieldHint>
-              Modifiez le texte à votre guise ; les {item.hashtags.length} hashtags du contenu sont ajoutés selon le réseau.
+              {item.hashtags.length > 0
+                ? `Modifiez le texte à votre guise ; les ${item.hashtags.length} hashtags du contenu sont ajoutés selon le réseau.`
+                : "Modifiez le texte à votre guise."}
             </FieldHint>
           </div>
 
@@ -500,8 +512,9 @@ function PostModalBody({
                   variant="secondary"
                   size="sm"
                   onClick={regenerate}
-                  disabled={busy || remaining <= 0}
-                  title={remaining <= 0 ? "Quota mensuel de régénérations atteint" : undefined}
+                  disabled={busy || regenBlocked !== undefined}
+                  title={regenBlocked}
+                  aria-describedby={regenBlocked ? `regen-help-${item.id}` : undefined}
                 >
                   {regenerating ? (
                     <>
@@ -512,6 +525,11 @@ function PostModalBody({
                   )}
                 </Button>
               </div>
+              {regenBlocked ? (
+                <p id={`regen-help-${item.id}`} className="mt-2 text-xs text-ink-500">
+                  {regenBlocked}
+                </p>
+              ) : null}
               {regenMessage ? (
                 <p className="mt-2 text-sm text-success-500" role="status">
                   {regenMessage}

@@ -14,7 +14,7 @@ import {
   type PlanId,
   googleUsage,
 } from "@theralys/db";
-import { checkEthicalCompliance, createGooglePostGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
+import { checkEthicalCompliance, createGooglePostGenerator } from "@theralys/ai";
 import {
   analyzeGoogleReviews,
   generateGoogleReviewReply,
@@ -54,6 +54,7 @@ import {
 } from "@/lib/google/posts";
 import { getScanUsage } from "@/lib/google/scans";
 import { loadSocialBrief } from "@/lib/social/brief";
+import { forbiddenWord, instructionsRefusal } from "@/lib/social/compliance";
 import { isMissingSchemaError, recentSocialTopics, type DbTransaction } from "@/lib/social/data";
 import { connectGooglePlace } from "../actions";
 
@@ -421,6 +422,8 @@ export async function generateReviewReply(input: unknown): Promise<{ error?: str
         return { error: "Cet avis ne contient pas de texte : rédigez une réponse courte de remerciement." };
       case "quota":
         return { error: `Vous avez utilisé vos ${GOOGLE_REPLY_GENERATIONS_PER_MONTH} générations de réponse du mois.` };
+      case "busy":
+        return { error: "Génération déjà en cours, patientez." };
     }
   } catch (err) {
     console.error("[google] génération de réponse échouée", { siteId: site.id, ms: Date.now() - started, err });
@@ -556,17 +559,6 @@ const requestSchema = z.object({
   scheduledFor: z.string().regex(DATE_RE),
 });
 
-/** Premier terme interdit du texte (pour le message), sinon null. */
-function forbiddenWord(text: string): string | null {
-  for (const { pattern } of FORBIDDEN_PATTERNS) {
-    pattern.lastIndex = 0;
-    const match = pattern.exec(text);
-    pattern.lastIndex = 0;
-    if (match) return match[0];
-  }
-  return null;
-}
-
 /**
  * Crée un post Google à partir du sujet saisi (1 appel IA). Sujet vérifié par
  * le garde-fou éthique AVANT l'appel ; quota vérifié avant (message immédiat)
@@ -666,8 +658,13 @@ const regenerateSchema = z.object({
   instructions: z.string().max(GOOGLE_POST_INSTRUCTIONS_MAX * 2).default(""),
 });
 
-/** Régénérations en cours dans ce processus (par post) : second clic refusé sans appel IA. */
+/**
+ * Régénérations en cours dans ce processus (par post) : second clic refusé
+ * sans appel IA, en plus du verrou consultatif en base (autres instances).
+ */
 const regenerationsInFlight = new Set<string>();
+const REGEN_IN_PROGRESS = "Régénération déjà en cours, patientez.";
+const REGEN_QUOTA_REACHED = `Vous avez utilisé vos ${GOOGLE_POST_REGENERATIONS_PER_MONTH} régénérations du mois.`;
 
 /** Rendus Blob d'un post (avant remplacement ou archivage), best-effort. */
 async function deleteRenders(assets: { renders: Record<string, { url?: string | null }> }): Promise<void> {
@@ -687,7 +684,11 @@ async function deleteRenders(assets: { renders: Record<string, { url?: string | 
  * « Régénérer » un post du mois avec des instructions libres : un appel IA
  * (même sujet, mêmes date et couleur), le texte et le visuel sont remplacés,
  * les anciens rendus supprimés. Quota GOOGLE_POST_REGENERATIONS_PER_MONTH
- * (lignes `google_usage` kind "post_regen"). Un post publié ne se régénère pas.
+ * (lignes `google_usage` kind "post_regen"), même schéma que
+ * `requestGooglePost` : vérifié avant l'appel IA (message immédiat, sous
+ * verrou consultatif du post) et recompté sous verrou par site dans la
+ * transaction qui inscrit la régénération et remplace le post (garantie).
+ * Un post publié ne se régénère pas.
  */
 export async function regenerateGooglePost(input: unknown): Promise<{ error?: string; remaining?: number }> {
   const session = await requireClient();
@@ -701,35 +702,33 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
 
   const instructions = cleanSocialInstructions(parsed.data.instructions).slice(0, GOOGLE_POST_INSTRUCTIONS_MAX);
   if (instructions !== "") {
-    const compliance = checkEthicalCompliance(instructions);
-    if (!compliance.ok) {
-      const word = forbiddenWord(instructions) ?? compliance.violations[0]?.rule ?? "";
-      return {
-        error: `Vos instructions contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`,
-      };
-    }
+    const refusal = instructionsRefusal(instructions, "Vos instructions");
+    if (refusal) return { error: refusal };
   }
-  if (regenerationsInFlight.has(post.id)) return { error: "Régénération déjà en cours, patientez." };
+  if (regenerationsInFlight.has(post.id)) return { error: REGEN_IN_PROGRESS };
   regenerationsInFlight.add(post.id);
   const now = new Date();
   const started = Date.now();
   const db = getDb();
   const generator = createGooglePostGenerator();
   try {
-    const usage = await getRegenerationUsage(site.id, now);
-    if (usage.remaining === 0) {
-      return { error: `Vous avez utilisé vos ${GOOGLE_POST_REGENERATIONS_PER_MONTH} régénérations du mois.` };
-    }
+    // 1. Transaction courte : verrou consultatif du post (régénération déjà lancée ailleurs ?) et quota (message immédiat)
+    const initial = await db.transaction(async (tx) => {
+      if (!(await tryLock(tx, `google-post-regen:${post.id}`))) return null;
+      return getRegenerationUsage(site.id, now, tx);
+    });
+    if (!initial) return { error: REGEN_IN_PROGRESS };
+    if (initial.remaining === 0) return { error: REGEN_QUOTA_REACHED };
+
+    // 2. Hors transaction : brief et appel IA — les instructions du post ont leur propre bloc dans le prompt
+    //    (distinct des consignes permanentes du praticien)
     const [{ brief, photosById, refsById }, recentTopics, keywords] = await Promise.all([
       loadSocialBrief(site.id),
       recentTopicsAcrossChannels(site.id, now),
       activeKeywordTexts(site.id),
     ]);
-    // Les instructions du post s'ajoutent aux consignes permanentes du praticien (même bloc du prompt)
-    const merged = cleanSocialInstructions([brief.instructions, instructions].filter((t) => t && t !== "").join("\n"));
-    const briefWithInstructions = merged === "" ? brief : { ...brief, instructions: merged };
     const regenerated = await generator.generateRequest(
-      briefWithInstructions,
+      brief,
       {
         topic: post.request ?? post.topic,
         accentHex: post.accentColor,
@@ -738,25 +737,41 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
         photosById,
         refsById,
         keywords,
+        ...(instructions === "" ? {} : { instructions }),
       },
       { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
     );
-    await db.insert(googleUsage).values({ siteId: site.id, month: usageMonthKey(now), kind: "post_regen", costUsd: 0, requests: 1 });
-    await db
-      .update(googlePosts)
-      .set({
-        topic: regenerated.topic,
-        template: regenerated.template,
-        content: regenerated.content,
-        assets: EMPTY_SOCIAL_ASSETS,
-        downloadedAt: null,
-        updatedAt: now,
-      })
-      .where(and(eq(googlePosts.id, post.id), eq(googlePosts.siteId, site.id)));
+
+    // 3. Transaction courte sous verrou par site : quota recompté, post remplacé et régénération inscrite ensemble
+    const outcome = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${site.id}:google-post-regen`}))`);
+      const { remaining } = await getRegenerationUsage(site.id, now, tx);
+      if (remaining === 0) return { error: REGEN_QUOTA_REACHED };
+      const [updated] = await tx
+        .update(googlePosts)
+        .set({
+          topic: regenerated.topic,
+          template: regenerated.template,
+          content: regenerated.content,
+          assets: EMPTY_SOCIAL_ASSETS,
+          downloadedAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(googlePosts.id, post.id), eq(googlePosts.siteId, site.id), ne(googlePosts.status, "archived")))
+        .returning({ id: googlePosts.id });
+      // Retiré pendant la génération : rien à remplacer, rien à décompter
+      if (!updated) return { error: NOT_FOUND };
+      await tx.insert(googleUsage).values({ siteId: site.id, month: usageMonthKey(now), kind: "post_regen", costUsd: 0, requests: 1 });
+      return { remaining: remaining - 1 };
+    });
+    if ("error" in outcome) {
+      console.warn("[google] régénération refusée après l'appel IA", { siteId: site.id, postId: post.id, reason: outcome.error, ms: Date.now() - started });
+      return { error: outcome.error };
+    }
     await deleteRenders(post.assets);
     console.info("[google] post régénéré", { siteId: site.id, postId: post.id, mode: generator.mode, withInstructions: instructions !== "", ms: Date.now() - started });
     revalidatePath(PATH);
-    return { remaining: usage.remaining - 1 };
+    return { remaining: outcome.remaining };
   } catch (err) {
     console.error("[google] régénération échouée", { siteId: site.id, postId: post.id, mode: generator.mode, ms: Date.now() - started, err });
     return { error: "La régénération a échoué — réessayez dans un instant. Votre quota n'a pas été décompté." };

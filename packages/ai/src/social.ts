@@ -84,6 +84,12 @@ export type SocialRequestInput = SocialGenerationContext & {
   accentHex: string | null;
   /** "YYYY-MM-DD" */
   scheduledFor: string;
+  /**
+   * Instructions du praticien pour ce contenu seul (régénération), déjà
+   * vérifiées par les garde-fous, ≤ SOCIAL_POST_INSTRUCTIONS_MAX : bloc du
+   * prompt distinct des consignes permanentes du brief.
+   */
+  instructions?: string;
 };
 
 /** Une publication prête à insérer dans `social_posts`. */

@@ -11,13 +11,7 @@ import {
   type NewSocialPost,
   type PlanId,
 } from "@theralys/db";
-import {
-  checkEthicalCompliance,
-  checkSocialCompliance,
-  createSocialGenerator,
-  FORBIDDEN_PATTERNS,
-  SOCIAL_FORBIDDEN_PATTERNS,
-} from "@theralys/ai";
+import { checkEthicalCompliance, createSocialGenerator } from "@theralys/ai";
 import {
   cleanSocialInstructions,
   EMPTY_SOCIAL_ASSETS,
@@ -37,6 +31,7 @@ import { parisDay, shiftIsoDay } from "@/lib/calendar";
 import { getSite } from "@/lib/data";
 import { loadSocialBrief } from "@/lib/social/brief";
 import { normalizeCaption, SOCIAL_CAPTION_MAX } from "@/lib/social/caption";
+import { captionRefusal, forbiddenWord, instructionsRefusal } from "@/lib/social/compliance";
 import {
   getSocialRequestUsage,
   loadSocialMonthState,
@@ -223,20 +218,6 @@ const requestSchema = z.object({
     .nullable(),
   scheduledFor: z.string().regex(DATE_RE),
 });
-
-/** Premier terme interdit du texte (pour le message), sinon null. */
-function forbiddenWord(
-  text: string,
-  patterns: readonly { pattern: RegExp }[] = FORBIDDEN_PATTERNS,
-): string | null {
-  for (const { pattern } of patterns) {
-    pattern.lastIndex = 0;
-    const match = pattern.exec(text);
-    pattern.lastIndex = 0;
-    if (match) return match[0];
-  }
-  return null;
-}
 
 /**
  * Crée un contenu à partir du sujet saisi (1 appel IA). Le sujet est vérifié
@@ -428,40 +409,6 @@ export async function saveSocialSettings(
   return {};
 }
 
-/**
- * Contrôle des consignes : on ne juge que ce que le praticien DEMANDE. Les
- * phrases négatives (« Ne jamais promettre de guérison », « éviter… ») et les
- * passages entre guillemets (« … ») sont des interdictions ou des citations,
- * pas des consignes à reproduire ; le reste est vérifié en minuscules (la
- * règle « majuscules criées » vise les légendes, pas un sigle dans une
- * consigne). Message distinct pour le vocabulaire médical et les règles
- * sociales ; null si tout est acceptable.
- */
-function instructionsRefusal(instructions: string): string | null {
-  const NEGATION =
-    /\b(ne|n')\s*\S*\s*(pas|jamais|plus|rien|aucun|aucune)\b|\b(jamais|éviter|évitez|évite|sans|interdit|interdite|interdits|proscrire|proscrit|bannir|exclure|aucun|aucune|pas de)\b/i;
-  const judged = instructions
-    .replace(/«[^»]*»|"[^"\n]*"|“[^”]*”/g, " ")
-    .split(/(?<=[.!?;\n])\s+|\n/)
-    .filter((sentence) => sentence.trim() !== "" && !NEGATION.test(sentence))
-    .join(" ")
-    .toLowerCase();
-  if (judged.trim() === "") return null;
-  const ethical = checkEthicalCompliance(judged);
-  if (!ethical.ok) {
-    const word = forbiddenWord(judged, FORBIDDEN_PATTERNS) ?? ethical.violations[0]?.rule ?? "";
-    return `Vos consignes contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`;
-  }
-  const social = checkSocialCompliance(judged);
-  if (!social.ok) {
-    const rule = social.violations[0]?.rule ?? "";
-    const word = forbiddenWord(judged, SOCIAL_FORBIDDEN_PATTERNS) ?? rule;
-    const detail = rule === "" || rule.toLowerCase() === word.toLowerCase() ? `« ${word} »` : `« ${word} », ${rule}`;
-    return `Vos consignes contiennent une formulation que nous n'employons pas sur les réseaux (${detail}). Reformulez-la.`;
-  }
-  return null;
-}
-
 // ─── Actions sur un contenu ──────────────────────────────────────────────────
 
 /** Contenu du site de la session, non archivé — sinon null. */
@@ -556,27 +503,6 @@ const captionSchema = z.object({
 });
 
 /**
- * Refus d'une légende saisie : le vocabulaire interdit par la réglementation
- * (garde-fou éthique) puis les règles sociales (avant/après, promesse
- * chiffrée, majuscules criées…), avec le mot en cause. Null si acceptable.
- */
-function captionRefusal(caption: string): string | null {
-  const ethical = checkEthicalCompliance(caption);
-  if (!ethical.ok) {
-    const word = forbiddenWord(caption) ?? ethical.violations[0]?.rule ?? "";
-    return `Votre légende contient un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`;
-  }
-  const social = checkSocialCompliance(caption);
-  if (!social.ok) {
-    const rule = social.violations[0]?.rule ?? "";
-    const word = forbiddenWord(caption, SOCIAL_FORBIDDEN_PATTERNS) ?? rule;
-    const detail = rule === "" || rule.toLowerCase() === word.toLowerCase() ? `« ${word} »` : `« ${word} », ${rule}`;
-    return `Votre légende contient une formulation que nous n'employons pas sur les réseaux (${detail}). Reformulez-la.`;
-  }
-  return null;
-}
-
-/**
  * « Enregistrer » la légende modifiée d'un contenu (non archivé) : texte
  * normalisé et borné à SOCIAL_CAPTION_MAX, vérifié par les garde-fous AVANT
  * d'être stocké ; seule la clé `caption` du jsonb est réécrite (`jsonb_set`,
@@ -618,15 +544,26 @@ const regenerateSchema = z.object({
   tone: z.string().refine(isGoogleReplyTone, "Ton inconnu"),
 });
 
-/** Régénérations en cours dans ce processus (par contenu) : second clic refusé sans appel IA. */
+/**
+ * Régénérations en cours dans ce processus (par contenu) : second clic refusé
+ * sans appel IA, en plus du verrou consultatif en base (autres instances).
+ */
 const regenerationsInFlight = new Set<string>();
+const REGEN_IN_PROGRESS = "Régénération déjà en cours, patientez.";
+const REGEN_QUOTA_REACHED = `Vous avez utilisé vos ${SOCIAL_REGENERATIONS_PER_MONTH} régénérations du mois.`;
+const REGEN_NEW_ARTICLE =
+  "Ce contenu annonce un nouvel article : il se régénère depuis « Préparer le mois » après l'avoir retiré.";
 
 /**
  * « Régénérer » un contenu non publié avec des instructions libres et un ton
  * choisi : un appel IA (même sujet, même format, mêmes date et couleur), la
  * légende, les hashtags et le visuel sont remplacés, les anciens rendus
  * supprimés. Quota SOCIAL_REGENERATIONS_PER_MONTH (lignes `google_usage` de
- * kind "social_regen"). Un contenu publié ne se régénère pas.
+ * kind "social_regen"), même schéma que `requestSocialPost` : vérifié avant
+ * l'appel IA (message immédiat, sous verrou consultatif du contenu) et
+ * recompté sous verrou par site dans la transaction qui inscrit la
+ * régénération et remplace le contenu (garantie). Un contenu publié ou
+ * « nouvel article » (lié à son créneau) ne se régénère pas ici.
  */
 export async function regenerateSocialPost(input: unknown): Promise<{ error?: string; remaining?: number }> {
   const session = await requireClient();
@@ -639,40 +576,36 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
   if (post.status === "published") {
     return { error: "Ce contenu est déjà publié : annulez la publication pour le régénérer." };
   }
+  if (post.content.pillar === "nouvel_article") return { error: REGEN_NEW_ARTICLE };
 
   const instructions = cleanSocialInstructions(parsed.data.instructions).slice(0, SOCIAL_POST_INSTRUCTIONS_MAX);
   if (instructions !== "") {
-    const compliance = checkEthicalCompliance(instructions);
-    if (!compliance.ok) {
-      const word = forbiddenWord(instructions) ?? compliance.violations[0]?.rule ?? "";
-      return {
-        error: `Vos instructions contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`,
-      };
-    }
+    const refusal = instructionsRefusal(instructions, "Vos instructions");
+    if (refusal) return { error: refusal };
   }
-  if (regenerationsInFlight.has(post.id)) return { error: "Régénération déjà en cours, patientez." };
+  if (regenerationsInFlight.has(post.id)) return { error: REGEN_IN_PROGRESS };
   regenerationsInFlight.add(post.id);
   const now = new Date();
   const started = Date.now();
   const db = getDb();
   const generator = createSocialGenerator();
   try {
-    const usage = await getSocialRegenerationUsage(site.id, now);
-    if (usage.remaining === 0) {
-      return { error: `Vous avez utilisé vos ${SOCIAL_REGENERATIONS_PER_MONTH} régénérations du mois.` };
-    }
+    // 1. Transaction courte : verrou consultatif du contenu (régénération déjà lancée ailleurs ?) et quota (message immédiat)
+    const initial = await db.transaction(async (tx) => {
+      if (!(await tryLock(tx, `social-regen:${post.id}`))) return null;
+      return getSocialRegenerationUsage(site.id, now, tx);
+    });
+    if (!initial) return { error: REGEN_IN_PROGRESS };
+    if (initial.remaining === 0) return { error: REGEN_QUOTA_REACHED };
+
+    // 2. Hors transaction : brief et appel IA — les instructions du contenu ont leur propre bloc dans le prompt
+    //    (distinct des consignes permanentes) ; le ton choisi remplace celui de la voix
     const settings = await getSocialSettings(site.id);
     const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
       loadSocialBrief(site.id, { settings }),
       recentTopicsAcrossChannels(site.id, now),
     ]);
-    // Les instructions du contenu s'ajoutent aux consignes permanentes (même bloc du prompt) ; le ton choisi remplace celui de la voix
-    const merged = cleanSocialInstructions([brief.instructions, instructions].filter((t) => t && t !== "").join("\n"));
-    const briefForRegen = {
-      ...brief,
-      ...(merged === "" ? {} : { instructions: merged }),
-      voice: { ...brief.voice, tone: parsed.data.tone },
-    };
+    const briefForRegen = { ...brief, voice: { ...brief.voice, tone: parsed.data.tone } };
     const regenerated = await generator.generateRequest(briefForRegen, {
       topic: post.request ?? post.topic,
       format: post.format as SocialFormat,
@@ -681,20 +614,36 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
       recentTopics: recentTopics.filter((t) => t !== post.topic),
       photosById,
       refsById,
+      ...(instructions === "" ? {} : { instructions }),
     });
-    await recordSocialRegeneration(site.id, now);
-    await db
-      .update(socialPosts)
-      .set({
-        topic: regenerated.topic,
-        template: regenerated.template,
-        // Les jours de publication de la préparation du mois restent portés par le contenu (état du mois)
-        content: post.content.planDays ? { ...regenerated.content, planDays: post.content.planDays } : regenerated.content,
-        assets: EMPTY_SOCIAL_ASSETS,
-        downloadedAt: null,
-        updatedAt: now,
-      })
-      .where(and(eq(socialPosts.id, post.id), eq(socialPosts.siteId, site.id)));
+
+    // 3. Transaction courte sous verrou par site : quota recompté, contenu remplacé et régénération inscrite ensemble
+    const outcome = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${site.id}:social-regen`}))`);
+      const { remaining } = await getSocialRegenerationUsage(site.id, now, tx);
+      if (remaining === 0) return { error: REGEN_QUOTA_REACHED };
+      const [updated] = await tx
+        .update(socialPosts)
+        .set({
+          topic: regenerated.topic,
+          template: regenerated.template,
+          // Les jours de publication de la préparation du mois restent portés par le contenu (état du mois)
+          content: post.content.planDays ? { ...regenerated.content, planDays: post.content.planDays } : regenerated.content,
+          assets: EMPTY_SOCIAL_ASSETS,
+          downloadedAt: null,
+          updatedAt: now,
+        })
+        .where(and(eq(socialPosts.id, post.id), eq(socialPosts.siteId, site.id), ne(socialPosts.status, "archived")))
+        .returning({ id: socialPosts.id });
+      // Retiré pendant la génération : rien à remplacer, rien à décompter
+      if (!updated) return { error: NOT_FOUND };
+      await recordSocialRegeneration(site.id, now, tx);
+      return { remaining: remaining - 1 };
+    });
+    if ("error" in outcome) {
+      console.warn("[social] régénération refusée après l'appel IA", { siteId: site.id, postId: post.id, reason: outcome.error, ms: Date.now() - started });
+      return { error: outcome.error };
+    }
     await deleteRenders(post.assets);
     console.info("[social] contenu régénéré", {
       siteId: site.id,
@@ -705,7 +654,7 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
       ms: Date.now() - started,
     });
     revalidatePath(PATH);
-    return { remaining: usage.remaining - 1 };
+    return { remaining: outcome.remaining };
   } catch (err) {
     console.error("[social] régénération échouée", { siteId: site.id, postId: post.id, mode: generator.mode, ms: Date.now() - started, err });
     return { error: "La régénération a échoué — réessayez dans un instant. Votre quota n'a pas été décompté." };

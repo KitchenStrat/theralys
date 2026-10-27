@@ -371,6 +371,23 @@ describe("posts Google", () => {
     expect(await generator.generateRequest(b, request, links)).toEqual(await generator.generateRequest(b, request, links));
   });
 
+  it("mock : les instructions du post (régénération) sont lues avant les consignes permanentes", async () => {
+    const b = brief();
+    const generator = createGooglePostGenerator(env);
+    const base = { topic: "Bien dormir avant un examen", accentHex: null, scheduledFor: "2026-11-03", recentTopics: [], photosById: {}, refsById: {} };
+    const plain = await generator.generateRequest(b, base, links);
+    const asked = await generator.generateRequest(b, { ...base, instructions: "Terminer par une question." }, links);
+    // La question demandée précède la fin du texte ; le reste du post est inchangé
+    expect(asked.content.summary).toContain("?");
+    expect(asked.content.summary).not.toBe(plain.content.summary);
+    expect(asked.topic).toBe(plain.topic);
+    expect(asked.content.slide).toEqual(plain.content.slide);
+    expect(asked.content.summary).not.toMatch(/(^|\s)#\w+/);
+    expect(asked.content.summary).not.toMatch(/bio/i);
+    // Sans mot-clé reconnu : identique au post sans instructions
+    expect(await generator.generateRequest(b, { ...base, instructions: "Un ton plus direct." }, links)).toEqual(plain);
+  });
+
   it("anthropic : prompt « google » et schéma sans hashtag obligatoire, texte nettoyé, bouton d'action choisi par le code", async () => {
     const b = brief();
     const draft = (slot: number, caption: string): SocialPlan["posts"][number] => ({
@@ -415,6 +432,43 @@ describe("posts Google", () => {
     expect(one.scheduledFor).toBe("2026-11-10");
     expect(one.content.summary).not.toMatch(/bio/i);
     expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it("anthropic : les instructions d'une régénération ont leur bloc dans le prompt utilisateur (variante google)", async () => {
+    const b = { ...brief(), instructions: "Ne jamais citer de tarif." };
+    const complete = vi.fn(async (_options: unknown, _system: string, user: string, schema: { parse: (v: unknown) => unknown }) => {
+      expect(user).toContain("<consignes>\nNe jamais citer de tarif.\n</consignes>");
+      expect(user).toContain("INSTRUCTIONS POUR CE CONTENU");
+      expect(user).toContain("<instructions>\nMentionner les créneaux du mardi.\n</instructions>");
+      expect(user.indexOf("</consignes>")).toBeLessThan(user.indexOf("<instructions>"));
+      expect(user.indexOf("</instructions>")).toBeLessThan(user.indexOf("DEMANDE DU PRATICIEN"));
+      return schema.parse({
+        posts: [
+          {
+            slot: 0,
+            pillar: "infos_pratiques",
+            format: "static",
+            template: "affirmation",
+            accentRole: "soft",
+            topic: "Les créneaux du mardi",
+            slides: [{ title: "Le mardi, des créneaux", body: "Des rendez-vous le mardi, pour souffler en semaine." }],
+            caption: "Des créneaux le mardi pour souffler en semaine, au cabinet à Albi.\n\nUn temps calme, guidé, pour relâcher la pression de la semaine et repartir plus léger. Chacun avance à son rythme.\n\nClaire, sophrologue à Albi",
+            hashtags: [],
+            altText: "Texte « Le mardi, des créneaux » sur fond de couleur.",
+            sourceRefs: ["section:home:hero"],
+          },
+        ],
+      });
+    });
+    const social = { mode: "anthropic" as const, planMonth: async () => [], generateRequest: async () => { throw new Error("non utilisé"); } };
+    const generator = createGooglePostGenerator(LIVE_ENV, social, { complete: complete as never });
+    const post = await generator.generateRequest(
+      b,
+      { topic: "Les créneaux du mardi", accentHex: null, scheduledFor: "2026-11-10", recentTopics: [], photosById: {}, refsById: {}, instructions: "Mentionner les créneaux du mardi." },
+      links,
+    );
+    expect(post.topic).toBe("Les créneaux du mardi");
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 });
 

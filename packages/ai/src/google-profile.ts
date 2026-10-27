@@ -473,6 +473,8 @@ export type GoogleRequestInput = SocialGenerationContext & {
   /** "YYYY-MM-DD" */
   scheduledFor: string;
   keywords?: string[];
+  /** Instructions du praticien pour ce post seul (régénération), ≤ GOOGLE_POST_INSTRUCTIONS_MAX : bloc du prompt distinct des consignes permanentes */
+  instructions?: string;
 };
 
 /**

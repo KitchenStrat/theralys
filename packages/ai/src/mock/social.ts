@@ -1387,7 +1387,18 @@ export type MockSocialRequestInput = {
   /** "YYYY-MM-DD" */
   scheduledFor: string;
   recentTopics: string[];
+  /** Instructions propres à ce contenu (régénération) : lues avant les consignes permanentes */
+  instructions?: string;
 };
+
+/**
+ * Consignes lues par le mock pour une demande : les instructions du contenu
+ * d'abord (leurs hashtags passent en premier), puis les consignes permanentes.
+ */
+export function mergedMockInstructions(input: Pick<MockSocialRequestInput, "instructions">, brief: SocialSiteBrief): string | undefined {
+  const parts = [input.instructions, brief.instructions].filter((t): t is string => typeof t === "string" && t.trim() !== "");
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
 
 /** Mots trop courants pour rapprocher une demande d'un élément du site. */
 const MATCH_STOPWORDS = new Set([
@@ -1471,7 +1482,7 @@ function noteFor(brief: SocialSiteBrief, topic: string): string | undefined {
  */
 export function mockSocialRequest(brief: SocialSiteBrief, input: MockSocialRequestInput): SocialPlan {
   const seed = hash31(`${brief.practitioner.city}|${brief.siteName}|${input.scheduledFor}|${input.topic}`);
-  const ctx = makeCtx(brief, input.recentTopics, seed);
+  const ctx: Ctx = { ...makeCtx(brief, input.recentTopics, seed), wishes: parseMockWishes(mergedMockInstructions(input, brief)) };
   const keyword = keywordPillar(input.topic);
   // Un mot-clé explicite (avis, rendez-vous, séance…) l'emporte sur un rapprochement faible
   const found = bestMatch(brief, input.topic);
