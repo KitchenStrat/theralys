@@ -171,9 +171,18 @@ export function mockReviewReply(review: ReviewForAnalysis, voice: SocialVoice, b
   };
   const echoLine = topics.map((t) => echo[t]).find((line) => line) ?? "";
   const thanks = b.reader(`Merci${name} pour votre retour`, `Merci${name} pour ton retour`);
+  // Le ton choisi colore l'ouverture et la clôture d'un avis positif (le reste du mock est commun)
+  const warmth: Record<SocialVoice["tone"], { open: string; close: string }> = {
+    chaleureux: { open: ", il me touche beaucoup.", close: b.reader("Au plaisir de vous retrouver au cabinet.", "Au plaisir de te retrouver au cabinet.") },
+    rassurant: { open: ", il compte beaucoup.", close: b.reader("Vous pouvez compter sur la même attention à chaque séance.", "Tu peux compter sur la même attention à chaque séance.") },
+    pose: { open: ".", close: "À bientôt." },
+    direct: { open: " !", close: "À très vite." },
+    pedagogue: { open: ", il me fait plaisir.", close: "Les exercices proposés se pratiquent facilement chez soi, à son rythme." },
+  };
   let text: string;
   if (sentiment === "positif") {
-    text = `${thanks}, il me touche beaucoup. ${echoLine} ${b.reader("Au plaisir de vous retrouver au cabinet.", "Au plaisir de te retrouver au cabinet.")}`;
+    const { open, close } = warmth[voice.tone];
+    text = `${thanks}${open} ${echoLine} ${close}`;
   } else if (sentiment === "mitige") {
     text = `${thanks} et pour votre franchise. ${echoLine} ${b.subj("Je reste à votre disposition pour en parler directement.", "Nous restons à votre disposition pour en parler directement.", "On reste à votre disposition pour en parler directement.")}`;
   } else {

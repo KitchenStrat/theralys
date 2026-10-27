@@ -103,6 +103,12 @@ describe("analyse des avis (mock)", () => {
       expect(a.generator).toBe("mock");
     }
     expect(mockReviewReply(reviews[0]!, { ...b.voice, reader: "tu" }, b)).toContain("ton retour");
+    // Le ton choisi change la réponse (générateur « sur mesure » de la section Avis)
+    const direct = mockReviewReply(reviews[0]!, { ...b.voice, tone: "direct" }, b);
+    const pose = mockReviewReply(reviews[0]!, { ...b.voice, tone: "pose" }, b);
+    expect(direct).not.toBe(pose);
+    expect(direct).toContain("À très vite.");
+    expect(checkEthicalCompliance(direct).ok && checkEthicalCompliance(pose).ok).toBe(true);
   });
 });
 

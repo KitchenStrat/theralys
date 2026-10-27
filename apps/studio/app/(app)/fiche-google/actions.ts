@@ -14,7 +14,14 @@ import {
   type PlanId,
 } from "@theralys/db";
 import { checkEthicalCompliance, createGooglePostGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
-import { analyzeGoogleReviews, googleBudget, hasRealGoogleProvider, runGoogleScan, syncGoogleProfile } from "@theralys/jobs";
+import {
+  analyzeGoogleReviews,
+  generateGoogleReviewReply,
+  googleBudget,
+  hasRealGoogleProvider,
+  runGoogleScan,
+  syncGoogleProfile,
+} from "@theralys/jobs";
 import {
   EMPTY_SOCIAL_ASSETS,
   GOOGLE_KEYWORDS_MAX,
@@ -25,6 +32,8 @@ import {
   isoDay,
   monthRange,
   isMockPlaceId,
+  isGoogleReplyTone,
+  GOOGLE_REPLY_GENERATIONS_PER_MONTH,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
@@ -363,6 +372,55 @@ export async function analyzeReviews(): Promise<{ error?: string; analyzed?: num
     return { error: "L'analyse a échoué — réessayez dans un instant." };
   } finally {
     analysesInFlight.delete(site.id);
+  }
+}
+
+// ─── Avis : réponse générée avec un ton choisi ───────────────────────────────
+
+const replySchema = z.object({
+  reviewId: z.string().uuid(),
+  tone: z.string().refine(isGoogleReplyTone, "Ton inconnu"),
+});
+
+/** Générations en cours dans ce processus (site:avis) : second clic refusé sans appel IA. */
+const repliesInFlight = new Set<string>();
+
+/**
+ * « Générer une réponse » sous un avis sans réponse : un appel IA pour cet
+ * avis, avec le ton choisi ; la réponse remplace la proposition et reste
+ * modifiable avant d'être copiée sur Google.
+ */
+export async function generateReviewReply(input: unknown): Promise<{ error?: string; reply?: string; remaining?: number }> {
+  const session = await requireClient();
+  const parsed = replySchema.safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide." };
+  const site = await getSite(session.siteId);
+  if (!googleAccess(site)) return { error: NOT_INCLUDED };
+  const key = `${site.id}:${parsed.data.reviewId}`;
+  if (repliesInFlight.has(key)) return { error: "Génération déjà en cours, patientez." };
+  repliesInFlight.add(key);
+  const started = Date.now();
+  try {
+    const outcome = await generateGoogleReviewReply(site.id, parsed.data.reviewId, parsed.data.tone);
+    if (outcome.status === "done") {
+      console.info("[google] réponse générée", { siteId: site.id, tone: parsed.data.tone, ms: Date.now() - started });
+      revalidatePath(PATH);
+      return { reply: outcome.analysis.suggestedReply, remaining: outcome.remaining };
+    }
+    if (outcome.status === "error") return { error: outcome.message };
+    switch (outcome.reason) {
+      case "not_found":
+        return { error: "Avis introuvable." };
+      case "no_text":
+        return { error: "Cet avis ne contient pas de texte : rédigez une réponse courte de remerciement." };
+      case "quota":
+        return { error: `Vous avez utilisé vos ${GOOGLE_REPLY_GENERATIONS_PER_MONTH} générations de réponse du mois.` };
+    }
+  } catch (err) {
+    console.error("[google] génération de réponse échouée", { siteId: site.id, ms: Date.now() - started, err });
+    return { error: "La génération a échoué — réessayez dans un instant." };
+  } finally {
+    repliesInFlight.delete(key);
   }
 }
 

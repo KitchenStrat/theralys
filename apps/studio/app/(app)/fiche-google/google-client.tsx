@@ -118,6 +118,8 @@ export function GoogleClient({
             reviews={data.reviews}
             totalCount={data.reviewsTotal}
             summary={data.reviewsSummary}
+            replyRemaining={data.replyRemaining}
+            replyTone={data.replyTone}
             placeId={data.linked?.placeId ?? null}
           />
         ) : null}

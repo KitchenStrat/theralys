@@ -729,6 +729,47 @@ export type GoogleReviewTopic = (typeof GOOGLE_REVIEW_TOPICS)[number]["id"];
 /** Longueur maximale d'une réponse proposée (Google accepte 4 096, 600 reste lisible). */
 export const GOOGLE_REPLY_MAX = 600;
 
+/** Tons proposés pour générer une réponse à un avis (mêmes valeurs que la voix du praticien). */
+export const GOOGLE_REPLY_TONES = [
+  { id: "chaleureux", label: "Chaleureux" },
+  { id: "pose", label: "Posé" },
+  { id: "rassurant", label: "Rassurant" },
+  { id: "direct", label: "Direct" },
+  { id: "pedagogue", label: "Pédagogue" },
+] as const satisfies readonly { id: SocialVoice["tone"]; label: string }[];
+export type GoogleReplyTone = (typeof GOOGLE_REPLY_TONES)[number]["id"];
+
+export function isGoogleReplyTone(value: unknown): value is GoogleReplyTone {
+  return typeof value === "string" && GOOGLE_REPLY_TONES.some((t) => t.id === value);
+}
+
+/** Générations de réponse « sur mesure » (ton choisi) par site et par mois. */
+export const GOOGLE_REPLY_GENERATIONS_PER_MONTH = 60;
+
+/**
+ * Texte brut d'un avis ou d'une réponse renvoyés avec du HTML (Google insère
+ * des `<br>`) : sauts de ligne conservés, balises retirées, entités courantes
+ * décodées, espaces normalisés.
+ */
+export function htmlToPlainText(input: string | null | undefined): string {
+  if (!input) return "";
+  return input
+    .replace(/\r\n?/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export type GoogleReviewAnalysis = {
   sentiment: GoogleReviewSentiment;
   topics: GoogleReviewTopic[];

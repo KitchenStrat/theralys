@@ -4,7 +4,14 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, FieldHint, Segmented, Spinner } from "@theralys/ui";
-import { GOOGLE_REPLY_MAX, GOOGLE_REVIEW_TOPICS, type GoogleReviewSentiment } from "@theralys/shared";
+import {
+  GOOGLE_REPLY_MAX,
+  GOOGLE_REPLY_TONES,
+  GOOGLE_REVIEW_TOPICS,
+  htmlToPlainText,
+  type GoogleReplyTone,
+  type GoogleReviewSentiment,
+} from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import {
   REVIEW_FILTERS,
@@ -15,7 +22,7 @@ import {
   type ReviewFilter,
   type ReviewsSummary,
 } from "@/lib/google/reviews";
-import { analyzeReviews } from "./actions";
+import { analyzeReviews, generateReviewReply } from "./actions";
 import { Stars } from "./stars";
 
 /** Avis affichés par page (« Voir plus »). */
@@ -32,13 +39,20 @@ export function ReviewsTab({
   totalCount,
   summary,
   placeId,
+  replyRemaining,
+  replyTone,
 }: {
   reviews: GoogleReviewView[];
   /** Total en base (les `reviews` sont les plus récents) */
   totalCount: number;
   summary: ReviewsSummary;
   placeId: string | null;
+  /** Générations de réponse (ton choisi) restantes ce mois-ci */
+  replyRemaining: number;
+  /** Ton par défaut (voix du praticien) */
+  replyTone: GoogleReplyTone;
 }) {
+  const [remaining, setRemaining] = useState(replyRemaining);
   const router = useRouter();
   const [filter, setFilter] = useState<ReviewFilter>("tous");
   const [shown, setShown] = useState(PAGE_SIZE);
@@ -179,7 +193,13 @@ export function ReviewsTab({
               {/* Clé liée à l'analyse : la réponse proposée remplace le brouillon vide après « Analyser » */}
               {visible.map((review) => (
                 <li key={`${review.id}:${review.analysis?.generatedAt ?? ""}`}>
-                  <ReviewCard review={review} placeId={placeId} />
+                  <ReviewCard
+                    review={review}
+                    placeId={placeId}
+                    defaultTone={review.analysis?.voice.tone ?? replyTone}
+                    remaining={remaining}
+                    onGenerated={setRemaining}
+                  />
                 </li>
               ))}
             </ul>
@@ -214,7 +234,19 @@ function topicLabel(id: string): string {
   return GOOGLE_REVIEW_TOPICS.find((t) => t.id === id)?.label ?? id;
 }
 
-function ReviewCard({ review, placeId }: { review: GoogleReviewView; placeId: string | null }) {
+function ReviewCard({
+  review,
+  placeId,
+  defaultTone,
+  remaining,
+  onGenerated,
+}: {
+  review: GoogleReviewView;
+  placeId: string | null;
+  defaultTone: GoogleReplyTone;
+  remaining: number;
+  onGenerated: (remaining: number) => void;
+}) {
   const avatar = safeAvatar(review.authorPhotoUrl);
   const answered = hasOwnerReply(review);
   const googleUrl = reviewGoogleUrl(review.reviewUrl, placeId);
@@ -247,7 +279,7 @@ function ReviewCard({ review, placeId }: { review: GoogleReviewView; placeId: st
             ))}
             {answered ? <Badge tone="info">Répondu</Badge> : <Badge tone="warning">Sans réponse</Badge>}
           </div>
-          <p className="mt-2 whitespace-pre-line text-sm text-ink-700">{review.text}</p>
+          <p className="mt-2 whitespace-pre-line text-sm text-ink-700">{htmlToPlainText(review.text)}</p>
         </div>
       </div>
 
@@ -256,10 +288,19 @@ function ReviewCard({ review, placeId }: { review: GoogleReviewView; placeId: st
           <p className="font-medium text-ink-900">
             Votre réponse{review.ownerRepliedAt ? ` · ${formatDayFr(review.ownerRepliedAt, "day")}` : ""}
           </p>
-          <p className="mt-1 whitespace-pre-line text-ink-700">{review.ownerReply}</p>
+          <p className="mt-1 whitespace-pre-line text-ink-700">{htmlToPlainText(review.ownerReply)}</p>
         </div>
       ) : (
-        <ReplyEditor reviewId={review.id} suggested={review.analysis?.suggestedReply ?? ""} analyzed={review.analysis !== null} googleUrl={googleUrl} />
+        <ReplyEditor
+          reviewId={review.id}
+          suggested={review.analysis?.suggestedReply ?? ""}
+          analyzed={review.analysis !== null}
+          googleUrl={googleUrl}
+          defaultTone={defaultTone}
+          remaining={remaining}
+          onGenerated={onGenerated}
+          hasText={review.text.trim() !== ""}
+        />
       )}
     </Card>
   );
@@ -270,11 +311,46 @@ function ReviewCard({ review, placeId }: { review: GoogleReviewView; placeId: st
  * publie pas). Un avis analysé sans réponse proposée (réponse écartée par les
  * garde-fous) l'indique plutôt que d'inviter à relancer l'analyse.
  */
-function ReplyEditor({ reviewId, suggested, analyzed, googleUrl }: { reviewId: string; suggested: string; analyzed: boolean; googleUrl: string | null }) {
+function ReplyEditor({
+  reviewId,
+  suggested,
+  analyzed,
+  googleUrl,
+  defaultTone,
+  remaining,
+  onGenerated,
+  hasText,
+}: {
+  reviewId: string;
+  suggested: string;
+  analyzed: boolean;
+  googleUrl: string | null;
+  defaultTone: GoogleReplyTone;
+  remaining: number;
+  onGenerated: (remaining: number) => void;
+  /** Un avis « note seule » n'a rien à faire générer */
+  hasText: boolean;
+}) {
   const [text, setText] = useState(suggested);
+  const [tone, setTone] = useState<GoogleReplyTone>(defaultTone);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generating, startGenerating] = useTransition();
   const id = `reply-${reviewId}`;
+
+  function generate() {
+    setError(null);
+    setCopied(false);
+    startGenerating(async () => {
+      const result = await generateReviewReply({ reviewId, tone });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setText((result.reply ?? "").slice(0, GOOGLE_REPLY_MAX));
+      if (typeof result.remaining === "number") onGenerated(result.remaining);
+    });
+  }
 
   async function copy() {
     setError(null);
@@ -289,9 +365,48 @@ function ReplyEditor({ reviewId, suggested, analyzed, googleUrl }: { reviewId: s
 
   return (
     <div className="mt-4">
-      <label htmlFor={id} className="block text-sm font-medium text-ink-900">
-        Réponse proposée
-      </label>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <label htmlFor={id} className="block text-sm font-medium text-ink-900">
+          Réponse proposée
+        </label>
+        {hasText ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor={`${id}-tone`} className="text-xs text-ink-500">
+              Ton
+            </label>
+            <select
+              id={`${id}-tone`}
+              value={tone}
+              onChange={(e) => setTone(e.target.value as GoogleReplyTone)}
+              disabled={generating}
+              className="rounded-full border border-cream-300 bg-white px-3 py-1.5 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            >
+              {GOOGLE_REPLY_TONES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={generate}
+              disabled={generating || remaining <= 0}
+              title={remaining <= 0 ? "Quota mensuel de générations atteint" : undefined}
+            >
+              {generating ? (
+                <>
+                  <Spinner /> Rédaction…
+                </>
+              ) : text.trim() === "" ? (
+                "✦ Générer une réponse"
+              ) : (
+                "✦ Proposer une autre réponse"
+              )}
+            </Button>
+          </div>
+        ) : null}
+      </div>
       <textarea
         id={id}
         value={text}
@@ -311,6 +426,7 @@ function ReplyEditor({ reviewId, suggested, analyzed, googleUrl }: { reviewId: s
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <p id={`${id}-count`} className={clsx("text-xs", text.length >= GOOGLE_REPLY_MAX ? "text-danger-500" : "text-ink-500")}>
           {text.length} / {GOOGLE_REPLY_MAX} caractères
+          {hasText ? ` · ${remaining} génération${remaining > 1 ? "s" : ""} restante${remaining > 1 ? "s" : ""} ce mois-ci` : ""}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={copy} disabled={text.trim() === ""}>

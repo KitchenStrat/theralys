@@ -34,6 +34,7 @@ import {
   GOOGLE_MANUAL_SCANS_PER_MONTH,
   GOOGLE_MONTHLY_BUDGET_USD,
   GOOGLE_PROFILE_SYNC_INTERVAL_DAYS,
+  GOOGLE_REPLY_GENERATIONS_PER_MONTH,
   GOOGLE_REVIEWS_SYNC_DEPTH,
   GOOGLE_SCAN_MAX_MISSING_POINTS,
   GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS,
@@ -57,6 +58,8 @@ import {
   type GoogleMapsListing,
   type GoogleProfileSnapshot,
   type GoogleScanGrid,
+  type GoogleReplyTone,
+  type GoogleReviewAnalysis,
 } from "@theralys/shared";
 import {
   PLANS,
@@ -863,6 +866,80 @@ async function upsertReviews(
       ),
     ),
   );
+}
+
+/** Réponses générées « sur mesure » (ton choisi) ce mois-ci pour un site. */
+export async function monthlyReplyGenerations(db: Database, siteId: string, now = new Date()): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`count(*)`.mapWith(Number) })
+    .from(googleUsage)
+    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now)), eq(googleUsage.kind, "reply_ai")));
+  return row?.total ?? 0;
+}
+
+export type ReplyGenerationOutcome =
+  | { status: "done"; analysis: GoogleReviewAnalysis; remaining: number }
+  | { status: "skipped"; reason: "not_found" | "no_text" | "quota" }
+  | { status: "error"; message: string };
+
+/**
+ * Génère (ou regénère) la réponse proposée d'un avis avec le ton demandé :
+ * un appel IA pour cet avis seul, voix du praticien dont le ton est remplacé.
+ * Quota GOOGLE_REPLY_GENERATIONS_PER_MONTH par site (ligne `google_usage`
+ * kind "reply_ai", coût 0 : l'IA n'est pas un coût fournisseur mesuré ici).
+ * Une réponse écartée par les garde-fous est une erreur lisible, l'analyse
+ * précédente est conservée.
+ */
+export async function generateGoogleReviewReply(
+  siteId: string,
+  reviewId: string,
+  tone: GoogleReplyTone,
+  opts: { now?: Date } = {},
+): Promise<ReplyGenerationOutcome> {
+  const now = opts.now ?? new Date();
+  const db = getDb();
+  const review = await db.query.googleReviews.findFirst({
+    where: and(eq(googleReviews.id, reviewId), eq(googleReviews.siteId, siteId)),
+  });
+  if (!review) return { status: "skipped", reason: "not_found" };
+  if (review.text.trim() === "") return { status: "skipped", reason: "no_text" };
+  const used = await monthlyReplyGenerations(db, siteId, now);
+  if (used >= GOOGLE_REPLY_GENERATIONS_PER_MONTH) return { status: "skipped", reason: "quota" };
+
+  try {
+    const { brief } = await loadGoogleBrief(db, siteId, now);
+    const toned = { ...brief, voice: { ...brief.voice, tone } };
+    const analyzer = createGoogleReviewsAnalyzer();
+    const analyses = await analyzer.analyze({
+      brief: toned,
+      reviews: [
+        {
+          id: review.id,
+          authorName: review.authorName,
+          rating: review.rating,
+          text: review.text,
+          reviewedAt: review.reviewedAt,
+          ownerReply: review.ownerReply,
+        },
+      ],
+      now,
+    });
+    // L'appel IA a eu lieu : décompté même si la réponse est écartée
+    await db.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind: "reply_ai", costUsd: 0, requests: 1 });
+    const analysis = analyses[review.id];
+    if (!analysis || analysis.suggestedReply.trim() === "") {
+      return { status: "error", message: "La réponse générée ne respectait pas nos règles de prudence — essayez un autre ton." };
+    }
+    await db
+      .update(googleReviews)
+      .set({ analysis })
+      .where(and(eq(googleReviews.id, review.id), eq(googleReviews.siteId, siteId)));
+    return { status: "done", analysis, remaining: Math.max(0, GOOGLE_REPLY_GENERATIONS_PER_MONTH - used - 1) };
+  } catch (err) {
+    const message = errorMessage(err);
+    console.error(`[google-reviews] génération de réponse impossible (avis ${reviewId}) :`, message);
+    return { status: "error", message };
+  }
 }
 
 // ─── Ticks (appelés par runAllTicks, quotidien 6 h UTC) ──────────────────────

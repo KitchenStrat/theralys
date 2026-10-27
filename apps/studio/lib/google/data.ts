@@ -16,8 +16,8 @@ import {
   type Prospect,
   type Site,
 } from "@theralys/db";
-import { googleBudget, hasRealGoogleProvider, type GoogleBudget } from "@theralys/jobs";
-import { isMockPlaceId } from "@theralys/shared";
+import { googleBudget, hasRealGoogleProvider, monthlyReplyGenerations, type GoogleBudget } from "@theralys/jobs";
+import { GOOGLE_REPLY_GENERATIONS_PER_MONTH, isMockPlaceId, type GoogleReplyTone } from "@theralys/shared";
 import type {
   GoogleAudit,
   GoogleCompetitor,
@@ -31,6 +31,7 @@ import { isGridRadius } from "./keywords";
 import { getGoogleMonth, getGoogleRequestUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
 import { summarizeReviews, type GoogleReviewView, type ReviewsSummary } from "./reviews";
 import { RUNNING_STALE_MS, displayScanStatus, getScanUsage, type ScanUsage } from "./scans";
+import { getSocialSettings } from "../social/settings";
 
 /** Audits conservés dans l'historique des scores. */
 const HISTORY_LIMIT = 12;
@@ -92,6 +93,10 @@ export type GoogleProfileData = {
   /** Nombre total d'avis synchronisés (les `reviews` sont les REVIEWS_LIMIT plus récents) */
   reviewsTotal: number;
   reviewsSummary: ReviewsSummary;
+  /** Générations de réponse (ton choisi) restantes ce mois-ci */
+  replyRemaining: number;
+  /** Ton par défaut des réponses : celui de la voix du praticien */
+  replyTone: GoogleReplyTone;
   posts: GoogleMonthData;
   postUsage: GoogleRequestUsage;
 };
@@ -251,7 +256,7 @@ export async function getGoogleProfileData(
   calendar: { year: number; month: number },
   now = new Date(),
 ): Promise<GoogleProfileData> {
-  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage] = await Promise.all([
+  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage, replyUsed, settings] = await Promise.all([
     getLatestGoogleAudit(site.id),
     getScoreHistory(site.id),
     getGoogleKeywords(site.id, now),
@@ -261,6 +266,8 @@ export async function getGoogleProfileData(
     countGoogleReviews(site.id),
     getGoogleMonth(site.id, calendar.year, calendar.month, now),
     getGoogleRequestUsage(site.id, now),
+    monthlyReplyGenerations(getDb(), site.id, now),
+    getSocialSettings(site.id),
   ]);
   return {
     linked: linkedProfileOf(prospect, { realProviders: hasRealGoogleProvider() }),
@@ -272,6 +279,8 @@ export async function getGoogleProfileData(
     reviews,
     reviewsTotal,
     reviewsSummary: summarizeReviews(reviews),
+    replyRemaining: Math.max(0, GOOGLE_REPLY_GENERATIONS_PER_MONTH - replyUsed),
+    replyTone: settings.voice.tone,
     posts,
     postUsage,
   };

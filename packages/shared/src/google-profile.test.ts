@@ -10,6 +10,7 @@ import {
   estimateScanCostUsd,
   findOwnListing,
   gridPoints,
+  htmlToPlainText,
   isMockPlaceId,
   isDistinctiveTitle,
   rankTone,
@@ -222,5 +223,16 @@ describe("isMockPlaceId", () => {
     expect(isMockPlaceId("mock-jonathan-lespinasse-1")).toBe(true);
     expect(isMockPlaceId("ChIJN1t_tDeuEmsRUsoyG83frY4")).toBe(false);
     expect(isMockPlaceId(null)).toBe(false);
+  });
+});
+
+describe("htmlToPlainText", () => {
+  it("convertit les <br> de Google en sauts de ligne et retire les autres balises", () => {
+    expect(htmlToPlainText("Merci pour votre retour.<br>Je suis ravi.<br><br>À bientôt &amp; merci 🙏")).toBe(
+      "Merci pour votre retour.\nJe suis ravi.\n\nÀ bientôt & merci 🙏",
+    );
+    expect(htmlToPlainText("<p>Un</p><p>Deux</p>")).toBe("Un\n\nDeux");
+    expect(htmlToPlainText("Texte <b>gras</b> &quot;cité&quot;")).toBe('Texte gras "cité"');
+    expect(htmlToPlainText(null)).toBe("");
   });
 });

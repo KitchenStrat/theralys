@@ -35,7 +35,7 @@
  *   review_text, owner_answer, owner_timestamp, review_url).
  */
 
-import { GOOGLE_SCAN_MAX_MISSING_POINTS, type GeoPoint, type GoogleMapsListing, type GoogleProfileSnapshot } from "@theralys/shared";
+import { GOOGLE_SCAN_MAX_MISSING_POINTS, htmlToPlainText, type GeoPoint, type GoogleMapsListing, type GoogleProfileSnapshot } from "@theralys/shared";
 
 // ─── Résultats ───────────────────────────────────────────────────────────────
 
@@ -601,9 +601,10 @@ export function reviewFromItem(item: DfsReviewItem): GoogleReviewItem | null {
     authorName: textOrNull(item.profile_name) ?? "Client Google",
     authorPhotoUrl: httpUrlOrNull(item.profile_image_url, GOOGLE_URL_HOSTS),
     rating: Math.max(1, Math.min(5, Math.round(value))),
-    text: typeof item.review_text === "string" ? item.review_text.trim() : "",
+    // Google renvoie des <br> dans les textes : texte brut avec sauts de ligne
+    text: htmlToPlainText(typeof item.review_text === "string" ? item.review_text : ""),
     reviewedAt: parseDataForSeoDate(item.timestamp),
-    ownerReply: textOrNull(item.owner_answer),
+    ownerReply: textOrNull(htmlToPlainText(item.owner_answer)),
     ownerRepliedAt: parseDataForSeoDate(item.owner_timestamp),
     reviewUrl: httpUrlOrNull(item.review_url, GOOGLE_URL_HOSTS),
   };
