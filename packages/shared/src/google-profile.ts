@@ -805,6 +805,10 @@ export const GOOGLE_POST_SUMMARY_MAX = 1500;
 export const GOOGLE_POST_IMAGE = { w: 1200, h: 900 } as const;
 /** Jour de publication hebdomadaire des posts Google (ISO : mardi). */
 export const GOOGLE_POST_DAY = 2;
+/** Instructions libres pour régénérer un post (caractères). */
+export const GOOGLE_POST_INSTRUCTIONS_MAX = 500;
+/** Régénérations de posts (avec instructions) par site et par mois. */
+export const GOOGLE_POST_REGENERATIONS_PER_MONTH = 20;
 
 export type GooglePostContent = {
   pillar: SocialPillar;

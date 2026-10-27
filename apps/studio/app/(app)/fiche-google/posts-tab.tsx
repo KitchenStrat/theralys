@@ -43,6 +43,7 @@ export function PostsTab({
   siteName,
   todayIso,
   requestDates,
+  regenRemaining,
 }: {
   year: number;
   month: number;
@@ -53,6 +54,8 @@ export function PostsTab({
   siteName: string;
   todayIso: string;
   requestDates: { default: string; min: string; max: string };
+  /** Régénérations (instructions) restantes ce mois-ci */
+  regenRemaining: number;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
@@ -151,7 +154,7 @@ export function PostsTab({
         </div>
       </div>
 
-      <GooglePostModal item={selected} todayIso={todayIso} onClose={() => setSelectedId(null)} />
+      <GooglePostModal item={selected} todayIso={todayIso} regenRemaining={regenRemaining} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

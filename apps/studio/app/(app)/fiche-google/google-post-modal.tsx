@@ -4,10 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, FieldHint, Input, Modal, Spinner } from "@theralys/ui";
-import { GOOGLE_POST_CTAS, GOOGLE_POST_IMAGE } from "@theralys/shared";
+import { GOOGLE_POST_CTAS, GOOGLE_POST_IMAGE, GOOGLE_POST_INSTRUCTIONS_MAX } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import type { GoogleCalendarItem } from "@/lib/google/posts";
-import { archiveGooglePost, markGooglePostPublished, rescheduleGooglePost } from "./actions";
+import { archiveGooglePost, markGooglePostPublished, regenerateGooglePost, rescheduleGooglePost } from "./actions";
 
 /** Page de gestion de la fiche (publication d'un post) : lien fixe, jamais une URL venue des données. */
 const GOOGLE_BUSINESS_URL = "https://business.google.com/";
@@ -27,15 +27,59 @@ function safeHref(url: string | null): string | null {
   }
 }
 
-export function GooglePostModal({ item, todayIso, onClose }: { item: GoogleCalendarItem | null; todayIso: string; onClose: () => void }) {
+export function GooglePostModal({
+  item,
+  todayIso,
+  regenRemaining,
+  onClose,
+}: {
+  item: GoogleCalendarItem | null;
+  todayIso: string;
+  regenRemaining: number;
+  onClose: () => void;
+}) {
   if (!item) return null;
   // L'état local (copies, date…) repart de zéro à chaque post
-  return <PostModalBody key={item.id} item={item} todayIso={todayIso} onClose={onClose} />;
+  return <PostModalBody key={item.id} item={item} todayIso={todayIso} regenRemaining={regenRemaining} onClose={onClose} />;
 }
 
-function PostModalBody({ item, todayIso, onClose }: { item: GoogleCalendarItem; todayIso: string; onClose: () => void }) {
+function PostModalBody({
+  item,
+  todayIso,
+  regenRemaining,
+  onClose,
+}: {
+  item: GoogleCalendarItem;
+  todayIso: string;
+  regenRemaining: number;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [retry, setRetry] = useState(0);
+  const [instructions, setInstructions] = useState("");
+  const [regenerating, startRegenerating] = useTransition();
+  const [regenMessage, setRegenMessage] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState(regenRemaining);
+
+  function regenerate() {
+    setError(null);
+    setRegenMessage(null);
+    startRegenerating(async () => {
+      const result = await regenerateGooglePost({ postId: item.id, instructions });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (typeof result.remaining === "number") setRemaining(result.remaining);
+      setInstructions("");
+      setLoadedUrl(null);
+      setErrorUrl(null);
+      // Nouveau visuel : l'URL d'aperçu change pour forcer le rechargement
+      setRetry((r) => r + 1);
+      setRegenMessage("Post régénéré : nouveau texte et nouveau visuel.");
+      router.refresh();
+    });
+  }
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [errorUrl, setErrorUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<"text" | "alt" | null>(null);
@@ -166,6 +210,51 @@ function PostModalBody({ item, todayIso, onClose }: { item: GoogleCalendarItem; 
             <Button className="mt-2 w-full" variant="secondary" onClick={() => copy(item.summary, "text")}>
               {copied === "text" ? "✓ Texte copié !" : "Copier le texte"}
             </Button>
+            {!published ? (
+              <div className="mt-4 rounded-2xl border border-cream-200 bg-cream-50 p-3">
+                <label htmlFor={`instructions-${item.id}`} className="block text-sm font-semibold text-ink-900">
+                  Instructions pour régénérer ce post
+                </label>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  Facultatif : ce que vous voulez changer (angle, ton, longueur, élément à mentionner). Le sujet, la date et la couleur sont conservés.
+                </p>
+                <textarea
+                  id={`instructions-${item.id}`}
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value.slice(0, GOOGLE_POST_INSTRUCTIONS_MAX))}
+                  maxLength={GOOGLE_POST_INSTRUCTIONS_MAX}
+                  rows={3}
+                  disabled={regenerating}
+                  placeholder="Ex. : mentionnez la respiration holotropique, un ton plus direct, texte plus court."
+                  className="mt-2 w-full rounded-xl border border-cream-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                />
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-ink-500">
+                    {instructions.length} / {GOOGLE_POST_INSTRUCTIONS_MAX} · {remaining} régénération{remaining > 1 ? "s" : ""} restante{remaining > 1 ? "s" : ""} ce mois-ci
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={regenerate}
+                    disabled={regenerating || pending || remaining <= 0}
+                    title={remaining <= 0 ? "Quota mensuel de régénérations atteint" : undefined}
+                  >
+                    {regenerating ? (
+                      <>
+                        <Spinner /> Rédaction…
+                      </>
+                    ) : (
+                      "✦ Régénérer"
+                    )}
+                  </Button>
+                </div>
+                {regenMessage ? (
+                  <p className="mt-2 text-sm text-success-500" role="status">
+                    {regenMessage}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <details className="mt-2 text-sm">
               <summary className="cursor-pointer text-ink-700">Texte alternatif du visuel</summary>
               <p className="mt-1 rounded-xl bg-cream-50 px-3 py-2 text-ink-700">{item.altText}</p>

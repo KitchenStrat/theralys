@@ -28,7 +28,7 @@ import type {
   GoogleScanSummary,
 } from "@theralys/shared";
 import { isGridRadius } from "./keywords";
-import { getGoogleMonth, getGoogleRequestUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
+import { getGoogleMonth, getGoogleRequestUsage, getRegenerationUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
 import { summarizeReviews, type GoogleReviewView, type ReviewsSummary } from "./reviews";
 import { RUNNING_STALE_MS, displayScanStatus, getScanUsage, type ScanUsage } from "./scans";
 import { getSocialSettings } from "../social/settings";
@@ -99,6 +99,8 @@ export type GoogleProfileData = {
   replyTone: GoogleReplyTone;
   posts: GoogleMonthData;
   postUsage: GoogleRequestUsage;
+  /** Régénérations de posts (instructions) restantes ce mois-ci */
+  regenRemaining: number;
 };
 
 /** Fiche reliée (prospect) : null tant que `googlePlaceId` est vide. */
@@ -256,7 +258,7 @@ export async function getGoogleProfileData(
   calendar: { year: number; month: number },
   now = new Date(),
 ): Promise<GoogleProfileData> {
-  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage, replyUsed, settings] = await Promise.all([
+  const [latestAudit, history, keywords, scanUsage, budget, reviews, reviewsTotal, posts, postUsage, replyUsed, settings, regen] = await Promise.all([
     getLatestGoogleAudit(site.id),
     getScoreHistory(site.id),
     getGoogleKeywords(site.id, now),
@@ -268,6 +270,7 @@ export async function getGoogleProfileData(
     getGoogleRequestUsage(site.id, now),
     monthlyReplyGenerations(getDb(), site.id, now),
     getSocialSettings(site.id),
+    getRegenerationUsage(site.id, now),
   ]);
   return {
     linked: linkedProfileOf(prospect, { realProviders: hasRealGoogleProvider() }),
@@ -281,6 +284,7 @@ export async function getGoogleProfileData(
     reviewsSummary: summarizeReviews(reviews),
     replyRemaining: Math.max(0, GOOGLE_REPLY_GENERATIONS_PER_MONTH - replyUsed),
     replyTone: settings.voice.tone,
+    regenRemaining: regen.remaining,
     posts,
     postUsage,
   };

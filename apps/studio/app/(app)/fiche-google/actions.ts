@@ -12,6 +12,7 @@ import {
   hasGoogleProfile,
   type NewGooglePost,
   type PlanId,
+  googleUsage,
 } from "@theralys/db";
 import { checkEthicalCompliance, createGooglePostGenerator, FORBIDDEN_PATTERNS } from "@theralys/ai";
 import {
@@ -34,6 +35,10 @@ import {
   isMockPlaceId,
   isGoogleReplyTone,
   GOOGLE_REPLY_GENERATIONS_PER_MONTH,
+  GOOGLE_POST_INSTRUCTIONS_MAX,
+  GOOGLE_POST_REGENERATIONS_PER_MONTH,
+  cleanSocialInstructions,
+  usageMonthKey,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
@@ -45,6 +50,7 @@ import {
   getGoogleRequestUsage,
   loadGoogleMonthState,
   recentGoogleTopics,
+  getRegenerationUsage,
 } from "@/lib/google/posts";
 import { getScanUsage } from "@/lib/google/scans";
 import { loadSocialBrief } from "@/lib/social/brief";
@@ -633,6 +639,110 @@ export async function requestGooglePost(input: unknown): Promise<{ error?: strin
   }
 }
 
+// ─── Régénération d'un post avec instructions ────────────────────────────────
+
+const regenerateSchema = z.object({
+  postId: z.string().uuid(),
+  instructions: z.string().max(GOOGLE_POST_INSTRUCTIONS_MAX * 2).default(""),
+});
+
+/** Régénérations en cours dans ce processus (par post) : second clic refusé sans appel IA. */
+const regenerationsInFlight = new Set<string>();
+
+/** Rendus Blob d'un post (avant remplacement ou archivage), best-effort. */
+async function deleteRenders(assets: { renders: Record<string, { url?: string | null }> }): Promise<void> {
+  const urls = Object.values(assets.renders)
+    .map((render) => render.url)
+    .filter((url): url is string => typeof url === "string" && url !== "");
+  if (urls.length === 0 || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  try {
+    const { del } = await import("@vercel/blob");
+    await del(urls);
+  } catch (err) {
+    console.warn("[google] suppression des rendus Blob impossible :", err);
+  }
+}
+
+/**
+ * « Régénérer » un post du mois avec des instructions libres : un appel IA
+ * (même sujet, mêmes date et couleur), le texte et le visuel sont remplacés,
+ * les anciens rendus supprimés. Quota GOOGLE_POST_REGENERATIONS_PER_MONTH
+ * (lignes `google_usage` kind "post_regen"). Un post publié ne se régénère pas.
+ */
+export async function regenerateGooglePost(input: unknown): Promise<{ error?: string; remaining?: number }> {
+  const session = await requireClient();
+  const parsed = regenerateSchema.safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide." };
+  const site = await getSite(session.siteId);
+  if (!googleAccess(site)) return { error: NOT_INCLUDED };
+  const post = await activePost(session.siteId, parsed.data.postId);
+  if (!post) return { error: NOT_FOUND };
+  if (post.status === "published") return { error: "Ce post est déjà publié : annulez la publication pour le régénérer." };
+
+  const instructions = cleanSocialInstructions(parsed.data.instructions).slice(0, GOOGLE_POST_INSTRUCTIONS_MAX);
+  if (instructions !== "") {
+    const compliance = checkEthicalCompliance(instructions);
+    if (!compliance.ok) {
+      const word = forbiddenWord(instructions) ?? compliance.violations[0]?.rule ?? "";
+      return {
+        error: `Vos instructions contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`,
+      };
+    }
+  }
+  if (regenerationsInFlight.has(post.id)) return { error: "Régénération déjà en cours, patientez." };
+  regenerationsInFlight.add(post.id);
+  const now = new Date();
+  const started = Date.now();
+  const db = getDb();
+  const generator = createGooglePostGenerator();
+  try {
+    const usage = await getRegenerationUsage(site.id, now);
+    if (usage.remaining === 0) {
+      return { error: `Vous avez utilisé vos ${GOOGLE_POST_REGENERATIONS_PER_MONTH} régénérations du mois.` };
+    }
+    const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
+      loadSocialBrief(site.id),
+      recentGoogleTopics(site.id, now),
+    ]);
+    // Les instructions du post s'ajoutent aux consignes permanentes du praticien (même bloc du prompt)
+    const merged = cleanSocialInstructions([brief.instructions, instructions].filter((t) => t && t !== "").join("\n"));
+    const briefWithInstructions = merged === "" ? brief : { ...brief, instructions: merged };
+    const regenerated = await generator.generateRequest(
+      briefWithInstructions,
+      {
+        topic: post.request ?? post.topic,
+        accentHex: post.accentColor,
+        scheduledFor: post.scheduledFor,
+        recentTopics: recentTopics.filter((t) => t !== post.topic),
+        photosById,
+        refsById,
+      },
+      { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
+    );
+    await db.insert(googleUsage).values({ siteId: site.id, month: usageMonthKey(now), kind: "post_regen", costUsd: 0, requests: 1 });
+    await db
+      .update(googlePosts)
+      .set({
+        topic: regenerated.topic,
+        template: regenerated.template,
+        content: regenerated.content,
+        assets: EMPTY_SOCIAL_ASSETS,
+        downloadedAt: null,
+        updatedAt: now,
+      })
+      .where(and(eq(googlePosts.id, post.id), eq(googlePosts.siteId, site.id)));
+    await deleteRenders(post.assets);
+    console.info("[google] post régénéré", { siteId: site.id, postId: post.id, mode: generator.mode, withInstructions: instructions !== "", ms: Date.now() - started });
+    revalidatePath(PATH);
+    return { remaining: usage.remaining - 1 };
+  } catch (err) {
+    console.error("[google] régénération échouée", { siteId: site.id, postId: post.id, mode: generator.mode, ms: Date.now() - started, err });
+    return { error: "La régénération a échoué — réessayez dans un instant. Votre quota n'a pas été décompté." };
+  } finally {
+    regenerationsInFlight.delete(post.id);
+  }
+}
+
 // ─── Actions sur un post ─────────────────────────────────────────────────────
 
 /** Post du site de la session, non archivé — sinon null. */
@@ -690,17 +800,7 @@ export async function archiveGooglePost(postId: string): Promise<{ error?: strin
     .set({ status: "archived", assets: EMPTY_SOCIAL_ASSETS, updatedAt: new Date() })
     .where(eq(googlePosts.id, post.id));
 
-  const urls = Object.values(post.assets.renders)
-    .map((render) => render.url)
-    .filter((url): url is string => typeof url === "string" && url !== "");
-  if (urls.length > 0 && process.env.BLOB_READ_WRITE_TOKEN) {
-    try {
-      const { del } = await import("@vercel/blob");
-      await del(urls);
-    } catch (err) {
-      console.warn("[google] suppression des rendus Blob impossible :", err);
-    }
-  }
+  await deleteRenders(post.assets);
   revalidatePath(PATH);
   return {};
 }

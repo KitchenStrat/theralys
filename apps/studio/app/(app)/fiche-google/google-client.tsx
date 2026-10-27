@@ -134,6 +134,7 @@ export function GoogleClient({
             siteName={siteName}
             todayIso={todayIso}
             requestDates={requestDates}
+            regenRemaining={data.regenRemaining}
           />
         ) : null}
       </section>

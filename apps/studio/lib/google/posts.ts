@@ -7,13 +7,15 @@
  */
 
 import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
-import { getDb, googlePosts, sites, type GooglePost } from "@theralys/db";
+import { getDb, googlePosts, googleUsage, sites, type GooglePost } from "@theralys/db";
 import {
   GOOGLE_POST_DAY,
+  GOOGLE_POST_REGENERATIONS_PER_MONTH,
   GOOGLE_POST_REQUESTS_PER_MONTH,
   isoDay,
   monthRange,
   socialSlotsForMonth,
+  usageMonthKey,
   type GooglePostCta,
   type SocialPillar,
   type SocialSlot,
@@ -173,6 +175,18 @@ export async function getGoogleRequestUsage(siteId: string, now: Date, db: DbExe
     .where(and(eq(googlePosts.siteId, siteId), eq(googlePosts.source, "request"), gte(googlePosts.createdAt, monthStart)));
   const used = row?.used ?? 0;
   return { used, remaining: Math.max(0, GOOGLE_POST_REQUESTS_PER_MONTH - used), resetsOn: isoDay(nextMonthStart) };
+}
+
+export type RegenerationUsage = { used: number; remaining: number };
+
+/** Régénérations de posts (instructions) du mois civil UTC : lignes `google_usage` de kind "post_regen". */
+export async function getRegenerationUsage(siteId: string, now: Date, db: DbExecutor = getDb()): Promise<RegenerationUsage> {
+  const [row] = await db
+    .select({ used: sql<number>`count(*)`.mapWith(Number) })
+    .from(googleUsage)
+    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now)), eq(googleUsage.kind, "post_regen")));
+  const used = row?.used ?? 0;
+  return { used, remaining: Math.max(0, GOOGLE_POST_REGENERATIONS_PER_MONTH - used) };
 }
 
 const RECENT_TOPICS_DAYS = 60;
