@@ -11,6 +11,7 @@ import {
   buildPlannerCsv,
   EXPORT_RENDER_MAX,
   exportFilename,
+  plannerExportable,
   plannerRows,
   socialPostDeepLink,
   STUDIO_DEFAULT_BASE_URL,
@@ -19,7 +20,7 @@ import {
 import { contentDisposition } from "@/lib/social/render/bundle";
 import { assetSlot, renderSlideCached } from "@/lib/social/render/cache";
 import { loadRenderContext, loadReviewRating } from "@/lib/social/render/context";
-import { monthLabelFr } from "@/lib/calendar";
+import { monthLabelFr, parisDay } from "@/lib/calendar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,35 +32,30 @@ const querySchema = z.object({
   format: z.enum(["csv", "ics"]),
 });
 
-/** En-tête HTTP : ASCII seulement (accents retirés, le reste remplacé) — l'encodage des octets non ASCII y est ambigu. */
-function headerSafe(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^\x20-\x7e]/g, "?");
-}
+/** Exports en cours dans ce processus (site:mois) : un second clic pendant les rendus est refusé (429). */
+const exportsInFlight = new Set<string>();
 
-function file(body: string, contentType: string, filename: string, note?: string): NextResponse {
+function file(body: string, contentType: string, filename: string): NextResponse {
   return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": contentType,
       "Content-Disposition": contentDisposition(filename),
       "Cache-Control": "private, no-store",
-      ...(note ? { "X-Harmony-Export-Note": headerSafe(note) } : {}),
     },
   });
 }
 
 /**
  * GET /api/social/export?mois=YYYY-MM&format=csv|ics
- * Contenus non archivés du mois, pour un planificateur (CSV : une ligne par
- * contenu et par réseau, légende du réseau, heure 09:00 Europe/Paris, URL
- * publique du visuel carré rendu sur Blob) ou un agenda (ICS : un événement
- * par contenu, lien profond vers le studio). Les URLs Blob ne sortent du
- * studio que par cet export : un planificateur doit pouvoir lire le visuel
- * sans session. Sans stockage Blob, `image_url` reste vide et l'en-tête
- * `X-Harmony-Export-Note` l'indique.
+ * Contenus non archivés du mois, pour un planificateur (CSV : les contenus à
+ * venir et non publiés seulement, une ligne par contenu et par réseau,
+ * légende du réseau, heure 09:00 Europe/Paris, URL publique du visuel carré
+ * rendu sur Blob) ou un agenda (ICS : tout le mois, un événement par
+ * contenu, lien profond vers le studio). Les URLs Blob ne sortent du studio
+ * que par cet export : un planificateur doit pouvoir lire le visuel sans
+ * session. Sans stockage Blob ou si un rendu échoue, `image_url` reste vide
+ * (la page l'indique sous les boutons d'export).
  */
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -72,6 +68,17 @@ export async function GET(request: NextRequest) {
   const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!parsed.success) return NextResponse.json({ error: "Paramètres invalides." }, { status: 400 });
   const { mois, format } = parsed.data;
+  const key = `${site.id}:${mois}`;
+  if (exportsInFlight.has(key)) return NextResponse.json({ error: "Export déjà en cours, patientez." }, { status: 429 });
+  exportsInFlight.add(key);
+  try {
+    return await exportMonth(site, mois, format);
+  } finally {
+    exportsInFlight.delete(key);
+  }
+}
+
+async function exportMonth(site: Awaited<ReturnType<typeof getSite>>, mois: string, format: "csv" | "ics"): Promise<NextResponse> {
   const [year, month] = mois.split("-").map(Number) as [number, number];
   const { startIso, endIso } = monthRange(year, month);
 
@@ -105,15 +112,13 @@ export async function GET(request: NextRequest) {
     return file(ics, "text/calendar; charset=utf-8", exportFilename(mois, "ics"));
   }
 
-  // CSV : visuels rendus (ou relus) sur Blob pour les EXPORT_RENDER_MAX premiers contenus
-  const notes: string[] = [];
+  // CSV : contenus à venir, non publiés ; visuels rendus (ou relus) sur Blob pour les EXPORT_RENDER_MAX premiers
+  const exportable = plannerExportable(posts, parisDay(new Date()));
   const imageUrls = new Map<string, string>();
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    notes.push("Visuels non exportés : le stockage des rendus n'est pas configuré (colonne image_url vide).");
-  } else if (posts.length > 0) {
+  let degraded = 0;
+  if (process.env.BLOB_READ_WRITE_TOKEN && exportable.length > 0) {
     const ctx = await loadRenderContext(site.id);
-    let degraded = 0;
-    for (const post of posts.slice(0, EXPORT_RENDER_MAX)) {
+    for (const post of exportable.slice(0, EXPORT_RENDER_MAX)) {
       const allowed = sizesFor(post.format as SocialFormat, post.template as SocialTemplate);
       const size: SocialSize | undefined = allowed.includes("square") ? "square" : allowed[0];
       if (!size) continue;
@@ -133,13 +138,9 @@ export async function GET(request: NextRequest) {
         degraded += 1;
       }
     }
-    if (degraded > 0) notes.push(`${degraded} visuel(s) non exporté(s) : rendu indisponible.`);
-    if (posts.length > EXPORT_RENDER_MAX) {
-      notes.push(`Visuels exportés pour les ${EXPORT_RENDER_MAX} premiers contenus seulement.`);
-    }
   }
 
-  const rows: ExportablePost[] = posts.map((post) => ({
+  const rows: ExportablePost[] = exportable.map((post) => ({
     id: post.id,
     scheduledFor: post.scheduledFor,
     topic: post.topic,
@@ -152,9 +153,12 @@ export async function GET(request: NextRequest) {
     siteId: site.id,
     month: mois,
     format,
-    posts: posts.length,
+    posts: exportable.length,
+    skipped: posts.length - exportable.length,
     images: imageUrls.size,
+    degraded,
+    blob: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     ms: Date.now() - started,
   });
-  return file(csv, "text/csv; charset=utf-8", exportFilename(mois, "csv"), notes.length > 0 ? notes.join(" ") : undefined);
+  return file(csv, "text/csv; charset=utf-8", exportFilename(mois, "csv"));
 }

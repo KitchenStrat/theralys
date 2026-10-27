@@ -66,6 +66,12 @@ export function PostsTab({
     const fromUrl = searchParams.get("post");
     return fromUrl && POST_ID_RE.test(fromUrl) ? fromUrl.toLowerCase() : null;
   });
+  // Lien profond (e-mail, agenda) vers un post absent du mois affiché : un message, pas une erreur, décidé au chargement
+  const [missingDeepLink, setMissingDeepLink] = useState(() => {
+    const fromUrl = searchParams.get("post");
+    const wanted = fromUrl && POST_ID_RE.test(fromUrl) ? fromUrl.toLowerCase() : null;
+    return wanted !== null && !items.some((i) => i.id === wanted);
+  });
 
   const monthParam = `${year}-${String(month).padStart(2, "0")}`;
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
@@ -101,6 +107,18 @@ export function PostsTab({
         </div>
         <QuotaBadge usage={usage} />
       </div>
+
+      {missingDeepLink ? (
+        <div
+          role="status"
+          className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-100 px-4 py-3 text-sm text-ink-700"
+        >
+          <span>Ce contenu n&apos;est plus dans ce mois (reporté ou retiré).</span>
+          <Button variant="ghost" size="sm" onClick={() => setMissingDeepLink(false)} aria-label="Fermer ce message">
+            Fermer
+          </Button>
+        </div>
+      ) : null}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <MonthCard

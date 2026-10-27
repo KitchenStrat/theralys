@@ -12,6 +12,15 @@ describe("resolveTrackSource", () => {
     expect(resolveTrackSource({ type: "pageview", referrer: "https://annuaire.exemple.fr/p" }, OWN)).toBe("other");
   });
 
+  it("referrer d'une application Android : réseau de l'application, jamais « le site lui-même »", () => {
+    expect(resolveTrackSource({ type: "pageview", referrer: "android-app://com.instagram.android" }, OWN)).toBe("instagram");
+    expect(resolveTrackSource({ type: "pageview", referrer: "android-app://com.facebook.orca/" }, OWN)).toBe("facebook");
+    expect(resolveTrackSource({ type: "pageview", referrer: "android-app://com.linkedin.android" }, OWN)).toBe("linkedin");
+    expect(resolveTrackSource({ type: "pageview", referrer: "android-app://com.google.android.gm" }, OWN)).toBe("google");
+    expect(resolveTrackSource({ type: "pageview", referrer: "android-app://com.autre.app" }, OWN)).toBe("other");
+    expect(isOwnHost("android-app://com.instagram.android", OWN)).toBe(false);
+  });
+
   it("pages suivantes (sans referrer ni src) et clics RDV : non renseigné", () => {
     expect(resolveTrackSource({ type: "pageview" }, OWN)).toBeNull();
     expect(resolveTrackSource({ type: "rdv_click", referrer: "https://l.instagram.com/", src: "ig" }, OWN)).toBeNull();

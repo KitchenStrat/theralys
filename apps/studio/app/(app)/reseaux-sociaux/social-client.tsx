@@ -70,6 +70,10 @@ export function SocialClient({
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Contenu créé par la barre, ou désigné par `?post=` : la modale s'ouvre dès qu'il figure dans `items`
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(initialPostId);
+  // Lien profond (e-mail, agenda) vers un contenu absent du mois affiché : un message, pas une erreur, décidé au chargement
+  const [missingDeepLink, setMissingDeepLink] = useState(
+    () => initialPostId !== null && !items.some((i) => i.id === initialPostId),
+  );
 
   const monthParam = `${year}-${String(month).padStart(2, "0")}`;
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
@@ -131,6 +135,10 @@ export function SocialClient({
         </div>
         <QuotaBadge usage={usage} />
       </div>
+
+      {missingDeepLink ? (
+        <MissingDeepLinkNotice onClose={() => setMissingDeepLink(false)} />
+      ) : null}
 
       <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <ExportToolbar monthParam={monthParam} count={items.length} />
@@ -244,9 +252,28 @@ export function SocialClient({
 }
 
 /**
- * Export du mois vers un planificateur (CSV : une ligne par contenu et par
- * réseau) ou un agenda (ICS : un événement par contenu). Rien à exporter
- * sans contenu.
+ * « Ce contenu n'est plus dans ce mois » : le lien profond (`?post=`) d'un
+ * e-mail ou d'un agenda vise un contenu reporté ou retiré. Affiché une fois,
+ * refermable.
+ */
+function MissingDeepLinkNotice({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      role="status"
+      className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-100 px-4 py-3 text-sm text-ink-700"
+    >
+      <span>Ce contenu n&apos;est plus dans ce mois (reporté ou retiré).</span>
+      <Button variant="ghost" size="sm" onClick={onClose} aria-label="Fermer ce message">
+        Fermer
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Export du mois vers un planificateur (CSV : une ligne par contenu à venir,
+ * non publié, et par réseau) ou un agenda (ICS : un événement par contenu du
+ * mois). Rien à exporter sans contenu.
  */
 function ExportToolbar({ monthParam, count }: { monthParam: string; count: number }) {
   if (count === 0) return null;
@@ -270,8 +297,13 @@ function ExportToolbar({ monthParam, count }: { monthParam: string; count: numbe
         </a>
       </div>
       <p className="mt-1.5 text-xs text-ink-500">
-        Importez le CSV dans Metricool, Buffer ou Later : une ligne par contenu et par réseau, avec la légende du
-        réseau. L&apos;ICS ajoute chaque contenu à votre agenda, avec un lien vers cette page.
+        Importez le CSV dans Metricool, Buffer ou Later : les contenus à venir, non publiés, une ligne par contenu et
+        par réseau, avec la légende du réseau. À l&apos;import, faites correspondre les colonnes date, heure, texte,
+        image_url et réseau à celles de votre planificateur. L&apos;ICS ajoute chaque contenu du mois à votre agenda,
+        avec un lien vers cette page.
+      </p>
+      <p className="mt-1 text-xs text-ink-500">
+        image_url : lien public du visuel (préparé à l&apos;export) ; vide si le visuel n&apos;a pas pu être préparé.
       </p>
     </div>
   );

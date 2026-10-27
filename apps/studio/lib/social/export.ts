@@ -45,9 +45,24 @@ export type PlannerRow = {
   network: string;
 };
 
-/** Champ CSV : toujours entre guillemets, guillemets internes doublés (RFC 4180). */
+/**
+ * Champ CSV : toujours entre guillemets, guillemets internes doublés
+ * (RFC 4180). Un champ qui commence par `=`, `+`, `-`, `@`, une tabulation ou
+ * un retour chariot serait interprété comme une formule par un tableur : il
+ * est préfixé d'une apostrophe.
+ */
 export function csvField(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Contenus à envoyer au planificateur : ceux qui restent à publier (statut
+ * autre que `published`) et datés d'aujourd'hui (`today`, jour civil
+ * Europe/Paris) ou plus tard. L'agenda ICS, lui, reçoit tout le mois.
+ */
+export function plannerExportable<T extends { status: string; scheduledFor: string }>(posts: readonly T[], today: string): T[] {
+  return posts.filter((post) => post.status !== "published" && post.scheduledFor >= today);
 }
 
 /**

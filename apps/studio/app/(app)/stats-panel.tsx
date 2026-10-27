@@ -93,13 +93,21 @@ export function StatsPanel({ firstName, period, stats, sources, socialAccess }: 
   );
 }
 
-/** Sources dont les visites arrivent par le lien de bio tracé (`?src=`) — mention sous le libellé. */
-const BIO_LINK_SOURCES: ReadonlySet<AnalyticsSource> = new Set<AnalyticsSource>(["instagram", "facebook"]);
+/**
+ * Précision affichée à côté du libellé d'une source : Instagram arrive par le
+ * lien de bio tracé (`?src=ig`) ou par l'application (referrer `android-app://`).
+ */
+const SOURCE_DETAIL: Partial<Record<AnalyticsSource, string>> = { instagram: "lien de bio ou application" };
+
+function sourceLabel(source: AnalyticsSource): string {
+  const detail = SOURCE_DETAIL[source];
+  return detail ? `${ANALYTICS_SOURCE_LABELS[source]} (${detail})` : ANALYTICS_SOURCE_LABELS[source];
+}
 
 /**
  * « Provenance des visites » : barres simples (divs), une ligne par source
  * mesurée, part en %. État vide pédagogique : la mesure commence avec le lien
- * de bio tracé (Réseaux sociaux → Paramétrage) et les referrers.
+ * de bio tracé (Réseaux sociaux → Votre lien de bio) et les referrers.
  */
 function SourcesBlock({
   sources,
@@ -129,12 +137,7 @@ function SourcesBlock({
           {sources.rows.map((row) => (
             <li key={row.source}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="text-ink-900">
-                  {ANALYTICS_SOURCE_LABELS[row.source]}
-                  {BIO_LINK_SOURCES.has(row.source) ? (
-                    <span className="ml-1.5 text-xs text-ink-500">depuis le lien de votre bio</span>
-                  ) : null}
-                </span>
+                <span className="text-ink-900">{sourceLabel(row.source)}</span>
                 <span className="whitespace-nowrap text-ink-700">
                   <span className="font-semibold text-ink-900">{row.share} %</span>
                   <span className="ml-1.5 text-xs text-ink-500">
@@ -148,7 +151,7 @@ function SourcesBlock({
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={row.share}
-                aria-label={`${ANALYTICS_SOURCE_LABELS[row.source]} : ${row.share} %`}
+                aria-label={`${sourceLabel(row.source)} : ${row.share} %`}
               >
                 <div className="h-full rounded-full bg-primary-400" style={{ width: `${Math.max(2, row.share)}%` }} />
               </div>
@@ -166,7 +169,7 @@ function SourcesBlock({
               Pour savoir ce que vos réseaux vous apportent, mettez votre lien de bio tracé dans
               Instagram et Facebook :{" "}
               <Link href="/reseaux-sociaux" className="font-medium text-primary-700 hover:underline">
-                Réseaux sociaux → Paramétrage
+                Réseaux sociaux → Votre lien de bio
               </Link>
               .
             </p>
