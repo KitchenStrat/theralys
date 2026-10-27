@@ -16,7 +16,10 @@ export const dynamic = "force-dynamic";
 // Préparation du mois et relevés de visibilité en mode live : jusqu'à quelques minutes
 export const maxDuration = 300;
 
-type Props = { searchParams: Promise<{ onglet?: string; mois?: string }> };
+type Props = { searchParams: Promise<{ onglet?: string; mois?: string; post?: string }> };
+
+/** `?post=<id>` (lien profond vers un post) : l'onglet « Posts Google » s'impose, `PostsTab` ouvre la modale. */
+const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function GoogleProfilePage({ searchParams }: Props) {
   const session = await requireClient();
@@ -33,10 +36,11 @@ export default async function GoogleProfilePage({ searchParams }: Props) {
     );
   }
 
-  const { onglet, mois } = await searchParams;
+  const { onglet, mois, post } = await searchParams;
   const now = new Date();
   const calendar = parseMonthParam(mois, now);
-  const tab: GoogleTab = isGoogleTab(onglet) ? onglet : "audit";
+  const deepLinkedPost = typeof post === "string" && POST_ID_RE.test(post);
+  const tab: GoogleTab = deepLinkedPost ? "posts" : isGoogleTab(onglet) ? onglet : "audit";
 
   let data: GoogleProfileData;
   const prospect = await getProspect(site);

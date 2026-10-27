@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
@@ -15,6 +15,8 @@ import { tabHref } from "./tabs";
 
 const CHIP_MAX = 3;
 const LIST_SCROLL_FROM = 8;
+/** `?post=<id>` : lien profond vers un post du mois affiché (modale ouverte au chargement). */
+const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WAITING_MESSAGES = [
   "Lecture de votre site…",
   "Rédaction des posts…",
@@ -57,8 +59,13 @@ export function PostsTab({
   /** Régénérations (instructions) restantes ce mois-ci */
   regenRemaining: number;
 }) {
+  const searchParams = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  // Post créé par la barre, ou désigné par `?post=` : la modale s'ouvre dès qu'il figure dans `items`
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(() => {
+    const fromUrl = searchParams.get("post");
+    return fromUrl && POST_ID_RE.test(fromUrl) ? fromUrl.toLowerCase() : null;
+  });
 
   const monthParam = `${year}-${String(month).padStart(2, "0")}`;
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
