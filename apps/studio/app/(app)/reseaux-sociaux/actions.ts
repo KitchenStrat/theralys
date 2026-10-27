@@ -21,17 +21,22 @@ import {
 import {
   cleanSocialInstructions,
   EMPTY_SOCIAL_ASSETS,
+  isGoogleReplyTone,
   isoDay,
   monthRange,
   normalizePostDays,
   SOCIAL_FORMATS,
   SOCIAL_INSTRUCTIONS_MAX,
+  SOCIAL_POST_INSTRUCTIONS_MAX,
+  SOCIAL_REGENERATIONS_PER_MONTH,
   SOCIAL_REQUESTS_PER_MONTH,
+  type SocialFormat,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
 import { getSite } from "@/lib/data";
 import { loadSocialBrief } from "@/lib/social/brief";
+import { normalizeCaption, SOCIAL_CAPTION_MAX } from "@/lib/social/caption";
 import {
   getSocialRequestUsage,
   loadSocialMonthState,
@@ -41,6 +46,7 @@ import {
   isMissingSchemaError,
 } from "@/lib/social/data";
 import { ownedSocialPost } from "@/lib/social/post-access";
+import { getSocialRegenerationUsage, recordSocialRegeneration } from "@/lib/social/regen";
 import { recentGoogleTopics } from "@/lib/google/posts";
 import { getSocialSettings } from "@/lib/social/settings";
 
@@ -507,6 +513,20 @@ export async function rescheduleSocialPost(input: unknown): Promise<{ error?: st
   return {};
 }
 
+/** Rendus Blob d'un contenu (avant remplacement ou archivage), best-effort. */
+async function deleteRenders(assets: { renders: Record<string, { url?: string | null }> }): Promise<void> {
+  const urls = Object.values(assets.renders)
+    .map((render) => render.url)
+    .filter((url): url is string => typeof url === "string" && url !== "");
+  if (urls.length === 0 || !process.env.BLOB_READ_WRITE_TOKEN) return;
+  try {
+    const { del } = await import("@vercel/blob");
+    await del(urls);
+  } catch (err) {
+    console.warn("[social] suppression des rendus Blob impossible :", err);
+  }
+}
+
 /**
  * « Retirer ce contenu » : archivage (reste compté dans le quota des demandes
  * et dans les créneaux pourvus du mois), suppression best-effort des rendus
@@ -522,17 +542,174 @@ export async function archiveSocialPost(postId: string): Promise<{ error?: strin
     .set({ status: "archived", assets: EMPTY_SOCIAL_ASSETS, updatedAt: new Date() })
     .where(eq(socialPosts.id, post.id));
 
-  const urls = Object.values(post.assets.renders)
-    .map((render) => render.url)
-    .filter((url): url is string => typeof url === "string" && url !== "");
-  if (urls.length > 0 && process.env.BLOB_READ_WRITE_TOKEN) {
-    try {
-      const { del } = await import("@vercel/blob");
-      await del(urls);
-    } catch (err) {
-      console.warn("[social] suppression des rendus Blob impossible :", err);
-    }
-  }
+  await deleteRenders(post.assets);
   revalidatePath(PATH);
   return {};
+}
+
+// ─── Légende modifiable ──────────────────────────────────────────────────────
+
+const captionSchema = z.object({
+  postId: z.string().uuid(),
+  // Borne large : la normalisation (fins de ligne, caractères de contrôle) précède la coupe à SOCIAL_CAPTION_MAX
+  caption: z.string().max(SOCIAL_CAPTION_MAX * 2),
+});
+
+/**
+ * Refus d'une légende saisie : le vocabulaire interdit par la réglementation
+ * (garde-fou éthique) puis les règles sociales (avant/après, promesse
+ * chiffrée, majuscules criées…), avec le mot en cause. Null si acceptable.
+ */
+function captionRefusal(caption: string): string | null {
+  const ethical = checkEthicalCompliance(caption);
+  if (!ethical.ok) {
+    const word = forbiddenWord(caption) ?? ethical.violations[0]?.rule ?? "";
+    return `Votre légende contient un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`;
+  }
+  const social = checkSocialCompliance(caption);
+  if (!social.ok) {
+    const rule = social.violations[0]?.rule ?? "";
+    const word = forbiddenWord(caption, SOCIAL_FORBIDDEN_PATTERNS) ?? rule;
+    const detail = rule === "" || rule.toLowerCase() === word.toLowerCase() ? `« ${word} »` : `« ${word} », ${rule}`;
+    return `Votre légende contient une formulation que nous n'employons pas sur les réseaux (${detail}). Reformulez-la.`;
+  }
+  return null;
+}
+
+/**
+ * « Enregistrer » la légende modifiée d'un contenu (non archivé) : texte
+ * normalisé et borné à SOCIAL_CAPTION_MAX, vérifié par les garde-fous AVANT
+ * d'être stocké ; seule la clé `caption` du jsonb est réécrite (`jsonb_set`,
+ * sous verrou de ligne : les hashtags et le reste du contenu sont intacts).
+ */
+export async function updateSocialCaption(input: unknown): Promise<{ error?: string; caption?: string }> {
+  const session = await requireClient();
+  const parsed = captionSchema.safeParse(input);
+  if (!parsed.success) return { error: "Légende invalide." };
+  const post = await activePost(session.siteId, parsed.data.postId);
+  if (!post) return { error: NOT_FOUND };
+
+  const caption = normalizeCaption(parsed.data.caption);
+  if (caption === "") return { error: "La légende ne peut pas être vide." };
+  const refusal = captionRefusal(caption);
+  if (refusal) return { error: refusal };
+
+  try {
+    await getDb()
+      .update(socialPosts)
+      .set({
+        content: sql`jsonb_set(${socialPosts.content}, '{caption}', ${JSON.stringify(caption)}::jsonb, true)`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(socialPosts.id, post.id), eq(socialPosts.siteId, session.siteId), ne(socialPosts.status, "archived")));
+  } catch (err) {
+    console.error("[social] enregistrement de la légende échoué", { siteId: session.siteId, postId: post.id, err });
+    return { error: "L'enregistrement a échoué — réessayez dans un instant." };
+  }
+  revalidatePath(PATH);
+  return { caption };
+}
+
+// ─── Régénération d'un contenu avec instructions et ton ──────────────────────
+
+const regenerateSchema = z.object({
+  postId: z.string().uuid(),
+  instructions: z.string().max(SOCIAL_POST_INSTRUCTIONS_MAX * 2).default(""),
+  tone: z.string().refine(isGoogleReplyTone, "Ton inconnu"),
+});
+
+/** Régénérations en cours dans ce processus (par contenu) : second clic refusé sans appel IA. */
+const regenerationsInFlight = new Set<string>();
+
+/**
+ * « Régénérer » un contenu non publié avec des instructions libres et un ton
+ * choisi : un appel IA (même sujet, même format, mêmes date et couleur), la
+ * légende, les hashtags et le visuel sont remplacés, les anciens rendus
+ * supprimés. Quota SOCIAL_REGENERATIONS_PER_MONTH (lignes `google_usage` de
+ * kind "social_regen"). Un contenu publié ne se régénère pas.
+ */
+export async function regenerateSocialPost(input: unknown): Promise<{ error?: string; remaining?: number }> {
+  const session = await requireClient();
+  const parsed = regenerateSchema.safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide." };
+  const site = await getSite(session.siteId);
+  if (!socialAccess(site)) return { error: NOT_INCLUDED };
+  const post = await activePost(session.siteId, parsed.data.postId);
+  if (!post) return { error: NOT_FOUND };
+  if (post.status === "published") {
+    return { error: "Ce contenu est déjà publié : annulez la publication pour le régénérer." };
+  }
+
+  const instructions = cleanSocialInstructions(parsed.data.instructions).slice(0, SOCIAL_POST_INSTRUCTIONS_MAX);
+  if (instructions !== "") {
+    const compliance = checkEthicalCompliance(instructions);
+    if (!compliance.ok) {
+      const word = forbiddenWord(instructions) ?? compliance.violations[0]?.rule ?? "";
+      return {
+        error: `Vos instructions contiennent un terme que la réglementation nous interdit d'employer (« ${word} »). Reformulez, par exemple avec « accompagner » ou « apaiser ».`,
+      };
+    }
+  }
+  if (regenerationsInFlight.has(post.id)) return { error: "Régénération déjà en cours, patientez." };
+  regenerationsInFlight.add(post.id);
+  const now = new Date();
+  const started = Date.now();
+  const db = getDb();
+  const generator = createSocialGenerator();
+  try {
+    const usage = await getSocialRegenerationUsage(site.id, now);
+    if (usage.remaining === 0) {
+      return { error: `Vous avez utilisé vos ${SOCIAL_REGENERATIONS_PER_MONTH} régénérations du mois.` };
+    }
+    const settings = await getSocialSettings(site.id);
+    const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
+      loadSocialBrief(site.id, { settings }),
+      recentTopicsAcrossChannels(site.id, now),
+    ]);
+    // Les instructions du contenu s'ajoutent aux consignes permanentes (même bloc du prompt) ; le ton choisi remplace celui de la voix
+    const merged = cleanSocialInstructions([brief.instructions, instructions].filter((t) => t && t !== "").join("\n"));
+    const briefForRegen = {
+      ...brief,
+      ...(merged === "" ? {} : { instructions: merged }),
+      voice: { ...brief.voice, tone: parsed.data.tone },
+    };
+    const regenerated = await generator.generateRequest(briefForRegen, {
+      topic: post.request ?? post.topic,
+      format: post.format as SocialFormat,
+      accentHex: post.accentColor,
+      scheduledFor: post.scheduledFor,
+      recentTopics: recentTopics.filter((t) => t !== post.topic),
+      photosById,
+      refsById,
+    });
+    await recordSocialRegeneration(site.id, now);
+    await db
+      .update(socialPosts)
+      .set({
+        topic: regenerated.topic,
+        template: regenerated.template,
+        // Les jours de publication de la préparation du mois restent portés par le contenu (état du mois)
+        content: post.content.planDays ? { ...regenerated.content, planDays: post.content.planDays } : regenerated.content,
+        assets: EMPTY_SOCIAL_ASSETS,
+        downloadedAt: null,
+        updatedAt: now,
+      })
+      .where(and(eq(socialPosts.id, post.id), eq(socialPosts.siteId, site.id)));
+    await deleteRenders(post.assets);
+    console.info("[social] contenu régénéré", {
+      siteId: site.id,
+      postId: post.id,
+      mode: generator.mode,
+      tone: parsed.data.tone,
+      withInstructions: instructions !== "",
+      ms: Date.now() - started,
+    });
+    revalidatePath(PATH);
+    return { remaining: usage.remaining - 1 };
+  } catch (err) {
+    console.error("[social] régénération échouée", { siteId: site.id, postId: post.id, mode: generator.mode, ms: Date.now() - started, err });
+    return { error: "La régénération a échoué — réessayez dans un instant. Votre quota n'a pas été décompté." };
+  } finally {
+    regenerationsInFlight.delete(post.id);
+  }
 }

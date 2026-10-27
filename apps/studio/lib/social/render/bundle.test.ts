@@ -50,16 +50,31 @@ describe("bundle", () => {
     expect(doc.getTitle()).toBe("Test");
   });
 
-  it("captionTxt = légende, hashtags, texte alternatif", () => {
-    const txt = captionTxt({
-      caption: "Première ligne.\n\nDeuxième paragraphe.",
-      hashtags: ["#SophrologueAlbi", "#Albi"],
-      altText: "Visuel violet avec un titre.",
-    });
-    expect(txt).toBe(
-      "Première ligne.\n\nDeuxième paragraphe.\n\n#SophrologueAlbi #Albi\n\nTexte alternatif : Visuel violet avec un titre.\n",
+  it("captionTxt = une variante par réseau (titres), puis le texte alternatif", () => {
+    const BIO = "Pour prendre rendez-vous, le lien est dans ma bio.";
+    const options = { siteUrl: "https://site.fr", bioLine: BIO };
+    const txt = captionTxt(
+      {
+        caption: `Première ligne.\n\n${BIO}`,
+        hashtags: ["#SophrologueAlbi", "#Albi", "#Sophrologie", "#Stress"],
+        altText: "Visuel violet avec un titre.",
+      },
+      options,
     );
-    expect(captionTxt({ caption: "Seule.", hashtags: [], altText: "" })).toBe("Seule.\n");
+    expect(txt).toBe(
+      [
+        `=== Instagram ===\nPremière ligne.\n\n${BIO}\n\n#SophrologueAlbi #Albi #Sophrologie #Stress`,
+        "=== Facebook ===\nPremière ligne.\n\nPour prendre rendez-vous : https://site.fr/?src=fb\n\n#SophrologueAlbi #Albi #Sophrologie",
+        "=== LinkedIn ===\nPremière ligne.\n\nPour prendre rendez-vous : https://site.fr/?src=li\n\n#SophrologueAlbi #Albi #Sophrologie",
+        "=== Texte alternatif ===\nVisuel violet avec un titre.\n",
+      ].join("\n\n"),
+    );
+    // Story : pas de variante LinkedIn ; sans texte alternatif, pas de section
+    const story = captionTxt({ caption: "Seule.", hashtags: [], altText: "" }, { ...options, format: "story" });
+    expect(story).toContain("=== Instagram ===");
+    expect(story).toContain("=== Facebook ===");
+    expect(story).not.toContain("LinkedIn");
+    expect(story).not.toContain("Texte alternatif");
   });
 
   it("downloadFilename est ASCII, borné et suffixé", () => {

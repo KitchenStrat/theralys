@@ -1,9 +1,10 @@
 import { hasSocialMedia } from "@theralys/db";
 import { Card } from "@theralys/ui";
+import { SOCIAL_BIO_LINE } from "@theralys/ai";
 import { monthRange } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { clampIsoDay, parisDay, parseMonthParam, shiftIsoDay } from "@/lib/calendar";
-import { getSite } from "@/lib/data";
+import { getSite, siteUrl } from "@/lib/data";
 import {
   getSocialMonth,
   getSocialRequestUsage,
@@ -12,6 +13,7 @@ import {
   type SocialMonthData,
   type SocialRequestUsage,
 } from "@/lib/social/data";
+import { getSocialRegenerationUsage, type SocialRegenerationUsage } from "@/lib/social/regen";
 import { swatchesFor } from "@/lib/social/render/theme";
 import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
 import { SocialClient } from "./social-client";
@@ -21,7 +23,10 @@ export const dynamic = "force-dynamic";
 // Préparation du mois en mode live : 25-60 s attendus (§5.5)
 export const maxDuration = 300;
 
-type Props = { searchParams: Promise<{ mois?: string }> };
+type Props = { searchParams: Promise<{ mois?: string; post?: string }> };
+
+/** `?post=<id>` (lien profond : export ICS, notifications) — un id mal formé est ignoré. */
+const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function SocialPage({ searchParams }: Props) {
   const session = await requireClient();
@@ -39,19 +44,22 @@ export default async function SocialPage({ searchParams }: Props) {
     );
   }
 
-  const { mois } = await searchParams;
+  const { mois, post } = await searchParams;
   const now = new Date();
   const { year, month } = parseMonthParam(mois, now);
+  const initialPostId = post && POST_ID_RE.test(post) ? post.toLowerCase() : null;
 
   let data: SocialMonthData;
   let usage: SocialRequestUsage;
+  let regen: SocialRegenerationUsage;
   let settings: SocialSettingsView;
   try {
     // Réglages « Paramétrage » d'abord : les créneaux du mois suivent les jours de publication choisis
     settings = await getSocialSettings(site.id);
-    [data, usage] = await Promise.all([
+    [data, usage, regen] = await Promise.all([
       getSocialMonth(site.id, year, month, now, settings.postDays),
       getSocialRequestUsage(site.id, now),
+      getSocialRegenerationUsage(site.id, now),
     ]);
   } catch (err) {
     // Déploiement avant les migrations `social_posts` / `social_settings` : page utilisable plutôt qu'une erreur 500
@@ -84,6 +92,10 @@ export default async function SocialPage({ searchParams }: Props) {
       usage={usage}
       swatches={swatchesFor(site.theme)}
       siteName={site.name}
+      siteUrl={siteUrl(site)}
+      bioLine={SOCIAL_BIO_LINE}
+      regenRemaining={regen.remaining}
+      initialPostId={initialPostId}
       todayIso={todayIso}
       requestDates={{ default: clampIsoDay(wanted, min, max), min, max }}
       settings={settings}

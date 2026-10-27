@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, FieldHint, Spinner } from "@theralys/ui";
+import { bioLinkFor } from "@theralys/shared";
 import { WEEKDAYS, buildMonthGrid, formatDayFr, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
 import type { SocialCalendarItem, SocialMonthState, SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
@@ -34,6 +35,10 @@ export function SocialClient({
   usage,
   swatches,
   siteName,
+  siteUrl,
+  bioLine,
+  regenRemaining,
+  initialPostId,
   todayIso,
   requestDates,
   settings,
@@ -45,6 +50,14 @@ export function SocialClient({
   usage: SocialRequestUsage;
   swatches: SocialSwatch[];
   siteName: string;
+  /** URL publique du site : lien de bio tracé et légendes Facebook/LinkedIn */
+  siteUrl: string;
+  /** Ligne « lien dans ma bio » exacte insérée par le générateur */
+  bioLine: string;
+  /** Régénérations (instructions + ton) restantes ce mois-ci */
+  regenRemaining: number;
+  /** `?post=<id>` : contenu à ouvrir au chargement (lien profond), s'il est dans le mois */
+  initialPostId: string | null;
   /** Jour civil Europe/Paris */
   todayIso: string;
   requestDates: { default: string; min: string; max: string };
@@ -55,8 +68,8 @@ export function SocialClient({
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [fromDay, setFromDay] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Contenu créé par la barre : la modale s'ouvre dès qu'il apparaît dans `items`
-  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  // Contenu créé par la barre, ou désigné par `?post=` : la modale s'ouvre dès qu'il figure dans `items`
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(initialPostId);
 
   const monthParam = `${year}-${String(month).padStart(2, "0")}`;
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
@@ -117,6 +130,11 @@ export function SocialClient({
           </Link>
         </div>
         <QuotaBadge usage={usage} />
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <ExportToolbar monthParam={monthParam} count={items.length} />
+        <BioLinkCard siteUrl={siteUrl} />
       </div>
 
       {/* grid-cols-1 = minmax(0,1fr) : la liste en nowrap de la carte A ne doit pas élargir la colonne sur mobile */}
@@ -203,6 +221,10 @@ export function SocialClient({
       <SocialPostModal
         item={selected}
         todayIso={todayIso}
+        siteUrl={siteUrl}
+        bioLine={bioLine}
+        regenRemaining={regenRemaining}
+        defaultTone={settings.voice.tone}
         onClose={() => {
           setSelectedId(null);
           setFromDay(null);
@@ -217,6 +239,88 @@ export function SocialClient({
             : undefined
         }
       />
+    </div>
+  );
+}
+
+/**
+ * Export du mois vers un planificateur (CSV : une ligne par contenu et par
+ * réseau) ou un agenda (ICS : un événement par contenu). Rien à exporter
+ * sans contenu.
+ */
+function ExportToolbar({ monthParam, count }: { monthParam: string; count: number }) {
+  if (count === 0) return null;
+  const href = (format: "csv" | "ics") => `/api/social/export?mois=${monthParam}&format=${format}`;
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={href("csv")}
+          download
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 transition-colors hover:bg-cream-100"
+        >
+          <span aria-hidden>⇩</span> Exporter le mois (CSV planificateur)
+        </a>
+        <a
+          href={href("ics")}
+          download
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 transition-colors hover:bg-cream-100"
+        >
+          <span aria-hidden>📅</span> Ajouter à mon agenda (ICS)
+        </a>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-500">
+        Importez le CSV dans Metricool, Buffer ou Later : une ligne par contenu et par réseau, avec la légende du
+        réseau. L&apos;ICS ajoute chaque contenu à votre agenda, avec un lien vers cette page.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * « Votre lien de bio » : l'URL du site avec `?src=ig` (Instagram ; `fb`
+ * pour Facebook), pour que les visites venues des réseaux apparaissent dans
+ * la provenance des statistiques.
+ */
+function BioLinkCard({ siteUrl }: { siteUrl: string }) {
+  const [copied, setCopied] = useState<"instagram" | "facebook" | null>(null);
+  const [failed, setFailed] = useState(false);
+  const links = { instagram: bioLinkFor(siteUrl, "instagram"), facebook: bioLinkFor(siteUrl, "facebook") } as const;
+
+  async function copy(network: "instagram" | "facebook") {
+    try {
+      await navigator.clipboard.writeText(links[network]);
+      setFailed(false);
+      setCopied(network);
+      setTimeout(() => setCopied((c) => (c === network ? null : c)), 2000);
+    } catch {
+      setFailed(true);
+    }
+  }
+
+  return (
+    <div className="min-w-0 rounded-2xl border border-cream-200 bg-white px-4 py-3 text-sm lg:max-w-md">
+      <p className="font-semibold text-ink-900">Votre lien de bio</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-cream-100 px-2 py-1 text-xs text-ink-700" title={links.instagram}>
+          {links.instagram}
+        </code>
+        <Button size="sm" variant="secondary" onClick={() => copy("instagram")} aria-label="Copier le lien de bio Instagram">
+          {copied === "instagram" ? "✓ Copié !" : "Copier"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => copy("facebook")} aria-label="Copier le lien de bio Facebook">
+          {copied === "facebook" ? "✓ Copié !" : "Version Facebook"}
+        </Button>
+      </div>
+      <p className="mt-1.5 text-xs text-ink-500">
+        Mettez ce lien dans votre bio Instagram : les visites qui en viennent apparaissent dans vos statistiques.
+        Même lien pour Facebook, avec <code>src=fb</code>.
+      </p>
+      {failed ? (
+        <p className="mt-1 text-xs text-danger-500" role="alert">
+          Copie impossible — sélectionnez le lien et copiez-le manuellement.
+        </p>
+      ) : null}
     </div>
   );
 }

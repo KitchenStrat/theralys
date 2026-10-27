@@ -4,10 +4,26 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, FieldHint, Input, Modal, Segmented, Spinner } from "@theralys/ui";
-import { SOCIAL_SIZES, type SocialSize } from "@theralys/shared";
+import {
+  captionFor,
+  GOOGLE_REPLY_TONES,
+  SOCIAL_NETWORKS,
+  SOCIAL_POST_INSTRUCTIONS_MAX,
+  SOCIAL_SIZES,
+  type SocialNetwork,
+  type SocialSize,
+  type SocialVoice,
+} from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
+import { SOCIAL_CAPTION_MAX } from "@/lib/social/caption";
 import type { SocialCalendarItem } from "@/lib/social/data";
-import { archiveSocialPost, markSocialPostPublished, rescheduleSocialPost } from "./actions";
+import {
+  archiveSocialPost,
+  markSocialPostPublished,
+  regenerateSocialPost,
+  rescheduleSocialPost,
+  updateSocialCaption,
+} from "./actions";
 import { FORMAT_LABEL } from "./day-modal";
 
 const SIZE_LABEL: Record<SocialSize, string> = { square: "Carré", portrait: "Portrait", story: "Story", landscape: "Paysage" };
@@ -29,31 +45,68 @@ const NETWORKS: Record<SocialCalendarItem["format"], string> = {
   story: "Instagram, Facebook",
 };
 
+/** Réseaux où le contenu se publie : LinkedIn n'a pas de stories. */
+function networksFor(format: SocialCalendarItem["format"]) {
+  return SOCIAL_NETWORKS.filter((n) => format !== "story" || n.id !== "linkedin");
+}
+
 export function SocialPostModal({
   item,
   todayIso,
+  siteUrl,
+  bioLine,
+  regenRemaining,
+  defaultTone,
   onClose,
   onBack,
 }: {
   item: SocialCalendarItem | null;
   todayIso: string;
+  /** URL publique du site (lien tracé des légendes Facebook et LinkedIn) */
+  siteUrl: string;
+  /** Ligne « lien dans ma bio » exacte insérée par le générateur */
+  bioLine: string;
+  /** Régénérations (instructions + ton) restantes ce mois-ci */
+  regenRemaining: number;
+  /** Ton de la voix du site : valeur initiale du sélecteur de ton */
+  defaultTone: SocialVoice["tone"];
   onClose: () => void;
   /** Ouvert depuis la modale d'une journée : « ← Retour à la journée » */
   onBack?: () => void;
 }) {
   if (!item) return null;
-  // L'état local (taille, page, copies…) repart de zéro à chaque contenu
-  return <PostModalBody key={item.id} item={item} todayIso={todayIso} onClose={onClose} onBack={onBack} />;
+  // L'état local (taille, page, copies, légende en cours…) repart de zéro à chaque contenu
+  return (
+    <PostModalBody
+      key={item.id}
+      item={item}
+      todayIso={todayIso}
+      siteUrl={siteUrl}
+      bioLine={bioLine}
+      regenRemaining={regenRemaining}
+      defaultTone={defaultTone}
+      onClose={onClose}
+      onBack={onBack}
+    />
+  );
 }
 
 function PostModalBody({
   item,
   todayIso,
+  siteUrl,
+  bioLine,
+  regenRemaining,
+  defaultTone,
   onClose,
   onBack,
 }: {
   item: SocialCalendarItem;
   todayIso: string;
+  siteUrl: string;
+  bioLine: string;
+  regenRemaining: number;
+  defaultTone: SocialVoice["tone"];
   onClose: () => void;
   onBack?: () => void;
 }) {
@@ -63,7 +116,7 @@ function PostModalBody({
   const [retry, setRetry] = useState(0);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [errorUrl, setErrorUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState<"caption" | "alt" | null>(null);
+  const [copied, setCopied] = useState<SocialNetwork | "alt" | null>(null);
   const [downloaded, setDownloaded] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [newDate, setNewDate] = useState(item.date);
@@ -72,16 +125,42 @@ function PostModalBody({
   const [pending, startTransition] = useTransition();
   const actionsRef = useRef<HTMLDivElement>(null);
 
+  // Légende modifiable : repart de la légende enregistrée dès que le serveur la change (régénération)
+  const [caption, setCaption] = useState(item.caption);
+  const [captionMessage, setCaptionMessage] = useState<string | null>(null);
+  const [savingCaption, startSavingCaption] = useTransition();
+  useEffect(() => {
+    setCaption(item.caption);
+  }, [item.caption]);
+  const captionDirty = caption !== item.caption;
+
+  // Variante par réseau (aperçu + copie), calculée sur la légende affichée
+  const [network, setNetwork] = useState<SocialNetwork>("instagram");
+  const networks = networksFor(item.format);
+
+  // Régénération : instructions libres + ton choisi
+  const [instructions, setInstructions] = useState("");
+  const [tone, setTone] = useState<SocialVoice["tone"]>(defaultTone);
+  const [regenerating, startRegenerating] = useTransition();
+  const [regenMessage, setRegenMessage] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState(regenRemaining);
+
   const isCarousel = item.format === "carousel";
   const published = item.status === "published";
   // Chaque bascule démonte le bouton cliqué : le focus suit l'élément qui le remplace
   useFocusAfterToggle(dateOpen, actionsRef, (open) => (open ? "new-date" : "change-date"));
   useFocusAfterToggle(confirmRemove, actionsRef, (confirm) => (confirm ? "keep" : "remove"));
   useFocusAfterToggle(published, actionsRef, (isPublished) => (isPublished ? "unpublish" : "publish"));
+  // Un contenu régénéré peut changer de gabarit, donc de tailles disponibles
+  useEffect(() => {
+    if (!item.sizes.includes(size)) setSize(item.sizes[0] ?? "square");
+  }, [item.sizes, size]);
   const previewUrl = `/api/social/${item.id}/render?size=${size}&slide=${slide}&preview=1${retry ? `&r=${retry}` : ""}`;
   const loading = loadedUrl !== previewUrl && errorUrl !== previewUrl;
   const failed = errorUrl === previewUrl;
-  const captionText = `${item.caption}\n\n${item.hashtags.join(" ")}`;
+  const captionSource = { caption, hashtags: item.hashtags };
+  const networkCaption = captionFor(network, captionSource, siteUrl, bioLine);
+  const networkLabel = SOCIAL_NETWORKS.find((n) => n.id === network)?.label ?? network;
 
   const statusBadge = published
     ? { tone: "success" as const, label: `Publié le ${formatDayFr(item.publishedAt ?? item.date)}` }
@@ -91,7 +170,7 @@ function PostModalBody({
         ? { tone: "info" as const, label: "Téléchargé" }
         : { tone: "info" as const, label: `À télécharger — prévu le ${formatDayFr(item.date)}` };
 
-  async function copy(text: string, what: "caption" | "alt") {
+  async function copy(text: string, what: SocialNetwork | "alt") {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(what);
@@ -114,6 +193,43 @@ function PostModalBody({
     });
   }
 
+  function saveCaption() {
+    setError(null);
+    setCaptionMessage(null);
+    startSavingCaption(async () => {
+      const result = await updateSocialCaption({ postId: item.id, caption });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (typeof result.caption === "string") setCaption(result.caption);
+      setCaptionMessage("Légende enregistrée.");
+      router.refresh();
+    });
+  }
+
+  function regenerate() {
+    setError(null);
+    setRegenMessage(null);
+    setCaptionMessage(null);
+    startRegenerating(async () => {
+      const result = await regenerateSocialPost({ postId: item.id, instructions, tone });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (typeof result.remaining === "number") setRemaining(result.remaining);
+      setInstructions("");
+      setSlide(0);
+      setLoadedUrl(null);
+      setErrorUrl(null);
+      // Nouveau visuel : l'URL d'aperçu change pour forcer le rechargement
+      setRetry((r) => r + 1);
+      setRegenMessage("Contenu régénéré : nouvelle légende et nouveau visuel.");
+      router.refresh();
+    });
+  }
+
   function onDownload() {
     setDownloaded(true);
     // `downloaded_at` est posé par la route : rafraîchir pour la bordure du calendrier
@@ -122,6 +238,7 @@ function PostModalBody({
 
   const download = (kind: "image" | "zip" | "pdf" | "caption" | "all") =>
     `/api/social/${item.id}/download?kind=${kind}${kind === "caption" ? "" : `&size=${size}`}`;
+  const busy = pending || savingCaption || regenerating;
 
   return (
     <Modal open onClose={onClose} title={item.topic} size="xl">
@@ -166,7 +283,7 @@ function PostModalBody({
           <div className={clsx("relative mt-3 w-full overflow-hidden rounded-2xl bg-cream-200", SIZE_ASPECT[size])}>
             {loading ? (
               <div className="absolute inset-0 flex animate-pulse items-center justify-center text-sm text-ink-500">
-                Préparation du visuel…
+                {regenerating ? "Nouveau visuel en préparation…" : "Préparation du visuel…"}
               </div>
             ) : null}
             {failed ? (
@@ -230,7 +347,7 @@ function PostModalBody({
                     style={{ width: Math.round((64 * SOCIAL_SIZES[size].w) / SOCIAL_SIZES[size].h) }}
                   >
                     <img
-                      src={`/api/social/${item.id}/render?size=${size}&slide=${i}&preview=1`}
+                      src={`/api/social/${item.id}/render?size=${size}&slide=${i}&preview=1${retry ? `&r=${retry}` : ""}`}
                       alt=""
                       loading="lazy"
                       className="h-full w-full object-cover"
@@ -244,18 +361,88 @@ function PostModalBody({
 
         {/* Prêt à poster */}
         <section aria-label="Prêt à poster" className="min-w-0 space-y-5">
+          {/* Légende modifiable */}
           <div>
-            <h3 className="text-sm font-semibold text-ink-900">Légende</h3>
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor={`caption-${item.id}`} className="text-sm font-semibold text-ink-900">
+                Légende
+              </label>
+              <span className="text-xs tabular-nums text-ink-500">
+                {caption.length} / {SOCIAL_CAPTION_MAX}
+              </span>
+            </div>
+            <textarea
+              id={`caption-${item.id}`}
+              value={caption}
+              onChange={(e) => {
+                setCaptionMessage(null);
+                setCaption(e.target.value.slice(0, SOCIAL_CAPTION_MAX));
+              }}
+              maxLength={SOCIAL_CAPTION_MAX}
+              rows={7}
+              disabled={regenerating}
+              className="mt-1 w-full resize-y rounded-xl border border-cream-300 bg-white px-3 py-2 text-sm leading-relaxed text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+            {captionDirty ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={saveCaption} disabled={busy || caption.trim() === ""}>
+                  {savingCaption ? <Spinner className="text-white" /> : null} Enregistrer
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={savingCaption}
+                  onClick={() => {
+                    setCaption(item.caption);
+                    setCaptionMessage(null);
+                  }}
+                >
+                  Annuler
+                </Button>
+                <span className="text-xs text-ink-500">Modifications non enregistrées</span>
+              </div>
+            ) : captionMessage ? (
+              <p className="mt-2 text-sm text-success-500" role="status">
+                {captionMessage}
+              </p>
+            ) : null}
+            <FieldHint>
+              Modifiez le texte à votre guise ; les {item.hashtags.length} hashtags du contenu sont ajoutés selon le réseau.
+            </FieldHint>
+          </div>
+
+          {/* Variantes par réseau */}
+          <div>
+            <h3 className="text-sm font-semibold text-ink-900">Copier pour un réseau</h3>
+            <Segmented
+              aria-label="Réseau"
+              options={networks.map((n) => ({ value: n.id, label: n.label }))}
+              value={networks.some((n) => n.id === network) ? network : "instagram"}
+              onChange={setNetwork}
+              className="mt-2 inline-flex"
+            />
             <textarea
               readOnly
-              value={captionText}
-              aria-label="Légende et hashtags"
-              className="mt-1 h-40 w-full resize-none rounded-xl border border-cream-300 bg-cream-50 px-3 py-2 text-sm text-ink-900"
+              value={networkCaption}
+              aria-label={`Légende pour ${networkLabel}`}
+              className="mt-2 h-32 w-full resize-none rounded-xl border border-cream-300 bg-cream-50 px-3 py-2 text-sm text-ink-900"
             />
-            <Button className="mt-2 w-full" variant="secondary" onClick={() => copy(captionText, "caption")}>
-              {copied === "caption" ? "✓ Légende copiée !" : "Copier la légende"}
-            </Button>
-            <FieldHint>Collez-la dans la description de votre publication.</FieldHint>
+            <div className="mt-2 flex flex-col gap-2">
+              {networks.map((n) => (
+                <Button
+                  key={n.id}
+                  variant={n.id === network ? "primary" : "secondary"}
+                  size="sm"
+                  onClick={() => copy(captionFor(n.id, captionSource, siteUrl, bioLine), n.id)}
+                >
+                  {copied === n.id ? "✓ Légende copiée !" : `Copier pour ${n.label}`}
+                </Button>
+              ))}
+            </div>
+            <FieldHint>
+              Instagram : « lien dans ma bio » et tous les hashtags. Facebook et LinkedIn : le lien de votre site
+              (tracé dans vos statistiques) et 3 hashtags.
+            </FieldHint>
             <details className="mt-2 text-sm">
               <summary className="cursor-pointer text-ink-700">Texte alternatif</summary>
               <p className="mt-1 rounded-xl bg-cream-50 px-3 py-2 text-ink-700">{item.altText}</p>
@@ -264,6 +451,74 @@ function PostModalBody({
               </Button>
             </details>
           </div>
+
+          {/* Régénération (contenu non publié) */}
+          {!published ? (
+            <div className="rounded-2xl border border-cream-200 bg-cream-50 p-3">
+              <label htmlFor={`instructions-${item.id}`} className="block text-sm font-semibold text-ink-900">
+                Instructions pour régénérer ce contenu
+              </label>
+              <p className="mt-0.5 text-xs text-ink-500">
+                Facultatif : ce que vous voulez changer (angle, longueur, élément à mentionner). Le sujet, le format, la
+                date et la couleur sont conservés ; la légende, les hashtags et le visuel sont refaits.
+              </p>
+              <textarea
+                id={`instructions-${item.id}`}
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value.slice(0, SOCIAL_POST_INSTRUCTIONS_MAX))}
+                maxLength={SOCIAL_POST_INSTRUCTIONS_MAX}
+                rows={3}
+                disabled={regenerating}
+                placeholder="Ex. : insistez sur la respiration, une légende plus courte, terminez par une question."
+                className="mt-2 w-full rounded-xl border border-cream-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label htmlFor={`tone-${item.id}`} className="text-sm text-ink-700">
+                  Ton
+                </label>
+                <select
+                  id={`tone-${item.id}`}
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value as SocialVoice["tone"])}
+                  disabled={regenerating}
+                  className="rounded-xl border border-cream-300 bg-white px-3 py-1.5 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                >
+                  {GOOGLE_REPLY_TONES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                      {t.id === defaultTone ? " (votre voix)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-ink-500">
+                  {instructions.length} / {SOCIAL_POST_INSTRUCTIONS_MAX} · {remaining} régénération{remaining > 1 ? "s" : ""}{" "}
+                  restante{remaining > 1 ? "s" : ""} ce mois-ci
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={regenerate}
+                  disabled={busy || remaining <= 0}
+                  title={remaining <= 0 ? "Quota mensuel de régénérations atteint" : undefined}
+                >
+                  {regenerating ? (
+                    <>
+                      <Spinner /> Rédaction…
+                    </>
+                  ) : (
+                    "✦ Régénérer"
+                  )}
+                </Button>
+              </div>
+              {regenMessage ? (
+                <p className="mt-2 text-sm text-success-500" role="status">
+                  {regenMessage}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div>
             <h3 className="text-sm font-semibold text-ink-900">Télécharger</h3>
@@ -284,7 +539,7 @@ function PostModalBody({
               )}
               <div className="flex flex-wrap gap-2">
                 <DownloadLink href={download("caption")} onClick={onDownload} variant="ghost">
-                  Légende (.txt)
+                  Légendes (.txt)
                 </DownloadLink>
                 <DownloadLink href={download("all")} onClick={onDownload} variant="ghost">
                   Tout en un ZIP
@@ -292,8 +547,8 @@ function PostModalBody({
               </div>
             </div>
             <FieldHint>
-              JPG : accepté par tous les réseaux. Sur iPhone, appui long → Enregistrer l&apos;image ;
-              les ZIP s&apos;ouvrent dans Fichiers.
+              JPG : accepté par tous les réseaux. Le .txt contient une légende par réseau. Sur iPhone, appui long →
+              Enregistrer l&apos;image ; les ZIP s&apos;ouvrent dans Fichiers.
             </FieldHint>
           </div>
 
@@ -305,7 +560,7 @@ function PostModalBody({
                 Ouvrez Instagram (ou Facebook, LinkedIn) et créez une publication avec ce fichier
                 {isCarousel ? " — pour un carrousel, sélectionnez toutes les pages dans l'ordre" : ""}
               </li>
-              <li>Collez la légende</li>
+              <li>Collez la légende du réseau</li>
               <li>Revenez ici et marquez le contenu comme publié</li>
             </ol>
           </div>
@@ -331,7 +586,7 @@ function PostModalBody({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={pending}
+                    disabled={busy}
                     data-focus="unpublish"
                     onClick={() => run(() => markSocialPostPublished(item.id, false))}
                   >
@@ -341,7 +596,7 @@ function PostModalBody({
               ) : (
                 <Button
                   className="w-full"
-                  disabled={pending}
+                  disabled={busy}
                   data-focus="publish"
                   onClick={() => run(() => markSocialPostPublished(item.id, true))}
                 >
@@ -373,7 +628,7 @@ function PostModalBody({
                       className="w-auto"
                       required
                     />
-                    <Button type="submit" size="sm" disabled={pending}>
+                    <Button type="submit" size="sm" disabled={busy}>
                       {pending ? <Spinner className="text-white" /> : null} Enregistrer
                     </Button>
                     <Button type="button" variant="ghost" size="sm" onClick={() => setDateOpen(false)}>
@@ -397,7 +652,7 @@ function PostModalBody({
               {confirmRemove ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-ink-700">Retirer ? Il disparaîtra du calendrier.</span>
-                  <Button variant="danger" size="sm" disabled={pending} onClick={() => run(() => archiveSocialPost(item.id), onClose)}>
+                  <Button variant="danger" size="sm" disabled={busy} onClick={() => run(() => archiveSocialPost(item.id), onClose)}>
                     {pending ? <Spinner className="text-white" /> : null} Retirer
                   </Button>
                   <Button variant="ghost" size="sm" data-focus="keep" onClick={() => setConfirmRemove(false)}>

@@ -6,7 +6,14 @@
 
 import { zipSync } from "fflate";
 import { PDFDocument } from "pdf-lib";
-import { slugify, type SocialPostContent, type SocialSize } from "@theralys/shared";
+import {
+  captionFor,
+  SOCIAL_NETWORKS,
+  slugify,
+  type SocialFormat,
+  type SocialPostContent,
+  type SocialSize,
+} from "@theralys/shared";
 
 export type ZipEntry = { name: string; data: Uint8Array };
 
@@ -32,11 +39,30 @@ export async function buildPdf(pages: PdfPage[], title?: string): Promise<Uint8A
   return pdf.save({ useObjectStreams: false });
 }
 
-/** Légende + hashtags + texte alternatif, prêts à coller. */
-export function captionTxt(content: Pick<SocialPostContent, "caption" | "hashtags" | "altText">) {
-  const parts = [content.caption.trim()];
-  if (content.hashtags.length > 0) parts.push(content.hashtags.join(" "));
-  if (content.altText.trim() !== "") parts.push(`Texte alternatif : ${content.altText.trim()}`);
+export type CaptionTxtOptions = {
+  /** URL publique du site (lien tracé sur Facebook et LinkedIn) */
+  siteUrl: string;
+  /** Ligne « lien dans ma bio » exacte insérée par le générateur (`SOCIAL_BIO_LINE`) */
+  bioLine: string;
+  /** Format du contenu : une story n'a pas de variante LinkedIn */
+  format?: SocialFormat;
+};
+
+/**
+ * Fichier .txt prêt à coller : une variante de légende par réseau
+ * (`captionFor` : Instagram avec tous les hashtags, Facebook et LinkedIn avec
+ * le lien du site tracé et 3 hashtags), séparées par des titres, puis le
+ * texte alternatif du visuel.
+ */
+export function captionTxt(
+  content: { caption: string; hashtags: readonly string[]; altText: string },
+  options: CaptionTxtOptions,
+): string {
+  const networks = SOCIAL_NETWORKS.filter((n) => options.format !== "story" || n.id !== "linkedin");
+  const parts = networks.map(
+    (network) => `=== ${network.label} ===\n${captionFor(network.id, content, options.siteUrl, options.bioLine)}`,
+  );
+  if (content.altText.trim() !== "") parts.push(`=== Texte alternatif ===\n${content.altText.trim()}`);
   return `${parts.join("\n\n")}\n`;
 }
 

@@ -4,8 +4,9 @@ import { z } from "zod";
 import { getDb, socialPosts } from "@theralys/db";
 import { SOCIAL_SIZES, sizesFor, type SocialFormat, type SocialSize, type SocialTemplate } from "@theralys/shared";
 import { hasSocialMedia } from "@theralys/db";
+import { SOCIAL_BIO_LINE } from "@theralys/ai";
 import { getSession } from "@/lib/auth";
-import { getSite } from "@/lib/data";
+import { getSite, siteUrl } from "@/lib/data";
 import { ownedActiveSocialPost } from "@/lib/social/post-access";
 import {
   SIZE_SUFFIX,
@@ -80,10 +81,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
 
   const name = (suffix: string, ext: string) =>
     downloadFilename({ scheduledFor: post.scheduledFor, topic: post.topic }, suffix, ext);
+  // Légende .txt : une variante par réseau (lien du site tracé sur Facebook et LinkedIn)
+  const caption = () =>
+    Buffer.from(
+      captionTxt(post.content, { siteUrl: siteUrl(site), bioLine: SOCIAL_BIO_LINE, format: post.format as SocialFormat }),
+      "utf8",
+    );
 
   if (kind === "caption") {
     await markDownloaded(post.id);
-    return file(Buffer.from(captionTxt(post.content), "utf8"), "text/plain; charset=utf-8", name("legende", "txt"));
+    return file(caption(), "text/plain; charset=utf-8", name("legende", "txt"));
   }
 
   const ctx = await loadRenderContext(session.siteId);
@@ -128,7 +135,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
       const entries: ZipEntry[] = isCarousel
         ? images.map((data, i) => ({ name: `carrousel/${slideFileName(i, slides[i]?.role ?? "page")}`, data }))
         : [{ name: `visuel-${SIZE_SUFFIX[size]}.jpg`, data: images[0]! }];
-      entries.push({ name: "legende.txt", data: Buffer.from(captionTxt(post.content), "utf8") });
+      entries.push({ name: "legende.txt", data: caption() });
       const total = entries.reduce((sum, e) => sum + e.data.byteLength, 0);
       if (total > MAX_BUNDLE_BYTES) {
         return NextResponse.json(
