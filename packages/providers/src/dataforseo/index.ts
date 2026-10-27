@@ -36,17 +36,24 @@
  */
 
 import { GOOGLE_SCAN_MAX_MISSING_POINTS, htmlToPlainText, type GeoPoint, type GoogleMapsListing, type GoogleProfileSnapshot } from "@theralys/shared";
+import {
+  DATAFORSEO_STATUS_OK,
+  DataForSeoClient,
+  DataForSeoError,
+  hash31,
+  numberOrNull,
+  round6,
+  textOrNull,
+  type DataForSeoClientOptions,
+  type ProviderMode,
+  type ProviderResult,
+} from "./client";
+
+// Socle commun (types de résultat, erreur, client HTTP, hash31) et fournisseur Google Ads
+export * from "./client";
+export * from "./ads";
 
 // ─── Résultats ───────────────────────────────────────────────────────────────
-
-export type ProviderMode = "dataforseo" | "mock";
-
-export type ProviderResult<T> = {
-  data: T;
-  /** Coût réel facturé par DataForSEO (USD), 0 en mock */
-  costUsd: number;
-  mode: ProviderMode;
-};
 
 /**
  * Résultat d'un relevé : une liste par point, `null` pour un point dont la
@@ -54,21 +61,6 @@ export type ProviderResult<T> = {
  * (retentatives comprises) ; `failedPoints` compte les points sans réponse.
  */
 export type MapsSearchResult = ProviderResult<(GoogleMapsListing[] | null)[]> & { failedPoints?: number };
-
-/**
- * Erreur fournisseur portant le coût déjà facturé par DataForSEO avant
- * l'échec (ex. relevé dont tous les points ont échoué après quelques appels
- * aboutis) : l'appelant l'inscrit dans `google_usage` même en échec.
- */
-export class DataForSeoError extends Error {
-  readonly costUsd: number;
-
-  constructor(message: string, costUsd = 0) {
-    super(message);
-    this.name = "DataForSeoError";
-    this.costUsd = costUsd;
-  }
-}
 
 export type MapsSearchInput = {
   keyword: string;
@@ -141,19 +133,7 @@ export interface LocalSearchProvider {
   fetchReviewsTask(taskId: string): Promise<ProviderResult<ReviewsTaskResult>>;
 }
 
-export const DATAFORSEO_BASE = "https://api.dataforseo.com/v3";
-
 // ─── Mock déterministe ───────────────────────────────────────────────────────
-
-/** Hachage 31 bits stable (même graine → mêmes rangs, mêmes avis). */
-export function hash31(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h & 0x7fffffff;
-}
 
 const MOCK_COMPETITORS = [
   { title: "Cabinet Équilibre & Sérénité", cid: "mock-cid-1", rating: 4.8, votes: 61, category: "Sophrologue", totalPhotos: 14 },
@@ -282,8 +262,6 @@ export function mockReviews(seedText: string, count: number): GoogleReviewItem[]
 
 // ─── Implémentation réelle ───────────────────────────────────────────────────
 
-/** Délai maximal d'une requête HTTP (ms) : au-delà, elle est abandonnée (AbortController). */
-export const DATAFORSEO_TIMEOUT_MS = 60_000;
 /** Requêtes simultanées pour une grille (DataForSEO tolère 30 appels en vol par compte). */
 export const DATAFORSEO_CONCURRENCY = 8;
 /** Rayon (m) autour du point d'observation pour la fiche et les avis (minimum DataForSEO : 199,9). */
@@ -291,7 +269,7 @@ export const DATAFORSEO_NEAR_RADIUS_M = 1000;
 /** Critère géographique Google « France » : repli quand aucune coordonnée n'est connue. */
 export const DATAFORSEO_FRANCE_LOCATION_CODE = 2250;
 
-const STATUS_OK = 20000;
+const STATUS_OK = DATAFORSEO_STATUS_OK;
 const STATUS_TASK_CREATED = 20100;
 /** 40601 « Task Handed », 40602 « Task In Queue » : la tâche n'est pas encore terminée. */
 const STATUS_PENDING = new Set([40601, 40602]);
@@ -339,21 +317,6 @@ const ATTRIBUTE_LABELS_FR: Record<string, string> = {
 };
 
 // ─── Formes des réponses DataForSEO (sous-ensemble exploité) ─────────────────
-
-type DfsTask<R> = {
-  id?: string;
-  status_code?: number;
-  status_message?: string;
-  cost?: number | null;
-  result?: R[] | null;
-};
-
-type DfsResponse<R> = {
-  status_code?: number;
-  status_message?: string;
-  cost?: number | null;
-  tasks?: DfsTask<R>[] | null;
-};
 
 type DfsRating = { value?: number | null; votes_count?: number | null } | null;
 
@@ -418,18 +381,6 @@ type DfsReviewsResult = {
 };
 
 // ─── Normalisation ───────────────────────────────────────────────────────────
-
-function round6(value: number): number {
-  return Math.round(value * 1e6) / 1e6;
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function textOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
 
 /** Hôtes Google autorisés pour les images et liens d'avis renvoyés par l'API (sous-domaines compris). */
 const GOOGLE_URL_HOSTS = ["googleusercontent.com", "ggpht.com", "google.com", "gstatic.com"] as const;
@@ -642,140 +593,29 @@ export async function mapConcurrent<T, R>(
   return results;
 }
 
-function describeError(err: unknown): string {
-  if (err instanceof Error) return err.name === "AbortError" ? "délai dépassé" : err.message.slice(0, 200);
-  return String(err).slice(0, 200);
-}
-
-/**
- * Une nouvelle tentative n'est permise que si la requête est idempotente côté
- * facturation : endpoints « live » (la réponse arrive dans le même appel) et
- * GET (`task_get`). Jamais pour `task_post` : la tâche a pu être créée et
- * facturée malgré un 5xx ou un délai dépassé (M9).
- */
-export function isRetryableRequest(endpoint: string, method: "GET" | "POST"): boolean {
-  return method === "GET" || /\/live(\/|$)/.test(endpoint);
-}
-
 // ─── Client ──────────────────────────────────────────────────────────────────
 
-export type DataForSeoOptions = {
-  /** Délai par requête (ms), défaut DATAFORSEO_TIMEOUT_MS */
-  timeoutMs?: number;
+export type DataForSeoOptions = DataForSeoClientOptions & {
   /** Requêtes simultanées pour une grille, défaut DATAFORSEO_CONCURRENCY */
   concurrency?: number;
 };
 
 /**
- * Client DataForSEO réel. Chaque endpoint « live » n'accepte qu'une tâche par
- * appel HTTP : une grille de 49 points = 49 appels, lancés avec une
- * concurrence bornée (résultats dans l'ordre des entrées). Délai de 60 s par
- * requête, une nouvelle tentative sur erreur 5xx ou réseau pour les endpoints
- * « live » et les GET seulement (`isRetryableRequest`). Les erreurs sont
- * explicites (`DataForSEO <endpoint> <statut>: <message>`) et ne contiennent
- * jamais les identifiants. Le coût rendu est la somme des `tasks[].cost`
- * renvoyés par l'API.
- *
- * Limite connue : si la première tentative d'un appel « live » dépasse le
- * délai mais a été servie (et facturée) côté DataForSEO, puis que la seconde
- * aboutit, le coût rendu est celui de la seconde seulement — l'API ne permet
- * pas de retrouver le coût d'une réponse jamais reçue. Les montants en jeu
- * (≈ 0,002 $ par point) restent sous le plafond mensuel.
+ * Fournisseur « recherche locale » DataForSEO réel, sur le client HTTP commun
+ * (`DataForSeoClient` : auth, délai, relance, coût = somme des `tasks[].cost`).
+ * Chaque endpoint « live » n'accepte qu'une tâche par appel HTTP : une grille
+ * de 49 points = 49 appels, lancés avec une concurrence bornée (résultats
+ * dans l'ordre des entrées). Les montants en jeu (≈ 0,002 $ par point)
+ * restent sous le plafond mensuel même dans le cas limite d'une première
+ * tentative servie mais non reçue (voir `DataForSeoClient`).
  */
-export class DataForSeoProvider implements LocalSearchProvider {
+export class DataForSeoProvider extends DataForSeoClient implements LocalSearchProvider {
   readonly mode = "dataforseo" as const;
-  private readonly timeoutMs: number;
   private readonly concurrency: number;
 
-  constructor(
-    private readonly login: string,
-    private readonly password: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-    options: DataForSeoOptions = {},
-  ) {
-    this.timeoutMs = options.timeoutMs ?? DATAFORSEO_TIMEOUT_MS;
+  constructor(login: string, password: string, fetchImpl: typeof fetch = fetch, options: DataForSeoOptions = {}) {
+    super(login, password, fetchImpl, options);
     this.concurrency = options.concurrency ?? DATAFORSEO_CONCURRENCY;
-  }
-
-  protected authHeader(): string {
-    return `Basic ${Buffer.from(`${this.login}:${this.password}`).toString("base64")}`;
-  }
-
-  /**
-   * Un appel HTTP (JSON) : délai, une nouvelle tentative sur 5xx ou erreur
-   * réseau si la requête est retentable (`isRetryableRequest`), statut général
-   * vérifié (20000). Renvoie les tâches et le coût total de la réponse reçue
-   * (voir la limite connue sur une première tentative servie mais non reçue).
-   * `signal` (facultatif) annule l'appel en cours sans nouvelle tentative :
-   * une grille dont trop de points échouent interrompt ses requêtes en vol.
-   */
-  protected async request<R>(
-    endpoint: string,
-    init: { method: "GET" | "POST"; body?: unknown },
-    signal?: AbortSignal,
-  ): Promise<{ tasks: DfsTask<R>[]; cost: number }> {
-    const attempts = isRetryableRequest(endpoint, init.method) ? 2 : 1;
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      if (signal?.aborted) throw new Error(`DataForSEO ${endpoint}: annulé`);
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      signal?.addEventListener("abort", abort, { once: true });
-      const timer = setTimeout(abort, this.timeoutMs);
-      try {
-        let response: Response;
-        try {
-          response = await this.fetchImpl(`${DATAFORSEO_BASE}${endpoint}`, {
-            method: init.method,
-            headers: {
-              Authorization: this.authHeader(),
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-            signal: controller.signal,
-          });
-        } catch (err) {
-          if (signal?.aborted) throw new Error(`DataForSEO ${endpoint}: annulé`);
-          lastError = new Error(`DataForSEO ${endpoint} réseau: ${describeError(err)}`);
-          continue;
-        }
-        if (response.status >= 500) {
-          lastError = new Error(`DataForSEO ${endpoint} ${response.status}: ${await this.bodyExcerpt(response)}`);
-          continue;
-        }
-        if (!response.ok) {
-          throw new Error(`DataForSEO ${endpoint} ${response.status}: ${await this.bodyExcerpt(response)}`);
-        }
-        const json = (await response.json()) as DfsResponse<R>;
-        if (json.status_code !== STATUS_OK) {
-          throw new Error(
-            `DataForSEO ${endpoint} ${json.status_code ?? "?"}: ${json.status_message ?? "réponse invalide"}`,
-          );
-        }
-        const tasks = json.tasks ?? [];
-        return { tasks, cost: round6(tasks.reduce((sum, task) => sum + (numberOrNull(task.cost) ?? 0), 0)) };
-      } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", abort);
-      }
-    }
-    throw lastError ?? new Error(`DataForSEO ${endpoint}: échec`);
-  }
-
-  private async bodyExcerpt(response: Response): Promise<string> {
-    try {
-      const text = (await response.text()).replace(/\s+/g, " ").trim();
-      return text === "" ? response.statusText || "sans détail" : text.slice(0, 200);
-    } catch {
-      return response.statusText || "sans détail";
-    }
-  }
-
-  private taskError(endpoint: string, task: DfsTask<unknown> | undefined): Error {
-    return new Error(
-      `DataForSEO ${endpoint} ${task?.status_code ?? "?"}: ${task?.status_message ?? "tâche absente de la réponse"}`,
-    );
   }
 
   /**

@@ -9,7 +9,8 @@
     "./hosting": "./src/hosting/index.ts",
     "./mail": "./src/mail/index.ts",
     "./google": "./src/google/index.ts",
-    "./dataforseo": "./src/dataforseo/index.ts"
+    "./dataforseo": "./src/dataforseo/index.ts",
+    "./dataforseo/ads": "./src/dataforseo/ads.ts"
   },
   "scripts": {
     "lint": "eslint src",
