@@ -334,7 +334,13 @@ function mainAndCity(seeds: string[]): { main: string; city: string } {
 export function mockAdsIdeaTexts(seeds: string[]): string[] {
   const { main, city } = mainAndCity(seeds);
   const mainNorm = normalizeAdsText(main);
-  const specialties = seeds.filter((s) => s !== main && !includesPhrase(normalizeAdsText(s), mainNorm) && (city === "" || !normalizeAdsText(s).endsWith(` ${normalizeAdsText(city)}`)));
+  const mainRoot = mainNorm.slice(0, 4);
+  const cityNorm = normalizeAdsText(city);
+  // Spécialités : graines sans le métier (ni un synonyme de même racine, ex. « sophrologie ») ni la ville
+  const specialties = seeds.filter((s) => {
+    const n = normalizeAdsText(s);
+    return s !== main && !includesPhrase(n, mainNorm) && !n.split(" ").some((w) => w.startsWith(mainRoot)) && (cityNorm === "" || !n.endsWith(` ${cityNorm}`));
+  });
   const texts: string[] = [...seeds];
   texts.push(`${main} près de chez moi`, `cabinet ${main}`, `${main} avis`, `${main} tarif`, `${main} prix`, `${main} rendez-vous`, `séance ${main}`, `consultation ${main}`, `${main} urgence`);
   if (city) {

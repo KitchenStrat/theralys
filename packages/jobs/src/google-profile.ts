@@ -103,8 +103,13 @@ const MAPS_DEPTH = 20;
 const DAY_MS = 86_400_000;
 const ERROR_MESSAGE_MAX = 300;
 
-/** `sync_attempt` : tentative de synchronisation sans appel abouti (coût 0, 0 requête), pour l'échéancier. */
-export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt";
+/**
+ * `sync_attempt` : tentative de synchronisation sans appel abouti (coût 0,
+ * 0 requête), pour l'échéancier. `ads_keywords` : analyse Google Ads
+ * (DataForSEO facturé, `requests` = nombre d'appels, coût réel) ;
+ * `ads_plan` : régénération du plan d'action (compteur, coût 0).
+ */
+export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan";
 
 export type GoogleBudget = {
   month: string;
@@ -114,8 +119,8 @@ export type GoogleBudget = {
 };
 
 /** Connexion ou transaction drizzle (les lectures de budget se font aussi sous verrou, dans une transaction). */
-type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-type DbExecutor = Database | DbTransaction;
+export type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type DbExecutor = Database | DbTransaction;
 
 /** Dépenses fournisseur du mois courant (USD) pour un site. */
 export async function monthlyGoogleSpendUsd(db: DbExecutor, siteId: string, now = new Date()): Promise<number> {
