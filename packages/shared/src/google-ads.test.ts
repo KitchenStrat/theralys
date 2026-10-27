@@ -42,6 +42,8 @@ const osteo = buildAdsSeeds({ profession: "Ostéopathe", city: "Toulouse", speci
 const sophro = buildAdsSeeds({ profession: "Sophrologue", city: "Toulouse", specialties: ["Sophrologie et gestion du stress", "Sophrologie", "Accompagnement du sommeil"] });
 const masseuse = buildAdsSeeds({ profession: "Masseuse bien-être", city: "Albi", specialties: ["Massage californien", "Massage"] });
 const yoga = buildAdsSeeds({ profession: "Professeur de yoga", city: "Albi", specialties: [] });
+const pilates = buildAdsSeeds({ profession: "Professeur de Pilates", city: "Albi", specialties: [] });
+const meditation = buildAdsSeeds({ profession: "Enseignante en méditation de pleine conscience", city: "Lyon", specialties: [] });
 
 const fetchedAt = new Date("2026-10-26T10:00:00Z");
 
@@ -169,6 +171,26 @@ describe("adsProfessionFamily", () => {
     expect(adsProfessionFamily("Praticienne en médecine traditionnelle chinoise").roots).toEqual(["medeci"]);
   });
 
+  it("métier d'enseignement (professeur, instructeur, enseignant…) : la pratique seule et ses cours deviennent des synonymes", () => {
+    expect(adsProfessionFamily("Professeur de Pilates")).toEqual({
+      key: "generic",
+      roots: ["pilate"],
+      synonyms: ["professeur de pilates", "pilates", "cours de pilates"],
+      negatives: [],
+      teaching: true,
+    });
+    expect(adsProfessionFamily("Instructeur Pilates").synonyms).toEqual(["instructeur pilates", "pilates", "cours de pilates"]);
+    expect(adsProfessionFamily("Enseignante en méditation de pleine conscience").synonyms).toEqual([
+      "enseignante en méditation de pleine conscience",
+      "méditation",
+      "cours de méditation",
+    ]);
+    expect(adsProfessionFamily("Professeur de yoga").teaching).toBe(true);
+    // Sans pratique après le mot de fonction, ou sans mot de fonction : inchangé
+    expect(adsProfessionFamily("Professeur")).toEqual({ key: "generic", roots: ["profes"], synonyms: ["professeur"], negatives: [] });
+    expect(adsProfessionFamily("Praticien en lithothérapie").teaching).toBeUndefined();
+  });
+
   it("« thérapeute » ne signe un psychopraticien qu'en tête d'intitulé : art-thérapeute et kinésithérapeute restent génériques", () => {
     expect(adsProfessionFamily("Thérapeute de couple").key).toBe("psychopraticien");
     expect(adsProfessionFamily("Psychothérapeute").key).toBe("psychopraticien");
@@ -252,10 +274,25 @@ describe("buildAdsSeeds", () => {
     const seed = buildAdsSeeds({
       profession: "Hypnothérapeute",
       city: "Albi",
-      specialties: ["Hypnose : arrêt du tabac (séances)", "hypnose   arrêt  du tabac", "Hypnose", "ok", "Un titre beaucoup trop long pour une spécialité raisonnable sur un site"],
+      specialties: ["Hypnose : arrêt du tabac (séances)", "hypnose   arrêt  du tabac", "Hypnose", "ok"],
     });
     expect(seed.specialties).toEqual(["hypnose arrêt du tabac"]);
     expect(seed.specialtyRoots).toEqual(["arret"]);
+  });
+
+  it("spécialité de plus de 6 mots significatifs : tronquée (mots vides non comptés, sans mot vide pendant), jamais écartée", () => {
+    const seed = buildAdsSeeds({
+      profession: "Sophrologue",
+      city: "Albi",
+      specialties: [
+        "Sommeil, stress, dos, cou, poids, sport, voix",
+        "Accompagnement des troubles du sommeil et de l'anxiété chez l'adulte",
+        "Un titre beaucoup trop long pour une spécialité raisonnable sur un site",
+      ],
+    });
+    expect(seed.specialties).toEqual(["sommeil stress dos cou poids sport", "accompagnement des troubles du sommeil", "un titre beaucoup trop long"]);
+    expect(seed.keywords).toContain("sommeil stress dos cou poids sport albi");
+    for (const specialty of seed.specialties) expect(specialty.length).toBeLessThanOrEqual(40);
   });
 
   it("spécialité de plus de 40 caractères coupée sur un mot, sans mot vide pendant", () => {
@@ -305,6 +342,18 @@ describe("buildAdsSeeds", () => {
     expect(yoga.keywords).toContain("cours de yoga albi");
     expect(yoga.keywords).toContain("professeur de yoga albi");
   });
+
+  it("« Professeur de Pilates » / « Enseignante en méditation » : la pratique seule et ses cours font des graines, la racine signe le métier", () => {
+    expect(pilates.professionTerms).toEqual(["professeur de pilates", "pilates", "cours de pilates"]);
+    expect(pilates.professionRoots).toEqual(["pilate"]);
+    expect(pilates.professionFamily).toBe("generic");
+    expect(pilates.keywords.slice(0, 5)).toEqual(["professeur de pilates albi", "pilates albi", "cours de pilates albi", "professeur de pilates", "pilates"]);
+    expect(meditation.professionTerms).toEqual(["enseignante en méditation de pleine conscience", "méditation", "cours de méditation"]);
+    expect(meditation.professionRoots).toEqual(["medita"]);
+    expect(meditation.keywords).toContain("méditation lyon");
+    expect(meditation.keywords).toContain("cours de méditation lyon");
+    for (const keyword of meditation.keywords) expect(keyword.split(" ").length).toBeLessThanOrEqual(10);
+  });
 });
 
 // ─── Exclusion et intention ──────────────────────────────────────────────────
@@ -347,6 +396,20 @@ describe("adsKeywordExclusion", () => {
     expect(adsKeywordExclusion("formation professeur de yoga", yoga)).toBe("negative");
   });
 
+  it("métiers d'enseignement : « cours », « atelier » et « stage » ciblent la pratique (Pilates, méditation, yoga) ; ils restent négatifs ailleurs", () => {
+    expect(adsKeywordExclusion("cours de pilates albi", pilates)).toBeNull();
+    expect(adsKeywordExclusion("pilates albi", pilates)).toBeNull();
+    expect(adsKeywordExclusion("atelier pilates albi", pilates)).toBeNull();
+    expect(adsKeywordExclusion("stage de pilates", pilates)).toBeNull();
+    expect(adsKeywordExclusion("formation pilates albi", pilates)).toBe("negative");
+    expect(adsKeywordExclusion("cours de méditation lyon", meditation)).toBeNull();
+    expect(adsKeywordExclusion("atelier méditation lyon", meditation)).toBeNull();
+    expect(adsKeywordExclusion("stage de yoga albi", yoga)).toBeNull();
+    expect(adsKeywordExclusion("atelier yoga albi", yoga)).toBeNull();
+    expect(adsKeywordExclusion("stage ostéopathie toulouse", osteo)).toBe("negative");
+    expect(adsKeywordExclusion("cours ostéopathie toulouse", osteo)).toBe("negative");
+  });
+
   it("vide ou trop long", () => {
     expect(adsKeywordExclusion("", osteo)).toBe("too_long");
     expect(adsKeywordExclusion("???", osteo)).toBe("too_long");
@@ -385,6 +448,21 @@ describe("classifyAdsIntent", () => {
     const mans = buildAdsSeeds({ profession: "Ostéopathe", city: "Le Mans", specialties: [] });
     expect(classifyAdsIntent("ostéopathe le mans", mans)).toBe("metier_ville");
     expect(classifyAdsIntent("ostéopathe romans", mans)).toBe("proximite");
+  });
+
+  it("ville à suffixe d'arrondissement (« Paris 15e », « Lyon 3 ») : reconnue sans suffixe, avec « 15 » ou « 15e »", () => {
+    const paris = buildAdsSeeds({ profession: "Sophrologue", city: "Paris 15e", specialties: ["Gestion du stress"] });
+    expect(paris.keywords[0]).toBe("sophrologue paris 15e");
+    expect(classifyAdsIntent("sophrologue paris 15e", paris)).toBe("metier_ville");
+    expect(classifyAdsIntent("sophrologue paris 15", paris)).toBe("metier_ville");
+    expect(classifyAdsIntent("sophrologue paris", paris)).toBe("metier_ville");
+    expect(classifyAdsIntent("sophrologue paris 15ème", paris)).toBe("metier_ville");
+    expect(adsKeywordExclusion("gestion du stress paris", paris)).toBeNull();
+    expect(classifyAdsIntent("sophrologue parisienne", paris)).toBe("proximite");
+    const lyon = buildAdsSeeds({ profession: "Sophrologue", city: "Lyon 3", specialties: [] });
+    expect(classifyAdsIntent("sophrologue lyon 3e", lyon)).toBe("metier_ville");
+    expect(classifyAdsIntent("sophrologue lyon", lyon)).toBe("metier_ville");
+    expect(classifyAdsIntent("sophrologue lyon 3", lyon)).toBe("metier_ville");
   });
 
   it("une page de spécialité qui n'est que le métier ne transforme pas « métier + ville » en spécialité", () => {
@@ -517,6 +595,21 @@ describe("selectAdsKeywords", () => {
     expect(set.negatives).toContain("formation");
   });
 
+  it("métiers d'enseignement : ni « cours », ni « atelier », ni « stage » dans les négatifs ; « cours de pilates albi » ciblé", () => {
+    for (const [seed, ideas] of [
+      [pilates, [idea("cours de pilates albi", 120), idea("pilates albi", 300), idea("stage pilates albi", 20)]],
+      [meditation, [idea("cours de méditation lyon", 90), idea("atelier méditation lyon", 40)]],
+      [yoga, [idea("cours de yoga albi", 200), idea("stage de yoga albi", 50), idea("atelier yoga albi", 30)]],
+    ] as const) {
+      const set = select([...ideas], seed);
+      expect(set.keywords.map((k) => k.keyword).sort()).toEqual(ideas.map((i) => i.keyword).sort());
+      for (const word of ["cours", "atelier", "stage"]) expect(set.negatives.map(normalizeAdsText)).not.toContain(word);
+      expect(set.negatives).toContain("formation");
+    }
+    expect(select([idea("pilates albi", 300)], pilates).keywords[0]).toMatchObject({ intent: "metier_ville", seed: true });
+    expect(select([idea("stage ostéopathie toulouse", 50)], osteo).negatives).toContain("stage");
+  });
+
   it("aucune idée : ensemble vide mais négatifs conseillés", () => {
     const set = select([]);
     expect(set).toMatchObject({ keywords: [], groups: [], rawCount: 0, dropped: 0 });
@@ -564,6 +657,19 @@ describe("summarizeForecast", () => {
     expect(forecast).toMatchObject({ version: 1, source: "dataforseo", fetchedAt: "2026-10-26T10:00:00.000Z", bidUsd: 2.5, match: "phrase", period: "next_month", locationCode: 2250, totalClicks: 16, totalCostUsd: 12.46 });
     expect(forecast.rows).toHaveLength(3);
     expect(summarizeForecast([], { source: "mock", fetchedAt, bidUsd: 1, match: "exact", locationCode: 2250 })).toMatchObject({ totalClicks: 0, totalCostUsd: 0 });
+  });
+
+  it("ligne agrégée du fournisseur (keyword null, format depuis juin) : les totaux portent sur l'ensemble des mots-clés envoyés", () => {
+    const forecast = summarizeForecast([{ keyword: null, clicks: 459.42, costUsd: 2562.44, averageCpcUsd: 5.58 }], {
+      source: "dataforseo",
+      fetchedAt,
+      bidUsd: 6,
+      match: "phrase",
+      locationCode: GOOGLE_ADS_LOCATION_CODE_FR,
+    });
+    expect(forecast).toMatchObject({ bidUsd: 6, totalClicks: 459, totalCostUsd: 2562.44 });
+    expect(forecast.rows).toEqual([{ keyword: null, clicks: 459.42, costUsd: 2562.44, averageCpcUsd: 5.58 }]);
+    expect(estimateAdsBudget(null, forecast).basis).toBe("forecast");
   });
 });
 
@@ -649,6 +755,8 @@ describe("adsReadinessChecks", () => {
     expect(checks.every((c) => c.status === "ok")).toBe(true);
     expect(checks.find((c) => c.id === "reviews")?.detail).toBe("30 avis, note 4,8 : vos annonces inspireront confiance.");
     expect(checks.find((c) => c.id === "landing_pages")?.detail).toContain("2 pages de spécialité");
+    // Le bandeau cookies peut être désactivé : le texte n'affirme pas un consentement systématique
+    expect(checks.find((c) => c.id === "tracking_tag")?.detail).toBe("La balise se charge sur le site (après consentement quand le bandeau cookies est actif).");
   });
 
   it("contact critique seulement si ni rendez-vous ni téléphone", () => {
@@ -748,6 +856,15 @@ describe("clampAdText", () => {
   it("sans espace exploitable : coupe franche à `max`", () => {
     expect(clampAdText("Ostéopathiepédiatriquetoulouse", 10)).toBe("Ostéopathi");
     expect(clampAdText("Un ostéopathetrèslongmotsansespace", 12)).toBe("Un ostéopath");
+  });
+
+  it("le trait d'union est une frontière : une ville composée n'est jamais coupée en plein mot", () => {
+    expect(clampAdText("Cabinet à Villefranche-de-Rouergue", 30)).toBe("Cabinet à Villefranche-de");
+    expect(clampAdText("Sophrologue à Saint-Jean-de-Luz", 27)).toBe("Sophrologue à Saint-Jean-de");
+    expect(clampAdText("Massage bien-être à Albi", 12)).toBe("Massage bien");
+    expect(clampAdText("Ostéopathe à Villefranche-sur-Saône", 30)).toBe("Ostéopathe à Villefranche-sur");
+    // Frontière tombant exactement à `max` : le mot entier est gardé
+    expect(clampAdText("Prendre rendez-vous en ligne", 19)).toBe("Prendre rendez-vous");
   });
 });
 

@@ -171,12 +171,22 @@ function cleanTerm(raw: string): string {
     .toLowerCase();
 }
 
-/** Formes normalisées d'une ville acceptées dans une requête : telle quelle, et sans son article (« L'Isle-Jourdain » → « isle jourdain », « Le Mans » → « mans »). */
+/**
+ * Formes normalisées d'une ville acceptées dans une requête : telle quelle,
+ * sans son article (« L'Isle-Jourdain » → « isle jourdain », « Le Mans » →
+ * « mans »), et pour une ville à suffixe d'arrondissement (« Paris 15e »,
+ * « Lyon 3 ») : la ville seule et le numéro avec ou sans « e » (« paris »,
+ * « paris 15 », « paris 15e »).
+ */
 function cityForms(city: string): string[] {
   const norm = normalizeAdsText(city);
   if (norm === "") return [];
-  const stripped = norm.replace(/^(?:l|le|la|les) /, "");
-  return unique([norm, stripped].filter((c) => c.length >= 3));
+  const forms = [norm, norm.replace(/^(?:l|le|la|les) /, "")];
+  for (const form of [...forms]) {
+    const district = /^(.+?) (\d{1,2})(?:e|er|eme)?$/.exec(form);
+    if (district) forms.push(district[1]!, `${district[1]} ${district[2]}`, `${district[1]} ${district[2]}e`);
+  }
+  return unique(forms.filter((c) => c.length >= 3));
 }
 
 function containsPhrase(haystack: string, phrase: string): boolean {
@@ -243,7 +253,23 @@ export type AdsProfessionFamily = {
   synonyms: string[];
   /** Mots-clés négatifs propres au métier */
   negatives: string[];
+  /**
+   * Métier d'enseignement (professeur, instructeur, moniteur, animateur,
+   * enseignant) : « cours », « atelier » et « stage » désignent la pratique
+   * elle-même et ne sont pas des négatifs.
+   */
+  teaching?: boolean;
 };
+
+/** Mots de fonction en tête d'un intitulé d'enseignement (« Professeur de Pilates », « Enseignante en méditation »). */
+const TEACHING_WORDS = new Set([
+  "professeur", "professeure", "professeurs", "prof",
+  "instructeur", "instructrice", "moniteur", "monitrice", "animateur", "animatrice",
+  "enseignant", "enseignante",
+]);
+
+/** Négatifs communs qui nomment la pratique d'un métier d'enseignement (jamais négatifs pour lui). */
+const TEACHING_PRACTICE_WORDS: readonly string[] = ["cours", "atelier", "stage"];
 
 const FAMILIES: readonly AdsProfessionFamily[] = [
   { key: "osteopathe", roots: ["osteo"], synonyms: ["ostéopathe", "ostéopathie"], negatives: ["animalier", "équin", "canin", "vétérinaire", "cheval", "chien", "chat"] },
@@ -259,7 +285,7 @@ const FAMILIES: readonly AdsProfessionFamily[] = [
   { key: "chiropracteur", roots: ["chiro"], synonyms: ["chiropracteur", "chiropraxie"], negatives: ["table"] },
   { key: "etiopathe", roots: ["etiop"], synonyms: ["étiopathe", "étiopathie"], negatives: [] },
   { key: "nutrition", roots: ["nutri", "dietet"], synonyms: ["nutritionniste", "diététicien", "rééquilibrage alimentaire"], negatives: ["application", "programme en ligne", "livre"] },
-  { key: "yoga", roots: ["yoga"], synonyms: ["cours de yoga", "professeur de yoga"], negatives: ["tapis", "tenue", "legging", "vêtement", "youtube", "en ligne"] },
+  { key: "yoga", roots: ["yoga"], synonyms: ["cours de yoga", "professeur de yoga"], negatives: ["tapis", "tenue", "legging", "vêtement", "youtube", "en ligne"], teaching: true },
   { key: "magnetiseur", roots: ["magnet"], synonyms: ["magnétiseur", "magnétisme"], negatives: ["aimant", "aimants"] },
   { key: "energeticien", roots: ["energet"], synonyms: ["énergéticien", "soin énergétique"], negatives: [] },
   { key: "psychopraticien", roots: ["psychoprat", "psychotherap", "therapeute"], synonyms: ["psychopraticien", "thérapeute"], negatives: ["remboursé", "psychiatre"] },
@@ -320,9 +346,24 @@ const TARIF_MARKERS: readonly string[] = ["tarif", "tarifs", "prix", "combien", 
 const PROXIMITY_MARKERS: readonly string[] = ["pres de", "proche", "autour", "a cote", "a proximite", "chez moi", "alentours"];
 
 /**
+ * Pratique enseignée, dans la graphie du praticien, quand l'intitulé commence
+ * par un mot de fonction (« Professeur de Pilates » → « pilates »,
+ * « Enseignante en méditation » → « méditation ») ; null sinon.
+ */
+function taughtPractice(profession: string): string | null {
+  const first = words(profession).find((w) => !STOP_WORDS.has(w));
+  if (!first || !TEACHING_WORDS.has(first)) return null;
+  const head = headWord(profession);
+  if (head === "" || head === first) return null;
+  return cleanTerm(profession).split(" ").find((token) => normalizeAdsText(token) === head) ?? null;
+}
+
+/**
  * Famille du métier (racines, synonymes, négatifs) ; repli générique sur le
  * premier mot significatif de l'intitulé (« Praticien en lithothérapie » →
- * « lithot », « EFT (libération émotionnelle) » → « eft »).
+ * « lithot », « EFT (libération émotionnelle) » → « eft »). Un intitulé
+ * d'enseignement (« Professeur de Pilates ») nomme aussi la pratique seule et
+ * ses cours (« pilates », « cours de pilates »), comme la famille yoga.
  */
 export function adsProfessionFamily(profession: string): AdsProfessionFamily {
   const normalized = normalizeAdsText(profession);
@@ -331,6 +372,16 @@ export function adsProfessionFamily(profession: string): AdsProfessionFamily {
     if (family.roots.some((root) => (WORD_START_ROOTS.has(root) ? head.startsWith(root) : hasRoot(normalized, root)))) return family;
   }
   const root = genericRoot(profession);
+  const practice = taughtPractice(profession);
+  if (practice) {
+    return {
+      key: "generic",
+      roots: root ? [root] : [],
+      synonyms: uniqueNormalized([cleanTerm(profession), practice, `cours de ${practice}`]),
+      negatives: [],
+      teaching: true,
+    };
+  }
   return {
     key: "generic",
     roots: root ? [root] : [],
@@ -339,10 +390,16 @@ export function adsProfessionFamily(profession: string): AdsProfessionFamily {
   };
 }
 
-/** Négatifs applicables à un métier : liste commune (moins ceux qui nomment la pratique, ex. « cours » pour « cours de yoga ») et liste propre. */
+/**
+ * Négatifs applicables à un métier : liste commune (moins ceux qui nomment la
+ * pratique, ex. « cours » pour « cours de yoga », et moins « cours »,
+ * « atelier », « stage » pour un métier d'enseignement) et liste propre.
+ */
 function familyNegatives(family: AdsProfessionFamily): string[] {
   const own = family.synonyms.map(normalizeAdsText);
-  const generic = GOOGLE_ADS_GENERIC_NEGATIVES.filter((n) => !own.some((s) => containsPhrase(s, n)));
+  const generic = GOOGLE_ADS_GENERIC_NEGATIVES.filter(
+    (n) => !own.some((s) => containsPhrase(s, n)) && !(family.teaching && TEACHING_PRACTICE_WORDS.includes(normalizeAdsText(n))),
+  );
   return uniqueNormalized([...generic, ...family.negatives]);
 }
 
@@ -380,22 +437,48 @@ function carriesRoot(word: string, professionRoots: string[]): boolean {
   return professionRoots.some((root) => root !== "" && (word.startsWith(root) || root.startsWith(word.slice(0, 6))));
 }
 
+/** Mots significatifs conservés dans une spécialité (les mots vides ne comptent pas). */
+const SPECIALTY_WORDS_MAX = 6;
+
+/** Retire les mots vides pendants en fin de liste (« gestion du » → « gestion »). */
+function dropTrailingStopWords(parts: string[]): string[] {
+  const out = [...parts];
+  while (out.length > 1 && words(out[out.length - 1]!).every((w) => STOP_WORDS.has(w))) out.pop();
+  return out;
+}
+
+/** Tronque un texte à ses `max` premiers mots significatifs (un mot vide ne compte pas), sans mot vide pendant. */
+function limitSignificantWords(text: string, max: number): string {
+  const kept: string[] = [];
+  let significant = 0;
+  for (const token of text.split(" ")) {
+    if (token === "") continue;
+    if (words(token).some((w) => !STOP_WORDS.has(w))) {
+      if (significant >= max) break;
+      significant++;
+    }
+    kept.push(token);
+  }
+  return dropTrailingStopWords(kept).join(" ");
+}
+
 /**
- * Titre de page → spécialité : ponctuation retirée, ≤ 40 caractères coupés sur
- * un mot (sans mot vide pendant). Une page qui n'est que le métier lui-même
- * (« Sophrologie », « Massages ») n'apporte rien de plus.
+ * Titre de page → spécialité : ponctuation retirée, au plus 6 mots
+ * significatifs puis ≤ 40 caractères, coupés sur un mot (sans mot vide
+ * pendant) — un titre long est tronqué, pas écarté. Une page qui n'est que le
+ * métier lui-même (« Sophrologie », « Massages ») n'apporte rien de plus.
  */
 function cleanSpecialty(raw: string, professionRoots: string[]): string | null {
   const text = cleanTerm(raw);
-  if (text.length < 3 || text.length > 60) return null;
+  if (text.length < 3) return null;
   const ws = words(text);
-  if (ws.length === 0 || ws.length > 6) return null;
+  if (ws.length === 0) return null;
   if (ws.length === 1 && carriesRoot(ws[0]!, professionRoots)) return null;
-  if (text.length <= SPECIALTY_MAX) return text;
-  const lastSpace = text.lastIndexOf(" ", SPECIALTY_MAX);
-  const parts = (lastSpace > 0 ? text.slice(0, lastSpace) : text.slice(0, SPECIALTY_MAX)).split(" ");
-  while (parts.length > 1 && STOP_WORDS.has(normalizeAdsText(parts[parts.length - 1]!))) parts.pop();
-  return parts.join(" ").trim();
+  const limited = limitSignificantWords(text, SPECIALTY_WORDS_MAX);
+  if (limited.length <= SPECIALTY_MAX) return limited;
+  const lastSpace = limited.lastIndexOf(" ", SPECIALTY_MAX);
+  const parts = (lastSpace > 0 ? limited.slice(0, lastSpace) : limited.slice(0, SPECIALTY_MAX)).split(" ");
+  return dropTrailingStopWords(parts).join(" ").trim();
 }
 
 /** Mots de titre de page qui ne désignent pas le sujet de la spécialité (« Accompagnement du sommeil » → « sommeil »). */
@@ -685,8 +768,16 @@ export function selectAdsKeywords(raw: GoogleAdsKeywordData[], seed: GoogleAdsSe
 
 // ─── Prévision de trafic (enchère → clics et coût) ───────────────────────────
 
+/**
+ * Ligne de prévision du fournisseur. Depuis le 1er juin (documentation
+ * DataForSEO « Google Ad Traffic By Keywords »), l'endpoint renvoie un seul
+ * item agrégé pour l'ensemble des mots-clés envoyés : `keyword` vaut alors
+ * null et les chiffres portent sur tout le cœur de cible. Une ligne par
+ * mot-clé (ancien format) reste acceptée.
+ */
 export type GoogleAdsForecastRow = {
-  keyword: string;
+  /** Mot-clé, ou null pour l'agrégat de l'ensemble des mots-clés envoyés */
+  keyword: string | null;
   clicks: number | null;
   costUsd: number | null;
   averageCpcUsd: number | null;
@@ -696,11 +787,12 @@ export type GoogleAdsForecast = {
   version: 1;
   source: "dataforseo" | "mock";
   fetchedAt: string;
-  /** Enchère maximale envoyée (USD) */
+  /** Enchère maximale réellement envoyée au fournisseur (USD, entier : l'endpoint déclare `bid` comme un entier) */
   bidUsd: number;
   match: GoogleAdsMatchType;
   period: "next_month";
   locationCode: number;
+  /** En pratique une seule ligne agrégée (`keyword: null`) ; les totaux ci-dessous somment toutes les lignes */
   rows: GoogleAdsForecastRow[];
   totalClicks: number;
   totalCostUsd: number;
@@ -976,7 +1068,9 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
       "tracking_tag",
       "Balise Google Ads sur le site",
       input.hasAdsTag ? "ok" : "todo",
-      input.hasAdsTag ? "La balise se charge après consentement des visiteurs." : "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",
+      input.hasAdsTag
+        ? "La balise se charge sur le site (après consentement quand le bandeau cookies est actif)."
+        : "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",
       false,
     ),
     check(
@@ -1104,13 +1198,18 @@ export type GoogleAdsPlanInput = {
   instructions?: string;
 };
 
-/** Tronque un texte d'annonce à `max` caractères sur une limite de mot, sans ponctuation pendante. */
+/**
+ * Tronque un texte d'annonce à `max` caractères sur une limite de mot (espace
+ * ou trait d'union : « Cabinet à Villefranche-de-Rouergue » → « Cabinet à
+ * Villefranche-de », jamais « …-Roue »), sans ponctuation pendante. Sans
+ * frontière assez loin (≥ 60 % de `max`), coupe franche.
+ */
 export function clampAdText(text: string, max: number): string {
   const clean = text.replace(/\s+/g, " ").trim();
   if (clean.length <= max) return clean;
   const cut = clean.slice(0, max);
-  const lastSpace = cut.lastIndexOf(" ");
-  const base = lastSpace >= Math.floor(max * 0.6) ? cut.slice(0, lastSpace) : cut;
+  const boundary = /[ -]/.test(clean.charAt(max)) ? max : Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("-"));
+  const base = boundary >= Math.floor(max * 0.6) ? cut.slice(0, boundary) : cut;
   return base.replace(/[\s,;:(\-–—]+$/g, "").trim();
 }
 

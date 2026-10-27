@@ -12,6 +12,7 @@ import {
   forecastRowFromItem,
   keywordIdeaFromItem,
   mockAdsKind,
+  mockKeywordTraffic,
   type DfsAdsKeywordItem,
 } from "./ads";
 
@@ -144,17 +145,13 @@ describe("DataForSeoAdsProvider — idées de mots-clés", () => {
 });
 
 describe("DataForSeoAdsProvider — prévision de trafic", () => {
-  it("corps conforme (enchère en USD arrondie au centime, correspondance, next_month) et lignes normalisées", async () => {
+  it("corps conforme (enchère entière en USD, correspondance, next_month) et ligne agrégée de la documentation (keyword null) conservée", async () => {
     const { calls, impl } = stubFetch(() =>
       jsonResponse(
         dfs({
           cost: 0.09,
-          result: [
-            { keyword: "sophrologue albi", clicks: 12.4, cost: 17.86, average_cpc: 1.44, impressions: null, ctr: null },
-            { keyword: "sophrologue albi avis", clicks: null, cost: null, average_cpc: null },
-            { keyword: "", clicks: 1 },
-            null,
-          ],
+          // Exemple de la documentation « ad_traffic_by_keywords/live » : un seul item pour toute la campagne
+          result: [{ keyword: null, clicks: 459.42, cost: 2562.44, average_cpc: 5.58, impressions: 15234.2, ctr: 3.02 }],
         }),
       ),
     );
@@ -168,12 +165,35 @@ describe("DataForSeoAdsProvider — prévision de trafic", () => {
     });
     expect(calls[0]!.url).toBe(`${DATAFORSEO_BASE}${ADS_TRAFFIC_ENDPOINT}`);
     expect(calls[0]!.body).toEqual([
-      { keywords: ["sophrologue albi", "sophrologue albi avis"], bid: 2.35, match: "phrase", location_code: 2250, language_code: "fr", date_interval: "next_month" },
+      { keywords: ["sophrologue albi", "sophrologue albi avis"], bid: 3, match: "phrase", location_code: 2250, language_code: "fr", date_interval: "next_month" },
     ]);
+    expect(Number.isInteger((calls[0]!.body as { bid: number }[])[0]!.bid)).toBe(true);
     expect(out.costUsd).toBe(0.09);
+    expect(out.data).toEqual([{ keyword: null, clicks: 459.42, costUsd: 2562.44, averageCpcUsd: 5.58 }]);
+  });
+
+  it("ancien format (une ligne par mot-clé) toujours accepté ; items vides ou malformés écartés", async () => {
+    const { impl } = stubFetch(() =>
+      jsonResponse(
+        dfs({
+          cost: 0.09,
+          result: [
+            { keyword: "sophrologue albi", clicks: 12.4, cost: 17.86, average_cpc: 1.44, impressions: null, ctr: null },
+            { keyword: "sophrologue albi avis", clicks: null, cost: null, average_cpc: null },
+            { keyword: "", clicks: 1 },
+            {},
+            null,
+            "x",
+          ],
+        }),
+      ),
+    );
+    const provider = new DataForSeoAdsProvider(LOGIN, PASSWORD, impl);
+    const out = await provider.adTraffic({ keywords: ["sophrologue albi"], bidUsd: 2, match: "exact", locationCode: 2250, languageCode: "fr" });
     expect(out.data).toEqual([
       { keyword: "sophrologue albi", clicks: 12.4, costUsd: 17.86, averageCpcUsd: 1.44 },
       { keyword: "sophrologue albi avis", clicks: null, costUsd: null, averageCpcUsd: null },
+      { keyword: null, clicks: 1, costUsd: null, averageCpcUsd: null },
     ]);
   });
 
@@ -187,12 +207,14 @@ describe("DataForSeoAdsProvider — prévision de trafic", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("adsBidForRequest : unités de devise, centime, bornes, valeurs invalides", () => {
-    expect(adsBidForRequest(2.5)).toBe(2.5);
-    expect(adsBidForRequest(1.234)).toBe(1.23);
-    expect(adsBidForRequest(0)).toBe(0.01);
+  it("adsBidForRequest : entier en unités de devise (arrondi au dollar supérieur), bornes 1–999, valeurs invalides", () => {
+    expect(adsBidForRequest(2.5)).toBe(3);
+    expect(adsBidForRequest(1.234)).toBe(2);
+    expect(adsBidForRequest(2)).toBe(2);
+    expect(adsBidForRequest(0.5)).toBe(1);
+    expect(adsBidForRequest(0)).toBe(1);
     expect(adsBidForRequest(5000)).toBe(999);
-    expect(adsBidForRequest(Number.NaN)).toBe(0.01);
+    expect(adsBidForRequest(Number.NaN)).toBe(1);
   });
 });
 
@@ -242,10 +264,15 @@ describe("DataForSeoAdsProvider — erreurs", () => {
 });
 
 describe("normalisation unitaire", () => {
-  it("keywordIdeaFromItem / forecastRowFromItem : null pour un item sans mot-clé", () => {
+  it("keywordIdeaFromItem : null pour un item sans mot-clé ; forecastRowFromItem : l'item sans mot-clé est l'agrégat (keyword null)", () => {
     expect(keywordIdeaFromItem({ search_volume: 10 })).toBeNull();
     expect(keywordIdeaFromItem(undefined)).toBeNull();
-    expect(forecastRowFromItem({ clicks: 3 })).toBeNull();
+    expect(forecastRowFromItem({ clicks: 3 })).toEqual({ keyword: null, clicks: 3, costUsd: null, averageCpcUsd: null });
+    expect(forecastRowFromItem({ keyword: null, clicks: 459.42, cost: 2562.44, average_cpc: 5.58 })).toEqual({ keyword: null, clicks: 459.42, costUsd: 2562.44, averageCpcUsd: 5.58 });
+    expect(forecastRowFromItem({})).toBeNull();
+    expect(forecastRowFromItem({ keyword: null, clicks: null, cost: null, average_cpc: null })).toBeNull();
+    expect(forecastRowFromItem(null)).toBeNull();
+    expect(forecastRowFromItem("x")).toBeNull();
     const item: DfsAdsKeywordItem = { keyword: "x", competition_index: -3, cpc: -1 };
     expect(keywordIdeaFromItem(item)).toMatchObject({ competitionIndex: 0, cpcUsd: null });
   });
@@ -326,26 +353,43 @@ describe("MockAdsDataProvider", () => {
     expect(set.groups.map((g) => g.intent)).toEqual(expect.arrayContaining(["metier_ville", "rendez_vous", "tarif"]));
   });
 
-  it("adTraffic : clics ≈ volume × 3 % bornés, coût = clics × CPC moyen, enchère plafonnant le CPC, null conservés", async () => {
+  it("mockKeywordTraffic : clics ≈ volume × 3 % bornés, coût = clics × CPC moyen, enchère plafonnant le CPC, null sans donnée", async () => {
     const provider = new MockAdsDataProvider({ now: NOW });
     const ideas = await provider.keywordIdeas({ seeds: seed.keywords, locationCode: 2250, languageCode: "fr" });
-    const byText = new Map(ideas.data.map((k) => [k.keyword, k]));
-    const keywords = ["sophrologue", "sophrologue albi", "sophrologue albi horaires", "sophrologue albi"];
-    const out = await provider.adTraffic({ keywords, bidUsd: 1, match: "exact", locationCode: 2250, languageCode: "fr" });
-    expect(out.costUsd).toBe(0);
-    expect(out.data).toHaveLength(3);
-    const main = out.data[0]!;
-    const idea = byText.get("sophrologue") as GoogleAdsKeywordData;
+    const idea = ideas.data.find((k) => k.keyword === "sophrologue") as GoogleAdsKeywordData;
+    const main = mockKeywordTraffic("sophrologue", 1, "exact", NOW)!;
     expect(main.clicks).toBeLessThanOrEqual(300);
     expect(main.clicks).toBeLessThanOrEqual(idea.searchVolume! * 0.03 + 0.1);
     expect(main.averageCpcUsd).toBe(Math.min(1, idea.cpcUsd!));
-    expect(main.costUsd).toBeCloseTo(main.clicks! * main.averageCpcUsd!, 1);
-    expect(out.data[2]).toEqual({ keyword: "sophrologue albi horaires", clicks: null, costUsd: null, averageCpcUsd: null });
+    expect(main.costUsd).toBeCloseTo(main.clicks * main.averageCpcUsd, 1);
+    expect(mockKeywordTraffic("sophrologue albi horaires", 1, "exact", NOW)).toBeNull();
+    expect(mockKeywordTraffic("sophrologue albi", 5, "broad", NOW)!.clicks).toBeGreaterThan(mockKeywordTraffic("sophrologue albi", 5, "exact", NOW)!.clicks);
+  });
+
+  it("adTraffic : comme l'API, UNE ligne agrégée (keyword null) sommant les mots-clés envoyés ; clics et coût > 0 ; déterministe", async () => {
+    const provider = new MockAdsDataProvider({ now: NOW });
+    const keywords = ["sophrologue", "sophrologue albi", "sophrologue albi horaires", "sophrologue albi"];
+    const out = await provider.adTraffic({ keywords, bidUsd: 1, match: "exact", locationCode: 2250, languageCode: "fr" });
+    expect(out.costUsd).toBe(0);
+    expect(out.data).toHaveLength(1);
+    const row = out.data[0]!;
+    expect(row.keyword).toBeNull();
+    const parts = ["sophrologue", "sophrologue albi"].map((k) => mockKeywordTraffic(k, 1, "exact", NOW)!);
+    expect(row.clicks).toBeCloseTo(parts.reduce((s, p) => s + p.clicks, 0), 1);
+    expect(row.costUsd).toBeCloseTo(parts.reduce((s, p) => s + p.costUsd, 0), 2);
+    expect(row.clicks!).toBeGreaterThan(0);
+    expect(row.costUsd!).toBeGreaterThan(0);
+    expect(row.averageCpcUsd).toBeCloseTo(row.costUsd! / row.clicks!, 2);
 
     const broad = await provider.adTraffic({ keywords: ["sophrologue albi"], bidUsd: 5, match: "broad", locationCode: 2250, languageCode: "fr" });
     const exact = await provider.adTraffic({ keywords: ["sophrologue albi"], bidUsd: 5, match: "exact", locationCode: 2250, languageCode: "fr" });
     expect(broad.data[0]!.clicks!).toBeGreaterThan(exact.data[0]!.clicks!);
     expect(await provider.adTraffic({ keywords: ["sophrologue albi"], bidUsd: 5, match: "exact", locationCode: 2250, languageCode: "fr" })).toEqual(exact);
+    // Aucun mot-clé exploitable : aucune ligne ; mots-clés sans donnée seulement : agrégat à zéro
+    expect((await provider.adTraffic({ keywords: [], bidUsd: 5, match: "exact", locationCode: 2250, languageCode: "fr" })).data).toEqual([]);
+    expect((await provider.adTraffic({ keywords: ["sophrologue albi horaires"], bidUsd: 5, match: "exact", locationCode: 2250, languageCode: "fr" })).data).toEqual([
+      { keyword: null, clicks: 0, costUsd: 0, averageCpcUsd: null },
+    ]);
   });
 
   it("sans graine : aucune idée", async () => {

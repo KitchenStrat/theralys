@@ -18,9 +18,13 @@
  *   compter des milliers d'items : tous sont conservés (la sélection revient
  *   à `selectAdsKeywords`), les items malformés sont écartés.
  * - POST /keywords_data/google_ads/ad_traffic_by_keywords/live — { keywords
- *   (≤ 1000), bid, match exact|phrase|broad, location_code, language_code,
- *   date_interval: "next_month" } → items { keyword, clicks, cost,
- *   average_cpc } (`impressions` et `ctr` toujours null).
+ *   (≤ 1000), bid (entier), match exact|phrase|broad, location_code,
+ *   language_code, date_interval: "next_month" }. Depuis le 1er juin
+ *   (documentation DataForSEO), la réponse est agrégée pour toute la
+ *   « campagne » : UN item { keyword: null, clicks, cost, average_cpc,
+ *   impressions, ctr } portant sur l'ensemble des mots-clés envoyés (une
+ *   ligne par mot-clé, ancien format, reste acceptée). `impressions` et
+ *   `ctr` ne sont pas exploités.
  *
  * Coûts (USD) : ≈ 0,09 $ par appel « live » quel que soit le nombre de
  * mots-clés (DATAFORSEO_ADS_UNIT_COSTS). Une tâche refusée (statut ≠ 20000)
@@ -77,10 +81,11 @@ export const ADS_TRAFFIC_KEYWORDS_PER_REQUEST = 1000;
 /** Longueur maximale d'un mot-clé accepté par Google Ads (caractères). */
 const KEYWORD_MAX_LENGTH = 80;
 /**
- * Bornes de l'enchère envoyée (USD). L'exemple de la documentation envoie
- * 999 : au-delà, la prévision n'augmente plus ; en deçà d'un centime, aucun clic.
+ * Bornes de l'enchère envoyée (USD, entier). L'exemple de la documentation
+ * envoie 999 : au-delà, la prévision n'augmente plus ; en deçà de 1 $, la
+ * fiche de l'endpoint n'accepte pas de valeur (champ entier).
  */
-const BID_MIN_USD = 0.01;
+const BID_MIN_USD = 1;
 const BID_MAX_USD = 999;
 
 // ─── Formes des réponses DataForSEO (sous-ensemble exploité) ─────────────────
@@ -99,11 +104,12 @@ export type DfsAdsKeywordItem = {
 };
 
 export type DfsAdTrafficItem = {
+  /** null : agrégat de l'ensemble des mots-clés de la tâche (format depuis juin) */
   keyword?: string | null;
   clicks?: number | null;
   cost?: number | null;
   average_cpc?: number | null;
-  /** Obsolètes : toujours null */
+  /** Non exploités */
   impressions?: number | null;
   ctr?: number | null;
 };
@@ -171,18 +177,25 @@ export function keywordIdeaFromItem(item: unknown): GoogleAdsKeywordData | null 
   };
 }
 
-/** Item « ad_traffic_by_keywords » → ligne de prévision ; null sans mot-clé. `impressions`/`ctr` ignorés. */
+/**
+ * Item « ad_traffic_by_keywords » → ligne de prévision. Un item sans
+ * mot-clé est l'agrégat de l'ensemble des mots-clés envoyés (`keyword:
+ * null`, format depuis juin) : ses clics, coût et CPC moyen sont conservés.
+ * null si l'item n'est pas un objet ou ne porte aucune donnée.
+ * `impressions`/`ctr` ignorés.
+ */
 export function forecastRowFromItem(item: unknown): GoogleAdsForecastRow | null {
   if (!item || typeof item !== "object") return null;
   const raw = item as DfsAdTrafficItem;
   const keyword = textOrNull(raw.keyword);
-  if (!keyword) return null;
-  return {
-    keyword: keyword.replace(/\s+/g, " "),
+  const row: GoogleAdsForecastRow = {
+    keyword: keyword ? keyword.replace(/\s+/g, " ") : null,
     clicks: nonNegativeOrNull(raw.clicks),
     costUsd: nonNegativeOrNull(raw.cost),
     averageCpcUsd: nonNegativeOrNull(raw.average_cpc),
   };
+  if (row.keyword === null && row.clicks === null && row.costUsd === null && row.averageCpcUsd === null) return null;
+  return row;
 }
 
 /**
@@ -207,18 +220,19 @@ export function cleanAdsKeywords(keywords: string[], max: number): string[] {
 }
 
 /**
- * Enchère envoyée à `ad_traffic_by_keywords`. La documentation DataForSEO
- * déclare `bid` comme un flottant — « the maximum custom bid … it stands for
- * the price you are willing to pay for an ad » — avec `999.00` en exemple, et
- * rend `average_cpc` et `cost` « (USD) » : la valeur est donc en **unités de
- * devise** (2.5 = 2,50 $), pas en micro-unités comme `max_cpc_bid_micros` de
- * l'API Google Ads (999 micro-dollars vaudraient 0,001 $ et ne donneraient
- * aucun clic). Aucune conversion : l'enchère USD de `suggestBidUsd` est
- * transmise telle quelle, arrondie au centime et bornée.
+ * Enchère envoyée à `ad_traffic_by_keywords`. La fiche « live » de l'endpoint
+ * déclare `bid` comme un **entier** — « the maximum custom bid … it stands
+ * for the price you are willing to pay for an ad » — avec `999` en exemple,
+ * et rend `average_cpc` et `cost` « (USD) » : la valeur est en unités de
+ * devise (3 = 3 $), pas en micro-unités comme `max_cpc_bid_micros` de l'API
+ * Google Ads (999 micro-dollars vaudraient 0,001 $ et ne donneraient aucun
+ * clic). L'enchère USD de `suggestBidUsd` est donc arrondie à l'entier
+ * supérieur (jamais sous 1 $) et bornée ; c'est cette valeur, réellement
+ * envoyée, que l'appelant doit stocker dans `forecast.bidUsd`.
  */
 export function adsBidForRequest(bidUsd: number): number {
-  const value = Number.isFinite(bidUsd) ? bidUsd : BID_MIN_USD;
-  return round2(clamp(value, BID_MIN_USD, BID_MAX_USD));
+  const value = Number.isFinite(bidUsd) ? Math.ceil(bidUsd) : BID_MIN_USD;
+  return clamp(value, BID_MIN_USD, BID_MAX_USD);
 }
 
 function isMatchType(value: unknown): value is GoogleAdsMatchType {
@@ -381,24 +395,47 @@ export class MockAdsDataProvider implements AdsDataProvider {
     return { data, costUsd: 0, mode: "mock" };
   }
 
-  /** Clics ≈ volume × 3 % (× correspondance, réduits si l'enchère est sous le CPC), bornés ; coût = clics × CPC moyen. */
+  /**
+   * Comme l'API depuis juin : UNE ligne agrégée (`keyword: null`) pour
+   * l'ensemble des mots-clés envoyés — somme des clics et coûts de
+   * `mockKeywordTraffic`, CPC moyen = coût / clics ; aucune ligne sans
+   * mot-clé exploitable.
+   */
   async adTraffic(input: AdsTrafficInput): Promise<ProviderResult<GoogleAdsForecastRow[]>> {
     const now = this.now ?? new Date();
     const keywords = cleanAdsKeywords(input.keywords, ADS_TRAFFIC_KEYWORDS_PER_REQUEST).map((k) => k.toLowerCase());
+    if (keywords.length === 0) return { data: [], costUsd: 0, mode: "mock" };
     const bid = adsBidForRequest(input.bidUsd);
-    const matchFactor = MOCK_MATCH_FACTOR[isMatchType(input.match) ? input.match : "phrase"];
-    const data = keywords.map((keyword): GoogleAdsForecastRow => {
-      const idea = mockKeywordIdea(keyword, now);
-      if (idea.searchVolume === null || idea.cpcUsd === null) {
-        return { keyword: idea.keyword, clicks: null, costUsd: null, averageCpcUsd: null };
-      }
-      const bidFactor = clamp(bid / idea.cpcUsd, 0.25, 1);
-      const clicks = Math.round(clamp(idea.searchVolume * MOCK_CTR * matchFactor * bidFactor, 0, MOCK_CLICKS_MAX) * 10) / 10;
-      const averageCpcUsd = round2(Math.min(idea.cpcUsd, bid));
-      return { keyword: idea.keyword, clicks, costUsd: round2(clicks * averageCpcUsd), averageCpcUsd };
-    });
-    return { data, costUsd: 0, mode: "mock" };
+    const match = isMatchType(input.match) ? input.match : "phrase";
+    let clicks = 0;
+    let costUsd = 0;
+    for (const keyword of keywords) {
+      const traffic = mockKeywordTraffic(keyword, bid, match, now);
+      if (traffic === null) continue;
+      clicks += traffic.clicks;
+      costUsd += traffic.costUsd;
+    }
+    clicks = Math.round(clicks * 10) / 10;
+    costUsd = round2(costUsd);
+    const row: GoogleAdsForecastRow = { keyword: null, clicks, costUsd, averageCpcUsd: clicks > 0 ? round2(costUsd / clicks) : null };
+    return { data: [row], costUsd: 0, mode: "mock" };
   }
+}
+
+/**
+ * Trafic mock d'un mot-clé : clics ≈ volume × 3 % (× correspondance,
+ * réduits si l'enchère est sous le CPC), bornés à MOCK_CLICKS_MAX ; coût =
+ * clics × CPC moyen (CPC plafonné par l'enchère). null pour un mot-clé sans
+ * donnée (« horaires »). Déterministe ; sommé par `MockAdsDataProvider.adTraffic`.
+ */
+export function mockKeywordTraffic(keyword: string, bidUsd: number, match: GoogleAdsMatchType, now: Date): { clicks: number; costUsd: number; averageCpcUsd: number } | null {
+  const idea = mockKeywordIdea(keyword, now);
+  if (idea.searchVolume === null || idea.cpcUsd === null) return null;
+  const bid = adsBidForRequest(bidUsd);
+  const bidFactor = clamp(bid / idea.cpcUsd, 0.25, 1);
+  const clicks = Math.round(clamp(idea.searchVolume * MOCK_CTR * MOCK_MATCH_FACTOR[match] * bidFactor, 0, MOCK_CLICKS_MAX) * 10) / 10;
+  const averageCpcUsd = round2(Math.min(idea.cpcUsd, bid));
+  return { clicks, costUsd: round2(clicks * averageCpcUsd), averageCpcUsd };
 }
 
 // ─── Implémentation réelle ───────────────────────────────────────────────────
@@ -450,7 +487,7 @@ export class DataForSeoAdsProvider extends DataForSeoClient implements AdsDataPr
       body: [
         {
           keywords,
-          // Unités de devise (USD), voir adsBidForRequest
+          // Entier en unités de devise (USD), voir adsBidForRequest
           bid: adsBidForRequest(input.bidUsd),
           match: input.match,
           location_code: input.locationCode,
