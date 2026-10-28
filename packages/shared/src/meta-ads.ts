@@ -269,10 +269,17 @@ export const FR_DEPARTMENTS: readonly FrDepartment[] = [
   { code: "976", name: "Mayotte", region: "Mayotte" },
 ];
 
-/** Code postal (5 chiffres) trouvé dans une adresse, null sinon. */
+/**
+ * Code postal (5 chiffres) trouvé dans une adresse, null sinon. Le code
+ * précède la ville en français : on retient le dernier groupe suivi d'un mot
+ * (« Résidence Les 10000 Fleurs, 31400 Toulouse » → 31400), sinon le dernier.
+ */
 export function postalCodeFrom(address: string | null | undefined): string | null {
-  const match = /\b(\d{5})\b/.exec(address ?? "");
-  return match ? match[1]! : null;
+  const text = address ?? "";
+  const groups = [...text.matchAll(/\b(\d{5})\b/g)];
+  const beforeCity = groups.filter((m) => /^\s+\p{L}/u.test(text.slice(m.index + 5)));
+  const pick = beforeCity.at(-1) ?? groups.at(-1);
+  return pick ? pick[1]! : null;
 }
 
 /** Département d'un code postal (Corse : 20000–20199 → 2A, 20200+ → 2B ; outre-mer : trois chiffres). */
@@ -438,12 +445,16 @@ function dateOrNull(value: string | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** Jours de diffusion (jusqu'à l'arrêt, sinon jusqu'à `now`), null sans date de début. */
+/**
+ * Jours de diffusion (jusqu'à l'arrêt, sinon jusqu'à `now`), null sans date de
+ * début. Un arrêt programmé dans le futur ne compte pas les jours non encore
+ * diffusés : on s'arrête à `now`.
+ */
 export function adRunningDays(ad: Pick<MetaAdRecord, "startedAt" | "stoppedAt">, now = new Date()): number | null {
   const start = dateOrNull(ad.startedAt);
   if (!start) return null;
-  const end = dateOrNull(ad.stoppedAt) ?? now;
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+  const end = Math.min((dateOrNull(ad.stoppedAt) ?? now).getTime(), now.getTime());
+  return Math.max(0, Math.round((end - start.getTime()) / 86_400_000));
 }
 
 export function adIsActive(ad: Pick<MetaAdRecord, "stoppedAt">, now = new Date()): boolean {
@@ -462,17 +473,46 @@ export function adScore(runningDays: number | null, reach: number | null, active
   return Math.round((Math.log10((reach ?? 0) + 1) + Math.min(runningDays ?? 0, 120) / 30 + (active ? 0.5 : 0)) * 100) / 100;
 }
 
-function locationMatches(locations: MetaAdLocation[], name: string | null | undefined): boolean {
-  const needle = normalizeAdsText(name ?? "");
-  if (needle === "") return false;
-  return locations.some((l) => !l.excluded && ` ${normalizeAdsText(l.name)} `.includes(` ${needle} `));
+/**
+ * Clé de comparaison d'un nom de lieu : normalisé (minuscules, sans accent ni
+ * trait d'union), sans code postal devant (« 31000 Toulouse ») ni numéro
+ * d'arrondissement ou de département derrière (« Paris 15e », « Toulouse 31 »).
+ */
+function locationKey(text: string): string {
+  return normalizeAdsText(text)
+    .replace(/^\d{2,5}\s+/, "")
+    .replace(/\s+\d{1,5}(?:e|er|eme)?$/, "");
 }
 
-/** Zone la plus étroite dans laquelle l'annonce est diffusée, d'après ses zones ciblées. */
+/**
+ * Segments d'une zone ciblée de la bibliothèque (« Toulouse, Occitanie » →
+ * « toulouse », « occitanie »). Chaque segment est comparé en entier : un nom
+ * contenu dans un autre ne compte pas (« Rhône » n'est pas
+ * « Auvergne-Rhône-Alpes », « Loire » n'est pas « Pays de la Loire »,
+ * « Toulouse » n'est pas « Toulouse-le-Château »).
+ */
+function locationSegments(name: string): string[] {
+  return name.split(",").map(locationKey).filter(Boolean);
+}
+
+const DEPARTMENT_BY_KEY: ReadonlyMap<string, FrDepartment> = new Map(FR_DEPARTMENTS.map((d) => [locationKey(d.name), d]));
+
+function locationMatches(locations: MetaAdLocation[], name: string | null | undefined): boolean {
+  const needle = locationKey(name ?? "");
+  if (needle === "") return false;
+  return locations.some((l) => !l.excluded && locationSegments(l.name).includes(needle));
+}
+
+/**
+ * Zone la plus étroite dans laquelle l'annonce est diffusée, d'après ses zones
+ * ciblées (les zones exclues sont ignorées). Une annonce ciblant un autre
+ * département de la même région relève de la région.
+ */
 export function scopeOfAd(ad: Pick<MetaAdRecord, "targetLocations">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): MetaMarketScope {
   if (locationMatches(ad.targetLocations, seed.city)) return "ville";
   if (locationMatches(ad.targetLocations, seed.department?.name)) return "departement";
   if (locationMatches(ad.targetLocations, seed.region)) return "region";
+  if (seed.region && ad.targetLocations.some((l) => !l.excluded && locationSegments(l.name).some((s) => DEPARTMENT_BY_KEY.get(s)?.region === seed.region))) return "region";
   return "france";
 }
 
@@ -535,13 +575,14 @@ export function selectMarketAds(
 /** Phrase de contexte de la veille (zone retenue, élargissement). */
 export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "ads">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): string {
   const local = market.counts.ville + market.counts.departement;
+  // Formulation sans article devant le nom (« en Haute-Garonne » mais « dans le Tarn », « dans les Hauts-de-France », « à La Réunion »).
   const where =
     market.scopeUsed === "ville"
       ? `autour de ${seed.city}`
       : market.scopeUsed === "departement"
-        ? `dans ${seed.department?.name ?? "votre département"}`
+        ? `dans votre département${seed.department ? ` (${seed.department.name})` : ""}`
         : market.scopeUsed === "region"
-          ? `en ${seed.region ?? "région"}`
+          ? `dans votre région${seed.region ? ` (${seed.region})` : ""}`
           : "en France";
   const widened = market.scopeUsed !== "ville" ? ` Peu d'annonces près de chez vous (${local}) : la veille a été élargie.` : "";
   return `${market.ads.length} annonce${market.ads.length > 1 ? "s" : ""} ${where}.${widened}`;
@@ -752,7 +793,8 @@ export function diagnoseMetaAds(input: MetaAdsDiagnosticInput, now = new Date())
   let marketNote: string | null = null;
   if (input.market) {
     const local = input.market.counts.ville + input.market.counts.departement;
-    const strong = input.market.ads.filter((a) => a.signal === "fort").length;
+    // « dont N diffusées depuis longtemps » parle des annonces près de chez vous : pas celles venues de l'élargissement.
+    const strong = input.market.ads.filter((a) => a.signal === "fort" && (a.scope === "ville" || a.scope === "departement")).length;
     marketNote =
       local === 0
         ? "Aucune annonce repérée près de chez vous : la place est libre et les coûts d'affichage devraient rester bas."
@@ -921,16 +963,39 @@ export type MetaAdsPlanInput = MetaAdsGenerationInput & {
 // ─── Conformité (règles Meta sur les attributs personnels, avant/après) ──────
 
 /**
+ * Motif insensible à la casse, borné par des non-lettres. `\b` ne connaît que
+ * les lettres ASCII : « êtes » contiendrait « tes » et « anxiété » ne finirait
+ * jamais sur une limite de mot.
+ */
+function phrase(source: string): RegExp {
+  return new RegExp(`(?<!\\p{L})(?:${source})(?!\\p{L})`, "iu");
+}
+
+/**
  * Formulations qui affirment ou laissent entendre connaître l'état de santé,
  * le poids ou l'état émotionnel du lecteur (interdites par Meta), et les
  * avant/après.
  */
 export const META_PERSONAL_ATTRIBUTE_PATTERNS: { rule: string; pattern: RegExp }[] = [
-  { rule: "attribut personnel : « vous souffrez / vous avez mal »", pattern: /\b(vous|tu)\s+(souffrez|souffres|avez\s+mal|as\s+mal|n'arrivez\s+plus|n'arrives\s+plus)\b/i },
-  { rule: "attribut personnel : « vous êtes stressé·e / anxieux·se / déprimé·e / fatigué·e / en surpoids »", pattern: /\b(vous\s+êtes|tu\s+es)\s+(stress|anxieu|angoiss|déprim|deprim|fatigu|épuis|epuis|en\s+surpoids|obèse|obese|malade)/i },
-  { rule: "attribut personnel : « votre stress / votre anxiété / votre dépression / votre poids / votre douleur »", pattern: /\b(votre|ton|ta)\s+(stress|anxiété|anxiete|angoisse|dépression|depression|burn[- ]?out|surpoids|poids|douleur|maladie|insomnie)\b/i },
-  { rule: "avant / après", pattern: /\bavant\s*[/\-–]\s*après\b|\bavant\s+et\s+après\b/i },
-  { rule: "diagnostic implicite : « si vous souffrez de »", pattern: /\bsi\s+(vous|tu)\s+(souffrez|souffres|avez|as)\b/i },
+  {
+    rule: "attribut personnel : « vous souffrez / vous avez mal / vous n'en pouvez plus »",
+    pattern: phrase(String.raw`(vous|tu)\s+(souffrez|souffres|avez\s+mal|as\s+mal|n['’]arrivez\s+plus|n['’]arrives\s+plus|n['’]en\s+pouvez\s+plus|n['’]en\s+peux\s+plus)`),
+  },
+  {
+    rule: "attribut personnel : « vous êtes / vous vous sentez stressé·e / anxieux·se / déprimé·e / fatigué·e / en surpoids »",
+    pattern: phrase(String.raw`(vous\s+[êe]tes|tu\s+es|vous\s+vous\s+sentez|tu\s+te\s+sens)\s+(stress|anxieu|angoiss|déprim|deprim|fatigu|épuis|epuis|en\s+surpoids|obèse|obese|malade)\p{L}*`),
+  },
+  {
+    rule: "attribut personnel : « votre stress / vos angoisses / votre dépression / votre poids / vos douleurs »",
+    pattern: phrase(String.raw`(votre|vos|ton|ta|tes)\s+(stress|anxiétés?|anxietes?|angoisses?|dépressions?|depressions?|burn[- ]?outs?|surpoids|poids|kilos|douleurs?|maladies?|insomnies?)`),
+  },
+  { rule: "avant / après", pattern: phrase(String.raw`avant\s*[/\-–]\s*après|avant\s+et\s+après`) },
+  {
+    // « si vous avez » seul est trop large (« si vous avez envie de souffler », « si vous avez des questions ») :
+    // seuls « souffrez » et « avez mal / du mal / des douleurs… » laissent entendre un état de santé.
+    rule: "diagnostic implicite : « si vous souffrez de / si vous avez mal »",
+    pattern: phrase(String.raw`si\s+(vous|tu)\s+(souffrez|souffres|(avez|as)\s+(mal|du\s+mal|des?\s+(douleurs?|angoisses?|insomnies?|troubles?|difficultés?|difficultes?|problèmes?|problemes?|kilos)))`),
+  },
 ];
 
 /** Règles enfreintes par un texte d'annonce (vide = conforme à ces motifs). */
@@ -945,7 +1010,7 @@ export function clampMetaText(text: string, max: number): string {
   const cut = clean.slice(0, max);
   const boundary = Math.max(cut.lastIndexOf(" "), cut.lastIndexOf("-"));
   const base = boundary >= Math.floor(max * 0.6) ? cut.slice(0, boundary) : cut;
-  return base.replace(/[\s,;:(\-–—]+$/g, "").trim();
+  return base.replace(/[\s,;:(«\-–—]+$/g, "").trim();
 }
 
 /** Écarts d'un jeu de créas au contrat (vide = conforme). */
