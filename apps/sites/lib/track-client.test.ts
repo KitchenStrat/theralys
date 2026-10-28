@@ -16,13 +16,20 @@ describe("landingSource", () => {
     expect(landingSource("?utm_source=Google&utm_medium=PPC&utm_campaign=x")).toBe("ads");
   });
 
-  it("annonce Meta (fbclid ou UTM payant Facebook / Instagram) sans src explicite → meta", () => {
-    expect(landingSource("?fbclid=test")).toBe("meta");
+  it("annonce Meta (UTM payant Facebook / Instagram, ou suffixe ?src=meta des annonces du studio) sans src explicite → meta", () => {
+    expect(landingSource("?src=meta&fbclid=abc")).toBe("meta");
     expect(landingSource("?utm_source=facebook&utm_medium=cpc")).toBe("meta");
     expect(landingSource("?utm_source=Instagram&utm_medium=paid_social&utm_campaign=x")).toBe("meta");
+    expect(landingSource("?fbclid=abc&utm_source=fb&utm_medium=ads")).toBe("meta");
     // le src explicite l'emporte ; à signatures Google et Meta réunies, Google prime
-    expect(landingSource("?src=fb&fbclid=abc")).toBe("fb");
-    expect(landingSource("?gclid=x&fbclid=y")).toBe("ads");
+    expect(landingSource("?src=fb&utm_source=facebook&utm_medium=cpc")).toBe("fb");
+    expect(landingSource("?gclid=x&utm_source=facebook&utm_medium=cpc")).toBe("ads");
+  });
+
+  it("clic organique Facebook avec fbclid seul : pas de src (provenance par referrer)", () => {
+    expect(landingSource("?fbclid=test")).toBeNull();
+    expect(landingSource("?fbclid=IwAR0abc&utm_source=facebook&utm_medium=social")).toBeNull();
+    expect(landingSource("?utm_source=facebook&fbclid=x")).toBeNull();
   });
 
   it("rien sans src ni signature d'annonce", () => {

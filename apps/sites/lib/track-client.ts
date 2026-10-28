@@ -12,9 +12,12 @@ const SRC_MAX = 20;
 
 /**
  * `src` à joindre à la première page vue : le paramètre explicite du lien de
- * bio (`?src=ig`), sinon `ads` quand l'URL porte la signature d'une annonce
- * Google (gclid, gbraid, wbraid ou UTM payant), sinon `meta` pour une annonce
- * Meta (fbclid ou UTM payant Facebook / Instagram). null sans aucun des trois.
+ * bio (`?src=ig`) ou des annonces Meta préparées par le studio (`?src=meta`),
+ * sinon `ads` quand l'URL porte la signature d'une annonce Google (gclid,
+ * gbraid, wbraid ou UTM payant), sinon `meta` pour un UTM payant Facebook /
+ * Instagram (`isMetaAdsLanding`). `fbclid` seul ne compte pas : Facebook
+ * l'ajoute à tout lien sortant, publication organique comprise — ce clic garde
+ * sa provenance par referrer. null sans aucun des trois.
  */
 export function landingSource(search: string): string | null {
   const explicit = new URLSearchParams(search).get("src")?.slice(0, SRC_MAX);

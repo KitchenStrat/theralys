@@ -35,6 +35,10 @@ export const META_LIBRARY_PAGE_LIMIT = 100;
 export const META_LIBRARY_MAX_CALLS = 12;
 /** Termes de recherche envoyés au plus par analyse. */
 export const META_LIBRARY_TERMS_MAX = 6;
+/** Longueur maximale d'un terme `search_terms` (au-delà, Graph répond une erreur 100 déterministe). */
+export const META_LIBRARY_TERM_MAX = 100;
+/** Suffixe ajouté à l'URL de destination des annonces : le site y lit la provenance « Meta Ads » (`SOCIAL_SOURCE_PARAMS.meta`). */
+export const META_ADS_LANDING_SUFFIX = "?src=meta";
 /** Annonces attendues avant d'élargir la zone (ville → département → région → France). */
 export const META_MARKET_MIN_LOCAL = 8;
 /** Annonces conservées dans la veille. */
@@ -329,19 +333,41 @@ function unique<T>(values: T[]): T[] {
 }
 
 /**
+ * Terme borné à META_LIBRARY_TERM_MAX caractères, coupé sur un espace ; null
+ * quand aucune coupure au mot n'est possible (un seul « mot » trop long).
+ */
+function boundedTerm(term: string): string | null {
+  if (term.length <= META_LIBRARY_TERM_MAX) return term;
+  const cut = term.slice(0, META_LIBRARY_TERM_MAX + 1);
+  const boundary = cut.lastIndexOf(" ");
+  if (boundary <= 0) return null;
+  const out = cut.slice(0, boundary).trim();
+  return out.length >= 3 ? out : null;
+}
+
+/**
  * Termes de recherche : le métier et ses synonymes d'abord (la bibliothèque
  * cherche dans les textes des annonces, sans ville), puis les spécialités les
  * plus courtes, puis les noms des concurrents (annonces citant leur enseigne).
+ * Chaque terme tient en META_LIBRARY_TERM_MAX caractères (tronqué au mot) ; un
+ * nom de concurrent impossible à tronquer proprement est ignoré.
  */
 export function buildMetaSearchTerms(seed: Pick<MetaAdsSeed, "profession" | "specialties" | "competitorNames">, max = META_LIBRARY_TERMS_MAX): string[] {
   const family = adsProfessionFamily(seed.profession);
-  const terms = unique([cleanTerm(seed.profession), ...family.synonyms.map(cleanTerm)].filter((t) => t.length >= 3)).slice(0, 3);
+  const bounded = (t: string) => boundedTerm(t) ?? t.slice(0, META_LIBRARY_TERM_MAX).trim();
+  const terms = unique([cleanTerm(seed.profession), ...family.synonyms.map(cleanTerm)].filter((t) => t.length >= 3).map(bounded)).slice(0, 3);
   const specialties = seed.specialties
     .map(cleanTerm)
     .filter((s) => s.length >= 4 && s.split(" ").length <= 4)
+    .map(bounded)
     .sort((a, b) => a.length - b.length)
     .slice(0, 2);
-  const competitors = seed.competitorNames.map(cleanTerm).filter((c) => c.length >= 4).slice(0, 2);
+  const competitors = seed.competitorNames
+    .map(cleanTerm)
+    .filter((c) => c.length >= 4)
+    .map(boundedTerm)
+    .filter((c): c is string => c !== null)
+    .slice(0, 2);
   return unique([...terms, ...specialties, ...competitors]).slice(0, max);
 }
 
@@ -390,7 +416,8 @@ export const META_MARKET_SCOPE_LABELS: Record<MetaMarketScope, string> = {
   ville: "Autour de vous",
   departement: "Votre département",
   region: "Votre région",
-  france: "En France",
+  /** Annonces nationales, mais aussi celles qui ciblent une autre ville ou une autre région (`scopeOfAd`) */
+  france: "Autres zones et France",
 };
 
 export type MetaMarketSignal = "fort" | "moyen" | "faible";
@@ -427,7 +454,15 @@ export type MetaAdsMarket = {
   terms: string[];
   /** Zone retenue après élargissement */
   scopeUsed: MetaMarketScope;
+  /** Annonces repérées par zone (toutes, pas seulement celles conservées dans `ads`) */
   counts: Record<MetaMarketScope, number>;
+  /**
+   * Annonces au signal « fort » par zone, sur toutes les annonces repérées :
+   * le diagnostic compte les signaux forts locaux sur le même ensemble que
+   * `counts`. Absent des veilles enregistrées avant son introduction.
+   */
+  strongCounts?: Record<MetaMarketScope, number>;
+  /** Annonces conservées (zone retenue et plus étroites, ≤ META_MARKET_MAX_ADS) */
   ads: MetaMarketAd[];
   /** Appels HTTP effectués */
   calls: number;
@@ -506,7 +541,9 @@ function locationMatches(locations: MetaAdLocation[], name: string | null | unde
 /**
  * Zone la plus étroite dans laquelle l'annonce est diffusée, d'après ses zones
  * ciblées (les zones exclues sont ignorées). Une annonce ciblant un autre
- * département de la même région relève de la région.
+ * département de la même région relève de la région. « france » regroupe les
+ * annonces nationales et toutes celles qui ciblent une autre zone (autre
+ * ville, autre région) : d'où le libellé « Autres zones et France ».
  */
 export function scopeOfAd(ad: Pick<MetaAdRecord, "targetLocations">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): MetaMarketScope {
   if (locationMatches(ad.targetLocations, seed.city)) return "ville";
@@ -526,14 +563,16 @@ export type SelectMarketAdsOptions = {
 /**
  * Veille : zone retenue = la plus étroite qui rassemble au moins `minLocal`
  * annonces (ville, puis département, région, France), annonces notées (portée,
- * durée, diffusion en cours) et dédoublonnées par identifiant.
+ * durée, diffusion en cours) et dédoublonnées par identifiant. `counts` et
+ * `strongCounts` portent sur toutes les annonces repérées ; `ads` ne garde
+ * que la zone retenue et les plus étroites (≤ `max`).
  */
 export function selectMarketAds(
   records: MetaAdRecord[],
   seed: Pick<MetaAdsSeed, "city" | "department" | "region">,
   now = new Date(),
   opts: SelectMarketAdsOptions = {},
-): { ads: MetaMarketAd[]; scopeUsed: MetaMarketScope; counts: Record<MetaMarketScope, number> } {
+): { ads: MetaMarketAd[]; scopeUsed: MetaMarketScope; counts: Record<MetaMarketScope, number>; strongCounts: Record<MetaMarketScope, number> } {
   const minLocal = opts.minLocal ?? META_MARKET_MIN_LOCAL;
   const max = opts.max ?? META_MARKET_MAX_ADS;
   const byId = new Map<string, MetaMarketAd>();
@@ -553,7 +592,11 @@ export function selectMarketAds(
   }
   const all = [...byId.values()];
   const counts: Record<MetaMarketScope, number> = { ville: 0, departement: 0, region: 0, france: 0 };
-  for (const ad of all) counts[ad.scope]++;
+  const strongCounts: Record<MetaMarketScope, number> = { ville: 0, departement: 0, region: 0, france: 0 };
+  for (const ad of all) {
+    counts[ad.scope]++;
+    if (ad.signal === "fort") strongCounts[ad.scope]++;
+  }
 
   let scopeUsed: MetaMarketScope = "france";
   let cumulative = 0;
@@ -569,12 +612,31 @@ export function selectMarketAds(
     .filter((ad) => rank(ad.scope) <= rank(scopeUsed))
     .sort((a, b) => rank(a.scope) - rank(b.scope) || b.score - a.score || a.pageName.localeCompare(b.pageName, "fr"))
     .slice(0, max);
-  return { ads, scopeUsed, counts };
+  return { ads, scopeUsed, counts, strongCounts };
 }
 
-/** Phrase de contexte de la veille (zone retenue, élargissement). */
+/** Annonces repérées en tout (toutes zones). */
+export function marketTotalCount(counts: Record<MetaMarketScope, number>): number {
+  return META_MARKET_SCOPES.reduce((sum, scope) => sum + counts[scope], 0);
+}
+
+/**
+ * Annonces « près de chez vous » qui ont motivé l'élargissement : celles de
+ * la ville quand la veille s'est arrêtée au département (le département est
+ * alors la zone retenue, pas la zone maigre), ville + département au-delà.
+ */
+export function marketNearbyCount(market: Pick<MetaAdsMarket, "scopeUsed" | "counts">): number {
+  return market.scopeUsed === "departement" ? market.counts.ville : market.counts.ville + market.counts.departement;
+}
+
+/**
+ * Phrase de contexte de la veille : annonces conservées (`ads`) sur annonces
+ * repérées (`counts`, toutes zones), zone retenue, élargissement et compte
+ * des annonces près de chez vous qui l'ont motivé (`marketNearbyCount`).
+ */
 export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "ads">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): string {
-  const local = market.counts.ville + market.counts.departement;
+  const kept = market.ads.length;
+  const total = Math.max(kept, marketTotalCount(market.counts));
   // Formulation sans article devant le nom (« en Haute-Garonne » mais « dans le Tarn », « dans les Hauts-de-France », « à La Réunion »).
   const where =
     market.scopeUsed === "ville"
@@ -583,9 +645,11 @@ export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "count
         ? `dans votre département${seed.department ? ` (${seed.department.name})` : ""}`
         : market.scopeUsed === "region"
           ? `dans votre région${seed.region ? ` (${seed.region})` : ""}`
-          : "en France";
-  const widened = market.scopeUsed !== "ville" ? ` Peu d'annonces près de chez vous (${local}) : la veille a été élargie.` : "";
-  return `${market.ads.length} annonce${market.ads.length > 1 ? "s" : ""} ${where}.${widened}`;
+          : "en France et dans d'autres zones";
+  const plural = (n: number, noun: string) => `${n} ${noun}${n > 1 ? "s" : ""}`;
+  const head = total > kept ? `${plural(kept, "annonce")} conservée${kept > 1 ? "s" : ""} sur ${plural(total, "repérée")}, ${where}.` : `${plural(kept, "annonce")} ${where}.`;
+  const widened = market.scopeUsed !== "ville" ? ` Peu d'annonces près de chez vous (${marketNearbyCount(market)}) : la veille a été élargie.` : "";
+  return `${head}${widened}`;
 }
 
 // ─── Diagnostic ──────────────────────────────────────────────────────────────
@@ -627,7 +691,8 @@ export type MetaAdsDiagnosticInput = {
   instagramUrl: string | null;
   motifPages: number;
   profile: { linked: boolean; rating: number | null; votes: number | null };
-  market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "ads"> | null;
+  /** Lecture de la veille : zone, comptes par zone (toutes les annonces repérées), signaux forts par zone, annonces conservées */
+  market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "strongCounts" | "ads"> | null;
 };
 
 export type MetaAdsBudgetEstimate = {
@@ -793,8 +858,12 @@ export function diagnoseMetaAds(input: MetaAdsDiagnosticInput, now = new Date())
   let marketNote: string | null = null;
   if (input.market) {
     const local = input.market.counts.ville + input.market.counts.departement;
-    // « dont N diffusées depuis longtemps » parle des annonces près de chez vous : pas celles venues de l'élargissement.
-    const strong = input.market.ads.filter((a) => a.signal === "fort" && (a.scope === "ville" || a.scope === "departement")).length;
+    // « dont N diffusées depuis longtemps » parle des annonces près de chez vous (ville + département, toutes les
+    // annonces repérées comme `local`) : pas celles venues de l'élargissement. Les veilles enregistrées sans
+    // `strongCounts` se rabattent sur les annonces conservées.
+    const strong = input.market.strongCounts
+      ? input.market.strongCounts.ville + input.market.strongCounts.departement
+      : input.market.ads.filter((a) => a.signal === "fort" && (a.scope === "ville" || a.scope === "departement")).length;
     marketNote =
       local === 0
         ? "Aucune annonce repérée près de chez vous : la place est libre et les coûts d'affichage devraient rester bas."
@@ -930,6 +999,8 @@ export type MetaAdsPlan = {
     placements: string;
     language: "fr";
     schedule: string;
+    /** Suffixe à ajouter à l'URL de destination des annonces (META_ADS_LANDING_SUFFIX) ; absent des plans antérieurs */
+    landingSuffix?: string;
   };
   adSets: {
     name: string;
@@ -998,6 +1069,22 @@ export const META_PERSONAL_ATTRIBUTE_PATTERNS: { rule: string; pattern: RegExp }
     rule: "diagnostic implicite : « si vous souffrez de / si vous avez mal »",
     pattern: phrase(String.raw`si\s+(vous|tu)\s+(souffrez|souffres|(avez|as)\s+(mal|du\s+mal|des?\s+(douleurs?|angoisses?|insomnies?|troubles?|difficultés?|difficultes?|problèmes?|problemes?|kilos)))`),
   },
+  {
+    rule: "attribut personnel : « vous dormez mal / vous avez du mal à »",
+    pattern: phrase(String.raw`(vous|tu)\s+((dormez|dors)\s+mal|(avez|as)\s+du\s+mal\s+[àa])`),
+  },
+  {
+    rule: "attribut personnel : « marre du stress / trop de fatigue / assez des douleurs »",
+    pattern: phrase(String.raw`(marre|trop|assez)\s+(du|de\s+la|de\s+l['’]|des?)\s*(stress|fatigue|douleurs?|angoisses?|insomnies?|anxiété|anxiete)`),
+  },
+  {
+    // Adjectif d'état posé en question au lecteur, en tête de texte ou de phrase : « Stressé·e ? », « Fatigué(e) ? »,
+    // « Épuisé·e par le travail ? ». « Stress : comment souffler ? » ou « Fatigue et sommeil : que faire ? » passent.
+    rule: "attribut personnel : « Stressé·e ? », « Épuisé·e par le travail ? »",
+    pattern: phrase(
+      String.raw`(?<=^|[.!?…]\s+)(stress|fatigu|épuis|epuis|anxieu|angoiss|déprim|deprim)\p{L}*(?:[·.]e|\(e\))?s?(?:\s+(?:par|de|du|des|d['’]|au|aux|[àa]|en)\s*[^?!.]{0,60}?)?\s*\?`,
+    ),
+  },
 ];
 
 /** Règles enfreintes par un texte d'annonce (vide = conforme à ces motifs). */
@@ -1020,11 +1107,14 @@ export function metaCreativeIssues(set: MetaAdsCreativeSet, landingPaths?: reado
   const issues: string[] = [];
   if (set.creatives.length < META_CREATIVES_MIN || set.creatives.length > META_CREATIVES_MAX) issues.push(`${set.creatives.length} créas (attendu ${META_CREATIVES_MIN} à ${META_CREATIVES_MAX})`);
   const ids = new Set<string>();
+  const angles = new Set<string>();
   set.creatives.forEach((c, i) => {
     const where = `créa ${i + 1} (${c.name})`;
     if (ids.has(c.id)) issues.push(`${where} : identifiant en double`);
     ids.add(c.id);
     if (!isMetaAdsAngle(c.angle)) issues.push(`${where} : angle inconnu`);
+    else if (angles.has(c.angle)) issues.push(`${where} : angle déjà utilisé par une autre créa`);
+    angles.add(c.angle);
     if (!isMetaAdsCta(c.cta)) issues.push(`${where} : bouton inconnu`);
     if (c.primaryText.trim() === "" || c.primaryText.length > META_ADS_TEXT.primaryMax) issues.push(`${where} : texte principal vide ou trop long`);
     if (c.headline.trim() === "" || c.headline.length > META_ADS_TEXT.headlineMax) issues.push(`${where} : titre vide ou > ${META_ADS_TEXT.headlineMax}`);
@@ -1040,12 +1130,17 @@ export function metaCreativeIssues(set: MetaAdsCreativeSet, landingPaths?: reado
   return issues;
 }
 
-/** Écarts d'un plan vidéo au contrat (vide = conforme). */
+/** Écarts d'un plan vidéo au contrat (vide = conforme) : META_VIDEO.count vidéos 9:16 aux identifiants uniques. */
 export function metaVideoPlanIssues(plan: MetaAdsVideoPlan): string[] {
   const issues: string[] = [];
   if (plan.videos.length === 0) issues.push("aucune vidéo");
+  else if (plan.videos.length !== META_VIDEO.count) issues.push(`${plan.videos.length} vidéo${plan.videos.length > 1 ? "s" : ""} (attendu ${META_VIDEO.count})`);
+  const ids = new Set<string>();
   plan.videos.forEach((v, i) => {
     const where = `vidéo ${i + 1} (${v.title})`;
+    if (ids.has(v.id)) issues.push(`${where} : identifiant en double`);
+    ids.add(v.id);
+    if (v.format !== META_VIDEO.format) issues.push(`${where} : format ${String(v.format)} (attendu ${META_VIDEO.format})`);
     if (v.durationSeconds < META_VIDEO.minSeconds || v.durationSeconds > META_VIDEO.maxSeconds) issues.push(`${where} : durée hors ${META_VIDEO.minSeconds}–${META_VIDEO.maxSeconds} s`);
     if (v.beats.length < 3) issues.push(`${where} : moins de 3 temps`);
     if (v.hook.trim() === "") issues.push(`${where} : accroche vide`);
@@ -1061,10 +1156,11 @@ export function metaVideoPlanIssues(plan: MetaAdsVideoPlan): string[] {
   return issues;
 }
 
-/** Écarts d'un plan de campagne au contrat (vide = conforme). */
+/** Écarts d'un plan de campagne au contrat (vide = conforme) : l'objectif suit le Pixel (conversions avec, trafic sans). */
 export function metaPlanIssues(plan: MetaAdsPlan, hasPixel: boolean): string[] {
   const issues: string[] = [];
   if (hasPixel && plan.objective.type !== "conversions_site") issues.push("objectif : le Pixel est installé, l'objectif doit être les conversions sur le site");
+  if (!hasPixel && plan.objective.type === "conversions_site") issues.push("objectif : sans Pixel, les conversions sur le site ne peuvent pas être mesurées (repli trafic attendu)");
   if (!META_PIXEL_EVENTS.includes(plan.objective.pixelEvent)) issues.push("événement Pixel inconnu");
   if (plan.adSets.length === 0) issues.push("aucun ensemble de publicités");
   if (plan.budget.dailyEur < META_ADS_BUDGET_EUR.dailyMin || plan.budget.dailyEur > META_ADS_BUDGET_EUR.dailyMax * 2) issues.push("budget quotidien hors bornes");
@@ -1080,7 +1176,15 @@ export type MetaAdsAnalysisStatus = (typeof META_ADS_ANALYSIS_STATUSES)[number];
 
 // ─── Mesure (site) ───────────────────────────────────────────────────────────
 
-/** Paramètres d'URL signant une visite venue d'une annonce Meta (fbclid, ou UTM payant Facebook/Instagram). */
+/**
+ * Paramètres d'URL signant une visite venue d'une annonce Meta : UTM payant
+ * Facebook / Instagram / Meta (`utm_source` facebook, instagram, meta, fb, ig
+ * ET `utm_medium` cpc, ppc, paid, paidsocial, paid_social, ads, social_paid).
+ * `fbclid` ne compte pas : Facebook l'ajoute à tout lien sortant, publication
+ * organique comprise — un clic organique garde sa provenance par referrer
+ * (« facebook »). Les annonces préparées par le studio portent le suffixe
+ * META_ADS_LANDING_SUFFIX (`?src=meta`), lu avant cette signature.
+ */
 export function isMetaAdsLanding(search: string): boolean {
   let params: URLSearchParams;
   try {
@@ -1088,7 +1192,6 @@ export function isMetaAdsLanding(search: string): boolean {
   } catch {
     return false;
   }
-  if (params.has("fbclid")) return true;
   const source = (params.get("utm_source") ?? "").toLowerCase();
   const medium = (params.get("utm_medium") ?? "").toLowerCase();
   return ["facebook", "instagram", "meta", "fb", "ig"].includes(source) && ["cpc", "ppc", "paid", "paidsocial", "paid_social", "ads", "social_paid"].includes(medium);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   GOOGLE_ADS_RADIUS_KM,
+  META_ADS_LANDING_SUFFIX,
   META_ADS_TEXT,
   META_CREATIVES_MAX,
   META_CREATIVES_MIN,
@@ -23,6 +24,7 @@ import { checkEthicalComplianceDeep } from "./guardrails";
 import {
   META_ADS_MILESTONE_HORIZONS,
   META_CREATIVE_TEMPLATES,
+  META_LANDING_TIP,
   checkMetaCompliance,
   createMetaAdsPlanner,
   defaultMetaMilestones,
@@ -31,6 +33,7 @@ import {
   finalizeMetaMarketInsights,
   finalizeMetaPlan,
   finalizeMetaVideoPlan,
+  maskNames,
   metaAdsSystemPrompt,
   metaCreativesSchema,
   metaCreativesUserPrompt,
@@ -47,6 +50,7 @@ import {
   mockMetaPlan,
   mockMetaVideoPlan,
   parseMetaInstructions,
+  protectedNames,
   type MetaCreativesOutput,
   type MetaPlanOutput,
   type MetaVideoPlanOutput,
@@ -504,6 +508,60 @@ describe("finalizeMetaCreatives", () => {
     expect(set.creatives.map((c) => c.angle)).not.toContain("decouverte");
     expect(metaCreativeIssues(set, PATHS)).toEqual([]);
   });
+
+  it("noms propres (« Sophie Guérin », « Guérande ») masqués avant la conformité : conservés dans les textes, « guérir » toujours refusé", () => {
+    const b = brief({
+      practitioner: { firstName: "Sophie", lastName: "Guérin", profession: "Sophrologue", practiceName: "la sophrologie", city: "Guérande", gender: "feminin" },
+      siteName: "Sophie Guérin Sophrologue",
+      home: { ...brief().home, contact: { id: "section:home:contact", address: "3 place du Marché, 44350 Guérande" } },
+      reviews: [{ id: "review:1", authorName: "Léa M.", rating: 5, text: "Sophie Guérin est à l'écoute, je recommande le cabinet de Guérande." }],
+    });
+    expect(protectedNames(b)).toEqual(["Sophie Guérin Sophrologue", "Sophie Guérin", "Guérande", "Guérin", "Sophie"]);
+    expect(maskNames("Sophie Guérin vous accueille à Guérande ; guérir n'est pas le mot.", protectedNames(b))).toBe("Nom vous accueille à Nom ; guérir n'est pas le mot.");
+    const i = input();
+    const raw = mockMetaCreatives(b, i);
+    const set = finalizeMetaCreatives(
+      {
+        ...raw,
+        creatives: [
+          { ...raw.creatives[0]!, primaryText: "Sophie Guérin vous accueille au cabinet de Guérande, sur rendez-vous. La sophrologie ne se substitue pas à un avis médical.", headline: "Sophie Guérin, sophrologue", hook: "Cabinet à Guérande" },
+          { ...raw.creatives[1]!, primaryText: "Guérir le stress en trois séances, c'est promis." },
+          ...raw.creatives.slice(2),
+        ],
+      },
+      i,
+      b,
+      "anthropic",
+      NOW,
+    );
+    expect(metaCreativeIssues(set, PATHS)).toEqual([]);
+    expect(set.creatives[0]!.primaryText).toContain("Sophie Guérin vous accueille au cabinet de Guérande");
+    expect(set.creatives[0]!.headline).toBe("Sophie Guérin, sophrologue");
+    expect(set.creatives[0]!.hook).toBe("Cabinet à Guérande");
+    expect(set.creatives[1]!.primaryText).not.toMatch(/guérir|promis/i);
+    // Les secours écrits par le code gardent la ville et le nom (« Sophrologue à Guérande » n'est plus un faux positif)
+    expect(raw.creatives.find((c) => c.angle === "local")!.headline).toBe("Sophrologue à Guérande");
+    expect(raw.creatives.find((c) => c.angle === "temoignage")!.primaryText).toContain("Sophie Guérin est à l'écoute");
+    const video = mockMetaVideoPlan(b, i);
+    expect(video.videos[0]!.hook).toBe("Bonjour, je suis Sophie, sophrologue à Guérande.");
+  });
+
+  it("`photosById` renseigne `photoUrl` (URL de la photo, null sans photo ou photo inconnue) ; absent sans lui", () => {
+    const b = brief();
+    const i = input();
+    const raw = mockMetaCreatives(b, i);
+    const photosById = { p1: "https://cdn.example/p1.jpg", p2: "https://cdn.example/p2.jpg" };
+    const set = finalizeMetaCreatives({ ...raw, creatives: [{ ...raw.creatives[0]!, photoId: null }, raw.creatives[1]!] }, i, b, "anthropic", NOW, photosById);
+    expect(metaCreativeIssues(set, PATHS)).toEqual([]);
+    expect(set.creatives[0]!.photoUrl).toBeNull();
+    // p3 (spécialité) n'a pas d'URL connue → null ; les secours du code reçoivent aussi leur URL
+    expect(set.creatives[1]!.photoId).toBe("p3");
+    expect(set.creatives[1]!.photoUrl).toBeNull();
+    expect(set.creatives[2]!.photoId).toBe("p1");
+    expect(set.creatives[2]!.photoUrl).toBe("https://cdn.example/p1.jpg");
+    const without = finalizeMetaCreatives(raw, i, b, "anthropic", NOW);
+    expect(without.creatives.every((c) => !("photoUrl" in c))).toBe(true);
+  });
 });
 
 // ─── Finalisation : plan vidéo ───────────────────────────────────────────────
@@ -587,6 +645,33 @@ describe("finalizeMetaVideoPlan", () => {
     expect(few.videos[0]!.beats.length).toBeGreaterThanOrEqual(4);
     expect(few.videos[0]!.durationSeconds).toBe(40);
     expect(metaVideoPlanIssues(few)).toEqual([]);
+  });
+
+  it("avec le brief (5ᵉ paramètre) : secours dans la voix du praticien (prénom, ville, avis), angle avis quand la fiche le permet", () => {
+    const i = input();
+    const empty: MetaVideoPlanOutput = { videos: [], equipment: [], editingTips: [] };
+    const generic = finalizeMetaVideoPlan(empty, i, "anthropic", NOW);
+    expect(generic.videos.map((v) => v.angle)).toEqual(["reassurance", "education", "local"]);
+    expect(generic.videos[0]!.hook).toBe("Bonjour et bienvenue au cabinet.");
+    const voiced = finalizeMetaVideoPlan(empty, i, "anthropic", NOW, brief());
+    expect(metaVideoPlanIssues(voiced)).toEqual([]);
+    expect(voiced.videos.map((v) => v.angle)).toEqual(["reassurance", "education", "temoignage"]);
+    expect(voiced.videos[0]!.hook).toBe("Bonjour, je suis Claire, sophrologue à Albi.");
+    expect(voiced.videos[2]!.hook).toContain("27 personnes ont laissé un avis sur Google");
+    expect(voiced.videos[0]!.cta).toBe("BOOK_NOW");
+    const noBooking = finalizeMetaVideoPlan(empty, input({}, { booking: false }), "anthropic", NOW, brief({ hasBookingUrl: false, google: undefined }));
+    expect(noBooking.videos.map((v) => v.angle)).toEqual(["reassurance", "education", "local"]);
+    expect(noBooking.videos.every((v) => v.cta !== "BOOK_NOW")).toBe(true);
+    expect(noBooking.videos[2]!.beats.some((bt) => bt.onScreen === "12 rue de la Paix, 81000 Albi")).toBe(true);
+    // Une vidéo du modèle qui cite le praticien n'est pas refusée pour son nom
+    const named = finalizeMetaVideoPlan(
+      { ...empty, videos: [{ ...mockMetaVideoPlan(brief(), i).videos[0]!, hook: "Bonjour, je suis Sophie Guérin, sophrologue à Guérande." }] },
+      i,
+      "anthropic",
+      NOW,
+      brief({ practitioner: { firstName: "Sophie", lastName: "Guérin", profession: "Sophrologue", practiceName: "la sophrologie", city: "Guérande", gender: "feminin" } }),
+    );
+    expect(named.videos[0]!.hook).toBe("Bonjour, je suis Sophie Guérin, sophrologue à Guérande.");
   });
 });
 
@@ -680,6 +765,27 @@ describe("finalizeMetaPlan", () => {
     expect(plan.adSets).toHaveLength(2);
     expect(plan.adSets.every((s) => s.creativeIds.length === 0)).toBe(true);
     expect(plan.adSets[1]!.details).toContain("à créer une fois le Pixel installé");
+  });
+
+  it("suffixe d'URL « ?src=meta » : `campaign.landingSuffix` et un conseil écrit par le code, toujours présent (même avec 6 conseils du modèle, sans doublon)", () => {
+    const i = planInput({}, { pixel: true });
+    const raw = mockMetaPlan(brief(), i);
+    expect(raw.tips).toContain(META_LANDING_TIP);
+    expect(META_LANDING_TIP.length).toBeLessThanOrEqual(240);
+    expect(META_LANDING_TIP).toContain(META_ADS_LANDING_SUFFIX);
+    const plan = finalizeMetaPlan(raw, i, "mock", NOW);
+    expect(plan.campaign.landingSuffix).toBe("?src=meta");
+    expect(plan.tips.at(-1)).toBe(META_LANDING_TIP);
+    expect(metaPlanIssues(plan, true)).toEqual([]);
+    const many = finalizeMetaPlan(
+      { ...raw, tips: ["Relisez les commentaires chaque semaine.", "Répondez aux messages dans la journée.", "Changez un visuel toutes les six semaines.", "Gardez le bandeau cookies actif.", "Pensez à ajouter ?src=meta à vos liens.", "Vérifiez le Pixel chaque lundi.", "Coupez la nuit si elle ne convertit pas."] },
+      i,
+      "anthropic",
+      NOW,
+    );
+    expect(many.tips).toHaveLength(6);
+    expect(many.tips.filter((t) => t.includes(META_ADS_LANDING_SUFFIX))).toEqual([META_LANDING_TIP]);
+    expect(many.tips[0]).toBe("Relisez les commentaires chaque semaine.");
   });
 });
 
@@ -842,6 +948,13 @@ describe("mocks", () => {
     expect(empty.angles).toHaveLength(3);
     expect(empty.angles.every((a) => a.adIds.length === 0)).toBe(true);
     expect(empty.warnings[0]).toContain("Aucune formulation interdite");
+  });
+
+  it("synthèse de la veille : les noms de pages (données de tiers) sont neutralisés comme dans le prompt", () => {
+    const m = market([...ADS.slice(0, 9), ad("a12", 'Cabinet <script>alert("x")</script> « Zen »', ["Un cadre calme, sur rendez-vous."], { days: 200, reach: 59_000 })]);
+    const insights = mockMarketInsights(brief(), m);
+    expect(insights.summary).toContain("Pages les plus présentes : Cabinet script alert( x ) /script Zen, Cabinet Sérénité");
+    expect(insights.summary).not.toMatch(/[<>«»"]/);
   });
 
   it("finalizeMetaMarketInsights : identifiants inconnus retirés, angles complétés à 3, textes non conformes remplacés", () => {

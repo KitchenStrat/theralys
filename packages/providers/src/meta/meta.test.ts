@@ -3,17 +3,25 @@ import { META_GRAPH_VERSION_DEFAULT, META_LIBRARY_PAGE_LIMIT, metaLibraryUrl, sc
 import {
   META_ADS_ARCHIVE_FIELDS,
   META_GRAPH_BASE,
+  META_RECORD_LIMITS,
+  META_TIMEOUT_MS,
+  META_TRANSIENT_CODES,
   MetaAdLibraryError,
   MetaAdLibraryProvider,
   MockAdLibraryProvider,
   adRecordFromItem,
   adsArchiveUrl,
+  boundedText,
   createAdLibraryProvider,
+  isMetaRetryable,
+  isMetaStrippedCodePoint,
   isMetaTokenError,
   isoDateOrNull,
   metaGraphVersion,
   mockLibraryAds,
+  nextPageUrl,
   redactMetaToken,
+  targetAgesFrom,
 } from "./index";
 
 const TOKEN = "EAAB-jeton-secret-0123456789abcdef";
@@ -78,6 +86,10 @@ describe("requête ads_archive", () => {
     expect(url.searchParams.get("ad_active_status")).toBe("ALL");
     expect(url.searchParams.get("limit")).toBe("100");
     expect(url.searchParams.get("fields")).toBe(META_ADS_ARCHIVE_FIELDS);
+    // ad_snapshot_url n'est jamais demandé (il embarque le jeton) ; délai borné à 15 s
+    expect(META_ADS_ARCHIVE_FIELDS.split(",")).not.toContain("ad_snapshot_url");
+    expect(META_ADS_ARCHIVE_FIELDS.split(",")).toContain("target_ages");
+    expect(META_TIMEOUT_MS).toBe(15_000);
   });
 
   it("searchAds : GET avec le jeton, limite bornée à 100, statut ACTIVE transmis, version de l'environnement", async () => {
@@ -169,6 +181,52 @@ describe("normalisation adRecordFromItem", () => {
     });
   });
 
+  it("target_ages en liste (API réelle) → « 18-65+ » ; en texte → tel quel ; sinon null", () => {
+    expect(targetAgesFrom(["18", "65+"])).toBe("18-65+");
+    expect(targetAgesFrom([25, "54"])).toBe("25-54");
+    expect(targetAgesFrom("25-54")).toBe("25-54");
+    expect(targetAgesFrom([])).toBeNull();
+    expect(targetAgesFrom(null)).toBeNull();
+    expect(adRecordFromItem({ ...ITEM, target_ages: ["18", "65+"] })!.targetAges).toBe("18-65+");
+    // Le mock produit la même forme
+    expect(mockLibraryAds("sophrologue", { now: NOW, locality: null }).every((ad) => ad.targetAges === null || /^\d{2}-\d{2}\+?$/.test(ad.targetAges))).toBe(true);
+  });
+
+  it("textes bornés : 3 textes de 1 000 caractères, 3 titres / descriptions / légendes de 200, page de 120 ; caractères de contrôle et de direction retirés", () => {
+    const long = (n: number) => Array.from({ length: n }, (_, i) => `mot${i}`).join(" ");
+    const ad = adRecordFromItem({
+      ...ITEM,
+      page_name: `Cabinet ‮Martin‬ ${"très ".repeat(40)}long`,
+      ad_creative_bodies: [long(400), "Deuxième\u0000 texte‏ propre", "Troisième", "Quatrième de trop"],
+      ad_creative_link_titles: [long(80), "T2", "T3", "T4"],
+      ad_creative_link_descriptions: ["D1⁦⁩", "D2", "D3", "D4", "D5"],
+      ad_creative_link_captions: ["C1", "C2", "C3", "C4"],
+      target_locations: [{ name: `Albi‎ ${"x".repeat(200)}`, type: "city", excluded: false }],
+    })!;
+    expect(ad.bodies).toHaveLength(META_RECORD_LIMITS.bodies.count);
+    expect(ad.bodies[0]!.length).toBeLessThanOrEqual(META_RECORD_LIMITS.bodies.length);
+    expect(ad.bodies[0]!.endsWith(" ")).toBe(false);
+    expect(ad.bodies[1]).toBe("Deuxième texte propre");
+    expect(ad.titles).toHaveLength(META_RECORD_LIMITS.titles.count);
+    expect(ad.titles[0]!.length).toBeLessThanOrEqual(META_RECORD_LIMITS.titles.length);
+    expect(ad.descriptions).toEqual(["D1", "D2", "D3"]);
+    expect(ad.captions).toHaveLength(3);
+    expect(ad.pageName.length).toBeLessThanOrEqual(META_RECORD_LIMITS.pageName);
+    expect(ad.pageName.startsWith("Cabinet Martin")).toBe(true);
+    expect(ad.targetLocations[0]!.name.length).toBeLessThanOrEqual(META_RECORD_LIMITS.short);
+    for (const text of [ad.pageName, ...ad.bodies, ...ad.descriptions, ...ad.targetLocations.map((l) => l.name)]) {
+      expect([...text].some((ch) => isMetaStrippedCodePoint(ch.codePointAt(0) ?? 0))).toBe(false);
+    }
+    // Blancs repliés (jamais retirés), contrôle C0 / C1, marques de direction, ALM et BOM retirés
+    expect([0x09, 0x0a, 0x0d, 0x20, 0x41, 0xe9].some(isMetaStrippedCodePoint)).toBe(false);
+    expect([0x00, 0x07, 0x0b, 0x0c, 0x1f, 0x7f, 0x9f, 0x200e, 0x200f, 0x202a, 0x202e, 0x2066, 0x2069, 0x061c, 0xfeff].every(isMetaStrippedCodePoint)).toBe(true);
+    expect(boundedText("  a \n b  ", 10)).toBe("a b");
+    expect(boundedText("", 10)).toBeNull();
+    expect(boundedText("\u0007", 10)).toBeNull();
+    expect(boundedText("abcdefghij klmnop", 12)).toBe("abcdefghij");
+    expect(boundedText("abcdefghijklmnopqrstuvwxyz", 12)).toBe("abcdefghijkl");
+  });
+
   it("item malformé : sans identifiant, non objet, dates invalides, portée négative ou texte", () => {
     expect(adRecordFromItem({ page_name: "Cabinet X" })).toBeNull();
     expect(adRecordFromItem(null)).toBeNull();
@@ -212,11 +270,43 @@ describe("pagination", () => {
     expect(two).toMatchObject({ calls: 2, truncated: true });
   });
 
-  it("items malformés écartés, réponse sans data tolérée", async () => {
+  it("items malformés écartés ; `data` vide accepté", async () => {
     const { impl } = stubFetch(() => jsonResponse({ data: [ITEM, null, "x", { page_name: "sans id" }] }));
     expect((await provider(impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" })).ads).toHaveLength(1);
-    const { impl: empty } = stubFetch(() => jsonResponse({}));
+    const { impl: empty } = stubFetch(() => jsonResponse({ data: [] }));
     expect(await provider(empty).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" })).toEqual({ ads: [], calls: 1, truncated: false });
+  });
+
+  it("réponse 200 non JSON, vide ou sans tableau `data` → erreur transitoire (une relance), message sans jeton", async () => {
+    const html = stubFetch(() => new Response(`<html>Maintenance ${TOKEN}</html>`, { status: 200, headers: { "Content-Type": "text/html" } }));
+    const htmlErr = (await provider(html.impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" }).catch((e: unknown) => e)) as MetaAdLibraryError;
+    expect(htmlErr).toBeInstanceOf(MetaAdLibraryError);
+    expect(htmlErr.transient).toBe(true);
+    expect(htmlErr.status).toBe(200);
+    expect(htmlErr.message).toContain("non JSON");
+    expect(htmlErr.message).not.toContain(TOKEN);
+    expect(html.calls).toHaveLength(2);
+    const noData = stubFetch(() => jsonResponse({ paging: {} }));
+    const noDataErr = (await provider(noData.impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" }).catch((e: unknown) => e)) as MetaAdLibraryError;
+    expect(noDataErr.transient).toBe(true);
+    expect(noDataErr.message).toContain("sans tableau data");
+    const blank = stubFetch(() => new Response("", { status: 200 }));
+    expect(((await provider(blank.impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" }).catch((e: unknown) => e)) as MetaAdLibraryError).transient).toBe(true);
+    // Une relance qui aboutit répare la veille
+    const flaky = stubFetch((_call, index) => (index === 0 ? new Response("<html>", { status: 200 }) : jsonResponse({ data: [ITEM] })));
+    expect((await provider(flaky.impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL" })).ads).toHaveLength(1);
+  });
+
+  it("paging.next : seul un https sur graph.facebook.com est suivi (autre hôte, http, texte illisible → ignoré, non tronqué)", async () => {
+    expect(nextPageUrl(NEXT)).toBe(NEXT);
+    expect(nextPageUrl(`https://evil.example.com/v22.0/ads_archive?access_token=${TOKEN}`)).toBeNull();
+    expect(nextPageUrl(`https://graph.facebook.com.evil.example/v22.0/ads_archive`)).toBeNull();
+    expect(nextPageUrl(`http://graph.facebook.com/v22.0/ads_archive?after=x`)).toBeNull();
+    expect(nextPageUrl("pas une url")).toBeNull();
+    const { calls, impl } = stubFetch(() => jsonResponse({ data: [ITEM], paging: { next: `https://evil.example.com/ads_archive?access_token=${TOKEN}` } }));
+    const result = await provider(impl).searchAds({ term: "sophrologue", country: "FR", activeStatus: "ALL", maxPages: 3 });
+    expect(calls).toHaveLength(1);
+    expect(result).toMatchObject({ calls: 1, truncated: false });
   });
 });
 
@@ -240,12 +330,27 @@ describe("erreurs", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("HTTP 429 : transitoire, une relance après le délai puis succès", async () => {
-    const { calls, impl } = stubFetch((_call, index) => (index === 0 ? jsonResponse({ error: { message: "Too many calls", code: 4 } }, 429) : jsonResponse({ data: [ITEM] })));
+  it("HTTP 429 sans code Graph : transitoire, une relance après le délai puis succès", async () => {
+    const { calls, impl } = stubFetch((_call, index) => (index === 0 ? new Response("Too Many Requests", { status: 429 }) : jsonResponse({ data: [ITEM] })));
     const result = await search(impl);
     expect(calls).toHaveLength(2);
     expect(result).toMatchObject({ calls: 1, truncated: false });
     expect(result.ads).toHaveLength(1);
+  });
+
+  it("codes de fenêtre horaire 4 / 17 / 32 / 613 : transitoires (message « réessayez ») mais jamais relancés sur-le-champ", async () => {
+    for (const code of META_TRANSIENT_CODES) {
+      const { calls, impl } = stubFetch(() => jsonResponse({ error: { message: "Too many calls", code } }, code === 4 ? 429 : 400));
+      const err = (await search(impl).catch((e: unknown) => e)) as MetaAdLibraryError;
+      expect(err, String(code)).toBeInstanceOf(MetaAdLibraryError);
+      expect(err.transient, String(code)).toBe(true);
+      expect(err.code).toBe(code);
+      expect(isMetaRetryable(err)).toBe(false);
+      expect(calls, String(code)).toHaveLength(1);
+    }
+    expect(isMetaRetryable(new MetaAdLibraryError("x", { status: 500, transient: true }))).toBe(true);
+    expect(isMetaRetryable(new MetaAdLibraryError("x", { status: 400, code: 100 }))).toBe(false);
+    expect(isMetaRetryable(new Error("x"))).toBe(false);
   });
 
   it("HTTP 500 deux fois : erreur transitoire après l'unique relance", async () => {
@@ -258,11 +363,11 @@ describe("erreurs", () => {
     expect(calls).toHaveLength(2);
   });
 
-  it("code Graph 17 ou 613 sur un statut 400 : transitoire ; code 100 : non transitoire, pas de relance", async () => {
+  it("code Graph 17 ou 613 sur un statut 400 : transitoire sans relance ; code 100 : non transitoire, pas de relance", async () => {
     const limit = stubFetch(() => jsonResponse({ error: { message: "User request limit reached", code: 17 } }, 400));
     const limitErr = (await search(limit.impl).catch((e: unknown) => e)) as MetaAdLibraryError;
     expect(limitErr.transient).toBe(true);
-    expect(limit.calls).toHaveLength(2);
+    expect(limit.calls).toHaveLength(1);
     const custom = stubFetch(() => jsonResponse({ error: { message: "Calls to this api have exceeded the rate limit.", code: 613 } }, 400));
     expect(((await search(custom.impl).catch((e: unknown) => e)) as MetaAdLibraryError).transient).toBe(true);
     const invalid = stubFetch(() => jsonResponse({ error: { message: "Invalid parameter", code: 100 } }, 400));

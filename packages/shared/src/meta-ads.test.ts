@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   FR_DEPARTMENTS,
   META_ADS_BUDGET_EUR,
+  META_ADS_LANDING_SUFFIX,
   META_ADS_TEXT,
   META_LIBRARY_TERMS_MAX,
+  META_LIBRARY_TERM_MAX,
   META_MARKET_MAX_ADS,
   META_MARKET_MIN_LOCAL,
   META_MARKET_SCOPES,
+  META_MARKET_SCOPE_LABELS,
   META_MARKET_STRONG_DAYS,
   META_MARKET_STRONG_REACH,
   META_PERSONAL_ATTRIBUTE_PATTERNS,
@@ -23,7 +26,9 @@ import {
   isMetaAdsAngle,
   isMetaAdsCta,
   isMetaAdsLanding,
+  marketNearbyCount,
   marketScopeNote,
+  marketTotalCount,
   metaCreativeIssues,
   metaLibraryUrl,
   metaPersonalAttributeViolations,
@@ -320,6 +325,24 @@ describe("buildMetaSearchTerms", () => {
       "eft libération émotionnelle",
     ]);
   });
+
+  it("chaque terme tient en META_LIBRARY_TERM_MAX caractères (coupé au mot) ; un concurrent impossible à tronquer proprement est ignoré", () => {
+    const longName = `${"Cabinet des Thérapies Douces et Naturelles de la Vallée ".repeat(3)}Toulouse`;
+    expect(longName.length).toBeGreaterThan(META_LIBRARY_TERM_MAX);
+    const terms = buildMetaSearchTerms({ profession: "Sophrologue", specialties: [], competitorNames: [longName, "x".repeat(140), "Cabinet Zen"] });
+    expect(terms.every((t) => t.length <= META_LIBRARY_TERM_MAX)).toBe(true);
+    const competitor = terms.find((t) => t.startsWith("cabinet des thérapies"));
+    expect(competitor).toBeDefined();
+    expect(competitor!.endsWith(" ")).toBe(false);
+    expect(longName.toLowerCase().startsWith(competitor!)).toBe(true);
+    expect(terms.some((t) => /^x+$/.test(t))).toBe(false);
+    expect(terms).toContain("cabinet zen");
+    // Métier et spécialité démesurés : tronqués, jamais ignorés
+    const specialty = `Accompagnement ${"très ".repeat(30)}long`;
+    const bounded = buildMetaSearchTerms({ profession: `Praticienne ${"bien-être ".repeat(15)}holistique`, specialties: [specialty], competitorNames: [] });
+    expect(bounded.length).toBeGreaterThan(0);
+    expect(bounded.every((t) => t.length <= META_LIBRARY_TERM_MAX && t.length >= 3)).toBe(true);
+  });
 });
 
 describe("buildMetaSeed", () => {
@@ -518,7 +541,17 @@ describe("selectMarketAds", () => {
     expect(selectMarketAds(records, toulouse, now).scopeUsed).toBe("ville");
     expect(selectMarketAds(records, toulouse, now).ads).toHaveLength(8);
     expect(selectMarketAds(inZone("ville", 2), toulouse, now, { minLocal: 2 }).scopeUsed).toBe("ville");
-    expect(selectMarketAds([], toulouse, now)).toEqual({ ads: [], scopeUsed: "france", counts: { ville: 0, departement: 0, region: 0, france: 0 } });
+    expect(selectMarketAds([], toulouse, now)).toEqual({ ads: [], scopeUsed: "france", counts: { ville: 0, departement: 0, region: 0, france: 0 }, strongCounts: { ville: 0, departement: 0, region: 0, france: 0 } });
+  });
+
+  it("`strongCounts` : signaux forts par zone sur toutes les annonces repérées, même hors des annonces conservées", () => {
+    const strong = { startedAt: daysAgo(60), euTotalReach: 20_000 };
+    const records = [...inZone("ville", META_MARKET_MIN_LOCAL, strong), ...inZone("departement", 2, strong), ...inZone("region", 1, strong), ...inZone("france", 3)];
+    const selected = selectMarketAds(records, toulouse, now);
+    expect(selected.scopeUsed).toBe("ville");
+    expect(selected.ads.every((a) => a.scope === "ville")).toBe(true);
+    expect(selected.counts).toEqual({ ville: 8, departement: 2, region: 1, france: 3 });
+    expect(selected.strongCounts).toEqual({ ville: 8, departement: 2, region: 1, france: 0 });
   });
 
   it("tri : zone la plus proche d'abord, puis score décroissant, puis nom de page ; `max` tronque", () => {
@@ -571,11 +604,22 @@ describe("marketScopeNote", () => {
     expect(marketScopeNote(market("ville", { ville: 1 }, 1), toulouse)).toBe("1 annonce autour de Toulouse.");
   });
 
-  it("département, région, France : formulation sans article piégé et mention de l'élargissement avec le compte local", () => {
-    expect(marketScopeNote(market("departement", { ville: 3, departement: 5 }, 8), toulouse)).toBe("8 annonces dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (8) : la veille a été élargie.");
+  it("département, région, France : formulation sans article piégé et mention de l'élargissement avec le compte près de chez vous (la ville seule quand le département est retenu)", () => {
+    expect(marketScopeNote(market("departement", { ville: 3, departement: 5 }, 8), toulouse)).toBe("8 annonces dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (3) : la veille a été élargie.");
     expect(marketScopeNote(market("region", { ville: 2, departement: 1, region: 6 }, 9), toulouse)).toBe("9 annonces dans votre région (Occitanie). Peu d'annonces près de chez vous (3) : la veille a été élargie.");
-    expect(marketScopeNote(market("france", { france: 4 }, 4), toulouse)).toBe("4 annonces en France. Peu d'annonces près de chez vous (0) : la veille a été élargie.");
+    expect(marketScopeNote(market("france", { france: 4 }, 4), toulouse)).toBe("4 annonces en France et dans d'autres zones. Peu d'annonces près de chez vous (0) : la veille a été élargie.");
     expect(marketScopeNote(market("region", {}, 2), { city: "Lille", department: departmentFromPostalCode("59000"), region: "Hauts-de-France" })).toContain("dans votre région (Hauts-de-France)");
+  });
+
+  it("annonces conservées sur annonces repérées quand des annonces plus lointaines ont été écartées", () => {
+    expect(marketScopeNote(market("ville", { ville: 12, departement: 3, france: 5 }, 12), toulouse)).toBe("12 annonces conservées sur 20 repérées, autour de Toulouse.");
+    expect(marketScopeNote(market("departement", { ville: 2, departement: 9, region: 4 }, 11), toulouse)).toBe(
+      "11 annonces conservées sur 15 repérées, dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (2) : la veille a été élargie.",
+    );
+    expect(marketScopeNote(market("ville", { ville: 1, france: 1 }, 1), toulouse)).toBe("1 annonce conservée sur 2 repérées, autour de Toulouse.");
+    expect(marketNearbyCount({ scopeUsed: "departement", counts: { ville: 2, departement: 9, region: 0, france: 0 } })).toBe(2);
+    expect(marketNearbyCount({ scopeUsed: "region", counts: { ville: 2, departement: 3, region: 9, france: 0 } })).toBe(5);
+    expect(marketTotalCount({ ville: 2, departement: 3, region: 9, france: 1 })).toBe(15);
   });
 
   it("département ou région inconnus : pas de parenthèse vide", () => {
@@ -708,6 +752,18 @@ describe("diagnoseMetaAds", () => {
   it("marketNote : les signaux forts venus de l'élargissement (région, France) ne comptent pas comme locaux", () => {
     const input = { ...readyInput, market: { scopeUsed: "region" as const, counts: { ville: 4, departement: 4, region: 3, france: 0 }, ads: [marketAd("region", "fort"), marketAd("france", "fort")] } };
     expect(diagnoseMetaAds(input, now).marketNote).toBe("8 annonces près de chez vous : le marché local est actif, vos visuels devront se démarquer.");
+    expect(diagnoseMetaAds({ ...input, market: { ...input.market, strongCounts: { ville: 0, departement: 0, region: 1, france: 1 } } }, now).marketNote).toBe(
+      "8 annonces près de chez vous : le marché local est actif, vos visuels devront se démarquer.",
+    );
+  });
+
+  it("marketNote : avec `strongCounts`, les signaux forts se comptent sur toutes les annonces repérées (ville + département), pas seulement sur celles conservées", () => {
+    // Zone ville retenue : les annonces du département ne sont pas conservées dans `ads`, mais comptent comme locales
+    const input = {
+      ...readyInput,
+      market: { scopeUsed: "ville" as const, counts: { ville: 8, departement: 4, region: 0, france: 2 }, strongCounts: { ville: 1, departement: 2, region: 0, france: 1 }, ads: [marketAd("ville", "fort")] },
+    };
+    expect(diagnoseMetaAds(input, now).marketNote).toBe("12 annonces près de chez vous, dont 3 diffusées depuis longtemps avec une large portée : le marché local est actif, vos visuels devront se démarquer.");
   });
 });
 
@@ -752,7 +808,11 @@ describe("metaPersonalAttributeViolations", () => {
     expect(metaPersonalAttributeViolations("Si vous avez besoin d'une pause")).toEqual([]);
     expect(metaPersonalAttributeViolations("Si vous souffrez de migraines")).toContain("diagnostic implicite : « si vous souffrez de / si vous avez mal »");
     expect(metaPersonalAttributeViolations("Si vous avez des douleurs au dos")).toHaveLength(1);
-    expect(metaPersonalAttributeViolations("Si tu as du mal à dormir")).toHaveLength(1);
+    // « si tu as du mal à » cumule le diagnostic implicite et l'attribut « vous avez du mal à »
+    expect(metaPersonalAttributeViolations("Si tu as du mal à dormir")).toEqual([
+      "diagnostic implicite : « si vous souffrez de / si vous avez mal »",
+      "attribut personnel : « vous dormez mal / vous avez du mal à »",
+    ]);
     // « si vous avez mal » cumule l'attribut (« vous avez mal ») et le diagnostic implicite.
     expect(metaPersonalAttributeViolations("si vous avez mal")).toEqual([
       "attribut personnel : « vous souffrez / vous avez mal / vous n'en pouvez plus »",
@@ -760,8 +820,32 @@ describe("metaPersonalAttributeViolations", () => {
     ]);
   });
 
+  it("« vous dormez mal », « vous avez du mal à », « marre du stress », « trop de stress », adjectif d'état posé en question", () => {
+    const flagged = ["Vous dormez mal ?", "Vous avez du mal à dormir ?", "Tu dors mal ces temps-ci ?", "Stressé·e ?", "Stressés ?", "Fatigué(e) ?", "Marre du stress ?", "Trop de stress au travail ?", "Assez des douleurs ?", "Épuisé·e par le travail ?", "Anxieux de nature ?", "Un temps pour vous. Déprimé·e ?"];
+    for (const text of flagged) {
+      const rules = metaPersonalAttributeViolations(text);
+      expect(rules.length, text).toBeGreaterThanOrEqual(1);
+      expect(rules.every((r) => r.startsWith("attribut personnel")), text).toBe(true);
+    }
+    expect(metaPersonalAttributeViolations("Vous dormez mal ?")).toEqual(["attribut personnel : « vous dormez mal / vous avez du mal à »"]);
+    expect(metaPersonalAttributeViolations("Marre du stress ?")).toEqual(["attribut personnel : « marre du stress / trop de fatigue / assez des douleurs »"]);
+    expect(metaPersonalAttributeViolations("Stressé·e ?")).toEqual(["attribut personnel : « Stressé·e ? », « Épuisé·e par le travail ? »"]);
+  });
+
   it("formulations conformes : rien", () => {
-    for (const text of ["Un accompagnement pour retrouver la sérénité", "Stress, sommeil, confiance : des séances pour souffler", "Première séance découverte au cabinet", ""]) {
+    for (const text of [
+      "Un accompagnement pour retrouver la sérénité",
+      "Stress, sommeil, confiance : des séances pour souffler",
+      "Première séance découverte au cabinet",
+      "Un accompagnement pour mieux dormir",
+      "Retrouver un sommeil apaisé",
+      "Stress : comment souffler ?",
+      "Fatigue et sommeil : que faire ?",
+      "Le stress, parlons-en ?",
+      "Trop de bruit autour ? Un cadre calme.",
+      "Envie d'essayer ?",
+      "",
+    ]) {
       expect(metaPersonalAttributeViolations(text), text).toEqual([]);
     }
   });
@@ -837,9 +921,11 @@ describe("metaCreativeIssues", () => {
     expect(metaCreativeIssues(creativeSet([creative("c1", "reassurance", { primaryText: long(META_ADS_TEXT.primaryMax + 1) }), validCreatives[1]!, validCreatives[2]!]))).toEqual(["créa 1 (Créa c1) : texte principal vide ou trop long"]);
   });
 
-  it("identifiant en double, angle ou bouton inconnus", () => {
+  it("identifiant en double, angle ou bouton inconnus, angle repété", () => {
     const set = creativeSet([creative("c1", "reassurance"), creative("c1", "education"), creative("c3", "inconnu" as MetaAdCreative["angle"], { cta: "SHOP_NOW" as MetaAdCreative["cta"] })]);
     expect(metaCreativeIssues(set, landingPaths)).toEqual(["créa 2 (Créa c1) : identifiant en double", "créa 3 (Créa c3) : angle inconnu", "créa 3 (Créa c3) : bouton inconnu"]);
+    const repeated = creativeSet([creative("c1", "reassurance"), creative("c2", "reassurance"), creative("c3", "local")]);
+    expect(metaCreativeIssues(repeated, landingPaths)).toEqual(["créa 2 (Créa c2) : angle déjà utilisé par une autre créa"]);
   });
 
   it("page d'atterrissage : invalide sans « / », inconnue hors de la liste fournie", () => {
@@ -866,9 +952,18 @@ describe("metaCreativeIssues", () => {
 });
 
 describe("metaVideoPlanIssues", () => {
-  it("plan conforme → aucun écart ; aucune vidéo → écart", () => {
+  it("plan conforme → aucun écart ; aucune vidéo → écart ; META_VIDEO.count vidéos exigées", () => {
     expect(metaVideoPlanIssues(videoPlan([video("v1"), video("v2"), video("v3")]))).toEqual([]);
     expect(metaVideoPlanIssues(videoPlan([]))).toEqual(["aucune vidéo"]);
+    expect(metaVideoPlanIssues(videoPlan([video("v1")]))).toEqual(["1 vidéo (attendu 3)"]);
+    expect(metaVideoPlanIssues(videoPlan([video("v1"), video("v2"), video("v3"), video("v4")]))).toEqual(["4 vidéos (attendu 3)"]);
+  });
+
+  it("identifiant en double, format autre que 9:16", () => {
+    expect(metaVideoPlanIssues(videoPlan([video("v1"), video("v1"), video("v3", { format: "16:9" as MetaVideoBrief["format"] })]))).toEqual([
+      "vidéo 2 (Vidéo v1) : identifiant en double",
+      "vidéo 3 (Vidéo v3) : format 16:9 (attendu 9:16)",
+    ]);
   });
 
   it("durée hors 15–45 s, moins de 3 temps, accroche vide, bouton inconnu", () => {
@@ -881,20 +976,20 @@ describe("metaVideoPlanIssues", () => {
       "vidéo 3 (Vidéo v3) : accroche vide",
       "vidéo 3 (Vidéo v3) : bouton inconnu",
     ]);
-    expect(metaVideoPlanIssues(videoPlan([video("v1", { durationSeconds: 15, beats: shortBeats }), video("v2", { durationSeconds: 45 })]))).toEqual([]);
+    expect(metaVideoPlanIssues(videoPlan([video("v1", { durationSeconds: 15, beats: shortBeats }), video("v2", { durationSeconds: 45 }), video("v3")]))).toEqual([]);
   });
 
   it("temps forts : seconde hors durée, texte à l'écran > 60", () => {
     const beats = [...video("x").beats];
     beats[2] = { ...beats[2]!, at: 31, onScreen: "x".repeat(61) };
-    expect(metaVideoPlanIssues(videoPlan([video("v1", { beats })]))).toEqual(["vidéo 1 (Vidéo v1), temps 3 : seconde hors durée", "vidéo 1 (Vidéo v1), temps 3 : texte à l'écran > 60"]);
-    expect(metaVideoPlanIssues(videoPlan([video("v1", { beats: [{ ...beats[0]!, at: -1 }, beats[1]!, { ...beats[2]!, at: 30, onScreen: "x".repeat(60) }] })]))).toEqual(["vidéo 1 (Vidéo v1), temps 1 : seconde hors durée"]);
+    expect(metaVideoPlanIssues(videoPlan([video("v1", { beats }), video("v2"), video("v3")]))).toEqual(["vidéo 1 (Vidéo v1), temps 3 : seconde hors durée", "vidéo 1 (Vidéo v1), temps 3 : texte à l'écran > 60"]);
+    expect(metaVideoPlanIssues(videoPlan([video("v1", { beats: [{ ...beats[0]!, at: -1 }, beats[1]!, { ...beats[2]!, at: 30, onScreen: "x".repeat(60) }] }), video("v2"), video("v3")]))).toEqual(["vidéo 1 (Vidéo v1), temps 1 : seconde hors durée"]);
   });
 
   it("violation d'attribut personnel dans l'accroche, le texte à coller, les paroles ou le texte à l'écran", () => {
     const beats = [...video("x").beats];
     beats[1] = { ...beats[1]!, say: "Si vous souffrez de stress…" };
-    const issues = metaVideoPlanIssues(videoPlan([video("v1", { caption: "Résultats avant / après" }), video("v2", { beats })]));
+    const issues = metaVideoPlanIssues(videoPlan([video("v1", { caption: "Résultats avant / après" }), video("v2", { beats }), video("v3")]));
     expect(issues).toEqual([
       "vidéo 1 (Vidéo v1) : avant / après",
       "vidéo 2 (Vidéo v2) : attribut personnel : « vous souffrez / vous avez mal / vous n'en pouvez plus »",
@@ -904,14 +999,15 @@ describe("metaVideoPlanIssues", () => {
 });
 
 describe("metaPlanIssues", () => {
-  it("plan conforme → aucun écart, avec ou sans Pixel", () => {
+  it("plan conforme → aucun écart : conversions avec le Pixel, trafic sans", () => {
     expect(metaPlanIssues(plan(), true)).toEqual([]);
     expect(metaPlanIssues(plan({ objective: { type: "traffic", pixelEvent: "Contact", rationale: "Installez le Pixel…" } }), false)).toEqual([]);
-    expect(metaPlanIssues(plan(), false)).toEqual([]);
+    expect(metaPlanIssues(plan({ campaign: { ...plan().campaign, landingSuffix: "?src=meta" } }), true)).toEqual([]);
   });
 
-  it("Pixel installé mais objectif trafic → écart", () => {
+  it("Pixel installé mais objectif trafic → écart ; conversions sans Pixel → écart", () => {
     expect(metaPlanIssues(plan({ objective: { type: "traffic", pixelEvent: "Schedule", rationale: "" } }), true)).toEqual(["objectif : le Pixel est installé, l'objectif doit être les conversions sur le site"]);
+    expect(metaPlanIssues(plan(), false)).toEqual(["objectif : sans Pixel, les conversions sur le site ne peuvent pas être mesurées (repli trafic attendu)"]);
   });
 
   it("événement Pixel inconnu, aucun ensemble, budget hors bornes (5 à 40 €/j), tranche d'âge invalide, moins de 3 jalons", () => {
@@ -934,10 +1030,12 @@ describe("metaPlanIssues", () => {
 // ─── Mesure ──────────────────────────────────────────────────────────────────
 
 describe("isMetaAdsLanding", () => {
-  it("fbclid, avec ou sans « ? », même sans valeur", () => {
-    expect(isMetaAdsLanding("?fbclid=IwAR123")).toBe(true);
-    expect(isMetaAdsLanding("fbclid=IwAR123&utm_source=x")).toBe(true);
-    expect(isMetaAdsLanding("?fbclid")).toBe(true);
+  it("fbclid seul ne vaut pas « annonce » : Facebook l'ajoute à tout lien sortant, organique compris", () => {
+    expect(isMetaAdsLanding("?fbclid=IwAR123")).toBe(false);
+    expect(isMetaAdsLanding("fbclid=IwAR123&utm_source=x")).toBe(false);
+    expect(isMetaAdsLanding("?fbclid")).toBe(false);
+    // Un fbclid accompagné d'un UTM payant reste une annonce (c'est l'UTM qui signe)
+    expect(isMetaAdsLanding("?fbclid=IwAR123&utm_source=facebook&utm_medium=paid")).toBe(true);
   });
 
   it("UTM payant Facebook, Instagram ou Meta, insensible à la casse", () => {
@@ -947,9 +1045,11 @@ describe("isMetaAdsLanding", () => {
     expect(isMetaAdsLanding("?utm_source=meta&utm_medium=ads")).toBe(true);
     expect(isMetaAdsLanding("?utm_source=fb&utm_medium=paidsocial")).toBe(true);
     expect(isMetaAdsLanding("?utm_source=ig&utm_medium=ppc")).toBe(true);
+    expect(isMetaAdsLanding("?utm_source=fb&utm_medium=social_paid")).toBe(true);
   });
 
-  it("publication organique, autre réseau, Google Ads, paramètre src, chaîne vide → false", () => {
+  it("publication organique, autre réseau, Google Ads, paramètre src, chaîne vide → false (le suffixe des annonces est lu avant, par `src`)", () => {
+    expect(META_ADS_LANDING_SUFFIX).toBe("?src=meta");
     expect(isMetaAdsLanding("?utm_source=facebook&utm_medium=social")).toBe(false);
     expect(isMetaAdsLanding("?utm_source=facebook")).toBe(false);
     expect(isMetaAdsLanding("?utm_medium=cpc")).toBe(false);
@@ -968,7 +1068,8 @@ describe("metaLibraryUrl et constantes", () => {
     expect(metaLibraryUrl("a b&c")).toBe("https://www.facebook.com/ads/library/?id=a%20b%26c");
   });
 
-  it("les zones de la veille vont du plus étroit au plus large", () => {
+  it("les zones de la veille vont du plus étroit au plus large ; « france » regroupe aussi les autres zones", () => {
     expect(META_MARKET_SCOPES).toEqual(["ville", "departement", "region", "france"]);
+    expect(META_MARKET_SCOPE_LABELS.france).toBe("Autres zones et France");
   });
 });

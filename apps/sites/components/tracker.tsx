@@ -15,10 +15,12 @@ const REFERRER_SENT_KEY = "hy_ref_sent";
  *
  * Provenance : sur la première page vue de la session seulement, le
  * `document.referrer` et le `src` sont joints — paramètre du lien de bio
- * (`?src=ig`) ou, sans `src` explicite, `ads` quand l'URL porte la signature
- * d'une annonce Google (gclid…) et `meta` pour une annonce Meta (fbclid…) ; le
- * serveur en déduit la source (Instagram, Google, Google Ads, Meta Ads, accès
- * direct…). Le `src` envoyé est mémorisé
+ * (`?src=ig`, `?src=meta` des annonces du studio) ou, sans `src` explicite,
+ * `ads` quand l'URL porte la signature d'une annonce Google (gclid…) et `meta`
+ * pour un UTM payant Facebook / Instagram (`fbclid` seul ne signe pas une
+ * annonce : Facebook l'ajoute aussi aux liens organiques) ; le serveur en
+ * déduit la source (Instagram, Google, Google Ads, Meta Ads, accès direct…).
+ * Le `src` envoyé est mémorisé
  * (sessionStorage `hy_src`) pour rattacher à la même provenance les clics RDV
  * et les appels de la session. Sans sessionStorage (navigation privée
  * stricte), chaque page vue est traitée comme une première page : au pire une

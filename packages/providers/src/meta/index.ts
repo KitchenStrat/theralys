@@ -9,11 +9,15 @@
  * `access_token`, `ad_type=ALL`, `ad_reached_countries=["FR"]`,
  * `search_terms`, `search_type=KEYWORD_UNORDERED`, `ad_active_status`,
  * `limit` (≤ 100) et `fields` (META_ADS_ARCHIVE_FIELDS) ; pages suivantes par
- * `paging.next` jusqu'à `maxPages`. Erreurs Graph `{ error: { message, code,
- * error_subcode } }` : code 190 → jeton invalide ou expiré (non transitoire) ;
- * codes 4 / 17 / 32 / 613 (limites de débit) et HTTP 429 / 5xx, délai (30 s)
- * ou réseau → transitoires, une relance après 2 s. Le jeton n'apparaît jamais
- * dans un message d'erreur ni un journal (`redactMetaToken`).
+ * `paging.next` (sur graph.facebook.com seulement) jusqu'à `maxPages`.
+ * Erreurs Graph `{ error: { message, code, error_subcode } }` : code 190 →
+ * jeton invalide ou expiré (non transitoire) ; codes 4 / 17 / 32 / 613
+ * (limites de débit : fenêtre horaire, « réessayez dans quelques minutes »,
+ * sans relance immédiate) ; HTTP 429 / 5xx sans code Graph, délai (15 s),
+ * réseau ou réponse 200 illisible → transitoires, une relance après 2 s. Le
+ * jeton n'apparaît jamais dans un message d'erreur ni un journal
+ * (`redactMetaToken`). Les textes conservés sont bornés et débarrassés des
+ * caractères de contrôle et de direction (`META_RECORD_LIMITS`).
  *
  * Sans jeton et sans META_ADS_MOCK, aucun fournisseur (`null`) : la veille est
  * indisponible. Le mock déterministe (`hash31`) sert les démos et les tests.
@@ -58,17 +62,33 @@ export interface AdLibraryProvider {
 
 export const META_GRAPH_BASE = "https://graph.facebook.com";
 export const META_ADS_ARCHIVE_ENDPOINT = "ads_archive";
-/** Champs demandés à la bibliothèque (ordre de la documentation). */
+/** Champs demandés à la bibliothèque (ordre de la documentation) ; `ad_snapshot_url` n'est pas demandé (il embarque le jeton et n'est jamais conservé). */
 export const META_ADS_ARCHIVE_FIELDS =
-  "id,page_id,page_name,ad_creation_time,ad_delivery_start_time,ad_delivery_stop_time,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_descriptions,ad_creative_link_captions,ad_snapshot_url,publisher_platforms,languages,eu_total_reach,target_ages,target_gender,target_locations,beneficiary_payers";
-/** Délai maximal d'une requête (ms). */
-export const META_TIMEOUT_MS = 30_000;
+  "id,page_id,page_name,ad_creation_time,ad_delivery_start_time,ad_delivery_stop_time,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_descriptions,ad_creative_link_captions,publisher_platforms,languages,eu_total_reach,target_ages,target_gender,target_locations,beneficiary_payers";
+/** Délai maximal d'une requête (ms) : une veille de 12 appels reste sous les 15 minutes de péremption d'une analyse, relances comprises. */
+export const META_TIMEOUT_MS = 15_000;
 /** Attente avant l'unique relance d'une erreur transitoire (ms). */
 export const META_RETRY_DELAY_MS = 2_000;
 /** Jeton invalide ou expiré (OAuthException). */
 export const META_INVALID_TOKEN_CODE = 190;
-/** Limites de débit Graph : application (4), utilisateur (17), page (32), personnalisée (613). */
+/**
+ * Limites de débit Graph : application (4), utilisateur (17), page (32),
+ * personnalisée (613). Transitoires (message « réessayez dans quelques
+ * minutes ») mais jamais relancées sur-le-champ : la fenêtre dure des minutes.
+ */
 export const META_TRANSIENT_CODES: readonly number[] = [4, 17, 32, 613];
+/** Hôte attendu des URL de pagination (`paging.next`) : tout autre hôte est ignoré. */
+export const META_GRAPH_HOST = "graph.facebook.com";
+/** Bornes des textes conservés par annonce (nombre d'entrées × caractères par entrée). */
+export const META_RECORD_LIMITS = {
+  bodies: { count: 3, length: 1_000 },
+  titles: { count: 3, length: 200 },
+  descriptions: { count: 3, length: 200 },
+  captions: { count: 3, length: 200 },
+  pageName: 120,
+  /** Plateformes, langues, âges, genre, payeur, noms de zones */
+  short: 80,
+} as const;
 
 /** Erreur de la bibliothèque : statut HTTP, code Graph et caractère transitoire (relance utile). */
 export class MetaAdLibraryError extends Error {
@@ -88,6 +108,11 @@ export class MetaAdLibraryError extends Error {
 /** Jeton invalide ou expiré (code Graph 190) : à renouveler côté Harmony, aucune relance utile. */
 export function isMetaTokenError(err: unknown): boolean {
   return err instanceof MetaAdLibraryError && err.code === META_INVALID_TOKEN_CODE;
+}
+
+/** Erreur qui mérite une relance immédiate : transitoire sans code de limite de débit (la fenêtre horaire ne se lève pas en 2 s). */
+export function isMetaRetryable(err: unknown): boolean {
+  return err instanceof MetaAdLibraryError && err.transient && (err.code === null || !META_TRANSIENT_CODES.includes(err.code));
 }
 
 // ─── Requête ─────────────────────────────────────────────────────────────────
@@ -147,12 +172,52 @@ function idOrNull(value: unknown): string | null {
   return textOrNull(value);
 }
 
-function stringList(value: unknown): string[] {
+/**
+ * Caractère retiré des textes conservés : contrôle C0 (sauf tabulation, saut
+ * de ligne et retour chariot, repliés en espace) et C1, marques de direction
+ * (LRM, RLM, LRE…PDF, LRI…PDI, ALM) et marque d'ordre des octets.
+ */
+export function isMetaStrippedCodePoint(code: number): boolean {
+  return (
+    code <= 0x08 ||
+    code === 0x0b ||
+    code === 0x0c ||
+    (code >= 0x0e && code <= 0x1f) ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0x200e ||
+    code === 0x200f ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069) ||
+    code === 0x061c ||
+    code === 0xfeff
+  );
+}
+
+/**
+ * Texte conservé : sans caractère de contrôle (sauf les blancs, repliés) ni
+ * marque de direction (`isMetaStrippedCodePoint`), borné à `max` caractères
+ * sur un espace quand c'est possible ; null si vide.
+ */
+export function boundedText(value: unknown, max: number): string | null {
+  const raw = textOrNull(value);
+  if (raw === null) return null;
+  let kept = "";
+  for (const ch of raw) if (!isMetaStrippedCodePoint(ch.codePointAt(0) ?? 0)) kept += ch;
+  const clean = kept.replace(/\s+/g, " ").trim();
+  if (clean === "") return null;
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const boundary = cut.lastIndexOf(" ");
+  return (boundary >= Math.floor(max * 0.6) ? cut.slice(0, boundary) : cut).trim();
+}
+
+function stringList(value: unknown, limit: { count: number; length: number }): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
   for (const entry of value) {
-    const text = textOrNull(entry);
-    if (text) out.push(text.replace(/\s+/g, " "));
+    if (out.length >= limit.count) break;
+    const text = boundedText(entry, limit.length);
+    if (text) out.push(text);
   }
   return out;
 }
@@ -172,15 +237,18 @@ function reachOrNull(value: unknown): number | null {
   return num !== null && num >= 0 ? Math.round(num) : null;
 }
 
+const SHORT = { count: 12, length: META_RECORD_LIMITS.short };
+
 function locationsFrom(value: unknown): MetaAdLocation[] {
   if (!Array.isArray(value)) return [];
   const out: MetaAdLocation[] = [];
   for (const entry of value) {
+    if (out.length >= 40) break;
     if (!entry || typeof entry !== "object") continue;
     const e = entry as { name?: unknown; type?: unknown; excluded?: unknown };
-    const name = textOrNull(e.name);
+    const name = boundedText(e.name, META_RECORD_LIMITS.short);
     if (!name) continue;
-    out.push({ name, type: textOrNull(e.type), excluded: e.excluded === true });
+    out.push({ name, type: boundedText(e.type, 40), excluded: e.excluded === true });
   }
   return out;
 }
@@ -190,17 +258,27 @@ function payerFrom(value: unknown): string | null {
   for (const entry of value) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as { payer?: unknown; beneficiary?: unknown };
-    const payer = textOrNull(e.payer) ?? textOrNull(e.beneficiary);
+    const payer = boundedText(e.payer, META_RECORD_LIMITS.pageName) ?? boundedText(e.beneficiary, META_RECORD_LIMITS.pageName);
     if (payer) return payer;
   }
   return null;
 }
 
+/** `target_ages` : liste (« ["18","65+"] » → « 18-65+ ») ou texte (« 25-54 »), null sinon. */
+export function targetAgesFrom(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const parts = value.map((v) => boundedText(typeof v === "number" && Number.isFinite(v) ? String(v) : v, 10)).filter((v): v is string => v !== null);
+    return parts.length > 0 ? parts.join("-") : null;
+  }
+  return boundedText(value, 20);
+}
+
 /**
  * Item `ads_archive` → annonce normalisée ; null sans identifiant ou si
  * l'item n'est pas un objet. Champs absents → tableaux vides ou null (rien
- * d'inventé) ; `ad_snapshot_url` est ignoré (il embarque le jeton) : le lien
- * public est `metaLibraryUrl(id)`.
+ * d'inventé) ; `ad_snapshot_url` n'est ni demandé ni lu (il embarque le
+ * jeton) : le lien public est `metaLibraryUrl(id)`. Textes bornés
+ * (`META_RECORD_LIMITS`), sans caractère de contrôle ni de direction.
  */
 export function adRecordFromItem(item: unknown): MetaAdRecord | null {
   if (!item || typeof item !== "object") return null;
@@ -210,19 +288,19 @@ export function adRecordFromItem(item: unknown): MetaAdRecord | null {
   return {
     id,
     pageId: idOrNull(raw.page_id),
-    pageName: textOrNull(raw.page_name)?.replace(/\s+/g, " ") ?? "",
-    bodies: stringList(raw.ad_creative_bodies),
-    titles: stringList(raw.ad_creative_link_titles),
-    descriptions: stringList(raw.ad_creative_link_descriptions),
-    captions: stringList(raw.ad_creative_link_captions),
+    pageName: boundedText(raw.page_name, META_RECORD_LIMITS.pageName) ?? "",
+    bodies: stringList(raw.ad_creative_bodies, META_RECORD_LIMITS.bodies),
+    titles: stringList(raw.ad_creative_link_titles, META_RECORD_LIMITS.titles),
+    descriptions: stringList(raw.ad_creative_link_descriptions, META_RECORD_LIMITS.descriptions),
+    captions: stringList(raw.ad_creative_link_captions, META_RECORD_LIMITS.captions),
     libraryUrl: metaLibraryUrl(id),
     startedAt: isoDateOrNull(raw.ad_delivery_start_time),
     stoppedAt: isoDateOrNull(raw.ad_delivery_stop_time),
-    platforms: stringList(raw.publisher_platforms),
-    languages: stringList(raw.languages),
+    platforms: stringList(raw.publisher_platforms, SHORT),
+    languages: stringList(raw.languages, SHORT),
     euTotalReach: reachOrNull(raw.eu_total_reach),
-    targetAges: textOrNull(raw.target_ages),
-    targetGender: textOrNull(raw.target_gender),
+    targetAges: targetAgesFrom(raw.target_ages),
+    targetGender: boundedText(raw.target_gender, 20),
     targetLocations: locationsFrom(raw.target_locations),
     payer: payerFrom(raw.beneficiary_payers),
   };
@@ -243,11 +321,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** URL de page suivante acceptée : https sur META_GRAPH_HOST exactement ; null sinon (jamais de requête vers un autre hôte avec le jeton). */
+export function nextPageUrl(next: string): string | null {
+  try {
+    const url = new URL(next);
+    return url.protocol === "https:" && url.host === META_GRAPH_HOST ? next : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Fournisseur réel : un GET par page, délai de 30 s, une relance après 2 s
- * sur erreur transitoire (limites de débit Graph, 429, 5xx, délai, réseau),
- * pagination par `paging.next`. Les messages d'erreur ne contiennent jamais
- * le jeton.
+ * Fournisseur réel : un GET par page, délai de 15 s, une relance après 2 s
+ * sur erreur transitoire relançable (`isMetaRetryable` : 429 / 5xx sans code
+ * Graph, délai, réseau, réponse illisible — jamais sur un code de limite de
+ * débit), pagination par `paging.next` sur graph.facebook.com. Les messages
+ * d'erreur ne contiennent jamais le jeton.
  */
 export class MetaAdLibraryProvider implements AdLibraryProvider {
   readonly mode = "meta" as const;
@@ -288,7 +377,7 @@ export class MetaAdLibraryProvider implements AdLibraryProvider {
     return { ads, calls, truncated: next !== null };
   }
 
-  /** Une page, avec une seule relance sur erreur transitoire. */
+  /** Une page, avec une seule relance sur erreur transitoire relançable (jamais sur une limite de débit). */
   private async fetchPage(url: string): Promise<{ ads: MetaAdRecord[]; next: string | null }> {
     let lastError: MetaAdLibraryError | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -296,8 +385,8 @@ export class MetaAdLibraryProvider implements AdLibraryProvider {
       try {
         return await this.fetchOnce(url);
       } catch (err) {
-        if (err instanceof MetaAdLibraryError && err.transient) {
-          lastError = err;
+        if (isMetaRetryable(err)) {
+          lastError = err as MetaAdLibraryError;
           continue;
         }
         throw err;
@@ -327,10 +416,12 @@ export class MetaAdLibraryProvider implements AdLibraryProvider {
         text = "";
       }
       let json: unknown = null;
+      let parsable = true;
       try {
         json = text === "" ? null : JSON.parse(text);
       } catch {
         json = null;
+        parsable = false;
       }
       const graphError = graphErrorFrom(json);
       if (!response.ok || graphError) {
@@ -344,11 +435,15 @@ export class MetaAdLibraryProvider implements AdLibraryProvider {
           { status: response.status, code, transient },
         );
       }
-      const body = (json ?? {}) as { data?: unknown; paging?: { next?: unknown } | null };
-      const items: unknown[] = Array.isArray(body.data) ? body.data : [];
-      const ads = items.map(adRecordFromItem).filter((ad): ad is MetaAdRecord => ad !== null);
+      // Réponse 200 illisible (HTML d'une page d'erreur, JSON sans `data` tableau) : transitoire, relancée une fois
+      const body = (json && typeof json === "object" ? json : {}) as { data?: unknown; paging?: { next?: unknown } | null };
+      if (!parsable || !Array.isArray(body.data)) {
+        const detail = !parsable ? "réponse non JSON" : json === null ? "réponse vide" : "réponse sans tableau data";
+        throw new MetaAdLibraryError(`Meta ads_archive HTTP ${response.status} : ${detail} (${this.redact(text.replace(/\s+/g, " ").trim().slice(0, 120)) || "sans contenu"})`, { status: response.status, transient: true });
+      }
+      const ads = body.data.map(adRecordFromItem).filter((ad): ad is MetaAdRecord => ad !== null);
       const next = body.paging && typeof body.paging === "object" ? textOrNull(body.paging.next) : null;
-      return { ads, next: next && /^https:\/\//.test(next) ? next : null };
+      return { ads, next: next ? nextPageUrl(next) : null };
     } finally {
       clearTimeout(timer);
     }

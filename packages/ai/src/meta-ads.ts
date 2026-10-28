@@ -26,6 +26,7 @@ import {
   META_ADS_BUDGET_EUR,
   META_ADS_CTAS,
   META_ADS_INSTRUCTIONS_MAX,
+  META_ADS_LANDING_SUFFIX,
   META_ADS_TEXT,
   META_CREATIVES_MAX,
   META_CREATIVES_MIN,
@@ -370,20 +371,48 @@ function fits(text: string, max: number): string | null {
   return clean.length > 0 && clean.length <= max ? clean : null;
 }
 
-/** Premier candidat qui tient dans la limite et passe la conformité Meta. */
-function pick(candidates: readonly string[], max: number): string {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Noms propres du brief à ne pas relire comme du vocabulaire : le praticien
+ * (nom complet, nom, prénom), le nom du site et la ville — « Sophie Guérin »
+ * ou « Guérande » déclencheraient « promesse de guérison ». Les plus longs
+ * d'abord, pour masquer le nom complet avant ses parties.
+ */
+export function protectedNames(brief: Pick<SocialSiteBrief, "practitioner" | "siteName">): string[] {
+  const p = brief.practitioner;
+  const names = [`${p.firstName} ${p.lastName}`, p.lastName, p.firstName, brief.siteName, p.city].map((n) => n.replace(/\s+/g, " ").trim()).filter((n) => n.length >= 2);
+  return uniqueBy(names, (n) => n.toLowerCase()).sort((a, b) => b.length - a.length);
+}
+
+/** Remplace chaque nom (entier, insensible à la casse, borné par des non-lettres) par un jeton neutre. */
+export function maskNames(text: string, names: readonly string[]): string {
+  let out = text;
+  for (const name of names) out = out.replace(new RegExp(`(?<!\\p{L})${escapeRegExp(name)}(?!\\p{L})`, "giu"), "Nom");
+  return out;
+}
+
+/** Conformité Meta d'un texte d'annonce, noms propres du brief masqués avant la relecture. */
+function compliantAdText(text: string, names: readonly string[] = []): boolean {
+  return checkMetaCompliance(names.length > 0 ? maskNames(text, names) : text).ok;
+}
+
+/** Premier candidat qui tient dans la limite et passe la conformité Meta (noms propres masqués). */
+function pickCompliant(candidates: readonly string[], max: number, names: readonly string[] = []): string {
   for (const c of candidates) {
     const text = fits(c, max);
-    if (text !== null && checkMetaCompliance(text).ok) return text;
+    if (text !== null && compliantAdText(text, names)) return text;
   }
   return "";
 }
 
-/** Texte d'annonce prêt : ≤ max (`clampMetaText`), non vide, conforme ; null sinon. */
-function cleanAdText(text: string, max: number, min = 1): string | null {
+/** Texte d'annonce prêt : ≤ max (`clampMetaText`), non vide, conforme (noms propres masqués) ; null sinon. */
+function cleanAdText(text: string, max: number, min = 1, names: readonly string[] = []): string | null {
   const clamped = clampMetaText(text, max);
   if (clamped.length < min) return null;
-  return checkMetaCompliance(clamped).ok ? clamped : null;
+  return compliantAdText(clamped, names) ? clamped : null;
 }
 
 /** Texte destiné au praticien (conseil, action, note…) : « diagnostic » → « bilan », borné, conforme au marketing éthique ; null sinon. */
@@ -775,6 +804,8 @@ type TextContext = {
   month: ReturnType<typeof monthContext>;
   photos: SocialPhoto[];
   brief: SocialSiteBrief | null;
+  /** Noms propres masqués avant la relecture de conformité (`protectedNames`) */
+  names: string[];
 };
 
 /** « autour du sommeil et de la récupération », « autour de la gestion du stress », « autour de l'ancrage » (`deArticle` du mock social). */
@@ -788,9 +819,10 @@ function specialtyPage(input: MetaAdsGenerationInput, featured: MetaAdsLandingPa
 
 function textContext(brief: SocialSiteBrief, input: MetaAdsGenerationInput, featured: MetaAdsLandingPage | null): TextContext {
   const { firstName, profession, practiceName, city } = brief.practitioner;
+  const names = protectedNames(brief);
   const specialty = specialtyPage(input, featured);
   const motif = specialty ? brief.motifPages.find((m) => canonicalPath(`/${m.slug}`) === canonicalPath(specialty.path)) : undefined;
-  const review = brief.reviews.find((r) => r.text.length <= 160 && checkMetaCompliance(r.text).ok) ?? null;
+  const review = brief.reviews.find((r) => r.text.length <= 160 && compliantAdText(r.text, names)) ?? null;
   const google = canReassure(brief) && brief.google ? { rating: fmtRating(brief.google.rating), count: brief.google.reviewCount } : null;
   return {
     v: mockVoice(brief.voice),
@@ -810,10 +842,11 @@ function textContext(brief: SocialSiteBrief, input: MetaAdsGenerationInput, feat
     month: monthContext(input.diagnostic.generatedAt.slice(0, 7)),
     photos: brief.photos,
     brief,
+    names,
   };
 }
 
-/** Contexte sans brief (finalisation du plan vidéo) : voix par défaut, textes génériques. */
+/** Contexte sans brief (finalisation du plan vidéo sans brief) : voix par défaut, textes génériques. */
 function genericContext(input: MetaAdsGenerationInput): TextContext {
   return {
     v: mockVoice(DEFAULT_MOCK_VOICE),
@@ -833,6 +866,7 @@ function genericContext(input: MetaAdsGenerationInput): TextContext {
     month: monthContext(input.diagnostic.generatedAt.slice(0, 7)),
     photos: [],
     brief: null,
+    names: [],
   };
 }
 
@@ -892,6 +926,7 @@ function codeAltText(ctx: TextContext, hook: string, photoId: string | null): st
 export function codeCreative(ctx: TextContext, angle: MetaAdsAngle): RawCreative {
   const { b } = ctx.v;
   const { city, profession, practice, practiceCap } = ctx;
+  const pick = (candidates: readonly string[], max: number) => pickCompliant(candidates, max, ctx.names);
   const T = META_ADS_TEXT;
   const cityPart = city ? ` à ${city}` : "";
   const base = {
@@ -1030,6 +1065,7 @@ function defaultDontSay(): string[] {
 export function codeVideo(ctx: TextContext, angle: MetaAdsAngle): RawVideo {
   const { b } = ctx.v;
   const { city, profession, practice, practiceCap } = ctx;
+  const pick = (candidates: readonly string[], max: number) => pickCompliant(candidates, max, ctx.names);
   const duration = VIDEO_DURATION[angle];
   const cityPart = city ? ` à ${city}` : "";
   const intro = ctx.firstName ? b.subj(`Bonjour, je suis ${ctx.firstName}, ${ctx.professionLower}${cityPart}.`, `Bonjour et bienvenue ${atCabinet(ctx)}.`, `Bonjour et bienvenue ${atCabinet(ctx)}.`) : `Bonjour et bienvenue ${atCabinet(ctx)}.`;
@@ -1363,8 +1399,9 @@ function codeInsightSummary(market: MetaAdsMarket): string {
   const local = market.counts.ville + market.counts.departement;
   const strong = ads.filter((a) => a.signal === "fort").length;
   const active = ads.filter((a) => a.active).length;
+  // Noms de pages : données de tiers, neutralisées comme dans le prompt (chevrons, guillemets, caractères de contrôle)
   const pages = uniqueBy(
-    [...ads].sort((a, b) => b.score - a.score).map((a) => a.pageName.trim()),
+    [...ads].sort((a, b) => b.score - a.score).map((a) => dataText(a.pageName, 80)),
     key,
   ).slice(0, 3);
   const where = META_MARKET_SCOPE_LABELS[market.scopeUsed].toLowerCase();
@@ -1539,8 +1576,17 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** id photo → URL du site, résolu à la génération pour que le studio rende sans recharger le brief. */
+export type MetaPhotoUrls = Readonly<Record<string, string>>;
+
+/** `photoUrl` d'une créa quand les URL sont connues : URL de la photo, null sans photo ou photo inconnue ; absent sinon. */
+function photoUrlField(photoId: string | null, photosById: MetaPhotoUrls | undefined): { photoUrl?: string | null } {
+  if (!photosById) return {};
+  return { photoUrl: photoId ? (photosById[photoId] ?? null) : null };
+}
+
 /** Créa stockée à partir d'une créa écrite par le code (valide par construction). */
-function creativeFromCode(id: string, c: RawCreative, booking: boolean): MetaAdCreative {
+function creativeFromCode(id: string, c: RawCreative, booking: boolean, photosById?: MetaPhotoUrls): MetaAdCreative {
   return {
     id,
     angle: isMetaAdsAngle(c.angle) ? c.angle : "reassurance",
@@ -1552,6 +1598,7 @@ function creativeFromCode(id: string, c: RawCreative, booking: boolean): MetaAdC
     hook: c.hook,
     subline: c.subline,
     photoId: c.photoId,
+    ...photoUrlField(c.photoId, photosById),
     template: DEFAULT_TEMPLATE,
     accentRole: (SOCIAL_ACCENT_ROLES as readonly string[]).includes(c.accentRole) ? (c.accentRole as SocialAccentRole) : "primary",
     altText: c.altText,
@@ -1569,7 +1616,10 @@ function creativeFromCode(id: string, c: RawCreative, booking: boolean): MetaAdC
  * remplacés par des secours écrits depuis le brief, bouton valide, photo et
  * template du brief, page d'atterrissage connue (sinon accueil, ou page de la
  * spécialité pour la pédagogie), identifiants « c1 »…, complété à 3 créas,
- * borné à 5 ; notes bornées, conformes, complétées.
+ * borné à 5 ; notes bornées, conformes, complétées. Les noms propres du brief
+ * (praticien, site, ville) sont masqués avant la relecture de conformité.
+ * `photosById` (id photo → URL, jamais transmis au modèle) renseigne
+ * `photoUrl` ; sans lui, le champ reste absent.
  */
 export function finalizeMetaCreatives(
   raw: MetaCreativesOutput,
@@ -1577,9 +1627,11 @@ export function finalizeMetaCreatives(
   brief: SocialSiteBrief,
   generator: MetaAdsCreativeSet["generator"],
   now: Date = new Date(),
+  photosById?: MetaPhotoUrls,
 ): MetaAdsCreativeSet {
   const parsed = parseMetaInstructions(input.instructions, input.landingPages);
   const ctx = textContext(brief, input, parsed.featured);
+  const names = ctx.names;
   const paths = knownPaths(input.landingPages);
   const photoIds = new Set(brief.photos.map((p) => p.id));
   const reassure = canReassure(brief);
@@ -1598,18 +1650,19 @@ export function finalizeMetaCreatives(
     const fb = codeCreative(ctx, angle);
     const index = creatives.length;
     const photoId = c.photoId === null ? null : photoIds.has(c.photoId) ? c.photoId : fb.photoId;
-    const hook = cleanAdText(c.hook, T.hookMax) ?? fb.hook;
+    const hook = cleanAdText(c.hook, T.hookMax, 1, names) ?? fb.hook;
     creatives.push({
       id: `c${index + 1}`,
       angle,
       name: clampText(c.name, NAME_MAX) || fb.name,
-      primaryText: cleanAdText(c.primaryText, T.primaryMax, 20) ?? fb.primaryText,
-      headline: cleanAdText(c.headline, T.headlineMax, 2) ?? fb.headline,
-      description: c.description === "" ? fb.description : (cleanAdText(c.description, T.descriptionMax) ?? fb.description),
+      primaryText: cleanAdText(c.primaryText, T.primaryMax, 20, names) ?? fb.primaryText,
+      headline: cleanAdText(c.headline, T.headlineMax, 2, names) ?? fb.headline,
+      description: c.description === "" ? fb.description : (cleanAdText(c.description, T.descriptionMax, 1, names) ?? fb.description),
       cta: validCta(c.cta, booking),
       hook,
-      subline: c.subline === "" ? fb.subline : (cleanAdText(c.subline, T.sublineMax) ?? fb.subline),
+      subline: c.subline === "" ? fb.subline : (cleanAdText(c.subline, T.sublineMax, 1, names) ?? fb.subline),
       photoId,
+      ...photoUrlField(photoId, photosById),
       template: (META_CREATIVE_TEMPLATES as readonly string[]).includes(c.template) ? (c.template as SocialTemplate) : DEFAULT_TEMPLATE,
       accentRole: (SOCIAL_ACCENT_ROLES as readonly string[]).includes(c.accentRole) ? (c.accentRole as SocialAccentRole) : SOCIAL_ACCENT_ROLES[index % SOCIAL_ACCENT_ROLES.length]!,
       altText: cleanPlanText(c.altText, ALT_MAX, 10) ?? codeAltText(ctx, hook, photoId),
@@ -1620,7 +1673,7 @@ export function finalizeMetaCreatives(
     const angle = nextAngle();
     if (!angle) break;
     used.add(angle);
-    creatives.push(creativeFromCode(`c${creatives.length + 1}`, codeCreative(ctx, angle), booking));
+    creatives.push(creativeFromCode(`c${creatives.length + 1}`, codeCreative(ctx, angle), booking, photosById));
   }
 
   let notes = uniqueBy(raw.notes.map((n) => cleanPlanText(n, NOTE_MAX, 10)).filter(nonNull), key);
@@ -1656,12 +1709,23 @@ function videoFromCode(id: string, v: RawVideo, booking: boolean): MetaVideoBrie
  * ≤ 60, textes dits conformes aux règles Meta ; moins de 3 temps → temps
  * écrits par le code), accroche et légende conformes, listes bornées, bouton
  * valide, identifiants « v1 »… ; matériel et conseils de montage complétés.
+ * Avec `brief`, les secours parlent dans la voix du praticien (prénom, ville,
+ * avis si la fiche le permet) et ses noms propres sont masqués avant la
+ * relecture ; sans brief, textes génériques et voix par défaut.
  */
-export function finalizeMetaVideoPlan(raw: MetaVideoPlanOutput, input: MetaAdsGenerationInput, generator: MetaAdsVideoPlan["generator"], now: Date = new Date()): MetaAdsVideoPlan {
-  const ctx = genericContext(input);
+export function finalizeMetaVideoPlan(
+  raw: MetaVideoPlanOutput,
+  input: MetaAdsGenerationInput,
+  generator: MetaAdsVideoPlan["generator"],
+  now: Date = new Date(),
+  brief?: SocialSiteBrief,
+): MetaAdsVideoPlan {
+  const ctx = brief ? textContext(brief, input, parseMetaInstructions(input.instructions, input.landingPages).featured) : genericContext(input);
+  const names = ctx.names;
   const booking = ctx.booking;
   const used = new Set<MetaAdsAngle>();
-  const nextAngle = () => VIDEO_FALLBACK_ORDER.find((a) => !used.has(a)) ?? null;
+  const order = brief && canReassure(brief) ? ANGLE_PRIORITY : VIDEO_FALLBACK_ORDER;
+  const nextAngle = () => order.find((a) => !used.has(a)) ?? null;
   const list = (items: readonly string[], max = VIDEO_LIST_MAX) => uniqueBy(items.map((t) => cleanPlanText(t, VIDEO_LIST_ITEM_MAX, 5)).filter(nonNull), key).slice(0, max);
   const videos: MetaVideoBrief[] = [];
 
@@ -1674,8 +1738,8 @@ export function finalizeMetaVideoPlan(raw: MetaVideoPlanOutput, input: MetaAdsGe
     let durationSeconds = Math.round(clampNumber(v.durationSeconds, META_VIDEO.minSeconds, META_VIDEO.maxSeconds));
     let beats = v.beats
       .map((b) => {
-        const say = b.say === "" ? "" : cleanAdText(b.say, VIDEO_BEAT_SAY_MAX);
-        const onScreen = b.onScreen === "" ? "" : cleanAdText(b.onScreen, VIDEO_ON_SCREEN_MAX);
+        const say = b.say === "" ? "" : cleanAdText(b.say, VIDEO_BEAT_SAY_MAX, 1, names);
+        const onScreen = b.onScreen === "" ? "" : cleanAdText(b.onScreen, VIDEO_ON_SCREEN_MAX, 1, names);
         if (say === null || onScreen === null || (say === "" && onScreen === "")) return null;
         return { at: Math.round(clampNumber(b.at, 0, durationSeconds)), say, onScreen, shot: clampText(b.shot, VIDEO_BEAT_SHOT_MAX) };
       })
@@ -1695,13 +1759,13 @@ export function finalizeMetaVideoPlan(raw: MetaVideoPlanOutput, input: MetaAdsGe
       goal: cleanPlanText(v.goal, VIDEO_GOAL_MAX, 5) ?? fb.goal,
       durationSeconds,
       format: "9:16",
-      hook: cleanAdText(v.hook, 300, 5) ?? fb.hook,
+      hook: cleanAdText(v.hook, 300, 5, names) ?? fb.hook,
       beats,
       shotList: shotList.length > 0 ? shotList : fb.shotList,
       doSay: doSay.length >= 2 ? doSay : uniqueBy([...doSay, ...fb.doSay], key).slice(0, VIDEO_LIST_MAX),
       dontSay: dontSay.length >= 2 ? dontSay : uniqueBy([...dontSay, ...fb.dontSay], key).slice(0, VIDEO_LIST_MAX),
       cta: validCta(v.cta, booking),
-      caption: cleanAdText(v.caption, META_ADS_TEXT.primaryMax, 20) ?? fb.caption,
+      caption: cleanAdText(v.caption, META_ADS_TEXT.primaryMax, 20, names) ?? fb.caption,
     });
   }
   while (videos.length < META_VIDEO.count) {
@@ -1751,6 +1815,19 @@ const AUDIENCES = ["large", "interets", "retargeting"] as const;
 const AUDIENCE_LABEL: Record<(typeof AUDIENCES)[number], string> = { large: "Large – Advantage+", interets: "Centres d'intérêt", retargeting: "Reciblage – visiteurs du site" };
 
 /**
+ * Conseil écrit par le code, toujours présent dans le plan : l'URL de
+ * destination de chaque annonce porte META_ADS_LANDING_SUFFIX, que le site
+ * lit comme provenance « Meta Ads » (fbclid seul ne signe plus une annonce).
+ */
+export const META_LANDING_TIP = `Ajoutez « ${META_ADS_LANDING_SUFFIX} » à la fin de l'URL de destination de chaque annonce (ex. https://votre-site.fr/${META_ADS_LANDING_SUFFIX}) : le site reconnaît la provenance Meta Ads et le bloc Résultats du studio compte ces visites et prises de contact.`;
+
+/** Conseils du plan : ceux du modèle (sans doublon du suffixe) puis, toujours en dernier, le conseil du suffixe d'URL. */
+function withLandingTip(tips: readonly string[]): string[] {
+  const kept = tips.filter((t) => !t.includes(META_ADS_LANDING_SUFFIX)).slice(0, TIPS_MAX - 1);
+  return [...kept, META_LANDING_TIP];
+}
+
+/**
  * Sortie validée du modèle (ou du mock) → plan stocké, conforme au contrat
  * (`metaPlanIssues` vide) : objectif imposé par le Pixel du bilan
  * (conversions dès que le check « pixel » est ok, sinon trafic avec une
@@ -1759,7 +1836,8 @@ const AUDIENCE_LABEL: Record<(typeof AUDIENCES)[number], string> = { large: "Lar
  * âges 18–65 (25–65 par défaut), placements Advantage+, langue fr, ensembles
  * « large » et « retargeting » toujours présents avec des identifiants de
  * créas et vidéos connus, budget = bilan, plan de test, jalons J+7 / J+30 /
- * J+60 (manquants écrits par le code), 3 à 6 conseils conformes.
+ * J+60 (manquants écrits par le code), 3 à 6 conseils conformes dont,
+ * toujours, le suffixe d'URL `landingSuffix` (META_ADS_LANDING_SUFFIX).
  */
 export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, generator: MetaAdsPlan["generator"], now: Date = new Date()): MetaAdsPlan {
   const ctx = planContext(input);
@@ -1785,7 +1863,7 @@ export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, g
   for (const d of defaults) if (!adSets.some((s) => s.audience === d.audience)) adSets.push(d);
   adSets.sort((a, b) => AUDIENCES.indexOf(a.audience) - AUDIENCES.indexOf(b.audience));
 
-  let tips = uniqueBy(raw.tips.map((t) => cleanPlanText(t, TIP_MAX, 10)).filter(nonNull), key);
+  let tips = uniqueBy(raw.tips.map((t) => cleanPlanText(t, TIP_MAX, 10)).filter(nonNull), key).filter((t) => !t.includes(META_ADS_LANDING_SUFFIX));
   if (tips.length < TIPS_MIN) tips = uniqueBy([...tips, ...defaultMetaTips(input)], key);
 
   return {
@@ -1801,11 +1879,12 @@ export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, g
       placements: cleanPlanText(raw.campaign.placements, 300, 10) ?? defaultPlacements(),
       language: "fr",
       schedule: cleanPlanText(raw.campaign.schedule, 300, 10) ?? defaultSchedule(),
+      landingSuffix: META_ADS_LANDING_SUFFIX,
     },
     adSets,
     budget: { dailyEur: ctx.daily, monthlyEur: ctx.monthly, testPlan: cleanPlanText(raw.budget.testPlan, 500, 10) ?? defaultTestPlan(ctx) },
     milestones: finalizeMilestones(raw.milestones, input),
-    tips: tips.slice(0, TIPS_MAX),
+    tips: withLandingTip(tips),
   };
 }
 
@@ -1894,7 +1973,7 @@ export function mockMetaPlan(brief: SocialSiteBrief, input: MetaAdsPlanInput): M
     adSets: defaultAdSets(ctx, city, ages),
     budget: { dailyEur: ctx.daily, monthlyEur: ctx.monthly, testPlan: defaultTestPlan(ctx) },
     milestones: defaultMetaMilestones(input),
-    tips: uniqueBy([...defaultMetaTips(input).slice(0, other.length > 0 ? 3 : 5), ...other], key).slice(0, TIPS_MAX),
+    tips: withLandingTip(uniqueBy([...defaultMetaTips(input).slice(0, other.length > 0 ? 3 : 5), ...other], key)),
   };
 }
 
@@ -1925,7 +2004,10 @@ export function createMetaAdsPlanner(env: NodeJS.ProcessEnv = process.env, deps:
         const brief = sanitizeSocialBrief(rawBrief);
         return finalizeMetaCreatives(mockMetaCreatives(brief, input), input, brief, "mock");
       },
-      createVideoPlan: async (rawBrief, input) => finalizeMetaVideoPlan(mockMetaVideoPlan(sanitizeSocialBrief(rawBrief), input), input, "mock"),
+      createVideoPlan: async (rawBrief, input) => {
+        const brief = sanitizeSocialBrief(rawBrief);
+        return finalizeMetaVideoPlan(mockMetaVideoPlan(brief, input), input, "mock", new Date(), brief);
+      },
       createPlan: async (rawBrief, input) => finalizeMetaPlan(mockMetaPlan(sanitizeSocialBrief(rawBrief), input), input, "mock"),
     };
   }
@@ -1947,7 +2029,7 @@ export function createMetaAdsPlanner(env: NodeJS.ProcessEnv = process.env, deps:
     createVideoPlan: async (rawBrief, input) => {
       const brief = sanitizeSocialBrief(rawBrief);
       const raw = metaVideoPlanSchema.parse(await complete(options, metaAdsSystemPrompt(brief), metaVideoUserPrompt(brief, input), metaVideoPlanSchema));
-      return finalizeMetaVideoPlan(raw, input, "anthropic");
+      return finalizeMetaVideoPlan(raw, input, "anthropic", new Date(), brief);
     },
     createPlan: async (rawBrief, input) => {
       const brief = sanitizeSocialBrief(rawBrief);

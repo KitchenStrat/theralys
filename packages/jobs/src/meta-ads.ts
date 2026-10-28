@@ -11,24 +11,38 @@
  *   transaction courte qui insère la ligne `meta_ads_analyses` (`running`) et
  *   la ligne `google_usage` kind `meta_analysis` (coût 0, `requests` = appels
  *   à la bibliothèque, mis à jour après la veille) ; les analyses `running`
- *   périmées (> META_ADS_ANALYSIS_STALE_MINUTES) sont closes avant le quota ;
+ *   périmées (> META_ADS_ANALYSIS_STALE_MINUTES sur `updatedAt`) sont closes
+ *   avant le quota et leur usage `meta_analysis` est remboursé (ligne
+ *   `google_usage` du site, même `kind`, `created_at` à ± 5 s de celui de
+ *   l'analyse, supprimée) ; pendant l'analyse, `updatedAt` bat après la
+ *   veille et entre chaque génération ; la ligne ne passe en `done` que si
+ *   elle est encore `running` (sinon elle a été close pour péremption :
+ *   journal, rien d'écrit) ;
  * - jamais de données simulées sur un site client : le mock ne sert que les
- *   démos ; sans jeton, la veille est indisponible (`provider: "none"`) et
- *   l'analyse continue (diagnostic, créas, plans) ;
- * - l'échec de la veille est toléré (`market: null`, `provider: "none"`,
- *   message utilisateur dans `error`) ; l'échec d'une génération laisse
- *   l'analyse `done` avec le champ manquant à null et un message dans
- *   `error` : `regenerateMetaAds` complète ;
+ *   démos ; un client avec jeton interroge la vraie bibliothèque même sous
+ *   META_ADS_MOCK ; sans fournisseur, la veille est indisponible
+ *   (`provider: "none"`) et l'analyse continue (diagnostic, créas, plans) ;
+ * - l'échec de la veille est toléré : `provider` garde le mode du
+ *   fournisseur (`meta` | `mock`), `market: null` seulement si AUCUN terme
+ *   n'a abouti (un terme en échec laisse une veille partielle,
+ *   `truncated: true`) et le message utilisateur va dans `error` ; l'échec
+ *   d'une génération laisse l'analyse `done` avec le champ manquant à null et
+ *   un message dans `error` : `regenerateMetaAds` complète ; dans `error`,
+ *   le message de génération (à relancer) prime sur celui de la veille ;
  * - messages rendus et colonne `error` en français pour le praticien
  *   (`metaErrorMessage`), détail technique dans les journaux `[meta-ads]` ;
  * - la régénération (kind `meta_regen`, coût 0) est inscrite dans la même
  *   transaction que la mise à jour, sous verrou `<siteId>:meta-ads-regen`,
  *   avec un marqueur en mémoire par site contre un second clic simultané ;
- *   `assets` est remis à vide (les rendus Blob précédents sont rendus dans
- *   `removedRenderUrls` pour que le studio les supprime).
+ *   refusée (`busy`) tant qu'une analyse `running` non périmée existe ou si
+ *   l'analyse visée n'est plus la dernière `done` du site au moment d'écrire
+ *   (quota non consommé) ; le diagnostic est recalculé avec le contexte
+ *   courant (Pixel, bandeau, liens) sur la veille conservée ; `assets` est
+ *   remis à vide — les chemins Blob des rendus sont déterministes et écrasés
+ *   en place, `removedRenderUrls` est donc toujours vide.
  */
 
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   EMPTY_SOCIAL_ASSETS,
   META_ADS_ANALYSES_PER_MONTH,
@@ -75,7 +89,7 @@ import {
   type Site,
 } from "@theralys/db";
 import { createMetaAdsPlanner, resolveProfession, type MetaAdsPlanner } from "@theralys/ai";
-import { MetaAdLibraryError, createAdLibraryProvider, isMetaTokenError, type AdLibraryProvider, type MockLocality } from "@theralys/providers/meta";
+import { MetaAdLibraryError, createAdLibraryProvider, isMetaTokenError, type AdLibraryProvider, type AdLibrarySearchResult, type MockLocality } from "@theralys/providers/meta";
 import { landingPagesFrom, onlineMotifPages, phoneFromSections } from "./google-ads";
 import { loadGoogleBrief } from "./google-brief";
 import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
@@ -84,6 +98,8 @@ import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
 export const META_ADS_ANALYSIS_STALE_MINUTES = 15;
 /** Pages suivies par terme (`maxPages` de `searchAds`). */
 export const META_MARKET_PAGES_PER_TERM = 2;
+/** Tolérance entre `created_at` d'une analyse périmée et celui de son usage `meta_analysis` à rembourser (ms). */
+export const META_USAGE_REFUND_TOLERANCE_MS = 5_000;
 const ERROR_MESSAGE_MAX = 300;
 const META_USAGE_KINDS = ["meta_analysis", "meta_regen"] as const;
 
@@ -92,6 +108,8 @@ export const META_ERROR_MESSAGES = {
   token: "Le jeton Meta est invalide ou expiré : contactez Harmony.",
   transient: "La bibliothèque Meta n'a pas répondu, réessayez dans quelques minutes.",
   marketRefused: "La bibliothèque Meta a refusé la requête : contactez Harmony.",
+  /** Veille absente d'une analyse dont le fournisseur existait (message de veille perdu derrière un message de génération) */
+  marketMissing: "La veille de la bibliothèque Meta n'a pas abouti : relancez une analyse pour l'obtenir.",
   generation: "Les annonces n'ont pas pu être générées : relancez la génération.",
   interrupted: "Analyse interrompue avant la fin — relancez-la.",
   unknown: "L'analyse a échoué : réessayez dans un instant.",
@@ -116,7 +134,12 @@ export type MetaRegenOutcome =
       status: "done";
       analysisId: string;
       remaining: number;
-      /** URL Blob des rendus précédents, à supprimer par le studio (`assets` remis à vide) */
+      /**
+       * Toujours vide : les chemins Blob des rendus sont déterministes
+       * (analyse, créa, format) et écrasés en place au prochain rendu ;
+       * `assets` est remis à vide, rien n'est à supprimer. Conservé pour la
+       * compatibilité du studio.
+       */
       removedRenderUrls?: string[];
     }
   | { status: "skipped"; reason: "no_access" | "quota" | "busy" | "no_analysis" }
@@ -143,8 +166,8 @@ export type MetaAdsContext = {
   brief: SocialSiteBrief;
 };
 
-/** Partie du contexte nécessaire à l'exécution (testable sans base). */
-export type MetaAdsContextData = Pick<MetaAdsContext, "seed" | "landingPages" | "diagnosticInput" | "brief">;
+/** Partie du contexte nécessaire à l'exécution (testable sans base) ; `photosById` renseigne `photoUrl` des créas quand il est fourni. */
+export type MetaAdsContextData = Pick<MetaAdsContext, "seed" | "landingPages" | "diagnosticInput" | "brief"> & Partial<Pick<MetaAdsContext, "photosById">>;
 
 // ─── Logique pure (testée sans base) ─────────────────────────────────────────
 
@@ -187,7 +210,7 @@ export function metaErrorMessage(err: unknown, stage?: "market" | "generation"):
 
 /** Message de la colonne `error` qui décrit la veille (conservé par la régénération, qui ne touche pas à la veille). */
 export function isMetaMarketMessage(text: string | null | undefined): boolean {
-  return text === META_ERROR_MESSAGES.token || text === META_ERROR_MESSAGES.transient || text === META_ERROR_MESSAGES.marketRefused;
+  return text === META_ERROR_MESSAGES.token || text === META_ERROR_MESSAGES.transient || text === META_ERROR_MESSAGES.marketRefused || text === META_ERROR_MESSAGES.marketMissing;
 }
 
 /** Accès à la section Meta Ads : démos et formules dotées de `metaAds`. */
@@ -197,14 +220,16 @@ export function hasMetaAdsAccess(site: Pick<Site, "type" | "plan">): boolean {
 
 /**
  * Fournisseur de la veille : mock réservé aux démos (jamais de données
- * simulées sur un site client) ; client sans jeton → null (veille
- * indisponible). `opts` (localité, `now`) paramètre le mock.
+ * simulées sur un site client) ; pour un site client, le fournisseur réel
+ * dès qu'un jeton existe, même sous META_ADS_MOCK ; client sans jeton → null
+ * (veille indisponible). `opts` (localité, `now`) paramètre le mock.
  */
 export function marketProviderFor(env: NodeJS.ProcessEnv, siteType: Site["type"], opts: { now?: Date; locality?: MockLocality } = {}): AdLibraryProvider | null {
-  const provider = createAdLibraryProvider(env, opts);
-  if (!provider) return null;
-  if (provider.mode === "mock" && siteType !== "demo") return null;
-  return provider;
+  if (siteType !== "demo") {
+    const token = env.META_AD_LIBRARY_TOKEN?.trim();
+    return token ? createAdLibraryProvider({ ...env, META_ADS_MOCK: "" }, opts) : null;
+  }
+  return createAdLibraryProvider(env, opts);
 }
 
 /** Localité du mock d'après la graine (ville, département, région). */
@@ -236,9 +261,9 @@ export function metaProfileFrom(
   return { linked: true, rating: snapshot?.rating ?? prospect?.googleRating ?? null, votes: snapshot?.votes ?? prospect?.googleReviewCount ?? null };
 }
 
-/** Entrée du diagnostic déterministe : contexte + lecture de la veille (zone, comptes, annonces). */
+/** Entrée du diagnostic déterministe : contexte + lecture de la veille (zone, comptes, signaux forts par zone, annonces). */
 export function metaDiagnosticInputFrom(input: Omit<MetaAdsDiagnosticInput, "market">, market: MetaAdsMarket | null): MetaAdsDiagnosticInput {
-  return { ...input, market: market ? { scopeUsed: market.scopeUsed, counts: market.counts, ads: market.ads } : null };
+  return { ...input, market: market ? { scopeUsed: market.scopeUsed, counts: market.counts, ...(market.strongCounts ? { strongCounts: market.strongCounts } : {}), ads: market.ads } : null };
 }
 
 /**
@@ -271,23 +296,51 @@ export function usageFromCounts(counts: { kind: string; total: number }[]): Meta
   };
 }
 
-/** Décision de lancement ; `staleIds` : analyses `running` périmées à passer en erreur, quelle que soit la décision. */
-export type MetaStartDecision = { kind: "busy" | "quota" | "ok"; staleIds: string[] };
+/** Analyse `running` telle que lue pour décider d'un lancement. */
+export type MetaRunningRow = { id: string; updatedAt: Date; createdAt?: Date | null };
+
+/** Analyse `running` périmée : `updatedAt` plus vieux que META_ADS_ANALYSIS_STALE_MINUTES (le processus est mort). */
+export function isMetaAnalysisStale(row: Pick<MetaRunningRow, "updatedAt">, now: Date): boolean {
+  return now.getTime() - row.updatedAt.getTime() > META_ADS_ANALYSIS_STALE_MINUTES * 60_000;
+}
+
+/** Une analyse `running` encore vivante existe (une autre génération est en cours). */
+export function hasFreshMetaRunning(running: readonly Pick<MetaRunningRow, "updatedAt">[], now: Date): boolean {
+  return running.some((row) => !isMetaAnalysisStale(row, now));
+}
+
+/**
+ * Décision de lancement ; `staleIds` : analyses `running` périmées à passer
+ * en erreur, quelle que soit la décision ; `stale` : les mêmes avec leur
+ * `createdAt`, pour rembourser l'usage inscrit avec elles.
+ */
+export type MetaStartDecision = { kind: "busy" | "quota" | "ok"; staleIds: string[]; stale: { id: string; createdAt: Date | null }[] };
 
 /**
  * Décision de lancement sous verrou : verrou refusé ou analyse `running`
  * récente → busy ; quota mensuel atteint → quota. Les analyses `running`
  * périmées (`updatedAt` plus vieux que META_ADS_ANALYSIS_STALE_MINUTES) sont
- * listées dans `staleIds` dès que le verrou est acquis, même si le quota
- * refuse : l'appelant les clôt avant de rendre la décision.
+ * listées dans `staleIds` / `stale` dès que le verrou est acquis, même si le
+ * quota refuse : l'appelant les clôt (et rembourse leur usage) avant de
+ * rendre la décision.
  */
-export function decideMetaStart(input: { locked: boolean; running: { id: string; updatedAt: Date }[]; analysesUsed: number; now: Date }): MetaStartDecision {
-  if (!input.locked) return { kind: "busy", staleIds: [] };
-  const stale = input.running.filter((a) => input.now.getTime() - a.updatedAt.getTime() > META_ADS_ANALYSIS_STALE_MINUTES * 60_000);
-  const staleIds = stale.map((a) => a.id);
-  if (input.running.length > stale.length) return { kind: "busy", staleIds };
-  if (input.analysesUsed >= META_ADS_ANALYSES_PER_MONTH) return { kind: "quota", staleIds };
-  return { kind: "ok", staleIds };
+export function decideMetaStart(input: { locked: boolean; running: MetaRunningRow[]; analysesUsed: number; now: Date }): MetaStartDecision {
+  if (!input.locked) return { kind: "busy", staleIds: [], stale: [] };
+  const staleRows = input.running.filter((a) => isMetaAnalysisStale(a, input.now));
+  const staleIds = staleRows.map((a) => a.id);
+  const stale = staleRows.map((a) => ({ id: a.id, createdAt: a.createdAt ?? null }));
+  if (input.running.length > staleRows.length) return { kind: "busy", staleIds, stale };
+  if (input.analysesUsed >= META_ADS_ANALYSES_PER_MONTH) return { kind: "quota", staleIds, stale };
+  return { kind: "ok", staleIds, stale };
+}
+
+/**
+ * Fenêtre de `created_at` dans laquelle retrouver l'usage `meta_analysis`
+ * inscrit avec une analyse (même transaction, même `now`) : ± tolérance
+ * autour du `createdAt` de l'analyse.
+ */
+export function usageRefundWindow(createdAt: Date, toleranceMs = META_USAGE_REFUND_TOLERANCE_MS): { from: Date; to: Date } {
+  return { from: new Date(createdAt.getTime() - toleranceMs), to: new Date(createdAt.getTime() + toleranceMs) };
 }
 
 /**
@@ -312,18 +365,36 @@ export type MarketCollection = {
   records: MetaAdRecord[];
   /** id d'annonce → termes qui l'ont remontée */
   matchedTerms: Record<string, string[]>;
-  /** Termes effectivement interrogés */
+  /** Termes effectivement interrogés (recherche aboutie) */
   terms: string[];
   calls: number;
-  /** Budget épuisé avant la fin, ou pages non suivies */
+  /** Budget épuisé avant la fin, pages non suivies, ou terme(s) en échec */
   truncated: boolean;
+  /** Première erreur rencontrée sur un terme (la veille est partielle), null si tout a abouti */
+  error: unknown;
+  /** Termes dont la recherche a échoué ou a été abandonnée après une erreur bloquante */
+  failedTerms: string[];
 };
+
+/**
+ * Erreur de la bibliothèque qui condamne les termes suivants : code Graph
+ * connu (jeton 190, limites de débit 4 / 17 / 32 / 613, paramètre 100…).
+ * Un incident sans code (réseau, 5xx, délai, réponse illisible) n'empêche
+ * pas d'essayer le terme suivant.
+ */
+export function isMetaMarketBlocking(err: unknown): boolean {
+  return err instanceof MetaAdLibraryError && err.code !== null;
+}
 
 /**
  * Veille : un `searchAds` par terme, séquentiel, `maxPages` borné par le
  * budget restant ; arrêt dès que le budget d'appels est consommé.
  * `progress.calls` est mis à jour après chaque appel pour que l'appelant
- * connaisse les appels effectués même si une recherche échoue.
+ * connaisse les appels effectués même si une recherche échoue. Un terme en
+ * échec n'efface pas la veille : les annonces déjà obtenues sont gardées,
+ * `truncated` passe à true et l'erreur est rendue dans `error` ; après une
+ * erreur bloquante (`isMetaMarketBlocking`), les termes restants sont
+ * abandonnés. Lève seulement si AUCUNE recherche n'a abouti.
  */
 export async function collectMarketAds(
   provider: AdLibraryProvider,
@@ -336,7 +407,9 @@ export async function collectMarketAds(
   const records: MetaAdRecord[] = [];
   const matchedTerms: Record<string, string[]> = {};
   const terms: string[] = [];
+  const failedTerms: string[] = [];
   let truncated = false;
+  let error: unknown = null;
   const queries = seed.searchTerms.slice(0, META_LIBRARY_TERMS_MAX);
   for (const [index, term] of queries.entries()) {
     const remaining = budget - progress.calls;
@@ -344,7 +417,19 @@ export async function collectMarketAds(
       truncated = index < queries.length;
       break;
     }
-    const result = await provider.searchAds({ term, country: seed.country, activeStatus: "ALL", limit: META_LIBRARY_PAGE_LIMIT, maxPages: Math.min(pagesPerTerm, remaining) });
+    let result: AdLibrarySearchResult;
+    try {
+      result = await provider.searchAds({ term, country: seed.country, activeStatus: "ALL", limit: META_LIBRARY_PAGE_LIMIT, maxPages: Math.min(pagesPerTerm, remaining) });
+    } catch (err) {
+      error ??= err;
+      truncated = true;
+      if (isMetaMarketBlocking(err)) {
+        failedTerms.push(...queries.slice(index));
+        break;
+      }
+      failedTerms.push(term);
+      continue;
+    }
     progress.calls += result.calls;
     terms.push(term);
     if (result.truncated) truncated = true;
@@ -354,12 +439,18 @@ export async function collectMarketAds(
       if (!matched.includes(term)) matched.push(term);
     }
   }
-  return { records, matchedTerms, terms, calls: progress.calls, truncated };
+  if (error !== null && terms.length === 0) throw error;
+  return { records, matchedTerms, terms, calls: progress.calls, truncated, error, failedTerms };
 }
 
-/** Veille enregistrée : annonces classées par zone (`selectMarketAds`), sans synthèse. */
-export function buildMetaMarket(collection: MarketCollection, seed: Pick<MetaAdsSeed, "city" | "department" | "region" | "country">, source: "meta" | "mock", now: Date): MetaAdsMarket {
-  const { ads, scopeUsed, counts } = selectMarketAds(collection.records, seed, now, { matchedTerms: collection.matchedTerms });
+/** Veille enregistrée : annonces classées par zone (`selectMarketAds`), comptes et signaux forts par zone, sans synthèse. */
+export function buildMetaMarket(
+  collection: Pick<MarketCollection, "records" | "matchedTerms" | "terms" | "calls" | "truncated">,
+  seed: Pick<MetaAdsSeed, "city" | "department" | "region" | "country">,
+  source: "meta" | "mock",
+  now: Date,
+): MetaAdsMarket {
+  const { ads, scopeUsed, counts, strongCounts } = selectMarketAds(collection.records, seed, now, { matchedTerms: collection.matchedTerms });
   return {
     version: 1,
     source,
@@ -368,6 +459,7 @@ export function buildMetaMarket(collection: MarketCollection, seed: Pick<MetaAds
     terms: collection.terms,
     scopeUsed,
     counts,
+    strongCounts,
     ads,
     calls: collection.calls,
     truncated: collection.truncated,
@@ -381,7 +473,7 @@ export function marketSampleForAi(market: MetaAdsMarket, max = META_MARKET_SAMPL
   return { ...market, ads };
 }
 
-/** URL Blob des rendus d'une analyse (à supprimer quand `assets` est remis à vide). */
+/** URL Blob des rendus d'une analyse (lecture seule : les chemins sont déterministes et écrasés en place, rien n'est à supprimer). */
 export function renderUrlsOf(assets: SocialPostAssets | null | undefined): string[] {
   return Object.values(assets?.renders ?? {})
     .map((r) => r.url)
@@ -391,6 +483,25 @@ export function renderUrlsOf(assets: SocialPostAssets | null | undefined): strin
 /** Message de la colonne `error` en fin d'analyse : la génération (à relancer) prime sur la veille. */
 export function metaAnalysisError(result: Pick<MetaAnalysisResult, "marketError" | "generationError">): string | null {
   return result.generationError ?? result.marketError ?? null;
+}
+
+/**
+ * Message de la colonne `error` après une régénération : le message de
+ * génération s'il y en a un, sinon le message de veille conservé, sinon —
+ * veille absente alors qu'un fournisseur existait (son message a été écrasé
+ * par celui d'une génération) — un message de veille recalculé ; null quand
+ * la veille est présente ou qu'aucun fournisseur n'existait.
+ */
+export function metaRegenerationError(analysis: Pick<MetaAdsAnalysis, "market" | "provider" | "error">, generationError: string | null = null): string | null {
+  if (generationError) return generationError;
+  if (isMetaMarketMessage(analysis.error)) return analysis.error ?? null;
+  if (analysis.market === null && analysis.provider !== "none") return META_ERROR_MESSAGES.marketMissing;
+  return null;
+}
+
+/** `photoUrl` de chaque créa résolu depuis `photosById` (id → URL) ; null sans photo ou photo inconnue. */
+export function withCreativePhotoUrls(set: MetaAdsCreativeSet, photosById: Readonly<Record<string, string>>): MetaAdsCreativeSet {
+  return { ...set, creatives: set.creatives.map((c) => ({ ...c, photoUrl: c.photoId ? (photosById[c.photoId] ?? null) : null })) };
 }
 
 /** Régénérations en cours dans ce processus (par site) : second clic refusé sans appel IA, en plus du verrou consultatif en base. */
@@ -421,12 +532,20 @@ export type MetaGeneration = {
   error: unknown;
 };
 
+export type MetaGenerationOptions = {
+  /** Battement enregistré entre chaque génération (`updatedAt` de l'analyse) ; ses erreurs sont ignorées */
+  heartbeat?: () => Promise<void>;
+  /** id photo → URL : renseigne `photoUrl` des créas (jamais transmis au modèle) */
+  photosById?: Readonly<Record<string, string>>;
+};
+
 /**
  * Trois générations tolérantes à l'échec : créas, plan vidéo, puis plan de
  * campagne (qui reçoit ce qui a abouti). Chaque échec est journalisé ; le
- * premier est rendu dans `error`.
+ * premier est rendu dans `error`. Un battement (`opts.heartbeat`) est
+ * enregistré entre les générations ; `opts.photosById` renseigne `photoUrl`.
  */
-export async function generateMetaAds(planner: MetaAdsPlanner, brief: SocialSiteBrief, input: MetaAdsGenerationInput, label: string): Promise<MetaGeneration> {
+export async function generateMetaAds(planner: MetaAdsPlanner, brief: SocialSiteBrief, input: MetaAdsGenerationInput, label: string, opts: MetaGenerationOptions = {}): Promise<MetaGeneration> {
   let creatives: MetaAdsCreativeSet | null = null;
   let videoPlan: MetaAdsVideoPlan | null = null;
   let plan: MetaAdsPlan | null = null;
@@ -440,16 +559,28 @@ export async function generateMetaAds(planner: MetaAdsPlanner, brief: SocialSite
       return null;
     }
   };
+  const beat = async () => {
+    if (!opts.heartbeat) return;
+    try {
+      await opts.heartbeat();
+    } catch (err) {
+      console.warn(`[meta-ads] ${label} : battement non enregistré :`, errorMessage(err));
+    }
+  };
   creatives = await attempt("créas", () => planner.createCreatives(brief, input));
+  if (creatives && opts.photosById) creatives = withCreativePhotoUrls(creatives, opts.photosById);
+  await beat();
   videoPlan = await attempt("plan vidéo", () => planner.createVideoPlan(brief, input));
+  await beat();
   plan = await attempt("plan de campagne", () => planner.createPlan(brief, { ...input, creatives, videoPlan }));
   return { creatives, videoPlan, plan, error };
 }
 
 export type MetaAnalysisResult = {
   market: MetaAdsMarket | null;
+  /** Mode du fournisseur (`none` seulement sans fournisseur : une veille en échec garde `meta` ou `mock`) */
   providerMode: "meta" | "mock" | "none";
-  /** Message utilisateur quand la veille a échoué (fournisseur présent) */
+  /** Message utilisateur quand la veille a échoué, en tout (`market` null) ou en partie (`market.truncated`) */
   marketError: string | null;
   calls: number;
   diagnostic: MetaAdsDiagnostic;
@@ -462,27 +593,32 @@ export type MetaAnalysisResult = {
 
 /**
  * Déroulé hors transaction : veille si fournisseur (échec toléré : market
- * null, `provider: "none"`, message utilisateur), synthèse IA sur
- * l'échantillon (échec toléré : `insights: null`), diagnostic déterministe,
- * puis créas, plan vidéo et plan (échecs tolérés). Ne lève pas, sauf erreur
- * de programmation ; `progress.calls` suit les appels même en cas d'échec.
+ * null seulement si aucun terme n'a abouti, `provider` = mode du
+ * fournisseur, message utilisateur), synthèse IA sur l'échantillon (échec
+ * toléré : `insights: null`), diagnostic déterministe, puis créas, plan vidéo
+ * et plan (échecs tolérés). Ne lève pas, sauf erreur de programmation ;
+ * `progress.calls` suit les appels même en cas d'échec ; `deps.heartbeat`
+ * est appelé après la veille et entre les générations.
  */
 export async function executeMetaAnalysis(
   ctx: MetaAdsContextData,
-  deps: { provider: AdLibraryProvider | null; planner: MetaAdsPlanner; instructions?: string; now: Date; label?: string; progress?: { calls: number } },
+  deps: { provider: AdLibraryProvider | null; planner: MetaAdsPlanner; instructions?: string; now: Date; label?: string; progress?: { calls: number }; heartbeat?: () => Promise<void> },
 ): Promise<MetaAnalysisResult> {
   const { provider, planner, now } = deps;
   const label = deps.label ?? "analyse";
   const progress = deps.progress ?? { calls: 0 };
   let market: MetaAdsMarket | null = null;
-  let providerMode: MetaAnalysisResult["providerMode"] = "none";
+  const providerMode: MetaAnalysisResult["providerMode"] = provider?.mode ?? "none";
   let marketError: string | null = null;
 
   if (provider) {
     try {
       const collection = await collectMarketAds(provider, ctx.seed, { progress });
+      if (collection.error !== null) {
+        marketError = metaErrorMessage(collection.error, "market");
+        console.error(`[meta-ads] ${label} : veille partielle (termes en échec : ${collection.failedTerms.join(", ")}) après ${progress.calls} appel(s) :`, collection.error);
+      }
       market = buildMetaMarket(collection, ctx.seed, provider.mode, now);
-      providerMode = provider.mode;
       let insights: MetaMarketInsights | null = null;
       if (market.ads.length > 0) {
         try {
@@ -494,9 +630,15 @@ export async function executeMetaAnalysis(
       market = { ...market, insights };
     } catch (err) {
       market = null;
-      providerMode = "none";
       marketError = metaErrorMessage(err, "market");
-      console.error(`[meta-ads] ${label} : veille indisponible après ${progress.calls} appel(s) :`, err);
+      console.error(`[meta-ads] ${label} : veille indisponible (${providerMode}) après ${progress.calls} appel(s) :`, err);
+    }
+    if (deps.heartbeat) {
+      try {
+        await deps.heartbeat();
+      } catch (err) {
+        console.warn(`[meta-ads] ${label} : battement non enregistré :`, errorMessage(err));
+      }
     }
   }
 
@@ -507,7 +649,10 @@ export async function executeMetaAnalysis(
     landingPages: ctx.landingPages,
     ...(deps.instructions ? { instructions: deps.instructions } : {}),
   };
-  const generated = await generateMetaAds(planner, ctx.brief, input, label);
+  const generated = await generateMetaAds(planner, ctx.brief, input, label, {
+    ...(deps.heartbeat ? { heartbeat: deps.heartbeat } : {}),
+    ...(ctx.photosById ? { photosById: ctx.photosById } : {}),
+  });
   return {
     market,
     providerMode,
@@ -605,11 +750,15 @@ type MetaStart = MetaStartDecision | { kind: "started"; analysisId: string; usag
 
 /**
  * Analyse Meta Ads d'un site : accès → transaction courte sous verrou
- * `<siteId>:meta-ads` (analyses périmées closes, quota `meta_analysis` du
- * mois, ligne `meta_ads_analyses` running + ligne `google_usage`) → hors
- * transaction : `executeMetaAnalysis` (veille, synthèse, diagnostic, créas,
- * plan vidéo, plan) → ligne `done` avec les appels réels (`calls`, et
- * `requests` de l'usage). Toute erreur inattendue → ligne `error`.
+ * `<siteId>:meta-ads` (analyses périmées closes et leur usage remboursé,
+ * quota `meta_analysis` du mois, ligne `meta_ads_analyses` running + ligne
+ * `google_usage` au même `createdAt`) → hors transaction :
+ * `executeMetaAnalysis` (veille, synthèse, diagnostic, créas, plan vidéo,
+ * plan, avec un battement `updatedAt` entre les étapes) → ligne `done` avec
+ * les appels réels (`calls`, et `requests` de l'usage), seulement si la
+ * ligne est encore `running` (sinon close pour péremption : journal, rien
+ * d'écrit, résultat `error` « interrompue »). Toute erreur inattendue → ligne
+ * `error`.
  */
 export async function runMetaAdsAnalysis(
   db: Database,
@@ -636,18 +785,26 @@ export async function runMetaAdsAnalysis(
     const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`${siteId}:meta-ads`})) as locked`);
     const running = await tx.query.metaAdsAnalyses.findMany({
       where: and(eq(metaAdsAnalyses.siteId, siteId), eq(metaAdsAnalyses.status, "running")),
-      columns: { id: true, updatedAt: true },
+      columns: { id: true, updatedAt: true, createdAt: true },
     });
-    const usage = await getMetaAdsUsage(tx, siteId, now);
-    const decision = decideMetaStart({ locked: lock.rows[0]?.locked === true, running, analysesUsed: usage.analysesUsed, now });
-    // Les analyses périmées sont closes dès le verrou acquis, même si le quota refuse le lancement
+    // Les analyses périmées sont closes dès le verrou acquis (et leur usage remboursé), même si le quota refuse le lancement
+    const decision = decideMetaStart({ locked: lock.rows[0]?.locked === true, running, analysesUsed: 0, now });
     if (decision.staleIds.length > 0) {
       await tx
         .update(metaAdsAnalyses)
         .set({ status: "error", error: META_ERROR_MESSAGES.interrupted, updatedAt: now })
-        .where(inArray(metaAdsAnalyses.id, decision.staleIds));
+        .where(and(inArray(metaAdsAnalyses.id, decision.staleIds), eq(metaAdsAnalyses.status, "running")));
+      for (const stale of decision.stale) {
+        if (!stale.createdAt) continue;
+        const { from, to } = usageRefundWindow(stale.createdAt);
+        await tx.delete(googleUsage).where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.kind, "meta_analysis"), between(googleUsage.createdAt, from, to)));
+      }
+      console.info(`[meta-ads] ${siteId} : ${decision.staleIds.length} analyse(s) périmée(s) close(s), usage remboursé`);
     }
-    if (decision.kind !== "ok") return decision;
+    if (decision.kind === "busy") return decision;
+    // Quota recompté après le remboursement
+    const usage = await getMetaAdsUsage(tx, siteId, now);
+    if (usage.analysesUsed >= META_ADS_ANALYSES_PER_MONTH) return { ...decision, kind: "quota" };
     const [analysis] = await tx
       .insert(metaAdsAnalyses)
       .values({
@@ -662,9 +819,10 @@ export async function runMetaAdsAnalysis(
         updatedAt: now,
       })
       .returning({ id: metaAdsAnalyses.id });
+    // Même `createdAt` que l'analyse : c'est la clé du remboursement (`usageRefundWindow`) si elle est close pour péremption
     const [usageRow] = await tx
       .insert(googleUsage)
-      .values({ siteId, month: usageMonthKey(now), kind: "meta_analysis", costUsd: 0, requests: 0 })
+      .values({ siteId, month: usageMonthKey(now), kind: "meta_analysis", costUsd: 0, requests: 0, createdAt: now })
       .returning({ id: googleUsage.id });
     return { kind: "started", analysisId: analysis!.id, usageId: usageRow!.id };
   });
@@ -675,29 +833,43 @@ export async function runMetaAdsAnalysis(
 
   const progress = { calls: 0 };
   const label = `analyse ${analysisId} (${site.slug})`;
-  const settleUsage = () => db.update(googleUsage).set({ requests: progress.calls }).where(eq(googleUsage.id, usageId));
+  const settleUsage = (tx: DbExecutor) => tx.update(googleUsage).set({ requests: progress.calls }).where(eq(googleUsage.id, usageId));
+  const stillRunning = and(eq(metaAdsAnalyses.id, analysisId), eq(metaAdsAnalyses.status, "running"));
+  // Battement : `updatedAt` avance tant que l'analyse vit, pour qu'un autre lancement ne la croie pas périmée
+  const heartbeat = async () => {
+    await db.update(metaAdsAnalyses).set({ updatedAt: new Date() }).where(stillRunning);
+  };
 
   try {
-    const result = await executeMetaAnalysis(ctx, { provider, planner, ...(instructions ? { instructions } : {}), now, label, progress });
-    await settleUsage();
+    const result = await executeMetaAnalysis(ctx, { provider, planner, ...(instructions ? { instructions } : {}), now, label, progress, heartbeat });
     const error = metaAnalysisError(result);
-    await db
-      .update(metaAdsAnalyses)
-      .set({
-        status: "done",
-        market: result.market,
-        diagnostic: result.diagnostic,
-        creatives: result.creatives,
-        videoPlan: result.videoPlan,
-        plan: result.plan,
-        provider: result.providerMode,
-        generator: planner.mode,
-        calls: result.calls,
-        instructions: instructions ?? null,
-        error,
-        updatedAt: new Date(),
-      })
-      .where(eq(metaAdsAnalyses.id, analysisId));
+    // Transaction finale : appels réels inscrits et ligne close ensemble, seulement si elle est encore `running`
+    const closed = await db.transaction(async (tx) => {
+      await settleUsage(tx);
+      const rows = await tx
+        .update(metaAdsAnalyses)
+        .set({
+          status: "done",
+          market: result.market,
+          diagnostic: result.diagnostic,
+          creatives: result.creatives,
+          videoPlan: result.videoPlan,
+          plan: result.plan,
+          provider: result.providerMode,
+          generator: planner.mode,
+          calls: result.calls,
+          instructions: instructions ?? null,
+          error,
+          updatedAt: new Date(),
+        })
+        .where(stillRunning)
+        .returning({ id: metaAdsAnalyses.id });
+      return rows.length > 0;
+    });
+    if (!closed) {
+      console.warn(`[meta-ads] ${label} : terminée après avoir été close pour péremption, résultat non enregistré`);
+      return { status: "error", analysisId, message: META_ERROR_MESSAGES.interrupted };
+    }
     console.info(
       `[meta-ads] ${label} : ${result.market ? `${result.market.ads.length} annonces (zone ${result.market.scopeUsed}, ${result.calls} appel(s), ${result.providerMode})` : `veille indisponible (${result.providerMode})`}, verdict ${result.diagnostic.verdict}, ${result.creatives ? `${result.creatives.creatives.length} créas` : "créas à relancer"}, ${result.videoPlan ? `${result.videoPlan.videos.length} vidéos` : "plan vidéo à relancer"}, ${result.plan ? "plan généré" : "plan à relancer"}`,
     );
@@ -706,11 +878,11 @@ export async function runMetaAdsAnalysis(
     const message = metaErrorMessage(err);
     console.error(`[meta-ads] ${label} en échec :`, err);
     try {
-      await settleUsage();
+      await settleUsage(db);
       await db
         .update(metaAdsAnalyses)
         .set({ status: "error", error: message, calls: progress.calls, updatedAt: new Date() })
-        .where(eq(metaAdsAnalyses.id, analysisId));
+        .where(stillRunning);
     } catch (dbErr) {
       console.error(`[meta-ads] ${label} : état d'erreur non enregistré :`, errorMessage(dbErr));
     }
@@ -720,16 +892,37 @@ export async function runMetaAdsAnalysis(
 
 // ─── Régénération ────────────────────────────────────────────────────────────
 
+/** Analyses `running` du site, telles que lues pour décider d'une régénération. */
+async function runningMetaAnalyses(tx: DbExecutor, siteId: string): Promise<Pick<MetaRunningRow, "id" | "updatedAt">[]> {
+  return tx.query.metaAdsAnalyses.findMany({
+    where: and(eq(metaAdsAnalyses.siteId, siteId), eq(metaAdsAnalyses.status, "running")),
+    columns: { id: true, updatedAt: true },
+  });
+}
+
+/** Dernière analyse `done` du site ayant un diagnostic (celle que la régénération vise). */
+async function latestDoneMetaAnalysis(tx: DbExecutor, siteId: string): Promise<MetaAdsAnalysis | undefined> {
+  return tx.query.metaAdsAnalyses.findFirst({
+    where: and(eq(metaAdsAnalyses.siteId, siteId), eq(metaAdsAnalyses.status, "done"), isNotNull(metaAdsAnalyses.diagnostic)),
+    orderBy: [desc(metaAdsAnalyses.createdAt)],
+  });
+}
+
 /**
  * Nouvelles créas, nouveau plan vidéo et nouveau plan (avec instructions) sur
- * la dernière analyse `done` du site ayant un diagnostic — veille et
- * diagnostic conservés, champs manquants complétés, `error` de génération
- * effacé (un message décrivant la veille est gardé) : marqueur
- * « régénération en cours » par site dans ce processus, verrou
- * `<siteId>:meta-ads-regen`, quota META_ADS_REGENERATIONS_PER_MONTH vérifié
- * avant les appels IA puis recompté dans la transaction qui inscrit
- * `google_usage` kind `meta_regen` (coût 0) et enregistre le résultat ;
- * `assets` remis à vide (URL des rendus précédents rendues au studio).
+ * la dernière analyse `done` du site ayant un diagnostic — veille conservée,
+ * diagnostic recalculé avec le contexte courant (Pixel enregistré depuis,
+ * bandeau, liens, photos…) pour que le plan passe en conversions dès que le
+ * Pixel est là, champs manquants complétés, `error` de génération effacé
+ * (`metaRegenerationError` : un message décrivant la veille est gardé ou
+ * recalculé) : marqueur « régénération en cours » par site dans ce processus,
+ * verrou `<siteId>:meta-ads-regen`, `busy` tant qu'une analyse `running` non
+ * périmée existe, quota META_ADS_REGENERATIONS_PER_MONTH vérifié avant les
+ * appels IA puis recompté dans la transaction qui inscrit `google_usage` kind
+ * `meta_regen` (coût 0) et enregistre le résultat — après avoir vérifié que
+ * l'analyse visée est toujours la dernière `done` du site (sinon `busy`, quota
+ * non consommé) ; `assets` remis à vide, `removedRenderUrls` toujours vide
+ * (chemins Blob déterministes, écrasés en place au prochain rendu).
  */
 export async function regenerateMetaAds(
   db: Database,
@@ -743,17 +936,15 @@ export async function regenerateMetaAds(
   if (!hasMetaAdsAccess(site)) return { status: "skipped", reason: "no_access" };
   if (!beginMetaRegeneration(siteId)) return { status: "skipped", reason: "busy" };
   try {
-    const analysis: MetaAdsAnalysis | undefined = await db.query.metaAdsAnalyses.findFirst({
-      where: and(eq(metaAdsAnalyses.siteId, siteId), eq(metaAdsAnalyses.status, "done"), isNotNull(metaAdsAnalyses.diagnostic)),
-      orderBy: [desc(metaAdsAnalyses.createdAt)],
-    });
+    const analysis = await latestDoneMetaAnalysis(db, siteId);
     if (!analysis || !analysis.diagnostic) return { status: "skipped", reason: "no_analysis" };
-    const { diagnostic, market } = analysis;
+    const { market } = analysis;
 
-    // Transaction courte : verrou consultatif (génération déjà lancée ailleurs ?) et quota (message immédiat)
+    // Transaction courte : verrou consultatif (génération déjà lancée ailleurs ?), analyse en cours (busy) et quota (message immédiat)
     const initial = await db.transaction(async (tx) => {
       const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`${siteId}:meta-ads-regen`})) as locked`);
       if (lock.rows[0]?.locked !== true) return null;
+      if (hasFreshMetaRunning(await runningMetaAnalyses(tx, siteId), now)) return null;
       return getMetaAdsUsage(tx, siteId, now);
     });
     if (initial === null) return { status: "skipped", reason: "busy" };
@@ -764,33 +955,45 @@ export async function regenerateMetaAds(
       const ctx = await loadMetaAdsContext(db, siteId, env);
       const planner = createMetaAdsPlanner(env);
       const label = `régénération ${analysis.id} (${site.slug})`;
-      const generated = await generateMetaAds(planner, ctx.brief, { diagnostic, market, landingPages: ctx.landingPages, ...(instructions ? { instructions } : {}) }, label);
+      // Diagnostic recalculé sur le contexte courant, veille conservée : un Pixel posé depuis l'analyse fait passer le plan en conversions
+      const diagnostic = diagnoseMetaAds(metaDiagnosticInputFrom(ctx.diagnosticInput, market), now);
+      const generated = await generateMetaAds(planner, ctx.brief, { diagnostic, market, landingPages: ctx.landingPages, ...(instructions ? { instructions } : {}) }, label, {
+        photosById: ctx.photosById,
+      });
       if (!generated.creatives || !generated.videoPlan || !generated.plan) throw generated.error ?? new Error("génération incomplète");
-      const removedRenderUrls = renderUrlsOf(analysis.assets);
-      // Transaction courte sous verrou par site : quota recompté, génération inscrite et résultat enregistré ensemble
-      const used = await db.transaction(async (tx) => {
+      // Transaction courte sous verrou par site : analyse toujours la dernière `done` et aucune analyse en cours, quota recompté,
+      // génération inscrite et résultat enregistré ensemble
+      const written = await db.transaction(async (tx): Promise<number | "busy" | "quota"> => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${siteId}:meta-ads-regen`}))`);
+        const latest = await latestDoneMetaAnalysis(tx, siteId);
+        if (latest?.id !== analysis.id) return "busy";
+        if (hasFreshMetaRunning(await runningMetaAnalyses(tx, siteId), now)) return "busy";
         const usage = await getMetaAdsUsage(tx, siteId, now);
-        if (usage.regenRemaining <= 0) return null;
+        if (usage.regenRemaining <= 0) return "quota";
         await tx.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind: "meta_regen", costUsd: 0, requests: 1 });
         await tx
           .update(metaAdsAnalyses)
           .set({
+            diagnostic,
             creatives: generated.creatives,
             videoPlan: generated.videoPlan,
             plan: generated.plan,
             assets: { ...EMPTY_SOCIAL_ASSETS, renders: {} },
             generator: planner.mode,
             instructions: instructions ?? null,
-            error: analysis.market === null && isMetaMarketMessage(analysis.error) ? analysis.error : null,
+            error: metaRegenerationError(analysis),
             updatedAt: new Date(),
           })
           .where(eq(metaAdsAnalyses.id, analysis.id));
         return usage.regenUsed;
       });
-      if (used === null) return { status: "skipped", reason: "quota" };
-      console.info(`[meta-ads] ${label} : créas, plan vidéo et plan régénérés (${planner.mode})`);
-      return { status: "done", analysisId: analysis.id, remaining: Math.max(0, META_ADS_REGENERATIONS_PER_MONTH - used - 1), removedRenderUrls };
+      if (written === "busy") {
+        console.info(`[meta-ads] ${label} : analyse remplacée ou relancée pendant la génération, résultat non enregistré`);
+        return { status: "skipped", reason: "busy" };
+      }
+      if (written === "quota") return { status: "skipped", reason: "quota" };
+      console.info(`[meta-ads] ${label} : créas, plan vidéo et plan régénérés (${planner.mode}), diagnostic recalculé (${diagnostic.verdict})`);
+      return { status: "done", analysisId: analysis.id, remaining: Math.max(0, META_ADS_REGENERATIONS_PER_MONTH - written - 1), removedRenderUrls: [] };
     } catch (err) {
       console.error(`[meta-ads] régénération impossible pour ${site.slug} :`, err);
       return { status: "error", message: metaErrorMessage(err, "generation") };

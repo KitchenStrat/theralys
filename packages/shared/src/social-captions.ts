@@ -29,7 +29,7 @@ export const SOCIAL_SOURCE_PARAMS: Record<string, AnalyticsSource> = {
   gbp: "google",
   /** Visite venue d'une annonce Google (gclid détecté par le site) */
   ads: "google_ads",
-  /** Visite venue d'une annonce Meta (fbclid détecté par le site) */
+  /** Visite venue d'une annonce Meta (`?src=meta` des annonces du studio, ou UTM payant Facebook / Instagram) */
   meta: "meta_ads",
 };
 
