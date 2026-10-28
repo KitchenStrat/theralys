@@ -21,6 +21,13 @@ import type {
   GoogleAdsPlan,
   GoogleAdsSeed,
   GoogleAudit,
+  MetaAdsAnalysisStatus,
+  MetaAdsCreativeSet,
+  MetaAdsDiagnostic,
+  MetaAdsMarket,
+  MetaAdsPlan,
+  MetaAdsSeed,
+  MetaAdsVideoPlan,
   GoogleCompetitor,
   GoogleGridPoint,
   GooglePostContent,
@@ -647,6 +654,50 @@ export const googleAdsAnalyses = pgTable(
   (t) => [index("google_ads_analyses_site_created_idx").on(t.siteId, t.createdAt)],
 );
 
+// ─── Meta Ads (studio) ───────────────────────────────────────────────────────
+
+/**
+ * Analyse Meta Ads d'un site : graine (métier, ville, département, termes),
+ * veille de la bibliothèque publicitaire Meta (annonces, zone retenue,
+ * synthèse IA), diagnostic déterministe, créas statiques (textes + visuels
+ * rendus dans `assets`, comme les posts), plan vidéo et plan de campagne (IA).
+ * Une ligne par analyse (la plus récente fait foi). Appels à la bibliothèque
+ * comptés dans `google_usage` (kind meta_market, coût 0) ; régénérations en
+ * kind meta_regen.
+ */
+export const metaAdsAnalyses = pgTable(
+  "meta_ads_analyses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    status: text("status").$type<MetaAdsAnalysisStatus>().notNull().default("running"),
+    seed: jsonb("seed").$type<MetaAdsSeed>().notNull(),
+    market: jsonb("market").$type<MetaAdsMarket>(),
+    diagnostic: jsonb("diagnostic").$type<MetaAdsDiagnostic>(),
+    creatives: jsonb("creatives").$type<MetaAdsCreativeSet>(),
+    videoPlan: jsonb("video_plan").$type<MetaAdsVideoPlan>(),
+    plan: jsonb("plan").$type<MetaAdsPlan>(),
+    /** Rendus des visuels des créas (clé par créa, taille et aperçu) */
+    assets: jsonb("assets")
+      .$type<SocialPostAssets>()
+      .notNull()
+      .default({ version: 1, renders: {} }),
+    instructions: text("instructions"),
+    /** meta | mock | none (veille indisponible) */
+    provider: text("provider").notNull().default("none"),
+    /** anthropic | mock */
+    generator: text("generator").notNull().default("mock"),
+    /** Appels à la bibliothèque effectués */
+    calls: integer("calls").notNull().default(0),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("meta_ads_analyses_site_created_idx").on(t.siteId, t.createdAt)],
+);
+
 /** Tâches asynchrones « avis Google » (DataForSEO : task_post → task_get). */
 export const googleReviewTasks = pgTable(
   "google_review_tasks",
@@ -699,5 +750,7 @@ export type NewGooglePost = typeof googlePosts.$inferInsert;
 export type GoogleUsage = typeof googleUsage.$inferSelect;
 export type GoogleAdsAnalysis = typeof googleAdsAnalyses.$inferSelect;
 export type NewGoogleAdsAnalysis = typeof googleAdsAnalyses.$inferInsert;
+export type MetaAdsAnalysis = typeof metaAdsAnalyses.$inferSelect;
+export type NewMetaAdsAnalysis = typeof metaAdsAnalyses.$inferInsert;
 export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;
 export type NotificationLogEntry = typeof notificationLog.$inferSelect;

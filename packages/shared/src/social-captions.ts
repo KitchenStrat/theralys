@@ -29,9 +29,11 @@ export const SOCIAL_SOURCE_PARAMS: Record<string, AnalyticsSource> = {
   gbp: "google",
   /** Visite venue d'une annonce Google (gclid détecté par le site) */
   ads: "google_ads",
+  /** Visite venue d'une annonce Meta (fbclid détecté par le site) */
+  meta: "meta_ads",
 };
 
-export const ANALYTICS_SOURCES = ["instagram", "facebook", "linkedin", "google", "google_ads", "direct", "other"] as const;
+export const ANALYTICS_SOURCES = ["instagram", "facebook", "linkedin", "google", "google_ads", "meta_ads", "direct", "other"] as const;
 export type AnalyticsSource = (typeof ANALYTICS_SOURCES)[number];
 
 export const ANALYTICS_SOURCE_LABELS: Record<AnalyticsSource, string> = {
@@ -40,6 +42,7 @@ export const ANALYTICS_SOURCE_LABELS: Record<AnalyticsSource, string> = {
   linkedin: "LinkedIn",
   google: "Google",
   google_ads: "Google Ads",
+  meta_ads: "Meta Ads",
   direct: "Accès direct",
   other: "Autres sites",
 };

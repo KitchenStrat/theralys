@@ -45,6 +45,8 @@ export type PlanDefinition = {
   googleProfile: boolean;
   /** Section « Google Ads » du studio (diagnostic, mots-clés, plan d'action, tuto et suivi) — Scale uniquement */
   googleAds: boolean;
+  /** Section « Meta Ads » du studio (diagnostic, veille, annonces, plan vidéo, plan de campagne) — Scale uniquement */
+  metaAds: boolean;
   advancedAnalytics: true;
   hostingAndDomain: true;
 };
@@ -64,6 +66,7 @@ const STARTER: PlanDefinition = {
   socialMedia: false,
   googleProfile: false,
   googleAds: false,
+  metaAds: false,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };
@@ -83,6 +86,7 @@ const SCALE: PlanDefinition = {
   socialMedia: true,
   googleProfile: true,
   googleAds: true,
+  metaAds: true,
   advancedAnalytics: true,
   hostingAndDomain: true,
 };
@@ -134,4 +138,9 @@ export function hasGoogleProfile(plan: PlanId): boolean {
 /** Section « Google Ads » du studio (Scale uniquement ; les démos y ont accès). */
 export function hasGoogleAds(plan: PlanId): boolean {
   return getPlan(plan).googleAds;
+}
+
+/** Section « Meta Ads » du studio (Scale uniquement ; les démos y ont accès). */
+export function hasMetaAds(plan: PlanId): boolean {
+  return getPlan(plan).metaAds;
 }
