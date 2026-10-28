@@ -21,7 +21,7 @@ import { KEYWORD_MAX, radiusLabel } from "@/lib/google/keywords";
 import type { ScanUsage } from "@/lib/google/scans";
 import { GoogleVisibilityCard } from "../google-visibility-card";
 import { addGoogleKeyword, removeGoogleKeyword, scanGoogleKeyword } from "./actions";
-import { TONE_COLOR, TONE_LABEL } from "./tones";
+import { RANK_LEGEND_TICKS, RANK_MAX, rankGradientCss } from "@/lib/google/rank-colors";
 
 // Leaflet touche `window` : chargé côté client seulement
 const VisibilityMap = dynamic(() => import("./visibility-map").then((m) => m.VisibilityMap), {
@@ -405,17 +405,28 @@ function ScanView({
       <div className="mt-4">
         <VisibilityMap grid={scan.grid} points={scan.points} keyword={keyword.keyword} />
       </div>
-      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-700" aria-label="Légende">
-        {(["top", "good", "weak", "none"] as const).map((tone) => (
-          <li key={tone} className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: TONE_COLOR[tone] }} />
-            {TONE_LABEL[tone]}
-          </li>
-        ))}
-        <li className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="inline-block h-3 w-3 rounded-full bg-ink-900" /> Votre cabinet
-        </li>
-      </ul>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-700" aria-label="Légende">
+        <div className="flex items-center gap-2">
+          <span className="text-ink-500">1re place</span>
+          <span aria-hidden className="relative block h-2.5 w-32 rounded-full" style={{ backgroundImage: rankGradientCss() }}>
+            {RANK_LEGEND_TICKS.slice(1, -1).map((rank) => (
+              <span
+                key={rank}
+                className="absolute -top-0.5 h-3.5 w-0.5 rounded-full bg-white/90"
+                style={{ left: `${((rank - 1) / (RANK_MAX - 1)) * 100}%` }}
+              />
+            ))}
+          </span>
+          <span className="text-ink-500">20e</span>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-ink-500">
+          <span aria-hidden className="inline-block h-3 w-3 rounded-full border-2 border-ink-300 bg-white" /> Au-delà de 20
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-3 w-3 rounded-full bg-ink-900 ring-2 ring-primary-200" /> Votre cabinet
+        </span>
+        <span className="text-ink-500">Vert : pack local (3 premiers) · ambre : 4 à 10 · rouge : 11 à 20</span>
+      </div>
     </div>
   );
 }
