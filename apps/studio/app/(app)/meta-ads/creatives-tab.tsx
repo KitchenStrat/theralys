@@ -13,10 +13,12 @@ import {
   type MetaAdCreative,
   type MetaAdsCreativeSet,
   type MetaAdsFormat,
+  type MetaAdsPlan,
   type MetaAdsVideoPlan,
 } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import { ctaLabel, landingUrl, metaCreativeTxt } from "@/lib/meta-ads/clipboard";
+import { metaCreativeDownloadUrl, metaCreativePreviewUrl } from "@/lib/meta-ads/urls";
 import { regenerateMetaAds } from "./actions";
 import { CopyButton } from "./copy-button";
 import { RegenerateModal } from "./regenerate-modal";
@@ -24,6 +26,7 @@ import type { MetaTab } from "./tabs";
 import { VideoPlanSection } from "./video-plan";
 
 const GENERATION_FAILED_FALLBACK = "Les annonces n'ont pas pu être générées.";
+const PLAN_FAILED_FALLBACK = "Le plan de campagne n'a pas pu être généré.";
 
 const FORMAT_SHORT: Record<MetaAdsFormat, string> = { square: "Carré", portrait: "Portrait", story: "Story" };
 
@@ -35,6 +38,7 @@ export function CreativesTab({
   analysisId,
   creatives,
   videoPlan,
+  plan,
   analysisReady,
   generationError,
   instructions,
@@ -45,6 +49,8 @@ export function CreativesTab({
   analysisId: string | null;
   creatives: MetaAdsCreativeSet | null;
   videoPlan: MetaAdsVideoPlan | null;
+  /** Plan de campagne (généré avec les créas) : absent, la régénération le produit */
+  plan: MetaAdsPlan | null;
   /** Analyse aboutie (diagnostic présent) : sans créas, elles peuvent être générées seules */
   analysisReady: boolean;
   /** Message d'erreur de l'analyse (génération en échec), déjà en français */
@@ -101,8 +107,22 @@ export function CreativesTab({
         </div>
       </Card>
 
+      {!plan ? (
+        // Créas et plan vidéo présents, plan de campagne manquant (génération en échec) : la même régénération le produit
+        <Card className="flex flex-wrap items-center justify-between gap-4 bg-warning-100 p-5" role="alert">
+          <div className="min-w-[16rem] flex-1">
+            <p className="font-medium text-ink-900">{generationError?.trim() ? generationError.trim() : PLAN_FAILED_FALLBACK}</p>
+            <p className="mt-1 text-sm text-ink-700">Vos créas et votre plan vidéo sont là ; régénérez les annonces pour obtenir le plan de campagne (onglet Plan et ciblage).</p>
+          </div>
+          <Button onClick={() => setModalOpen(true)} disabled={regenRemaining <= 0} title={regenRemaining <= 0 ? "Quota mensuel de régénérations atteint" : undefined}>
+            ✦ Régénérer
+          </Button>
+        </Card>
+      ) : null}
+
       {creatives.creatives.map((creative, index) => (
-        <CreativeCard key={creative.id} analysisId={analysisId} creative={creative} index={index} siteDomain={siteDomain} />
+        // Clé versionnée : après une régénération, la carte (et son aperçu) se remonte au lieu de garder l'ancien visuel
+        <CreativeCard key={`${creative.id}-${creatives.generatedAt}`} analysisId={analysisId} creative={creative} version={creatives.generatedAt} index={index} siteDomain={siteDomain} />
       ))}
 
       {creatives.notes.length > 0 ? (
@@ -187,9 +207,21 @@ function MissingCreativesCard({ error, remaining, onSelectTab }: { error: string
   );
 }
 
-function CreativeCard({ analysisId, creative, index, siteDomain }: { analysisId: string; creative: MetaAdCreative; index: number; siteDomain: string }) {
+function CreativeCard({
+  analysisId,
+  creative,
+  version,
+  index,
+  siteDomain,
+}: {
+  analysisId: string;
+  creative: MetaAdCreative;
+  /** Date de génération du jeu de créas : versionne l'URL d'aperçu */
+  version: string;
+  index: number;
+  siteDomain: string;
+}) {
   const [size, setSize] = useState<MetaAdsFormat>("square");
-  const base = `/api/meta-ads/${analysisId}/creatives/${creative.id}`;
   const allTexts = metaCreativeTxt(creative, siteDomain);
   return (
     <Card className="p-6">
@@ -205,10 +237,10 @@ function CreativeCard({ analysisId, creative, index, siteDomain }: { analysisId:
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href={`${base}/download?size=${size}`} download className="inline-flex items-center rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-cream-100">
+          <a href={metaCreativeDownloadUrl(analysisId, creative.id, { size })} download className="inline-flex items-center rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-cream-100">
             Télécharger le visuel ({FORMAT_SHORT[size].toLowerCase()})
           </a>
-          <a href={`${base}/download?kit=1`} download className="inline-flex items-center rounded-xl bg-primary-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-primary-600">
+          <a href={metaCreativeDownloadUrl(analysisId, creative.id, { kit: true })} download className="inline-flex items-center rounded-xl bg-primary-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-primary-600">
             Télécharger le kit
           </a>
         </div>
@@ -234,7 +266,7 @@ function CreativeCard({ analysisId, creative, index, siteDomain }: { analysisId:
             ))}
           </div>
           <p className="mt-1 text-[11px] text-ink-500">{META_ADS_FORMAT_LABELS[size]}</p>
-          <Preview key={size} src={`${base}/render?size=${size}&preview=1`} size={size} alt={creative.altText} />
+          <Preview key={size} src={metaCreativePreviewUrl(analysisId, creative.id, size, version)} size={size} alt={creative.altText} />
         </div>
 
         <div className="space-y-3">

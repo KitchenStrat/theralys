@@ -32,6 +32,7 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
   const current = data.current;
   const analysisReady = Boolean(current?.diagnostic);
   const hasPixel = data.tracking.metaPixelId !== "";
+  const generationMissing = Boolean(current && (!current.creatives || !current.videoPlan || !current.plan));
 
   return (
     <div>
@@ -84,15 +85,25 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
       <section className="mt-6" aria-label={META_TABS.find((t) => t.id === tab)?.label}>
         {tab === "diagnostic" ? <DiagnosticTab latest={data.latest} current={current} usage={data.usage} site={site} onSelectTab={select} /> : null}
         {tab === "marche" ? (
-          <MarketTab market={current?.market ?? null} seed={current?.seed ?? null} provider={current?.provider ?? null} analysisReady={analysisReady} siteType={site.type} onSelectTab={select} />
+          <MarketTab
+            market={current?.market ?? null}
+            seed={current?.seed ?? null}
+            provider={current?.provider ?? null}
+            error={current?.error ?? null}
+            generationMissing={generationMissing}
+            analysisReady={analysisReady}
+            siteType={site.type}
+            onSelectTab={select}
+          />
         ) : null}
         {tab === "annonces" ? (
           <CreativesTab
             analysisId={current?.id ?? null}
             creatives={current?.creatives ?? null}
             videoPlan={current?.videoPlan ?? null}
+            plan={current?.plan ?? null}
             analysisReady={analysisReady}
-            generationError={current && (!current.creatives || !current.videoPlan || !current.plan) ? current.error : null}
+            generationError={generationMissing && current ? current.error : null}
             instructions={current?.instructions ?? null}
             regenRemaining={data.usage.regenRemaining}
             siteDomain={site.domain}
@@ -100,7 +111,16 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
           />
         ) : null}
         {tab === "plan" ? (
-          <PlanTab plan={current?.plan ?? null} creatives={current?.creatives ?? null} videoPlan={current?.videoPlan ?? null} analysisReady={analysisReady} hasPixel={hasPixel} regenRemaining={data.usage.regenRemaining} onSelectTab={select} />
+          <PlanTab
+            plan={current?.plan ?? null}
+            creatives={current?.creatives ?? null}
+            videoPlan={current?.videoPlan ?? null}
+            analysisReady={analysisReady}
+            hasPixel={hasPixel}
+            regenRemaining={data.usage.regenRemaining}
+            siteDomain={site.domain}
+            onSelectTab={select}
+          />
         ) : null}
         {tab === "parametrage" ? (
           <SetupTab

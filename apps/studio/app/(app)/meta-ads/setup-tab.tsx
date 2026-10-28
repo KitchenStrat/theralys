@@ -7,7 +7,7 @@ import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys
 import type { MetaAdsCreativeSet, MetaAdsPlan, MetaAdsVideoPlan } from "@theralys/shared";
 import { ctaLabel, landingUrl } from "@/lib/meta-ads/clipboard";
 import type { AdsResults as PaidResults } from "@theralys/analytics";
-import { validateMetaTracking, type MetaTrackingForm } from "@/lib/meta-ads/tracking";
+import { META_PIXEL_ID_SHAPE, validateMetaTracking, type MetaTrackingForm } from "@/lib/meta-ads/tracking";
 import { saveMetaTracking } from "./actions";
 import { CopyButton } from "./copy-button";
 import type { MetaTab } from "./tabs";
@@ -217,6 +217,8 @@ function PixelForm({ initial, cookieBanner, siteDomain }: { initial: MetaTrackin
         setError(result.error);
         return;
       }
+      // Le champ reflète la valeur enregistrée (identifiant extrait d'un extrait de code collé, espaces retirés, vide = retiré)
+      setForm({ metaPixelId: result.metaPixelId ?? checked.value.metaPixelId ?? "" });
       setMessage(result.message ?? "Pixel enregistré.");
       router.refresh();
     });
@@ -254,8 +256,8 @@ function PixelForm({ initial, cookieBanner, siteDomain }: { initial: MetaTrackin
             className="max-w-xs font-mono"
           />
           <FieldHint>
-            Où le trouver : Gestionnaire d&apos;événements → Sources de données → votre jeu de données → l&apos;identifiant (15 à 16 chiffres) sous son nom, ou
-            dans l&apos;extrait de code : fbq(&apos;init&apos;, &apos;1234567890123456&apos;). Vous pouvez coller la ligne entière, le nombre est extrait.
+            Où le trouver : Gestionnaire d&apos;événements → Sources de données → votre jeu de données → l&apos;identifiant ({META_PIXEL_ID_SHAPE}) sous son
+            nom, ou dans l&apos;extrait de code : fbq(&apos;init&apos;, &apos;1234567890123456&apos;). Vous pouvez coller la ligne entière, le nombre est extrait.
           </FieldHint>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -292,13 +294,14 @@ function ResultsCard({ results, days, tracked }: { results: PaidResults; days: n
         <Badge tone="neutral">{days} derniers jours</Badge>
       </div>
       <p className="mt-1 text-sm text-ink-500">
-        Ce que vos annonces Meta apportent réellement sur votre site, mesuré par Harmony (sans compte publicitaire à connecter).
+        Ce que vos annonces Meta apportent réellement sur votre site, mesuré par Harmony grâce au suffixe{" "}
+        <code className="rounded bg-cream-100 px-1 text-ink-700">?src=meta</code> des annonces (sans compte publicitaire à connecter).
       </p>
       {empty ? (
         <p className="mt-4 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
-          Mesure automatique dès la première visite depuis une annonce : Meta ajoute un paramètre (fbclid) aux liens de vos annonces, votre site
-          le reconnaît et compte les visites, les clics « Prendre rendez-vous » et les appels qui en découlent. Rien à paramétrer : ce bloc se
-          remplira dès que la campagne diffusera.
+          Mesure automatique dès la première visite depuis une annonce : l&apos;URL de chaque annonce pointe vers votre site avec le suffixe ?src=meta
+          (déjà ajouté aux URL copiées depuis le studio), votre site le reconnaît et compte les visites, les clics « Prendre rendez-vous » et les
+          appels qui en découlent. Ce bloc se remplira dès que la campagne diffusera.
           {tracked ? "" : " Renseignez aussi votre Pixel ci-dessus pour que Meta reçoive ces conversions et optimise vos annonces."}
         </p>
       ) : (

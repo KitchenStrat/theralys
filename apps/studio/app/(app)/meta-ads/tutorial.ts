@@ -52,7 +52,7 @@ export const META_TUTORIAL: TutorialStep[] = [
     summary: "Le Pixel est la source de vérité : sans lui, Meta ne sait pas ce qu'une annonce rapporte et ne peut pas optimiser.",
     items: [
       "Gestionnaire d'événements (Toutes les ressources → Gestionnaire d'événements) → Connecter des données → Web → nommez le jeu de données « Site [nom du cabinet] » → Créer.",
-      "Choisissez « Pixel Meta uniquement » (pas d'API Conversions pour l'instant), puis « Installer le code manuellement » : l'identifiant du Pixel est le nombre de 15 à 16 chiffres affiché en haut (aussi visible dans fbq('init', '…')).",
+      "Choisissez « Pixel Meta uniquement » (pas d'API Conversions pour l'instant), puis « Installer le code manuellement » : l'identifiant du Pixel est le nombre de 15 à 16 chiffres en général (10 à 20 acceptés) affiché en haut (aussi visible dans fbq('init', '…')).",
       "Copiez cet identifiant et collez-le dans le formulaire « Pixel Meta » sous ce tuto, puis enregistrez : votre site Harmony charge le Pixel et envoie les événements, vous n'avez aucun code à poser.",
       "Ne cochez pas « Correspondance avancée automatique » et n'ajoutez pas d'événement via l'outil de configuration : les événements sont déjà envoyés par le site.",
     ],
@@ -112,7 +112,7 @@ export const META_TUTORIAL: TutorialStep[] = [
       "Au niveau de la publicité : Identité = votre page Facebook (et votre compte Instagram). Format « Image ou vidéo unique ».",
       "Ajouter un contenu multimédia → Importer : sélectionnez les trois fichiers du kit (carré, portrait, story). Meta demande ensuite « Recadrer par placement » : associez le carré au fil Facebook, le portrait au fil Instagram, la story aux stories et Reels.",
       "Collez le texte principal, le titre et la description (boutons Copier ci-dessous, ou le fichier textes.txt du kit). Bouton d'appel à l'action : celui indiqué pour la créa (Réserver, En savoir plus…).",
-      "URL du site web : la page d'atterrissage de la créa (accueil ou page de spécialité). Suivi : laissez le Pixel sélectionné.",
+      "URL du site web : la page d'atterrissage de la créa (accueil ou page de spécialité) avec le suffixe ?src=meta — le bouton Copier l'URL l'ajoute déjà. C'est ce suffixe qui permet à votre site de reconnaître les visites venues de vos annonces et de les mesurer dans le bloc Résultats. Suivi : laissez le Pixel sélectionné.",
       "Créez une publicité par créa dans le même ensemble (Dupliquer, puis remplacer visuels et textes) : 3 à 5 publicités en test.",
     ],
     copy: "creatives",
@@ -124,7 +124,7 @@ export const META_TUTORIAL: TutorialStep[] = [
     items: [
       "Dans l'ensemble « Large », Dupliquer une publicité existante → remplacer le visuel par la vidéo (format vertical 1080 × 1920, moins de 60 Mo, sous-titres incrustés).",
       "Miniature : choisissez une image nette de vous (pas un plan flou) ; Meta la propose automatiquement.",
-      "Collez le texte à coller de la vidéo (bouton Copier ci-dessous), gardez le même bouton et la même page d'atterrissage que les créas.",
+      "Collez le texte à coller de la vidéo (bouton Copier ci-dessous), gardez le même bouton et la même page d'atterrissage que les créas (avec le suffixe ?src=meta).",
       "Laissez les trois vidéos en concurrence 14 jours avant de couper la moins performante.",
     ],
     copy: "videos",
@@ -151,7 +151,7 @@ export const META_TUTORIAL: TutorialStep[] = [
       "J+3 : fréquence et coût pour 1 000 impressions (CPM) dans le Gestionnaire de publicités ; un CPM entre 6 et 12 € est normal pour un cabinet local.",
       "J+7 : ne modifiez ni budget ni audience (chaque changement relance l'apprentissage). Répondez aux commentaires sous les annonces.",
       "J+14 : colonnes « Résultats » et « Coût par résultat » (vos événements Schedule / Contact) : gardez les deux créas au coût le plus bas, coupez les autres, ajoutez une vidéo.",
-      "Chaque semaine : revenez sur cette page, le bloc « Résultats » affiche les visites, clics RDV et appels venus des annonces Meta, mesurés par votre site.",
+      "Chaque semaine : revenez sur cette page, le bloc « Résultats » affiche les visites, clics RDV et appels venus des annonces Meta, mesurés par votre site grâce au suffixe ?src=meta des annonces.",
     ],
   },
 ];

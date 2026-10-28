@@ -16,7 +16,9 @@ export type MetaTrackingValue = {
 
 export type MetaTrackingValidation = { ok: true; value: MetaTrackingValue } | { ok: false; error: string };
 
-export const META_PIXEL_ID_ERROR = "Identifiant de Pixel invalide : un nombre de 10 à 20 chiffres, par exemple 1234567890123456.";
+/** Forme attendue de l'identifiant (même formulation dans l'aide du formulaire et le tuto). */
+export const META_PIXEL_ID_SHAPE = "15 à 16 chiffres en général (10 à 20 acceptés)";
+export const META_PIXEL_ID_ERROR = `Identifiant de Pixel invalide : un nombre de ${META_PIXEL_ID_SHAPE}, par exemple 1234567890123456.`;
 
 /**
  * Identifiant collé depuis Meta : espaces retirés ; la forme

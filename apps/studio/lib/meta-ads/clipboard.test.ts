@@ -26,10 +26,14 @@ describe("formatMetaLines", () => {
 });
 
 describe("landingUrl", () => {
-  it("construit l'URL publique, accueil sans barre finale", () => {
-    expect(landingUrl("claire.harmony-web.fr", "/")).toBe("https://claire.harmony-web.fr");
-    expect(landingUrl("https://claire.harmony-web.fr/", "/gestion-du-stress")).toBe("https://claire.harmony-web.fr/gestion-du-stress");
-    expect(landingUrl("claire.harmony-web.fr", "sommeil")).toBe("https://claire.harmony-web.fr/sommeil");
+  it("construit l'URL publique avec le suffixe de provenance ?src=meta", () => {
+    expect(landingUrl("claire.harmony-web.fr", "/")).toBe("https://claire.harmony-web.fr/?src=meta");
+    expect(landingUrl("https://claire.harmony-web.fr/", "/gestion-du-stress")).toBe("https://claire.harmony-web.fr/gestion-du-stress?src=meta");
+    expect(landingUrl("claire.harmony-web.fr", "sommeil")).toBe("https://claire.harmony-web.fr/sommeil?src=meta");
+  });
+
+  it("ajoute le suffixe à une page qui porte déjà des paramètres", () => {
+    expect(landingUrl("claire.harmony-web.fr", "/sommeil?utm_campaign=hiver")).toBe("https://claire.harmony-web.fr/sommeil?utm_campaign=hiver&src=meta");
   });
 });
 
@@ -42,7 +46,7 @@ describe("metaCreativeTxt", () => {
         "=== Titre ===\nSophrologie à Albi",
         "=== Description ===\nRendez-vous en ligne",
         "=== Bouton ===\nRéserver",
-        "=== Page d'atterrissage ===\nhttps://claire.harmony-web.fr/gestion-du-stress",
+        "=== Page d'atterrissage ===\nhttps://claire.harmony-web.fr/gestion-du-stress?src=meta",
         "=== Texte alternatif ===\nPhoto du cabinet",
       ].join("\n\n") + "\n",
     );

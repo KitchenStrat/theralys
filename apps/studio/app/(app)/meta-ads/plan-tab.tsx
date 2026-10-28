@@ -3,6 +3,7 @@
 import { Badge, Button, Card } from "@theralys/ui";
 import type { MetaAdsCreativeSet, MetaAdsPlan, MetaAdsVideoPlan } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
+import { landingUrl } from "@/lib/meta-ads/clipboard";
 import { CopyButton } from "./copy-button";
 import type { MetaTab } from "./tabs";
 
@@ -27,6 +28,7 @@ export function PlanTab({
   analysisReady,
   hasPixel,
   regenRemaining,
+  siteDomain,
   onSelectTab,
 }: {
   plan: MetaAdsPlan | null;
@@ -36,6 +38,7 @@ export function PlanTab({
   /** Pixel renseigné dans le suivi du site (état courant, peut différer de celui de l'analyse) */
   hasPixel: boolean;
   regenRemaining: number;
+  siteDomain: string;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   if (!plan) {
@@ -59,6 +62,9 @@ export function PlanTab({
   const nameOf = (id: string) => creatives?.creatives.find((c) => c.id === id)?.name ?? videoPlan?.videos.find((v) => v.id === id)?.title ?? id;
   const kindOf = (id: string): "créa" | "vidéo" => (videoPlan?.videos.some((v) => v.id === id) ? "vidéo" : "créa");
   const pixelOutdated = plan.objective.type === "traffic" && hasPixel;
+  // Pages d'atterrissage des créas, dédoublonnées, avec le suffixe de provenance ?src=meta
+  const landingPaths = [...new Set((creatives?.creatives ?? []).map((c) => c.landingPath))];
+  const linkClass = "font-medium text-primary-700 underline";
 
   return (
     <div className="space-y-6">
@@ -72,15 +78,25 @@ export function PlanTab({
         </div>
         <p className="mt-3 text-sm text-ink-700">{plan.objective.rationale}</p>
         {plan.objective.type === "traffic" ? (
+          // La régénération recalcule le diagnostic avec le Pixel enregistré entre-temps : le plan passe en Conversions sans nouvelle analyse
           <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">
-            {pixelOutdated
-              ? "Votre Pixel est désormais renseigné : relancez l'analyse (ou régénérez les annonces) pour obtenir un plan en objectif Conversions."
-              : "Le Pixel est la source de vérité des conversions : "}
-            {!pixelOutdated ? (
-              <button type="button" onClick={() => onSelectTab("parametrage")} className="font-medium text-primary-700 underline">
-                installez-le dans Paramétrage et suivi →
-              </button>
-            ) : null}
+            {pixelOutdated ? (
+              <>
+                Votre Pixel est désormais renseigné :{" "}
+                <button type="button" onClick={() => onSelectTab("annonces")} className={linkClass}>
+                  régénérez les annonces →
+                </button>{" "}
+                le plan passera en objectif Conversions.
+              </>
+            ) : (
+              <>
+                Enregistrez votre Pixel dans{" "}
+                <button type="button" onClick={() => onSelectTab("parametrage")} className={linkClass}>
+                  Paramétrage &amp; suivi →
+                </button>
+                , puis régénérez les annonces : le plan passera en objectif Conversions.
+              </>
+            )}
           </p>
         ) : null}
         <p className="mt-2 text-xs text-ink-500">
@@ -134,6 +150,32 @@ export function PlanTab({
           ))}
         </ul>
       </Card>
+
+      {landingPaths.length > 0 ? (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold">Pages d&apos;atterrissage</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            L&apos;URL à coller dans chaque annonce porte le suffixe <code className="rounded bg-cream-100 px-1 text-ink-900">?src=meta</code> : c&apos;est
+            lui qui permet à votre site de reconnaître les visites venues de Meta et de compter les rendez-vous et appels qui en découlent (bloc
+            Résultats de l&apos;onglet Paramétrage et suivi). Les boutons Copier l&apos;ajoutent déjà.
+          </p>
+          <ul className="mt-4 space-y-2" aria-label="Pages d'atterrissage">
+            {landingPaths.map((path) => {
+              const url = landingUrl(siteDomain, path);
+              const names = (creatives?.creatives ?? []).filter((c) => c.landingPath === path).map((c) => c.name);
+              return (
+                <li key={path} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-50 p-3">
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-sm text-ink-900">{url.replace(/^https?:\/\//, "")}</p>
+                    <p className="text-xs text-ink-500">{names.join(", ")}</p>
+                  </div>
+                  <CopyButton text={url} label="Copier l'URL" variant="ghost" />
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      ) : null}
 
       <Card className="p-6">
         <h2 className="text-xl font-semibold">Budget et plan de test</h2>

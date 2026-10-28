@@ -16,17 +16,20 @@ export const maxDuration = 60;
 const querySchema = z.object({
   size: z.enum(META_ADS_FORMATS).default("square"),
   preview: z.enum(["1", "0"]).optional(),
+  /** Version de l'aperçu (date de génération des créas) : change l'URL après une régénération, ignorée ici */
+  v: z.string().max(64).optional(),
 });
 
 const REVALIDATE = "private, no-cache";
 const NO_STORE = "private, no-store";
 
 /**
- * GET /api/meta-ads/[analysisId]/creatives/[creativeId]/render?size=square|portrait|story&preview=1
+ * GET /api/meta-ads/[analysisId]/creatives/[creativeId]/render?size=square|portrait|story&preview=1&v=…
  * JPEG du visuel d'une créa Meta (aperçu 540 px avec `preview=1`), via le
  * cache des rendus (table `meta_ads_analyses`, slot par créa). ETag faible =
- * clé de cache ; 304 sur `If-None-Match`. Accès : session, formule, analyse
- * aboutie du site.
+ * clé de cache ; 304 sur `If-None-Match`. `v` (version de l'aperçu) n'entre
+ * ni dans la clé ni dans le rendu. Accès : session, formule, analyse aboutie
+ * du site.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ analysisId: string; creativeId: string }> }) {
   const session = await getSession();

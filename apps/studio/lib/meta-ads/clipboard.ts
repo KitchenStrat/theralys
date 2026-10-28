@@ -26,11 +26,21 @@ export function formatMetaLines(lines: string[]): string {
   return out.join("\n");
 }
 
-/** URL publique de la page d'atterrissage (« https://domaine/<slug> »). */
+/**
+ * Suffixe de provenance des annonces Meta (`?src=meta`) : le site le
+ * reconnaît (`SOCIAL_SOURCE_PARAMS.meta` → source `meta_ads`) et rattache
+ * visites, clics RDV et appels aux annonces. Les URL copiées et affichées le
+ * portent toujours : sans lui, une visite venue d'une annonce n'est pas
+ * mesurée.
+ */
+export const META_LANDING_SUFFIX = "src=meta";
+
+/** URL publique de la page d'atterrissage avec le suffixe de provenance (« https://domaine/<slug>?src=meta »). */
 export function landingUrl(siteDomain: string, landingPath: string): string {
   const domain = siteDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const path = landingPath.startsWith("/") ? landingPath : `/${landingPath}`;
-  return `https://${domain}${path === "/" ? "" : path}`;
+  const url = `https://${domain}${path}`;
+  return `${url}${url.includes("?") ? "&" : "?"}${META_LANDING_SUFFIX}`;
 }
 
 /**

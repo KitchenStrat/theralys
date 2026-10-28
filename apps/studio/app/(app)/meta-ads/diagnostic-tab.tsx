@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { Badge, Button, Card, Spinner } from "@theralys/ui";
 import {
   META_ADS_ANALYSES_PER_MONTH,
+  META_ADS_BENCHMARKS,
   type MetaAdsBudgetEstimate,
   type MetaAdsCheckId,
   type MetaAdsDiagnostic,
@@ -17,12 +18,21 @@ import {
 } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import type { MetaAdsAnalysisView, MetaAdsUsageView } from "@/lib/meta-ads/data";
+import { marketUnavailableNotice } from "@/lib/meta-ads/market-status";
 import { launchMetaAnalysis } from "./actions";
 import type { MetaSiteInfo } from "./meta-client";
 import type { MetaTab } from "./tabs";
 
 const eur = (value: number, digits = 0) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 const num = (value: number) => value.toLocaleString("fr-FR");
+const pct = (ratio: number) => (ratio * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+
+/** Repères de coût affichés sous le budget, depuis `META_ADS_BENCHMARKS` (coût par clic, part des visites qui prennent contact). */
+export function budgetBenchmarksLabel(): string {
+  const [cpcLow, cpcHigh] = META_ADS_BENCHMARKS.cpcEur;
+  const [rateLow, rateHigh] = META_ADS_BENCHMARKS.contactRate;
+  return `coût par clic ${eur(cpcLow, 2)} – ${eur(cpcHigh, 2)}, ${pct(rateLow)} à ${pct(rateHigh)} % des visites qui prennent contact`;
+}
 
 const ANALYSIS_FAILED_FALLBACK = "L'analyse a échoué : réessayez dans un instant.";
 /** Analyse lancée ailleurs (autre onglet, autre session) : la page se relit à cet intervalle jusqu'à la fin */
@@ -97,6 +107,8 @@ export function DiagnosticTab({
   const canLaunch = usage.analysesRemaining > 0;
   const diagnostic = current?.diagnostic ?? null;
   const generationMissing = Boolean(current && (!current.creatives || !current.videoPlan || !current.plan));
+  // Analyse aboutie sans veille : jeton absent (client / démo) ou échec signalé par le service (`error`)
+  const marketNotice = current && current.market === null ? marketUnavailableNotice({ provider: current.provider, error: current.error, siteType: site.type, generationMissing }) : null;
 
   // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin
   useEffect(() => {
@@ -185,11 +197,9 @@ export function DiagnosticTab({
             </button>
           </p>
         ) : null}
-        {current && current.provider === "none" && !generationMissing && !pending ? (
-          <p className="mt-3 rounded-xl bg-cream-100 px-4 py-2 text-sm text-ink-700">
-            {site.type === "demo"
-              ? "Veille du marché indisponible pour cette analyse : relancez-la pour l'obtenir."
-              : "Veille du marché en attente d'activation du jeton Meta : le diagnostic, vos annonces et votre plan sont disponibles ; la veille des annonces autour de vous s'ajoutera à la prochaine analyse, une fois le jeton activé par Harmony."}
+        {marketNotice && !pending ? (
+          <p className="mt-3 rounded-xl bg-cream-100 px-4 py-2 text-sm text-ink-700" data-testid="meta-market-notice">
+            <strong className="font-medium text-ink-900">{marketNotice.title}</strong> {marketNotice.detail}
           </p>
         ) : null}
         {error ? (
@@ -320,7 +330,7 @@ function BudgetCard({ budget }: { budget: MetaAdsBudgetEstimate }) {
         <Stat label="Prises de contact" value={`${num(budget.contactsMin)} – ${num(budget.contactsMax)}`} hint="rendez-vous, appels, e-mails" />
       </dl>
       <p className="mt-3 text-xs text-ink-500">
-        D&apos;après les repères de coût d&apos;un cabinet local sur Meta (coût par clic 0,50 – 1 €, 3 à 8 % des visites qui prennent contact).
+        D&apos;après les repères de coût d&apos;un cabinet local sur Meta ({budgetBenchmarksLabel()}).
         Visites et prises de contact sont <strong className="text-ink-700">mesurées par le Pixel</strong> : sans lui, aucun chiffre réel.
       </p>
     </Card>

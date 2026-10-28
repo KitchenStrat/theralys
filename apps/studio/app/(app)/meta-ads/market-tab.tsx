@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Card } from "@theralys/ui";
 import {
+  META_MARKET_SCOPES,
   META_MARKET_SCOPE_LABELS,
   marketScopeNote,
   type MetaAdsMarket,
@@ -13,6 +14,7 @@ import {
   type MetaMarketSignal,
 } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
+import { marketUnavailableNotice } from "@/lib/meta-ads/market-status";
 import type { MetaTab } from "./tabs";
 
 const SIGNAL: Record<MetaMarketSignal, { label: string; tone: "success" | "warning" | "neutral" }> = {
@@ -47,29 +49,54 @@ export function marketSegments(market: Pick<MetaAdsMarket, "ads" | "scopeUsed">,
   const segments: Segment[] = [
     { id: "local", title: META_MARKET_SCOPE_LABELS.ville, hint: localZones ? `Annonces diffusées sur ${localZones}` : "Annonces diffusées sur votre ville et votre département", ads: by(["ville", "departement"]) },
     { id: "region", title: META_MARKET_SCOPE_LABELS.region, hint: seed.region ? `Annonces diffusées en ${seed.region}` : "Annonces diffusées dans votre région", ads: by(["region"]) },
-    { id: "france", title: META_MARKET_SCOPE_LABELS.france, hint: "Annonces nationales de praticiens du même métier", ads: by(["france"]) },
+    // Zone « france » : annonces nationales ou diffusées hors de votre région (libellé partagé : « Autres zones et France »)
+    { id: "france", title: META_MARKET_SCOPE_LABELS.france, hint: "Annonces nationales ou diffusées dans d'autres zones, par des praticiens du même métier", ads: by(["france"]) },
   ];
   return segments.filter((s) => s.ads.length > 0);
+}
+
+export type ScopeCounter = { scope: MetaMarketScope; label: string; spotted: number; kept: number };
+
+/**
+ * Compteurs par zone, jusqu'à la zone retenue seulement (les zones plus
+ * larges n'ont pas été explorées) : annonces repérées dans la bibliothèque
+ * (`counts`) et conservées dans la veille (`ads`, après tri et plafond).
+ */
+export function scopeCounters(market: Pick<MetaAdsMarket, "ads" | "scopeUsed" | "counts">): ScopeCounter[] {
+  const used = META_MARKET_SCOPES.indexOf(market.scopeUsed);
+  return META_MARKET_SCOPES.filter((_, i) => i <= used).map((scope) => ({
+    scope,
+    label: META_MARKET_SCOPE_LABELS[scope],
+    spotted: market.counts[scope],
+    kept: market.ads.filter((a) => a.scope === scope).length,
+  }));
 }
 
 export function MarketTab({
   market,
   seed,
   provider,
+  error,
+  generationMissing,
   analysisReady,
   siteType,
   onSelectTab,
 }: {
   market: MetaAdsMarket | null;
   seed: MetaAdsSeed | null;
-  /** meta | mock | none (veille indisponible) de la dernière analyse aboutie */
+  /** meta | mock | none (aucun jeton ni fournisseur) de la dernière analyse aboutie */
   provider: string | null;
+  /** Message d'erreur de l'analyse (échec de la veille quand `market` est null et la génération a abouti) */
+  error: string | null;
+  /** Créas, plan vidéo ou plan manquants : `error` concerne alors la génération */
+  generationMissing: boolean;
   analysisReady: boolean;
   siteType: "demo" | "client";
   onSelectTab: (tab: MetaTab) => void;
 }) {
   const segments = useMemo(() => (market && seed ? marketSegments(market, seed) : []), [market, seed]);
   const adsById = useMemo(() => new Map((market?.ads ?? []).map((a) => [a.id, a])), [market]);
+  const counters = useMemo(() => (market ? scopeCounters(market) : []), [market]);
 
   if (!analysisReady || !seed) {
     return (
@@ -90,21 +117,18 @@ export function MarketTab({
   }
 
   if (!market) {
+    const notice = marketUnavailableNotice({ provider, error, siteType, generationMissing });
     return (
-      <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">
-          {provider === "none" && siteType === "client" ? "Veille en attente d'activation du jeton Meta." : "La veille du marché n'est pas disponible pour cette analyse."}
-        </p>
-        <p className="mt-1 text-sm">
-          {provider === "none" && siteType === "client"
-            ? "La bibliothèque publicitaire Meta (API officielle) demande un jeton que Harmony active sur la plateforme : dès son activation, relancez l'analyse pour obtenir les annonces des praticiens autour de vous. Votre diagnostic, vos annonces et votre plan sont déjà disponibles."
-            : "Relancez l'analyse depuis l'onglet Diagnostic pour obtenir les annonces des praticiens autour de vous."}
-        </p>
-        <div className="mt-5">
-          <Button variant="secondary" onClick={() => onSelectTab("diagnostic")}>
-            Aller au diagnostic
-          </Button>
-        </div>
+      <Card className="p-8 text-center text-ink-500" data-testid="meta-market-notice">
+        <p className="font-medium text-ink-700">{notice.title}</p>
+        <p className="mt-1 text-sm">{notice.detail}</p>
+        {notice.retry ? (
+          <div className="mt-5">
+            <Button variant="secondary" onClick={() => onSelectTab("diagnostic")}>
+              Aller au diagnostic
+            </Button>
+          </div>
+        ) : null}
       </Card>
     );
   }
@@ -123,12 +147,18 @@ export function MarketTab({
           {market.truncated ? " · relevé plafonné" : ""}
           {market.source === "mock" ? " · données de démonstration" : ""}.
         </p>
-        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(["ville", "departement", "region", "france"] as const).map((scope) => (
+        {/* Zones explorées seulement (jusqu'à la zone retenue) : repérées dans la bibliothèque, conservées dans la veille */}
+        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Annonces par zone">
+          {counters.map(({ scope, label, spotted, kept }) => (
             <div key={scope} className="rounded-2xl bg-cream-50 p-3">
-              <dt className="text-xs text-ink-500">{META_MARKET_SCOPE_LABELS[scope]}</dt>
-              <dd className="text-xl font-semibold text-ink-900">{market.counts[scope]}</dd>
-              <dd className="text-[11px] text-ink-500">{scope === "ville" ? seed.city || "ville" : scope === "departement" ? seed.department?.name ?? "département" : scope === "region" ? seed.region ?? "région" : "national"}</dd>
+              <dt className="text-xs text-ink-500">{label}</dt>
+              <dd className="text-xl font-semibold text-ink-900">
+                {spotted} <span className="text-sm font-normal text-ink-500">repérée{spotted > 1 ? "s" : ""}</span>
+              </dd>
+              <dd className="text-[11px] text-ink-500">
+                {kept} conservée{kept > 1 ? "s" : ""} ·{" "}
+                {scope === "ville" ? seed.city || "ville" : scope === "departement" ? (seed.department?.name ?? "département") : scope === "region" ? (seed.region ?? "région") : "autres zones, national"}
+              </dd>
             </div>
           ))}
         </dl>
@@ -244,10 +274,11 @@ function InsightsCard({ insights, adsById }: { insights: MetaMarketInsights; ads
         <div className="mt-5">
           <h3 className="text-sm font-semibold text-ink-900">Angles qui marchent</h3>
           <ul className="mt-2 grid gap-3 sm:grid-cols-2" aria-label="Angles observés">
-            {insights.angles.map((angle) => {
+            {insights.angles.map((angle, i) => {
               const refs = angle.adIds.map((id) => adsById.get(id)).filter((a): a is MetaMarketAd => a !== undefined);
               return (
-                <li key={angle.label} className="rounded-2xl bg-cream-50 p-3">
+                // Clé par index : deux angles peuvent porter le même libellé (sortie du modèle)
+                <li key={`${i}-${angle.label}`} className="rounded-2xl bg-cream-50 p-3">
                   <p className="font-medium text-ink-900">{angle.label}</p>
                   <p className="mt-1 text-sm text-ink-700">{angle.description}</p>
                   {refs.length > 0 ? (

@@ -9,6 +9,7 @@ import { META_ADS_ANALYSES_PER_MONTH, META_ADS_INSTRUCTIONS_MAX, META_ADS_REGENE
 import { requireClient } from "@/lib/auth";
 import { getSite } from "@/lib/data";
 import { metaAccess } from "@/lib/meta-ads/access";
+import { marketFailureSentence } from "@/lib/meta-ads/market-status";
 import { validateMetaTracking } from "@/lib/meta-ads/tracking";
 import { instructionsRefusal } from "@/lib/social/compliance";
 import { isMissingSchemaError } from "@/lib/social/data";
@@ -33,6 +34,21 @@ function sentence(message: string, fallback: string): string {
 
 // ─── Analyse ─────────────────────────────────────────────────────────────────
 
+/**
+ * Phrase de fin d'analyse quand la veille manque : le fournisseur et le
+ * message utilisateur sont relus sur la ligne enregistrée (le service ne les
+ * renvoie pas) ; ligne illisible → phrase générique, jamais une erreur.
+ */
+async function marketFailureFor(analysisId: string, siteType: "demo" | "client", generationMissing: boolean): Promise<string> {
+  let row: { provider: string; error: string | null } | undefined;
+  try {
+    row = await getDb().query.metaAdsAnalyses.findFirst({ where: eq(metaAdsAnalyses.id, analysisId), columns: { provider: true, error: true } });
+  } catch (err) {
+    console.error("[meta-ads] état de la veille illisible après l'analyse", { analysisId, err });
+  }
+  return marketFailureSentence({ provider: row?.provider ?? null, error: row?.error ?? null, siteType, generationMissing });
+}
+
 export async function launchMetaAnalysis(): Promise<{ error?: string; message?: string; remaining?: number }> {
   const session = await requireClient();
   const site = await getSite(session.siteId);
@@ -45,11 +61,14 @@ export async function launchMetaAnalysis(): Promise<{ error?: string; message?: 
     if (outcome.status === "done") {
       console.info("[meta-ads] analyse lancée depuis le studio", { siteId: site.id, analysisId: outcome.analysisId, marketAvailable: outcome.marketAvailable, ms: Date.now() - started });
       const market = outcome.marketAvailable ? "veille du marché, " : "";
-      return {
-        message: outcome.generationError
+      const parts = [
+        outcome.generationError
           ? `Analyse terminée : ${market}diagnostic mis à jour. ${sentence(outcome.generationError, "")}`.trim()
           : `Analyse terminée : ${market}diagnostic, annonces, plan vidéo et plan de campagne mis à jour.`,
-      };
+      ];
+      // Veille absente : dite explicitement (jeton en attente, échec signalé par le service…) plutôt que passée sous silence
+      if (!outcome.marketAvailable) parts.push(await marketFailureFor(outcome.analysisId, site.type, Boolean(outcome.generationError)));
+      return { message: parts.join(" ") };
     }
     if (outcome.status === "error") {
       console.error("[meta-ads] analyse en erreur", { siteId: site.id, analysisId: outcome.analysisId, message: outcome.message });
@@ -83,29 +102,13 @@ export async function launchMetaAnalysis(): Promise<{ error?: string; message?: 
 
 const regenerateSchema = z.object({ instructions: z.string().max(META_ADS_INSTRUCTIONS_MAX * 4).optional() });
 
-/** URLs Blob des visuels rendus de la dernière analyse aboutie (à supprimer après une régénération, qui remet `assets` à zéro). */
-async function renderedBlobUrls(siteId: string): Promise<string[]> {
-  const rows = await getDb().query.metaAdsAnalyses.findMany({
-    where: eq(metaAdsAnalyses.siteId, siteId),
-    columns: { assets: true, status: true },
-  });
-  return rows
-    .filter((r) => r.status === "done")
-    .flatMap((r) => Object.values(r.assets.renders).map((render) => render.url))
-    .filter((url): url is string => typeof url === "string" && url !== "");
-}
-
-/** Suppression best-effort des rendus Blob devenus orphelins (jamais bloquante). */
-async function deleteBlobRenders(urls: string[]): Promise<void> {
-  if (urls.length === 0 || !process.env.BLOB_READ_WRITE_TOKEN) return;
-  try {
-    const { del } = await import("@vercel/blob");
-    await del([...new Set(urls)]);
-  } catch (err) {
-    console.warn("[meta-ads] suppression des rendus Blob orphelins impossible :", err);
-  }
-}
-
+/**
+ * Régénère créas, plan vidéo et plan de campagne (veille conservée, diagnostic
+ * recalculé par le service avec l'état courant du site, Pixel compris). Les
+ * rendus Blob des créas remplacées ne sont pas supprimés : leurs chemins sont
+ * déterministes (`meta/<siteId>/<analysisId>/…`) et réécrits en place au
+ * prochain rendu ; `assets` est remis à vide par le service.
+ */
 export async function regenerateMetaAds(input: unknown): Promise<{ error?: string; remaining?: number }> {
   const session = await requireClient();
   const parsed = regenerateSchema.safeParse(input);
@@ -120,12 +123,9 @@ export async function regenerateMetaAds(input: unknown): Promise<{ error?: strin
   }
   const started = Date.now();
   try {
-    // Les rendus Blob des créas remplacées sont relus avant l'appel (le service remet `assets` à zéro) puis supprimés
-    const previousRenders = await renderedBlobUrls(site.id);
     const outcome = await regenerateMetaAdsJob(getDb(), site.id, { now: new Date(), ...(instructions === "" ? {} : { instructions }) });
     if (outcome.status === "done") {
       console.info("[meta-ads] annonces régénérées depuis le studio", { siteId: site.id, withInstructions: instructions !== "", ms: Date.now() - started });
-      await deleteBlobRenders(previousRenders);
       revalidatePath(PATH);
       return { remaining: outcome.remaining };
     }
@@ -157,9 +157,10 @@ export async function regenerateMetaAds(input: unknown): Promise<{ error?: strin
  * (transaction + SELECT … FOR UPDATE, comme `saveAdsTracking` et
  * `updateSiteSettings`) : la transformation part de l'état le plus frais, les
  * autres réglages de suivi (bandeau, GA, GTM, Google Ads et ses libellés)
- * sont conservés. Vide = Pixel retiré.
+ * sont conservés. Vide = Pixel retiré. `metaPixelId` renvoie la valeur
+ * enregistrée (normalisée) pour resynchroniser le formulaire.
  */
-export async function saveMetaTracking(input: unknown): Promise<{ error?: string; message?: string }> {
+export async function saveMetaTracking(input: unknown): Promise<{ error?: string; message?: string; metaPixelId?: string | null }> {
   const session = await requireClient();
   const site = await getSite(session.siteId);
   if (!metaAccess(site)) return { error: NOT_INCLUDED };
@@ -185,9 +186,10 @@ export async function saveMetaTracking(input: unknown): Promise<{ error?: string
   revalidatePath(PATH);
   // Les réglages de l'éditeur affichent aussi l'identifiant du Pixel
   revalidatePath("/editor");
-  if (!metaPixelId) return { message: "Pixel Meta retiré : votre site n'envoie plus d'événement à Meta." };
+  if (!metaPixelId) return { metaPixelId: null, message: "Pixel Meta retiré : votre site n'envoie plus d'événement à Meta." };
   // Sans bandeau cookies, le Pixel et les événements partent sans consentement : le message le dit
   return {
+    metaPixelId,
     message: updated.cookieBanner
       ? "Pixel enregistré : votre site envoie les événements Schedule (clic RDV) et Contact (téléphone, e-mail) à Meta après consentement (bandeau cookies actif)."
       : "Pixel enregistré : votre site envoie les événements à Meta dès l'arrivée du visiteur, car votre bandeau cookies est désactivé — réactivez-le dans l'éditeur (Paramètres → Tracking) pour rester conforme.",
