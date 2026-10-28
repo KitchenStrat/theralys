@@ -140,19 +140,20 @@ export type AdsResults = {
 };
 
 /**
- * Résultats des annonces Google (studio → Google Ads → Paramétrage & suivi) :
- * seuls les événements de provenance `google_ads` comptent. Un visiteur
+ * Résultats des annonces (studio → Google Ads ou Meta Ads → Paramétrage &
+ * suivi) : seuls les événements de la provenance demandée comptent
+ * (`google_ads` par défaut, `meta_ads` pour les annonces Meta). Un visiteur
  * identifié compte une visite quel que soit son nombre de pages vues ; chaque
  * page vue sans identifiant compte pour une. Les clics sont comptés par
  * événement, même sans identifiant.
  */
-export function summarizeAdsResults(events: SourceEventLike[]): AdsResults {
+export function summarizeAdsResults(events: SourceEventLike[], source: AnalyticsSource = "google_ads"): AdsResults {
   const ids = new Set<string>();
   let views = 0;
   let rdvClicks = 0;
   let callClicks = 0;
   for (const e of events) {
-    if (e.source !== "google_ads") continue;
+    if (e.source !== source) continue;
     if (e.type === "pageview") {
       if (e.visitorId) ids.add(e.visitorId);
       else views++;

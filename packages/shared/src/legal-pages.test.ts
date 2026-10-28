@@ -87,7 +87,9 @@ describe("pages légales générées", () => {
       tracking: { googleAnalyticsId: "G-ABC12345", metaPixelId: "1234567890123" },
     }).body;
     expect(tracked).toContain("Google Analytics 4 (Google Ireland Ltd, mesure d'audience)");
-    expect(tracked).toContain("Meta Pixel");
+    expect(tracked).toContain(
+      "Meta Pixel (Meta Platforms Ireland Ltd, mesure des conversions publicitaires (clics sur la prise de rendez-vous, le téléphone et l'e-mail))",
+    );
   });
 
   it("cookies : bandeau actif (après acceptation, lien Gérer les cookies) ou désactivé (dès l'arrivée)", () => {

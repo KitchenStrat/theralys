@@ -5,8 +5,9 @@ import { sendClickEvent } from "@/lib/track-client";
 /**
  * Bouton « Prendre Rendez-Vous » : chaque clic est compté (tracking maison,
  * sans identifiant — les clics sont comptés même sans consentement), avec la
- * provenance de la session (lien de bio, annonce Google). `data-track="rdv"`
- * sert aussi aux conversions Google Ads (ConversionEvents), après consentement.
+ * provenance de la session (lien de bio, annonce Google ou Meta). `data-track="rdv"`
+ * sert aussi aux conversions Google Ads et à l'événement `Schedule` du Pixel
+ * Meta (ConversionEvents), après consentement.
  */
 export function RdvButton({
   siteId,

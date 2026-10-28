@@ -1,5 +1,6 @@
+import { META_PIXEL_EVENTS } from "@theralys/shared";
 import { describe, expect, it } from "vitest";
-import { conversionKindOf, conversionSendTo } from "./conversions";
+import { conversionKindOf, conversionSendTo, pixelEventOf } from "./conversions";
 
 describe("conversionKindOf", () => {
   it("bouton RDV (data-track), téléphone (tel:) et e-mail (mailto:), une seule action par clic", () => {
@@ -30,5 +31,19 @@ describe("conversionSendTo", () => {
     expect(conversionSendTo("AW-1234567890", labels, "email")).toBeNull();
     expect(conversionSendTo("AW-1234567890", undefined, "rdv")).toBeNull();
     expect(conversionSendTo("AW-1234567890", null, "call")).toBeNull();
+  });
+});
+
+describe("pixelEventOf", () => {
+  it("Schedule pour la prise de rendez-vous, Contact pour le téléphone et l'e-mail", () => {
+    expect(pixelEventOf("rdv")).toBe("Schedule");
+    expect(pixelEventOf("call")).toBe("Contact");
+    expect(pixelEventOf("email")).toBe("Contact");
+  });
+
+  it("n'émet que des événements standards du Pixel (META_PIXEL_EVENTS)", () => {
+    for (const kind of ["rdv", "call", "email"] as const) {
+      expect(META_PIXEL_EVENTS).toContain(pixelEventOf(kind));
+    }
   });
 });

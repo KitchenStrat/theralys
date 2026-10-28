@@ -8,8 +8,9 @@ import { SOCIAL_SOURCE_PARAMS, sourceFromReferrer, type AnalyticsSource } from "
  *   → null (non renseigné) ;
  * - referrer sur l'un des hôtes du site lui-même (navigation interne, retour
  *   depuis une page du site) → null, jamais « autres sites » ;
- * - sinon `sourceFromReferrer` : le `src` (lien de bio, annonce Google)
- *   l'emporte, puis l'hôte du referrer, et un referrer vide vaut accès direct.
+ * - sinon `sourceFromReferrer` : le `src` (lien de bio, annonce Google ou
+ *   Meta) l'emporte, puis l'hôte du referrer, et un referrer vide vaut accès
+ *   direct.
  *
  * Clics (RDV, appel) : le `src` de session mémorisé par le navigateur s'il
  * correspond à une provenance connue (`SOCIAL_SOURCE_PARAMS`), sinon null —

@@ -80,7 +80,11 @@ export function configuredTrackers(tracking: SiteTracking | null | undefined): {
     });
   }
   if (tracking?.metaPixelId) {
-    list.push({ name: "Meta Pixel", vendor: "Meta Platforms Ireland Ltd", purpose: "mesure des conversions publicitaires" });
+    list.push({
+      name: "Meta Pixel",
+      vendor: "Meta Platforms Ireland Ltd",
+      purpose: "mesure des conversions publicitaires (clics sur la prise de rendez-vous, le téléphone et l'e-mail)",
+    });
   }
   return list;
 }

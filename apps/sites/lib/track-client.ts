@@ -1,4 +1,4 @@
-import { isGoogleAdsLanding } from "@theralys/shared";
+import { isGoogleAdsLanding, isMetaAdsLanding } from "@theralys/shared";
 
 /**
  * Helpers du tracking maison côté navigateur (Tracker, RdvButton,
@@ -13,12 +13,14 @@ const SRC_MAX = 20;
 /**
  * `src` à joindre à la première page vue : le paramètre explicite du lien de
  * bio (`?src=ig`), sinon `ads` quand l'URL porte la signature d'une annonce
- * Google (gclid, gbraid, wbraid ou UTM payant). null sans l'un ni l'autre.
+ * Google (gclid, gbraid, wbraid ou UTM payant), sinon `meta` pour une annonce
+ * Meta (fbclid ou UTM payant Facebook / Instagram). null sans aucun des trois.
  */
 export function landingSource(search: string): string | null {
   const explicit = new URLSearchParams(search).get("src")?.slice(0, SRC_MAX);
   if (explicit) return explicit;
-  return isGoogleAdsLanding(search) ? "ads" : null;
+  if (isGoogleAdsLanding(search)) return "ads";
+  return isMetaAdsLanding(search) ? "meta" : null;
 }
 
 /** Mémorise la provenance de la session pour les clics (RDV, appel) qui suivront. */

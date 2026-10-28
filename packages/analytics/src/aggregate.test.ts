@@ -197,6 +197,32 @@ describe("summarizeAdsResults", () => {
       unit: "views",
     });
   });
+
+  it("provenance meta_ads : mêmes règles, les événements Google Ads et autres sont exclus", () => {
+    const mixed = [
+      ev("pageview", "m1", "meta_ads"),
+      ev("pageview", "m1", "meta_ads"), // même visiteur, deuxième page
+      ev("pageview", null, "meta_ads"), // vue anonyme : s'ajoute
+      ev("rdv_click", "m1", "meta_ads"),
+      ev("call_click", null, "meta_ads"),
+      ev("call_click", "m2", "meta_ads"),
+      ev("pageview", "g1", "google_ads"), // annonce Google : exclue du bloc Meta
+      ev("rdv_click", "g1", "google_ads"),
+      ev("pageview", "f1", "facebook"), // publication organique Facebook : exclue
+      ev("rdv_click", "f1", "instagram"),
+      ev("pageview", "d1", null),
+    ];
+    expect(summarizeAdsResults(mixed, "meta_ads")).toEqual({ visits: 2, rdvClicks: 1, callClicks: 2, unit: "visitors" });
+    // L'appel existant sans provenance reste celui de Google Ads
+    expect(summarizeAdsResults(mixed)).toEqual({ visits: 1, rdvClicks: 1, callClicks: 0, unit: "visitors" });
+    expect(summarizeAdsResults(mixed, "google_ads")).toEqual(summarizeAdsResults(mixed));
+    expect(summarizeAdsResults([ev("pageview", "g1", "google_ads")], "meta_ads")).toEqual({
+      visits: 0,
+      rdvClicks: 0,
+      callClicks: 0,
+      unit: "views",
+    });
+  });
 });
 
 describe("consentement", () => {

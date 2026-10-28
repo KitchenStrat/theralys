@@ -2,22 +2,11 @@
 
 import { useEffect } from "react";
 import type { SiteTracking } from "@theralys/shared";
+import { ensureFbq, type FbqWindow } from "@/lib/fbq";
 import { ensureGtag, type TrackingWindow as GtagWindow } from "@/lib/gtag";
 import { useTrackingAllowed } from "./tracking-consent";
 
-type FbqFn = {
-  (...args: unknown[]): void;
-  callMethod?: (...args: unknown[]) => void;
-  queue: unknown[][];
-  loaded: boolean;
-  version: string;
-  push: (...args: unknown[]) => void;
-};
-
-type TrackingWindow = GtagWindow & {
-  fbq?: FbqFn;
-  _fbq?: FbqFn;
-};
+type TrackingWindow = GtagWindow & FbqWindow;
 
 /**
  * Charge les traceurs configurés dans le studio (Paramètres → Tracking) :
@@ -62,25 +51,17 @@ export function TrackingScripts({ tracking }: { tracking: SiteTracking }) {
       document.head.appendChild(script);
     }
 
-    // Meta Pixel : amorce officielle (file d'attente vidée par fbevents.js)
-    if (pixelId && !w.fbq) {
-      const fbq = function (...args: unknown[]) {
-        if (fbq.callMethod) fbq.callMethod(...args);
-        else fbq.queue.push(args);
-      } as FbqFn;
-      fbq.queue = [];
-      fbq.loaded = true;
-      fbq.version = "2.0";
-      fbq.push = fbq;
-      w.fbq = fbq;
-      w._fbq = fbq;
+    // Meta Pixel : amorce officielle partagée avec ConversionEvents (file
+    // d'attente vidée par fbevents.js) ; init + PageView puis le script
+    if (pixelId && !document.getElementById("tl-fbq")) {
+      const fbq = ensureFbq(w);
+      fbq("init", pixelId);
+      fbq("track", "PageView");
       const script = document.createElement("script");
       script.id = "tl-fbq";
       script.async = true;
       script.src = "https://connect.facebook.net/en_US/fbevents.js";
       document.head.appendChild(script);
-      fbq("init", pixelId);
-      fbq("track", "PageView");
     }
   }, [allowed, tracking]);
 
