@@ -14,8 +14,11 @@ function readConsent(): string | null {
  * Bandeau de consentement CNIL/RGPD : la mesure d'audience utilise un cookie,
  * posé uniquement après « Accepter ». « Continuer sans accepter » est offert
  * au même niveau, comme l'exige la CNIL. Le refus est mémorisé aussi.
+ * `thirdParties` : noms des outils tiers configurés dans le studio (Google
+ * Analytics, Google Ads, Meta Pixel…), chargés seulement après « Accepter » —
+ * le bandeau les nomme pour un consentement éclairé ; vide = aucun tiers.
  */
-export function ConsentBanner() {
+export function ConsentBanner({ thirdParties = [] }: { thirdParties?: string[] }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -43,9 +46,20 @@ export function ConsentBanner() {
     >
       <div className="mx-auto flex max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
         <p className="flex-1 text-sm opacity-80">
-          Ce site utilise un cookie de mesure d&apos;audience (visiteurs et clics sur la prise de
-          rendez-vous). Aucune donnée n&apos;est partagée avec des tiers. Votre choix est conservé
-          6&nbsp;mois.
+          {thirdParties.length > 0 ? (
+            <>
+              Ce site utilise un cookie de mesure d&apos;audience (visiteurs et clics sur la prise de
+              rendez-vous) et, avec votre accord, des outils tiers : {thirdParties.join(", ")}. Sans
+              accord, seule une mesure anonyme interne est réalisée et rien n&apos;est transmis à ces
+              tiers. Votre choix est conservé 6&nbsp;mois.
+            </>
+          ) : (
+            <>
+              Ce site utilise un cookie de mesure d&apos;audience (visiteurs et clics sur la prise de
+              rendez-vous). Aucune donnée n&apos;est partagée avec des tiers. Votre choix est conservé
+              6&nbsp;mois.
+            </>
+          )}
         </p>
         <div className="flex shrink-0 gap-2">
           <button

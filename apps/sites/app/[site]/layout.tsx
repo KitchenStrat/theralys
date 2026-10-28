@@ -1,3 +1,4 @@
+import { configuredTrackers } from "@theralys/shared";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -113,7 +114,9 @@ export default async function SiteLayout({ children, params }: Props) {
       {editorPreview ? null : (
         <>
           {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
-          {site.theme.tracking?.cookieBanner === false ? null : <ConsentBanner />}
+          {site.theme.tracking?.cookieBanner === false ? null : (
+            <ConsentBanner thirdParties={configuredTrackers(site.theme.tracking).map((tracker) => tracker.name)} />
+          )}
           <Tracker siteId={site.id} />
           <TrackingScripts tracking={site.theme.tracking ?? {}} />
           {/* Conversions Google Ads (clic RDV, appel, e-mail) : après consentement, comme les traceurs */}
