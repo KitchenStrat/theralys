@@ -10,7 +10,8 @@
     "./mail": "./src/mail/index.ts",
     "./google": "./src/google/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
-    "./dataforseo/ads": "./src/dataforseo/ads.ts"
+    "./dataforseo/ads": "./src/dataforseo/ads.ts",
+    "./meta": "./src/meta/index.ts"
   },
   "scripts": {
     "lint": "eslint src",
