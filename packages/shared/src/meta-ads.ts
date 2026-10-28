@@ -840,6 +840,8 @@ export type MetaAdCreative = {
   subline: string;
   /** Photo du brief (« p3 »), null = visuel sans photo */
   photoId: string | null;
+  /** URL de la photo résolue à la génération (évite de recharger le brief au rendu) ; absente = à résoudre */
+  photoUrl?: string | null;
   template: SocialTemplate;
   accentRole: SocialAccentRole;
   altText: string;
