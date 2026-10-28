@@ -662,7 +662,7 @@ export const googleAdsAnalyses = pgTable(
  * synthèse IA), diagnostic déterministe, créas statiques (textes + visuels
  * rendus dans `assets`, comme les posts), plan vidéo et plan de campagne (IA).
  * Une ligne par analyse (la plus récente fait foi). Appels à la bibliothèque
- * comptés dans `google_usage` (kind meta_market, coût 0) ; régénérations en
+ * comptés dans `google_usage` (kind meta_analysis, coût 0, `requests` = appels) ; régénérations en
  * kind meta_regen.
  */
 export const metaAdsAnalyses = pgTable(
