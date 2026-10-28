@@ -108,8 +108,11 @@ const ERROR_MESSAGE_MAX = 300;
  * 0 requête), pour l'échéancier. `ads_keywords` : analyse Google Ads
  * (DataForSEO facturé, `requests` = nombre d'appels, coût réel) ;
  * `ads_plan` : régénération du plan d'action (compteur, coût 0).
+ * `meta_analysis` : analyse Meta Ads (quota, `requests` = appels à la
+ * bibliothèque publicitaire, coût 0) ; `meta_regen` : régénération des
+ * créas, du plan vidéo et du plan de campagne (compteur, coût 0).
  */
-export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan";
+export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan" | "meta_analysis" | "meta_regen";
 
 export type GoogleBudget = {
   month: string;

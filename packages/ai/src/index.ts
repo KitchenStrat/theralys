@@ -6,6 +6,7 @@ export { TONE_LABEL, designationLabel, readerLabel, voiceBricks, type VoiceBrick
 export * from "./social";
 export * from "./google-profile";
 export * from "./google-ads";
+export * from "./meta-ads";
 export * from "./images";
 export * from "./stock";
 export { buildMotifPlan } from "./mock/generator";
