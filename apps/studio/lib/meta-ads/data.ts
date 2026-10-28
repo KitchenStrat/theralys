@@ -11,7 +11,7 @@ import { analyticsEvents, getDb, metaAdsAnalyses, type Site } from "@theralys/db
 import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage } from "@theralys/jobs";
 import type { MetaAdsAnalysisStatus, MetaAdsCreativeSet, MetaAdsDiagnostic, MetaAdsMarket, MetaAdsPlan, MetaAdsSeed, MetaAdsVideoPlan } from "@theralys/shared";
 import { isMissingSchemaError } from "../social/data";
-import { summarizePaidResults, type PaidResults } from "./results";
+import { summarizeAdsResults, type AdsResults as PaidResults } from "@theralys/analytics";
 import { metaTrackingForm, type MetaTrackingForm } from "./tracking";
 
 /** Fenêtre du bloc « Résultats » (jours). */
@@ -115,12 +115,12 @@ export async function getMetaResults(siteId: string, now: Date): Promise<PaidRes
       where: and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, since), eq(analyticsEvents.source, "meta_ads")),
       columns: { type: true, visitorId: true, source: true },
     });
-    return summarizePaidResults(events, "meta_ads");
+    return summarizeAdsResults(events, "meta_ads");
   } catch (err) {
     // Colonne `source` absente (migration 0004 non appliquée) : bloc vide plutôt qu'une page en erreur
     if (!isMissingSchemaError(err)) throw err;
     console.warn("[meta-ads] colonne analytics_events.source absente — migration 0004 non appliquée ?");
-    return summarizePaidResults([], "meta_ads");
+    return summarizeAdsResults([], "meta_ads");
   }
 }
 

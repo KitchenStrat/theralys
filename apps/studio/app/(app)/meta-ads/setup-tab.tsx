@@ -6,7 +6,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
 import type { MetaAdsCreativeSet, MetaAdsPlan, MetaAdsVideoPlan } from "@theralys/shared";
 import { ctaLabel, landingUrl } from "@/lib/meta-ads/clipboard";
-import type { PaidResults } from "@/lib/meta-ads/results";
+import type { AdsResults as PaidResults } from "@theralys/analytics";
 import { validateMetaTracking, type MetaTrackingForm } from "@/lib/meta-ads/tracking";
 import { saveMetaTracking } from "./actions";
 import { CopyButton } from "./copy-button";
