@@ -38,6 +38,7 @@ export default function HomePage() {
       socialMedia: plan.socialMedia,
       googleProfile: plan.googleProfile,
       googleAds: plan.googleAds,
+      metaAds: plan.metaAds,
     };
   });
 

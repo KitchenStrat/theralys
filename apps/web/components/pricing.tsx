@@ -18,6 +18,7 @@ export type PlanCard = {
   socialMedia: boolean;
   googleProfile: boolean;
   googleAds: boolean;
+  metaAds: boolean;
 };
 
 const TAGLINES: Record<string, string> = {
@@ -160,6 +161,12 @@ function featureList(plan: PlanCard): Feature[] {
       included: plan.googleAds,
       highlight: plan.googleAds,
       icon: "bulb",
+    },
+    {
+      text: "Meta Ads : veille, annonces et plan vidéo",
+      included: plan.metaAds,
+      highlight: plan.metaAds,
+      icon: "share",
     },
     { text: "Hébergement, nom de domaine et SSL inclus", included: true, highlight: false, icon: "server" },
   ];

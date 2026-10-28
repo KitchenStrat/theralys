@@ -84,6 +84,11 @@ export default async function AccountPage() {
                   ? "✓ Google Ads : analyse, mots-clés et plan d'action"
                   : "— Google Ads (analyse, mots-clés et plan d'action) non inclus"}
               </li>
+              <li>
+                {plan.metaAds
+                  ? "✓ Meta Ads : veille, annonces et plan vidéo"
+                  : "— Meta Ads (veille, annonces et plan vidéo) non inclus"}
+              </li>
               <li>✓ Avis Google synchronisés · statistiques · hébergement</li>
             </ul>
             <div className="mt-5">
