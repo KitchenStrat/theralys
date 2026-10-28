@@ -1,6 +1,6 @@
 /**
  * Couleurs de la carte de visibilité (Fiche Google) : une échelle continue de
- * la 1re à la 20e place — émeraude (pack local), ambre (4 à 10), corail puis
+ * la 1re à la 20e place — émeraude (pack local), orange (4 à 10), rouge puis
  * carmin (11 à 20) — et un gris neutre pour les emplacements où la fiche est
  * absente des 20 premiers. Fonctions pures, sans Leaflet (importables par la
  * légende rendue côté serveur).
@@ -10,9 +10,9 @@
 export const RANK_COLOR_STOPS: readonly (readonly [number, string])[] = [
   [1, "#047857"],
   [3, "#16a34a"],
-  [6, "#ca8a04"],
+  [4, "#f97316"],
   [10, "#ea580c"],
-  [15, "#dc2626"],
+  [11, "#dc2626"],
   [20, "#9f1239"],
 ];
 

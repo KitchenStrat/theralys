@@ -425,7 +425,7 @@ function ScanView({
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden className="inline-block h-3 w-3 rounded-full bg-ink-900 ring-2 ring-primary-200" /> Votre cabinet
         </span>
-        <span className="text-ink-500">Vert : pack local (3 premiers) · ambre : 4 à 10 · rouge : 11 à 20</span>
+        <span className="text-ink-500">Vert : pack local (3 premiers) · orange : 4 à 10 · rouge : 11 à 20</span>
       </div>
     </div>
   );
