@@ -12,15 +12,17 @@
  * nulle part. Les URLs Blob ne sortent jamais d'ici : le client passe toujours
  * par `/api/social/*` ou `/api/google-posts/*`.
  *
- * Deux tables partagent ce cache : `social_posts` (défaut) et `google_posts`
- * (posts Google, visuel 4:3) — même colonne `assets`, même statut `archived`.
- * `post.table` choisit la table du `jsonb_set` et le préfixe Blob, et entre
- * dans la clé des rendus Google.
+ * Trois tables partagent ce cache : `social_posts` (défaut), `google_posts`
+ * (posts Google, visuel 4:3) et `meta_ads_analyses` (créas Meta Ads : une
+ * analyse porte plusieurs créas, le slot est alors suffixé de l'identifiant
+ * de la créa, `variant`) — même colonne `assets`, même exclusion du statut
+ * `archived`. `post.table` choisit la table du `jsonb_set` et le préfixe
+ * Blob, et entre (avec `variant`) dans la clé des rendus hors social.
  */
 
 import { createHash } from "node:crypto";
-import { and, eq, ne, sql } from "drizzle-orm";
-import { getDb, googlePosts, socialPosts } from "@theralys/db";
+import { and, eq, sql } from "drizzle-orm";
+import { getDb, googlePosts, metaAdsAnalyses, socialPosts } from "@theralys/db";
 import {
   SOCIAL_TEMPLATE_VERSION,
   socialAssetKeyPayload,
@@ -35,11 +37,14 @@ import { resolveSocialTheme } from "./theme";
 
 export const RENDER_LRU_MAX = 40;
 
-/** Table des contenus rendus : `social_posts` (défaut) ou `google_posts`. */
-export type PostTable = "social" | "google";
-const POST_TABLES = { social: socialPosts, google: googlePosts } as const;
+/** Table des contenus rendus : `social_posts` (défaut), `google_posts` ou `meta_ads_analyses`. */
+export type PostTable = "social" | "google" | "meta";
+const POST_TABLES = { social: socialPosts, google: googlePosts, meta: metaAdsAnalyses } as const;
 /** 7 diapositives × 2 tailles × 2 variantes : un carrousel complet tient sans éviction. */
 export const ASSETS_MAX_ENTRIES = 28;
+/** Créas Meta : 5 créas × 3 tailles × 2 variantes tiennent sans éviction. */
+export const META_ASSETS_MAX_ENTRIES = 30;
+const ASSETS_MAX_BY_TABLE: Record<PostTable, number> = { social: ASSETS_MAX_ENTRIES, google: ASSETS_MAX_ENTRIES, meta: META_ASSETS_MAX_ENTRIES };
 
 type LruEntry = { key: string; data: Buffer };
 
@@ -88,12 +93,20 @@ export type RenderKeyInput = {
 };
 
 export type CachedRenderInput = RenderKeyInput & {
-  post: RenderablePost & { id: string; siteId: string; assets: SocialPostAssets; table?: PostTable };
+  post: RenderablePost & {
+    id: string;
+    siteId: string;
+    assets: SocialPostAssets;
+    table?: PostTable;
+    /** Sous-contenu d'une même ligne (identifiant d'une créa Meta) : distingue slot, chemin Blob et clé */
+    variant?: string;
+  };
 };
 
-/** Clé des entrées `assets.renders` : `${size}:${slide}:${variant}`. */
-export function assetSlot(size: SocialSize, slideIndex: number, preview: boolean): string {
-  return `${size}:${slideIndex}:${preview ? "preview" : "full"}`;
+/** Clé des entrées `assets.renders` : `${size}:${slide}:${preview|full}`, suffixée `:${variant}` pour un sous-contenu. */
+export function assetSlot(size: SocialSize, slideIndex: number, preview: boolean, variant?: string): string {
+  const base = `${size}:${slideIndex}:${preview ? "preview" : "full"}`;
+  return variant ? `${base}:${variant}` : base;
 }
 
 /** Chemin Blob d'un slot : déterministe, un seul objet par slot, écrasé en place ; préfixe = table. */
@@ -103,10 +116,11 @@ export function blobPathname(siteId: string, postId: string, slot: string, table
 
 /**
  * Clé de cache (sha256 tronquée) d'un rendu : change dès qu'un ingrédient
- * visuel change. Les rendus de `google_posts` portent la table dans la clé ;
- * ceux de `social_posts` gardent leur clé historique (rendus Blob conservés).
+ * visuel change. Les rendus de `google_posts` et `meta_ads_analyses` portent
+ * la table (et la variante) dans la clé ; ceux de `social_posts` gardent leur
+ * clé historique (rendus Blob conservés).
  */
-export function renderKey(input: RenderKeyInput & { post: { table?: PostTable } }): string {
+export function renderKey(input: RenderKeyInput & { post: { table?: PostTable; variant?: string } }): string {
   const { post, ctx, size, slideIndex, preview } = input;
   const theme = resolveSocialTheme(ctx.siteTheme, post.accentColor, post.content.accentRole);
   const payload = socialAssetKeyPayload({
@@ -128,6 +142,7 @@ export function renderKey(input: RenderKeyInput & { post: { table?: PostTable } 
   });
   const hash = createHash("sha256").update(payload);
   if (post.table && post.table !== "social") hash.update(`|${post.table}`);
+  if (post.variant) hash.update(`|${post.variant}`);
   return hash.digest("hex").slice(0, 20);
 }
 
@@ -189,11 +204,11 @@ async function recordRender(
         true
       )`,
     })
-    .where(and(eq(posts.id, postId), ne(posts.status, "archived")))
+    .where(and(eq(posts.id, postId), sql`${posts.status} <> 'archived'`))
     .returning({ assets: posts.assets });
   if (!row) return { stored: false, evicted: [] };
 
-  const { evicted } = pruneRenders(row.assets.renders);
+  const { evicted } = pruneRenders(row.assets.renders, ASSETS_MAX_BY_TABLE[table]);
   for (const [evictedSlot, entry] of Object.entries(evicted)) {
     await db
       .update(posts)
@@ -259,7 +274,7 @@ export type CachedRender = {
  */
 export async function renderSlideCached(input: CachedRenderInput): Promise<CachedRender> {
   const key = renderKey(input);
-  const slot = assetSlot(input.size, input.slideIndex, input.preview);
+  const slot = assetSlot(input.size, input.slideIndex, input.preview, input.post.variant);
 
   const fromMemory = lruGet(key);
   if (fromMemory) return { data: fromMemory, key, cached: "memory", degraded: false };

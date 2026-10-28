@@ -1,12 +1,12 @@
 # @theralys/studio — espace client (app.harmony-web.fr)
 
 Back-office des praticiens : statistiques de visite, publications du blog,
-fiche Google, Google Ads, académie et éditeur de site (WYSIWYG).
+fiche Google, Google Ads, Meta Ads, académie et éditeur de site (WYSIWYG).
 
 ## Structure
 
 - `app/(app)/` — pages avec la barre latérale : Accueil, Publications,
-  Réseaux sociaux, Fiche Google, Google Ads, Académie, Compte. L'éditeur
+  Réseaux sociaux, Fiche Google, Google Ads, Meta Ads, Académie, Compte. L'éditeur
   n'apparaît pas dans la navigation : on y accède depuis la carte « Votre
   site » de l'Accueil. L'ancienne route `/mots-cles` redirige vers
   `/google-ads` ; la carte « Visibilité Google » (Search Console,
@@ -194,6 +194,68 @@ le praticien paramètre lui-même sa campagne. Onglets
   `@theralys/jobs` est affichée comme interrompue), `lib/google-ads/keywords.ts`
   (exemple de requête « sans ville »).
 - **Tests** : `lib/google-ads/*.test.ts` (config `lib/vitest.config.ts`).
+
+## Meta Ads
+
+Section `app/(app)/meta-ads/` (formule Scale, `hasMetaAds`, démos comprises ;
+repli « en cours d'activation » tant que la migration 0006 n'est pas
+appliquée) : « Meta Ads est-il pertinent pour vous ? ». Harmony ne pilote pas
+de compte publicitaire Meta : la veille, le diagnostic, les annonces, le plan
+vidéo et le plan de campagne sont préparés, le praticien diffuse lui-même
+depuis son compte. Onglets
+`?onglet=diagnostic|marche|annonces|plan|parametrage` (`tabs.ts`).
+
+- **Diagnostic** (`diagnostic-tab.tsx`) : « Lancer l'analyse » →
+  `launchMetaAnalysis` → `runMetaAdsAnalysis` de `@theralys/jobs` (veille de
+  la bibliothèque publicitaire Meta, `diagnoseMetaAds`, créas + plan vidéo +
+  plan ; 2 analyses par mois, kind `meta_analysis` de `google_usage`), verdict
+  avec jauge, affinité du métier, budget (visites et contacts attendus,
+  mesurés par le Pixel), lecture de la veille et check-list (Pixel bloquant,
+  liens vers Paramétrage, l'éditeur ou Fiche Google). Note « veille en
+  attente d'activation du jeton Meta » quand `provider = none` sur un site
+  client ; rafraîchissement toutes les 10 s pendant une analyse lancée
+  ailleurs.
+- **Marché** (`market-tab.tsx`) : `marketScopeNote`, segments « Autour de
+  vous » (ville + département) / « Votre région » / « En France » selon la
+  zone retenue, cartes d'annonces (annonceur, texte avec « voir plus », titre
+  de lien, signal fort / moyen / faible, durée de diffusion, portée
+  européenne, plateformes, âges et genre, zones, lien public vers la
+  bibliothèque — jamais d'image des confrères), synthèse IA (angles avec
+  annonces de référence, accroches, offres, saisonnalité, ce que personne ne
+  fait, avertissements).
+- **Annonces** (`creatives-tab.tsx`, `video-plan.tsx`) : cartes de créas
+  (aperçu rendu par le moteur des posts sociaux, sélecteur carré / portrait /
+  story, textes avec compteurs et boutons Copier, Télécharger le visuel ou le
+  kit ZIP : 3 JPEG + `textes.txt`), conseils, plan vidéo (3 vidéos : angle,
+  objectif, durée, accroche, frise seconde par seconde, plans, à dire / à ne
+  pas dire, bouton, texte à coller ; matériel et montage) ; « Instructions &
+  régénérer » (`regenerate-modal.tsx`, `regenerateMetaAds`, 5 par mois, kind
+  `meta_regen`, `instructionsRefusal`) régénère créas + vidéo + plan et
+  supprime les anciens rendus Blob.
+- **Plan et ciblage** (`plan-tab.tsx`) : objectif (conversions mesurées par le
+  Pixel, repli trafic tant qu'il manque), campagne (zone, âges, placements,
+  calendrier), ensembles de publicités avec leurs créas, budget et plan de
+  test, jalons J+7 / J+30 / J+60, conseils.
+- **Paramétrage et suivi** (`setup-tab.tsx`, `tutorial.ts`) : tuto en
+  accordéon (10 étapes, interface Meta 2025-2026, boutons Copier contextuels),
+  formulaire « Pixel Meta » (`saveMetaTracking` : `metaPixelId` dans
+  `site.theme.tracking`, validation `lib/meta-ads/tracking.ts`, avertissement
+  si le bandeau cookies est désactivé), bloc Résultats sur 30 jours
+  (`getMetaResults` → `summarizePaidResults` de `lib/meta-ads/results.ts`,
+  source `meta_ads` : visites, clics RDV, appels).
+- **Rendu des créas** : `lib/meta-ads/render.ts` (`metaCreativeToSocialContent`
+  : une diapositive, accroche = titre, ligne secondaire = texte, photo du
+  site ; `renderableMetaCreative`, table `meta` du cache
+  `lib/social/render/cache.ts` avec slot `size:0:full:<créa>` et chemins Blob
+  `meta/<siteId>/<analysisId>/…`), routes
+  `app/api/meta-ads/[analysisId]/creatives/[creativeId]/render?size=…&preview=1`
+  et `/download?size=…` ou `?kit=1` (accès : session, formule, analyse aboutie
+  du site).
+- **Données** : `lib/meta-ads/data.ts` (`getMetaAdsData` ; une analyse
+  `running` plus ancienne que `META_ADS_ANALYSIS_STALE_MINUTES` est affichée
+  comme interrompue), `lib/meta-ads/access.ts`, `lib/meta-ads/photos.ts`
+  (photo d'une créa via le catalogue de `loadGoogleBrief`).
+- **Tests** : `lib/meta-ads/*.test.ts` (config `lib/vitest.config.ts`).
 
 ## Développement local
 

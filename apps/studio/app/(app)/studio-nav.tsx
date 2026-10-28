@@ -15,6 +15,7 @@ export function StudioNav({
   showSocial = true,
   showGoogle = true,
   showAds = true,
+  showMeta = true,
 }: {
   showPublications?: boolean;
   /** Section « Réseaux sociaux » (démos et formule Scale) */
@@ -23,11 +24,13 @@ export function StudioNav({
   showGoogle?: boolean;
   /** Section « Google Ads » (démos et formule Scale) */
   showAds?: boolean;
+  /** Section « Meta Ads » (démos et formule Scale) */
+  showMeta?: boolean;
 }) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
 
-  // Mobile : la barre déborde (6 entrées) — centrer l'onglet actif au chargement et à chaque navigation
+  // Mobile : la barre déborde (7 entrées) — centrer l'onglet actif au chargement et à chaque navigation
   useEffect(() => {
     const nav = navRef.current;
     if (!nav || nav.scrollWidth <= nav.clientWidth) return;
@@ -71,6 +74,15 @@ export function StudioNav({
             href: "/google-ads",
             label: "Google Ads",
             active: pathname.startsWith("/google-ads"),
+          },
+        ]
+      : []),
+    ...(showMeta
+      ? [
+          {
+            href: "/meta-ads",
+            label: "Meta Ads",
+            active: pathname.startsWith("/meta-ads"),
           },
         ]
       : []),

@@ -137,4 +137,23 @@ describe("tables de contenus (social_posts / google_posts)", () => {
     expect(renderKey({ ...base, post: { ...base.post, table: "social" } })).toBe(social);
     expect(renderKey({ ...base, post: { ...base.post, table: "google" } })).not.toBe(social);
   });
+
+  it("créas Meta : slot et chemin Blob suffixés de la créa, clé distincte par créa et par table", async () => {
+    const { assetSlot, blobPathname, renderKey } = await import("./cache");
+    expect(assetSlot("square", 0, true)).toBe("square:0:preview");
+    expect(assetSlot("story", 0, false, "c2")).toBe("story:0:full:c2");
+    expect(blobPathname("s", "a", assetSlot("square", 0, false, "c1"), "meta")).toBe("meta/s/a/square-0-full-c1.jpg");
+    const base: CachedRenderInput = {
+      post: { ...postWithPhoto("https://example.com/photo.jpg"), table: "meta", variant: "c1" },
+      ctx: smokeContext("chaleureux"),
+      size: "square",
+      slideIndex: 0,
+      preview: false,
+      reviewRating: null,
+    };
+    const c1 = renderKey(base);
+    expect(renderKey({ ...base, post: { ...base.post, variant: "c2" } })).not.toBe(c1);
+    expect(renderKey({ ...base, post: { ...base.post, table: "google" } })).not.toBe(c1);
+    expect(renderKey({ ...base, post: { ...base.post, variant: "c1" } })).toBe(c1);
+  });
 });
