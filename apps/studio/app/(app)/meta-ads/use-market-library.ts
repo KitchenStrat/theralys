@@ -66,6 +66,8 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<MarketToast | null>(null);
   const tokens = useRef(0);
+  /** Dernier geste posé sur chaque annonce : un échec tardif ne défait pas un geste plus récent */
+  const owners = useRef<Record<string, number>>({});
 
   // Le serveur ne renvoie pas les visuels d'une annonce supprimée : à l'annulation, la carte reprend
   // ceux qu'elle avait, le temps que les données reviennent (sinon elle passerait par l'affiche typographique).
@@ -93,6 +95,7 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
     const token = ++tokens.current;
     const at = new Date().toISOString();
     const ids = Object.keys(marks);
+    for (const id of ids) owners.current[id] = token;
     setOverrides((previous) => ({ ...previous, ...Object.fromEntries(ids.map((id) => [id, { mark: marks[id]!, at, token }])) }));
     setErrors((previous) => (ids.some((id) => id in previous) ? Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))) : previous));
     return token;
@@ -100,17 +103,20 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
 
   /**
    * Échec : retour à l'état du serveur pour les annonces que ce geste régit
-   * encore, annonce du geste refermée, message sur la carte (une annonce
+   * encore (rien à défaire ni à signaler si un geste plus récent l'a
+   * remplacé), annonce du geste refermée, message sur la carte (une annonce
    * visible) ou dans le bandeau (un lot, ou une carte qui n'est plus là).
    */
   function fail(ids: readonly string[], token: number, error: string, where: "card" | "toast" = ids.length === 1 ? "card" : "toast") {
+    const mine = ids.filter((id) => owners.current[id] === token);
+    if (mine.length === 0) return;
     setOverrides((previous) => {
       const next = { ...previous };
-      for (const id of ids) if (next[id]?.token === token) delete next[id];
+      for (const id of mine) if (next[id]?.token === token) delete next[id];
       return next;
     });
     if (where === "card") {
-      setErrors((previous) => ({ ...previous, ...Object.fromEntries(ids.map((id) => [id, error])) }));
+      setErrors((previous) => ({ ...previous, ...Object.fromEntries(mine.map((id) => [id, error])) }));
       setToast((current) => (current?.key === token ? null : current));
     } else {
       say(error, { tone: "error" });

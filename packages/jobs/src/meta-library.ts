@@ -12,11 +12,16 @@
  *   `meta_media_pending`, puis soldées en `meta_media` (recherches réelles,
  *   coût réel) ; un lot (analyse, « Afficher les visuels ») refuse de
  *   démarrer tant qu'une réservation récente du même site n'est pas soldée ;
+ *   une réservation abandonnée (processus interrompu) est rendue au quota
+ *   après META_MEDIA_RESERVATION_STALE_MS ; seules les recherches qui ont pu
+ *   être facturées sont comptées (pas une connexion refusée ni un 5xx) ;
  * - un lot est borné dans le temps (`META_MEDIA_BATCH_DEADLINE_MS`) et
  *   s'interrompt après plusieurs échecs d'affilée, une clé refusée, des
  *   crédits épuisés ou une limite de débit ;
  * - le cache ne régresse jamais : un rafraîchissement qui ne ramène rien
- *   (annonce retirée, réponse vide) garde les visuels déjà copiés ;
+ *   (annonce retirée, réponse vide) garde les visuels encore affichables ;
+ * - une annonce n'est pas recherchée à la demande deux fois en moins de
+ *   META_MEDIA_REFRESH_RETRY_HOURS, que la tentative ait abouti ou non ;
  * - un visuel de démonstration n'est jamais servi à une vraie veille, et
  *   inversement (`source`).
  *
@@ -29,7 +34,7 @@
  * la veille s'affiche alors sans visuels ni bibliothèque.
  */
 
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import {
   META_LIBRARY_BULK_MAX,
   META_LIBRARY_KEPT_MAX,
@@ -47,7 +52,7 @@ import {
   type MetaMarketAd,
 } from "@theralys/shared";
 import { googleUsage, metaAdMedia, metaAdsAnalyses, metaAdsLibrary, type Database, type MetaAdMediaRow, type Site } from "@theralys/db";
-import { MockAdMediaProvider, createAdMediaProvider, isAdMediaBlocking, type AdMediaLookup, type AdMediaProvider } from "@theralys/providers/meta/media";
+import { MockAdMediaProvider, createAdMediaProvider, isAdMediaBlocking, isAdMediaPossiblyBilled, type AdMediaLookup, type AdMediaProvider } from "@theralys/providers/meta/media";
 import type { DbExecutor } from "./google-profile";
 
 /** Recherches de visuels menées de front. */
@@ -65,12 +70,19 @@ export const META_LIBRARY_COPY_DEADLINE_MS = 90_000;
 export const META_MEDIA_BATCH_DEADLINE_MS = 60_000;
 /** Échecs d'affilée après lesquels un lot s'interrompt (fournisseur en panne). */
 export const META_MEDIA_MAX_CONSECUTIVE_FAILURES = 5;
-/** Un rafraîchissement à la demande (lecture d'une vidéo) n'est pas retenté avant ce délai (heures). */
+/** Un rafraîchissement à la demande (lecture d'une vidéo, exemple gardé) n'est pas retenté avant ce délai (heures). */
 export const META_MEDIA_REFRESH_RETRY_HOURS = 6;
 /** Durée pendant laquelle une réservation non soldée bloque un autre lot du même site (ms). */
 export const META_MEDIA_RESERVATION_TTL_MS = 3 * 60_000;
-
-const MEDIA_USAGE_KINDS = ["meta_media", "meta_media_pending"] as const;
+/**
+ * Âge au-delà duquel une réservation non soldée est tenue pour abandonnée
+ * (processus interrompu avant le solde, ms) : elle ne compte plus dans le
+ * quota. Bien au-delà de la durée d'un lot, pour ne jamais rendre au quota
+ * des recherches encore en cours.
+ */
+export const META_MEDIA_RESERVATION_STALE_MS = 15 * 60_000;
+/** Âge au-delà duquel une réservation abandonnée est effacée du registre (ms). */
+export const META_MEDIA_RESERVATION_PURGE_MS = 24 * 3_600_000;
 
 const MISSING_SCHEMA_CODES = new Set(["42P01", "42703"]);
 
@@ -161,12 +173,17 @@ export function mediaSourceFor(marketMode: "meta" | "mock" | "none" | string): M
   return marketMode === "mock" ? "mock" : marketMode === "meta" ? "scrapecreators" : null;
 }
 
-/** Recherches de visuels comptées ce mois-ci pour le site (soldées et réservées). */
+/**
+ * Recherches de visuels comptées ce mois-ci pour le site : soldées, et
+ * réservées par un lot en cours. Une réservation jamais soldée (processus
+ * interrompu) cesse de compter après META_MEDIA_RESERVATION_STALE_MS.
+ */
 export async function mediaLookupsUsed(db: DbExecutor, siteId: string, now = new Date()): Promise<number> {
+  const live = or(eq(googleUsage.kind, "meta_media"), and(eq(googleUsage.kind, "meta_media_pending"), gte(googleUsage.createdAt, new Date(now.getTime() - META_MEDIA_RESERVATION_STALE_MS))));
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${googleUsage.requests}), 0)` })
     .from(googleUsage)
-    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now)), inArray(googleUsage.kind, [...MEDIA_USAGE_KINDS])));
+    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now)), live));
   return Number(row?.total ?? 0);
 }
 
@@ -195,6 +212,10 @@ export async function reserveMediaLookups(db: Database, siteId: string, wanted: 
   if (!(count > 0)) return { granted: 0, id: null, busy: false };
   return db.transaction(async (tx): Promise<MediaReservation> => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${siteId}:meta-media`}))`);
+    // Ménage : les réservations abandonnées depuis longtemps quittent le registre
+    await tx
+      .delete(googleUsage)
+      .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.kind, "meta_media_pending"), lt(googleUsage.createdAt, new Date(now.getTime() - META_MEDIA_RESERVATION_PURGE_MS))));
     if (opts.exclusive) {
       const fresh = await tx
         .select({ id: googleUsage.id })
@@ -229,7 +250,7 @@ export async function settleMediaLookups(db: DbExecutor, reservation: MediaReser
 
 export type MediaEnrichment = {
   mediaByAdId: Record<string, MetaAdMedia>;
-  /** Recherches réellement envoyées au fournisseur */
+  /** Recherches comptées : celles auxquelles le fournisseur a répondu, et celles qu'il a pu facturer malgré l'échec */
   lookups: number;
   /** Lot interrompu : clé refusée, crédits épuisés, limite de débit ou échecs d'affilée */
   blocked: boolean;
@@ -245,7 +266,7 @@ export type MediaEnrichmentDeps = {
   budget: number;
   concurrency?: number;
   fetchImpl?: typeof fetch;
-  /** Recherche même si des visuels sont déjà en cache (liens expirés à rafraîchir) */
+  /** Recherche même si des visuels sont déjà en cache (liens expirés à rafraîchir) — sauf tentative de moins de META_MEDIA_REFRESH_RETRY_HOURS */
   force?: boolean;
   /** Temps au plus consacré aux recherches (défaut META_MEDIA_BATCH_DEADLINE_MS) */
   deadlineMs?: number;
@@ -330,7 +351,9 @@ export type MediaPlan = {
  * Lecture du cache : ce qui est réutilisable et ce qu'il reste à chercher.
  * Une ligne d'une autre source (`source` : démonstration ou réel) est
  * ignorée ; une annonce « introuvable » n'est pas recherchée à nouveau avant
- * META_MEDIA_MISSING_RETRY_DAYS, sauf `force`.
+ * META_MEDIA_MISSING_RETRY_DAYS, sauf `force` — qui ne relance pas pour
+ * autant une annonce tentée depuis moins de META_MEDIA_REFRESH_RETRY_HOURS
+ * (une annonce retirée ne coûte pas une recherche à chaque lecture).
  */
 export async function planAdsMedia(db: Database, adIds: readonly string[], deps: { now: Date; force?: boolean; source?: MetaAdMedia["source"] | null }): Promise<MediaPlan> {
   const ids = [...new Set(adIds.filter(isAdId))];
@@ -345,9 +368,14 @@ export async function planAdsMedia(db: Database, adIds: readonly string[], deps:
     return { ...plan, unavailable: true };
   }
   const retryMissingBefore = deps.now.getTime() - META_MEDIA_MISSING_RETRY_DAYS * 86_400_000;
+  const retryForcedBefore = deps.now.getTime() - META_MEDIA_REFRESH_RETRY_HOURS * 3_600_000;
   for (const row of rows) if (!deps.source || row.provider === deps.source) plan.rows.set(row.adId, row);
   for (const id of ids) {
     const row = plan.rows.get(id);
+    if (row && deps.force && row.fetchedAt.getTime() > retryForcedBefore) {
+      if (row.media) plan.cached[id] = row.media;
+      continue;
+    }
     if (row && !deps.force) {
       if (row.media && cachedMediaUsable(row.media, deps.now)) {
         plan.cached[id] = row.media;
@@ -366,56 +394,82 @@ export async function planAdsMedia(db: Database, adIds: readonly string[], deps:
  * annonce en échec est ignorée ; une clé refusée, des crédits épuisés, une
  * limite de débit ou META_MEDIA_MAX_CONSECUTIVE_FAILURES échecs d'affilée
  * interrompent le lot (`blocked`). Le cache ne régresse jamais : une réponse
- * vide ou « introuvable » garde les visuels déjà enregistrés (seule la date
- * de la tentative avance).
+ * vide ou « introuvable » garde les visuels encore affichables (seule la date
+ * de la tentative avance). Une tentative en échec est datée elle aussi, pour
+ * qu'une lecture répétée ne relance pas la recherche. `lookups` ne compte que
+ * ce qui a pu être facturé.
  */
 export async function lookupAdsMedia(
   db: Database,
   pending: readonly string[],
   rows: ReadonlyMap<string, MetaAdMediaRow>,
-  deps: Omit<MediaEnrichmentDeps, "budget" | "force"> & { provider: AdMediaProvider },
+  deps: Omit<MediaEnrichmentDeps, "budget" | "force"> & { provider: AdMediaProvider; /** Compteur tenu à jour au fil du lot : lisible même si le lot lève */ progress?: { lookups: number } },
 ): Promise<Pick<MediaEnrichment, "mediaByAdId" | "lookups" | "blocked">> {
   const result: Pick<MediaEnrichment, "mediaByAdId" | "lookups" | "blocked"> = { mediaByAdId: {}, lookups: 0, blocked: false };
   const { provider } = deps;
   const queue = [...pending];
-  const until = Date.now() + (deps.deadlineMs ?? META_MEDIA_BATCH_DEADLINE_MS);
+  const deadline = deps.deadlineMs ?? META_MEDIA_BATCH_DEADLINE_MS;
+  const until = Date.now() + (Number.isFinite(deadline) ? deadline : META_MEDIA_BATCH_DEADLINE_MS);
   let failures = 0;
+  const counted = () => {
+    result.lookups++;
+    if (deps.progress) deps.progress.lookups = result.lookups;
+  };
+  /** Échec non bloquant : compté, le lot s'interrompt au-delà du seuil. Rend true si le lot doit s'arrêter. */
+  const failed = (id: string, what: string, err: unknown): boolean => {
+    failures++;
+    console.warn(`[meta-ads] visuels de l'annonce ${id} ${what} :`, err instanceof Error ? err.message : err);
+    if (failures < META_MEDIA_MAX_CONSECUTIVE_FAILURES) return false;
+    result.blocked = true;
+    console.error(`[meta-ads] visuels : ${failures} échecs d'affilée, lot interrompu`);
+    return true;
+  };
   const worker = async () => {
     for (;;) {
       if (result.blocked || Date.now() >= until) return;
       const id = queue.shift();
       if (id === undefined) return;
-      const previous = rows.get(id)?.media ?? null;
+      const row = rows.get(id);
+      const previous = row?.media ?? null;
+      let lookup: AdMediaLookup | null;
       try {
-        result.lookups++;
-        const lookup = await provider.lookup(id);
-        failures = 0;
-        const fresh = lookup ? await materializeMedia(lookup, { store: deps.store, now: deps.now, source: provider.mode, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }, previous) : null;
-        if (previous && previous.items.length > 0 && (fresh === null || fresh.items.length === 0)) {
-          // Rien de mieux qu'avant : on garde les visuels déjà copiés, la tentative est datée
-          await db.update(metaAdMedia).set({ fetchedAt: deps.now, updatedAt: deps.now }).where(eq(metaAdMedia.adId, id));
-          result.mediaByAdId[id] = previous;
-          continue;
-        }
-        const status = fresh === null ? "missing" : fresh.items.length > 0 ? "ok" : "empty";
-        await db
-          .insert(metaAdMedia)
-          .values({ adId: id, status, media: fresh, provider: provider.mode, fetchedAt: deps.now, updatedAt: deps.now })
-          .onConflictDoUpdate({ target: metaAdMedia.adId, set: { status, media: fresh, provider: provider.mode, fetchedAt: deps.now, updatedAt: deps.now } });
-        if (fresh) result.mediaByAdId[id] = fresh;
+        lookup = await provider.lookup(id);
+        counted();
       } catch (err) {
+        if (isAdMediaPossiblyBilled(err)) counted();
+        // La tentative est datée : pas de nouvelle recherche à la demande avant META_MEDIA_REFRESH_RETRY_HOURS
+        if (row) {
+          try {
+            await db.update(metaAdMedia).set({ fetchedAt: deps.now, updatedAt: deps.now }).where(eq(metaAdMedia.adId, id));
+          } catch {
+            // La date de la tentative est un garde-fou, pas une donnée : son échec ne change rien au lot
+          }
+        }
         if (isAdMediaBlocking(err)) {
           result.blocked = true;
           console.error("[meta-ads] visuels : fournisseur indisponible (clé refusée, crédits épuisés ou limite de débit) :", err instanceof Error ? err.message : err);
           return;
         }
-        failures++;
-        console.warn(`[meta-ads] visuels de l'annonce ${id} non obtenus :`, err instanceof Error ? err.message : err);
-        if (failures >= META_MEDIA_MAX_CONSECUTIVE_FAILURES) {
-          result.blocked = true;
-          console.error(`[meta-ads] visuels : ${failures} échecs d'affilée, lot interrompu`);
-          return;
+        if (failed(id, "non obtenus", err)) return;
+        continue;
+      }
+      try {
+        const fresh = lookup ? await materializeMedia(lookup, { store: deps.store, now: deps.now, source: provider.mode, ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}) }, previous) : null;
+        if (previous && previous.items.length > 0 && cachedMediaUsable(previous, deps.now) && (fresh === null || fresh.items.length === 0)) {
+          // Rien de mieux qu'avant : on garde les visuels encore affichables, la tentative est datée
+          await db.update(metaAdMedia).set({ fetchedAt: deps.now, updatedAt: deps.now }).where(eq(metaAdMedia.adId, id));
+          result.mediaByAdId[id] = previous;
+        } else {
+          const status = fresh === null ? "missing" : fresh.items.length > 0 ? "ok" : "empty";
+          await db
+            .insert(metaAdMedia)
+            .values({ adId: id, status, media: fresh, provider: provider.mode, fetchedAt: deps.now, updatedAt: deps.now })
+            .onConflictDoUpdate({ target: metaAdMedia.adId, set: { status, media: fresh, provider: provider.mode, fetchedAt: deps.now, updatedAt: deps.now } });
+          if (fresh) result.mediaByAdId[id] = fresh;
         }
+        failures = 0;
+      } catch (err) {
+        if (failed(id, "non enregistrés", err)) return;
       }
     }
   };
@@ -448,7 +502,7 @@ export type SiteMediaEnrichment = MediaEnrichment & {
  * Visuels d'un lot d'annonces pour un site, quota compris : lecture du cache,
  * réservation des recherches manquantes (`exclusive` : un seul lot à la fois
  * par site), recherche, puis solde de la réservation avec les recherches
- * réellement envoyées — même si le lot échoue en route.
+ * comptées — même si le lot échoue en route.
  */
 export async function enrichSiteAdsMedia(
   db: Database,
@@ -463,13 +517,13 @@ export async function enrichSiteAdsMedia(
   const provider = deps.provider;
   const reservation = await reserveMediaLookups(db, siteId, plan.pending.length, deps.now, deps.exclusive ? { exclusive: true } : {});
   if (reservation.granted <= 0) return { ...base, busy: reservation.busy, overQuota: reservation.busy ? 0 : plan.pending.length };
-  let lookups = 0;
+  // Compteur partagé avec le lot : même si la recherche lève, ce qui a été envoyé est soldé
+  const progress = { lookups: 0 };
   try {
-    const looked = await lookupAdsMedia(db, plan.pending.slice(0, reservation.granted), plan.rows, { ...deps, provider });
-    lookups = looked.lookups;
-    return { ...base, mediaByAdId: { ...plan.cached, ...looked.mediaByAdId }, lookups, blocked: looked.blocked, overQuota: plan.pending.length - reservation.granted };
+    const looked = await lookupAdsMedia(db, plan.pending.slice(0, reservation.granted), plan.rows, { ...deps, provider, progress });
+    return { ...base, mediaByAdId: { ...plan.cached, ...looked.mediaByAdId }, lookups: looked.lookups, blocked: looked.blocked, overQuota: plan.pending.length - reservation.granted };
   } finally {
-    await settleMediaLookups(db, reservation, lookups, provider.mode).catch((err) => console.error("[meta-ads] réservation de visuels non soldée :", err instanceof Error ? err.message : err));
+    await settleMediaLookups(db, reservation, progress.lookups, provider.mode).catch((err) => console.error("[meta-ads] réservation de visuels non soldée :", err instanceof Error ? err.message : err));
   }
 }
 
@@ -559,10 +613,14 @@ export async function currentMarketAds(db: DbExecutor, siteId: string): Promise<
 
 export type LibraryOutcome =
   | { status: "done"; count: number }
-  | { status: "skipped"; reason: "unknown_ad" | "full" | "unavailable" | "empty" };
+  | { status: "skipped"; reason: "unknown_ad" | "full" | "unavailable" | "empty" | "too_many" };
 
-function cleanIds(adIds: readonly string[]): string[] {
-  return [...new Set(adIds.filter(isAdId))].slice(0, META_LIBRARY_BULK_MAX);
+/** Identifiants valides et distincts d'une action groupée ; `too_many` au-delà de META_LIBRARY_BULK_MAX (rien n'est fait à moitié). */
+function cleanIds(adIds: readonly string[]): { ids: string[]; refusal: LibraryOutcome | null } {
+  const ids = [...new Set(adIds.filter(isAdId))];
+  if (ids.length === 0) return { ids, refusal: { status: "skipped", reason: "empty" } };
+  if (ids.length > META_LIBRARY_BULK_MAX) return { ids, refusal: { status: "skipped", reason: "too_many" } };
+  return { ids, refusal: null };
 }
 
 /** URL des vidéos durables d'un exemple (à supprimer quand il quitte la bibliothèque). */
@@ -627,8 +685,8 @@ async function durableMedia(db: Database, siteId: string, adId: string, media: M
  * exemples.
  */
 export async function keepMetaAds(db: Database, siteId: string, adIds: readonly string[], deps: KeepDeps): Promise<LibraryOutcome> {
-  const ids = cleanIds(adIds);
-  if (ids.length === 0) return { status: "skipped", reason: "empty" };
+  const { ids, refusal } = cleanIds(adIds);
+  if (refusal) return refusal;
   try {
     const [market, existing] = await Promise.all([
       currentMarket(db, siteId),
@@ -665,8 +723,8 @@ export async function keepMetaAds(db: Database, siteId: string, adIds: readonly 
  * bibliothèque du site.
  */
 export async function dismissMetaAds(db: Database, siteId: string, adIds: readonly string[], deps: { store: MetaMediaStore | null; now: Date }): Promise<LibraryOutcome> {
-  const ids = cleanIds(adIds);
-  if (ids.length === 0) return { status: "skipped", reason: "empty" };
+  const { ids, refusal } = cleanIds(adIds);
+  if (refusal) return refusal;
   try {
     const [market, existing] = await Promise.all([
       currentMarket(db, siteId),
@@ -695,8 +753,8 @@ export async function dismissMetaAds(db: Database, siteId: string, adIds: readon
 
 /** Retire des annonces de la bibliothèque (exemples gardés ou annonces supprimées) : elles retrouvent leur état d'origine dans la veille. */
 export async function restoreMetaAds(db: Database, siteId: string, adIds: readonly string[], deps: { store: MetaMediaStore | null }): Promise<LibraryOutcome> {
-  const ids = cleanIds(adIds);
-  if (ids.length === 0) return { status: "skipped", reason: "empty" };
+  const { ids, refusal } = cleanIds(adIds);
+  if (refusal) return refusal;
   try {
     const removed = await db
       .delete(metaAdsLibrary)

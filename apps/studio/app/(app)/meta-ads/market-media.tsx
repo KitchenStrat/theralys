@@ -2,7 +2,6 @@
 
 import { clsx } from "clsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Badge } from "@theralys/ui";
 import { META_MARKET_SCOPE_LABELS, adIsTrending, metaMediaBadge, type MetaAdMedia, type MetaGalleryAd } from "@theralys/shared";
 import { SIGNAL_LABELS, pageInitials, posterTone, rankLabel } from "@/lib/meta-ads/market-view";
 import { Icon, type IconName } from "./market-icons";
@@ -67,16 +66,17 @@ export function TextPoster({ adId, hook, large = false }: { adId: string; hook: 
   const tone = posterTone(adId);
   return (
     <span
-      className={clsx("flex h-full w-full flex-col justify-end text-left", large ? "p-8" : "p-5")}
+      // Carte : marge basse pour la pastille de zone posée sur le visuel
+      className={clsx("flex h-full w-full flex-col justify-end text-left", large ? "p-8" : "px-4 pb-12 pt-11")}
       style={{
         color: tone.ink,
-        background: `radial-gradient(120% 70% at 100% 0%, rgb(255 255 255 / 0.75), transparent 60%), linear-gradient(160deg, ${tone.from}, ${tone.to})`,
+        background: `radial-gradient(110% 60% at 100% 0%, rgb(255 255 255 / 0.55), transparent 60%), linear-gradient(165deg, ${tone.from}, ${tone.to})`,
       }}
     >
-      <span aria-hidden className={clsx("block font-serif leading-none opacity-30", large ? "text-7xl" : "text-5xl")}>
+      <span aria-hidden className={clsx("block font-serif leading-none opacity-30", large ? "text-7xl" : "text-[2.75rem]")}>
         «
       </span>
-      <span className={clsx("mt-1 block text-balance font-semibold leading-snug tracking-tight", large ? "line-clamp-[9] text-2xl" : "line-clamp-6 text-[17px]")}>
+      <span className={clsx("mt-1 block text-balance font-semibold leading-snug tracking-tight", large ? "line-clamp-[9] text-2xl" : "line-clamp-5 text-[17px]")}>
         {hook || "Annonce sans texte"}
       </span>
     </span>
@@ -114,6 +114,13 @@ export function FormatBadge({ media, className }: { media: MetaAdMedia | null; c
   );
 }
 
+/** Teintes des signaux : celles des pastilles du studio, texte assombri pour rester lisible en petit corps. */
+const SIGNAL_TONES: Record<"success" | "warning" | "neutral", string> = {
+  success: "bg-success-100 text-green-800",
+  warning: "bg-warning-100 text-yellow-800",
+  neutral: "bg-cream-200 text-ink-700",
+};
+
 /** « Tendance » (encore diffusée, signal fort), sinon le signal de l'annonce. */
 export function SignalBadge({ ad }: { ad: Pick<MetaGalleryAd, "active" | "signal"> }) {
   if (adIsTrending(ad)) {
@@ -125,11 +132,7 @@ export function SignalBadge({ ad }: { ad: Pick<MetaGalleryAd, "active" | "signal
     );
   }
   const signal = SIGNAL_LABELS[ad.signal];
-  return (
-    <Badge tone={signal.tone} className="px-2">
-      {signal.label}
-    </Badge>
-  );
+  return <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", SIGNAL_TONES[signal.tone])}>{signal.label}</span>;
 }
 
 /** Zone de l'annonce (« Autour de vous ») ; rien pour les annonces nationales ou d'autres zones. */

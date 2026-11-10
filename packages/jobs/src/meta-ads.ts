@@ -54,6 +54,7 @@ import {
   META_LIBRARY_TERMS_MAX,
   META_MARKET_MAX_ADS,
   META_MARKET_MEDIA_SPARE,
+  META_MARKET_MIN_LOCAL,
   META_MARKET_SAMPLE_FOR_AI,
   META_MARKET_SCOPES,
   buildMetaLocalIndex,
@@ -77,6 +78,7 @@ import {
   type MetaAdsVideoPlan,
   type MetaLocalIndex,
   type MetaMarketAd,
+  type MetaMarketScope,
   type MetaMarketInsights,
   type PageSections,
   type SocialPostAssets,
@@ -517,10 +519,12 @@ export function buildMetaMarket(
 /**
  * Second filtre, une fois les visuels obtenus : les annonces dont la page
  * Facebook est classée boutique, marque, école, média ou assurance sont
- * écartées — retirées des comptes par zone et comptées dans
- * `filtered.commerce` — puis la veille est ramenée à `max` annonces.
+ * écartées — retirées des comptes par zone, du classement (`rank`,
+ * `rankTotal`) et comptées dans `filtered.commerce` — puis la veille est
+ * ramenée à `max` annonces. La zone retenue est recalculée sur les comptes
+ * restants (`minLocal` annonces au moins, comme à la sélection).
  */
-export function dropCommercialPages(market: MetaAdsMarket, mediaByAdId: Readonly<Record<string, MetaAdMedia | undefined>>, max = META_MARKET_MAX_ADS): MetaAdsMarket {
+export function dropCommercialPages(market: MetaAdsMarket, mediaByAdId: Readonly<Record<string, MetaAdMedia | undefined>>, max = META_MARKET_MAX_ADS, minLocal = META_MARKET_MIN_LOCAL): MetaAdsMarket {
   const dropped = market.ads.filter((ad) => isCommercialPageCategory(mediaByAdId[ad.id]?.pageCategories ?? []));
   if (dropped.length === 0) return { ...market, ads: market.ads.slice(0, max) };
   const droppedIds = new Set(dropped.map((ad) => ad.id));
@@ -532,7 +536,26 @@ export function dropCommercialPages(market: MetaAdsMarket, mediaByAdId: Readonly
   }
   const filtered = { formation: 0, commerce: 0, autre: 0, ...market.filtered };
   filtered.commerce += dropped.length;
-  return { ...market, ads: market.ads.filter((ad) => !droppedIds.has(ad.id)).slice(0, max), counts, ...(strongCounts ? { strongCounts } : {}), filtered };
+  // Classement resserré : chaque annonce remonte d'autant de rangs qu'il y avait d'annonces écartées devant elle
+  const droppedRanks = dropped.map((ad) => ad.rank).filter((rank): rank is number => typeof rank === "number");
+  const ads = market.ads
+    .filter((ad) => !droppedIds.has(ad.id))
+    .slice(0, max)
+    .map((ad): MetaMarketAd => {
+      if (typeof ad.rank !== "number" || typeof ad.rankTotal !== "number") return ad;
+      const ahead = droppedRanks.filter((rank) => rank < ad.rank!).length;
+      return { ...ad, rank: Math.max(1, ad.rank - ahead), rankTotal: Math.max(1, ad.rankTotal - droppedRanks.length) };
+    });
+  let scopeUsed: MetaMarketScope = "france";
+  let cumulative = 0;
+  for (const scope of META_MARKET_SCOPES) {
+    cumulative += counts[scope];
+    if (cumulative >= minLocal) {
+      scopeUsed = scope;
+      break;
+    }
+  }
+  return { ...market, scopeUsed, ads, counts, ...(strongCounts ? { strongCounts } : {}), filtered };
 }
 
 /**
@@ -1006,7 +1029,8 @@ export async function runMetaAdsAnalysis(
   const mediaProvider = mediaProviderFor(env, provider?.mode ?? "none");
   const enrichMedia = mediaProvider
     ? async (ads: MetaMarketAd[]): Promise<Record<string, MetaAdMedia>> => {
-        const enriched = await enrichSiteAdsMedia(db, siteId, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now, exclusive: true });
+        // Heure réelle du lot (et non celle du lancement de l'analyse) : la réservation doit rester récente tant que le lot tourne
+        const enriched = await enrichSiteAdsMedia(db, siteId, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now: opts.now ?? new Date(), exclusive: true });
         await heartbeat().catch(() => undefined);
         console.info(
           `[meta-ads] ${label} : visuels de ${Object.keys(enriched.mediaByAdId).length}/${ads.length} annonce(s), ${enriched.lookups} recherche(s) (${mediaProvider.mode})${enriched.blocked ? ", lot interrompu" : ""}${enriched.busy ? ", autre lot en cours" : ""}${enriched.overQuota > 0 ? `, ${enriched.overQuota} hors quota` : ""}`,

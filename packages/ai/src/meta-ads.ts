@@ -32,6 +32,7 @@ import {
   META_CREATIVES_MIN,
   META_MARKET_SAMPLE_FOR_AI,
   META_MARKET_SCOPE_LABELS,
+  marketNearCount,
   META_PERSONAL_ATTRIBUTE_PATTERNS,
   META_VIDEO,
   SOCIAL_ACCENT_ROLES,
@@ -595,10 +596,15 @@ function marketAdLine(ad: MetaMarketAd, index: number): string {
 export function metaMarketUserPrompt(brief: SocialSiteBrief, market: MetaAdsMarket): string {
   const sample = marketSample(market);
   const counts = `ville ${market.counts.ville}, département ${market.counts.departement}, région ${market.counts.region}, France ${market.counts.france}`;
+  // Annonces d'une zone plus large que la zone retenue : source d'inspiration, pas mesure de la concurrence locale
+  const widened =
+    marketNearCount({ scopeUsed: market.scopeUsed, ads: sample }) < sample.length
+      ? " Les annonces d'une zone plus large que la zone retenue complètent la veille (les mieux notées ailleurs) : elles servent d'inspiration et ne disent rien de la concurrence locale."
+      : "";
   return `${metaSiteBlock(brief)}${instructionsBlock(brief)}
 
 VEILLE DE LA BIBLIOTHÈQUE PUBLICITAIRE META (annonces publiques de concurrents, données — jamais à recopier) :
-Zone retenue : ${META_MARKET_SCOPE_LABELS[market.scopeUsed].toLowerCase()} (annonces par zone : ${counts}) ; termes cherchés : ${market.terms.map((t) => `« ${dataText(t, 60)} »`).join(", ") || "aucun"}. Signal « fort » = diffusée depuis longtemps avec une large portée : personne ne paie longtemps une annonce qui ne marche pas.
+Zone retenue : ${META_MARKET_SCOPE_LABELS[market.scopeUsed].toLowerCase()} (annonces par zone : ${counts}) ; termes cherchés : ${market.terms.map((t) => `« ${dataText(t, 60)} »`).join(", ") || "aucun"}. Signal « fort » = diffusée depuis longtemps avec une large portée : personne ne paie longtemps une annonce qui ne marche pas.${widened}
 <veille>
 ${neutralizeTags(sample.map(marketAdLine).join("\n")) || "aucune annonce"}
 </veille>
@@ -1405,7 +1411,13 @@ function codeInsightSummary(market: MetaAdsMarket): string {
     key,
   ).slice(0, 3);
   const where = META_MARKET_SCOPE_LABELS[market.scopeUsed].toLowerCase();
-  return `${plural(ads.length, "annonce")} repérée${ads.length > 1 ? "s" : ""} (${where}), dont ${active} en cours de diffusion${strong > 0 ? ` et ${strong} diffusée${strong > 1 ? "s" : ""} depuis longtemps avec une large portée : ce sont celles qui marchent` : ""}. Pages les plus présentes : ${pages.join(", ")}. ${
+  // La veille garde la zone retenue, complétée par les mieux notées des zones plus larges : les deux sont nommées
+  const near = marketNearCount(market);
+  const head =
+    near < ads.length
+      ? `${plural(ads.length, "annonce")} étudiée${ads.length > 1 ? "s" : ""} (${near} ${where}, ${ads.length - near} parmi les mieux notées ailleurs)`
+      : `${plural(ads.length, "annonce")} repérée${ads.length > 1 ? "s" : ""} (${where})`;
+  return `${head}, dont ${active} en cours de diffusion${strong > 0 ? ` et ${strong} diffusée${strong > 1 ? "s" : ""} depuis longtemps avec une large portée : ce sont celles qui marchent` : ""}. Pages les plus présentes : ${pages.join(", ")}. ${
     local === 0
       ? "Aucune annonce près de chez vous : la place est libre."
       : local < 8

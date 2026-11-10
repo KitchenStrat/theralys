@@ -11,6 +11,7 @@ import {
   adMediaFromScrapeCreators,
   createAdMediaProvider,
   isAdMediaBlocking,
+  isAdMediaPossiblyBilled,
   mockPosterDataUrl,
 } from "./media";
 
@@ -424,13 +425,21 @@ describe("ScrapeCreatorsMediaProvider", () => {
     expect(JSON.stringify({ ...unreachable })).not.toContain(KEY);
   });
 
-  // Constat : le détail renvoyé par le serveur est coupé à 200 caractères AVANT le masquage de la clé. Une clé à cheval
-  // sur la coupure n'est plus reconnue : son début reste lisible dans le message (donc dans les journaux), alors que la
-  // clé « n'est jamais journalisée ». Le masquage devrait précéder la coupure, comme pour les erreurs réseau.
-  it.fails("constat — une clé coupée par la limite de 200 caractères du détail laisse son début dans le message", async () => {
-    const { impl } = stubFetch(() => jsonResponse({ message: `${"x".repeat(180)} ${KEY}` }, 401));
+  // La clé est masquée avant la coupe à 200 caractères : une clé tombant sur la coupure ne laisse pas son début dans le
+  // message (donc dans les journaux). Cas le plus simple : un corps d'erreur en texte brut (page d'un mandataire qui
+  // recopie l'en-tête reçu).
+  it("clé à cheval sur la limite de 200 caractères du détail : masquée avant la coupe, rien n'en reste dans le message", async () => {
+    const { impl } = stubFetch(() => new Response(`${"x".repeat(176)} cle ${KEY}`, { status: 403 }));
     const err = await failure(provider(impl).lookup(AD_ID));
     expect(err.message).not.toContain(KEY.slice(0, 12));
+  });
+
+  it("clé entière dans un détail long : masquée même au-delà de 200 caractères de réponse", async () => {
+    const { impl } = stubFetch(() => jsonResponse({ message: `Refus pour ${KEY} : ${"détail ".repeat(60)}` }, 401));
+    const err = await failure(provider(impl).lookup(AD_ID));
+    expect(err.message).not.toContain(KEY);
+    expect(err.message).toContain("***");
+    expect(err.message.length).toBeLessThan(260);
   });
 
   it("creditsRemaining : suit le solde renvoyé par l'API, inchangé quand il est absent", async () => {
@@ -462,6 +471,15 @@ describe("isAdMediaBlocking", () => {
     expect(isAdMediaBlocking(Object.assign(new Error("faux ami"), { kind: "auth" }))).toBe(false);
     expect(isAdMediaBlocking(null)).toBe(false);
     expect(new AdMediaError("défauts")).toMatchObject({ name: "AdMediaError", kind: "other", status: null });
+  });
+});
+
+describe("isAdMediaPossiblyBilled", () => {
+  it("délai dépassé, réponse illisible ou erreur étrangère : la recherche a pu être facturée ; connexion refusée, 5xx, clé, crédits, débit et autre refus HTTP : non", () => {
+    expect(isAdMediaPossiblyBilled(new AdMediaError("délai dépassé", { kind: "transient" }))).toBe(true);
+    expect(isAdMediaPossiblyBilled(new TypeError("réponse inattendue"))).toBe(true);
+    expect(isAdMediaPossiblyBilled("échec")).toBe(true);
+    for (const kind of ["retry", "auth", "credits", "rate", "other"] as const) expect(isAdMediaPossiblyBilled(new AdMediaError("refus", { kind }))).toBe(false);
   });
 });
 

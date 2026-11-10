@@ -56,11 +56,11 @@ export function MarketHeader({ market, seed, dismissed }: { market: MetaAdsMarke
             const place = zoneName(scope, seed);
             return (
               <div key={scope} className="min-w-0 rounded-2xl bg-cream-100/70 px-3.5 py-2.5">
-                <dt className="truncate text-xs text-ink-500">{label}</dt>
+                <dt className="text-xs text-ink-500">{label}</dt>
                 <dd className="text-lg font-semibold leading-snug text-ink-900">
                   {spotted} <span className="text-sm font-normal text-ink-500">repérée{spotted > 1 ? "s" : ""}</span>
                 </dd>
-                <dd className="truncate text-[11px] text-ink-500">
+                <dd className="text-[11px] text-ink-500">
                   {kept} conservée{kept > 1 ? "s" : ""}
                   {place ? ` · ${place}` : ""}
                 </dd>

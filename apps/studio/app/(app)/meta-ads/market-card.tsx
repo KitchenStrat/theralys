@@ -116,11 +116,12 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
 
         <div className="flex min-w-0 items-center gap-2">
           <PageAvatar name={ad.pageName} url={ad.media?.avatarUrl} seed={ad.pageId ?? ad.pageName} />
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-900">
+          {/* Hors sélection, c'est le bouton qui rogne le nom : son anneau de focus reste entier */}
+          <h3 className={clsx("min-w-0 flex-1 text-sm font-semibold text-ink-900", selecting && "truncate")}>
             {selecting ? (
               ad.pageName
             ) : (
-              <button type="button" onClick={onOpen} className={clsx("max-w-full cursor-pointer truncate rounded text-left align-bottom transition-colors hover:text-primary-700", FOCUS_RING)}>
+              <button type="button" onClick={onOpen} className={clsx("block max-w-full cursor-pointer truncate rounded text-left transition-colors hover:text-primary-700", FOCUS_RING)}>
                 {ad.pageName}
               </button>
             )}
@@ -130,8 +131,8 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
         <p className="truncate text-[13px] leading-5 text-ink-700">{hook || <span className="italic text-ink-500">Annonce sans texte</span>}</p>
 
         {/* Deux lignes : la colonne de droite (date, note) prend sa largeur, les plateformes ont le reste */}
-        <dl className="space-y-2 rounded-xl bg-cream-100/70 px-2.5 py-2.5">
-          <div className="flex items-start justify-between gap-2">
+        <div className="space-y-2 rounded-xl bg-cream-100/70 px-2.5 py-2.5">
+          <dl className="flex items-start justify-between gap-2">
             <Fact label="Diffusion">
               <span className="inline-flex items-center gap-1.5">
                 <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
@@ -142,8 +143,8 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
             <Fact label="Lancée le" end>
               <span className="tabular-nums">{formatAdDate(ad.startedAt) ?? "—"}</span>
             </Fact>
-          </div>
-          <div className="flex items-start justify-between gap-2">
+          </dl>
+          <dl className="flex items-start justify-between gap-2">
             <Fact label="Plateformes">{platforms ?? "—"}</Fact>
             <Fact label="Note" end>
               <span className="tabular-nums">
@@ -151,13 +152,13 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
                 <span className="font-normal text-ink-500">/10</span>
               </span>
             </Fact>
-          </div>
-        </dl>
+          </dl>
+        </div>
 
         {savedAt ? <p className="text-[11px] leading-4 text-ink-500">Gardée le {formatAdDate(savedAt) ?? "—"}</p> : null}
 
         {error ? (
-          <p role="alert" className="rounded-lg bg-danger-100 px-2.5 py-1.5 text-xs text-danger-500">
+          <p role="alert" className="rounded-lg bg-danger-100 px-2.5 py-1.5 text-xs text-red-700">
             {error}
           </p>
         ) : null}
@@ -179,7 +180,9 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
                   )}
                 >
                   <Icon name="bookmark" filled={ad.kept} className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{ad.kept ? "Gardée" : "Garder comme exemple"}</span>
+                  {/* Carte étroite (grille à quatre colonnes) : libellé court, les deux gestes restent nommés */}
+                  <span className="truncate @[19rem]:hidden">{ad.kept ? "Gardée" : "Garder"}</span>
+                  <span className="hidden truncate @[19rem]:inline">{ad.kept ? "Gardée" : "Garder comme exemple"}</span>
                   <span className="sr-only"> : annonce de {ad.pageName}</span>
                 </button>
                 <button
@@ -189,13 +192,12 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
                   aria-label={`Supprimer l'annonce de ${ad.pageName}`}
                   title="Supprimer de ma veille"
                   className={clsx(
-                    "inline-flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-ink-500 @[19rem]:px-3 ring-1 ring-inset ring-cream-300 transition-colors hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30",
+                    "inline-flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium text-ink-500 ring-1 ring-inset ring-cream-300 transition-colors hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30",
                     FOCUS_RING,
                   )}
                 >
                   <Icon name="trash" className="h-4 w-4 shrink-0" />
-                  {/* Libellé visible dès que la carte est assez large (mobile, grille à trois colonnes) */}
-                  <span className="hidden @[19rem]:inline">Supprimer</span>
+                  <span>Supprimer</span>
                 </button>
               </>
             ) : (

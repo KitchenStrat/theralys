@@ -53,7 +53,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
       <div
         data-testid="meta-detail"
         data-ad-id={ad.id}
-        className="relative flex max-h-[90vh] flex-col md:grid md:h-[min(90vh,45rem)] md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:grid-rows-[minmax(0,1fr)_auto]"
+        className="relative flex max-h-[90vh] flex-col md:grid md:h-[min(90vh,45rem)] md:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] md:grid-rows-[minmax(0,1fr)_auto]"
       >
         <div className="min-h-0 flex-1 overflow-y-auto md:contents">
           <div className="md:row-span-2 md:min-h-0">
@@ -137,7 +137,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
 
         <div className="border-t border-cream-200 bg-white px-5 py-3.5 md:col-start-2 md:px-6">
           {error ? (
-            <p role="alert" className="mb-3 rounded-lg bg-danger-100 px-3 py-2 text-sm text-danger-500">
+            <p role="alert" className="mb-3 rounded-lg bg-danger-100 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           ) : null}
@@ -172,7 +172,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
               href={ad.libraryUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={clsx("ml-auto inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-2 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
+              className={clsx("ml-auto inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
             >
               Voir sur Meta ↗<span className="sr-only"> (nouvel onglet)</span>
             </a>

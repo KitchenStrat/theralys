@@ -60,7 +60,7 @@ export function MarketToolbar({
   return (
     // Une seule rangée qui se replie : sur mobile, « Sélectionner » rejoint le compteur sur la dernière ligne
     <div className="flex flex-wrap items-center gap-2 rounded-card border border-cream-200 bg-white p-3 shadow-(--shadow-card) sm:gap-x-2.5 sm:p-4" role="search" aria-label="Filtrer les annonces">
-      <label className="relative min-w-0 basis-full sm:basis-64 sm:flex-1">
+      <label className="relative min-w-0 basis-full sm:basis-48 sm:flex-1">
         <span className="sr-only">Rechercher une annonce</span>
         <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
         <input
@@ -91,7 +91,7 @@ export function MarketToolbar({
             <option value="all">Toutes les zones</option>
             {scopes.map((scope) => (
               <option key={scope} value={scope}>
-                {META_MARKET_SCOPE_LABELS[scope]} ({counts.scopes[scope]})
+                {META_MARKET_SCOPE_LABELS[scope]}
               </option>
             ))}
           </select>
@@ -211,7 +211,7 @@ function Pill({
       <span
         className={clsx(
           "rounded-full px-1.5 py-px text-[11px] tabular-nums leading-4",
-          tone === "tab" ? (active ? "bg-white/20 text-white" : "bg-white text-ink-500") : active ? "bg-primary-100 text-primary-800" : "bg-cream-100 text-ink-500",
+          tone === "tab" ? (active ? "bg-white/20 text-white" : "bg-white text-ink-700") : active ? "bg-primary-100 text-primary-800" : "bg-cream-100 text-ink-700",
         )}
       >
         {count}

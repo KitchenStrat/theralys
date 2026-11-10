@@ -82,6 +82,15 @@ export function isAdMediaBlocking(err: unknown): boolean {
   return err instanceof AdMediaError && (err.kind === "auth" || err.kind === "credits" || err.kind === "rate");
 }
 
+/**
+ * La recherche a pu être facturée malgré l'échec : délai dépassé ou réponse
+ * illisible (`transient`), ou erreur d'une autre nature. Connexion refusée,
+ * 5xx, clé refusée, crédits épuisés et limite de débit ne coûtent rien.
+ */
+export function isAdMediaPossiblyBilled(err: unknown): boolean {
+  return !(err instanceof AdMediaError) || err.kind === "transient";
+}
+
 // ─── Normalisation ───────────────────────────────────────────────────────────
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -254,7 +263,9 @@ export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
         json = null;
       }
       const root = record(json);
-      const detail = this.redact(shortText(root?.message, 200) ?? shortText(root?.error, 200) ?? (text.replace(/\s+/g, " ").trim().slice(0, 200) || response.statusText || "sans détail"));
+      // La clé est masquée avant la coupe : une clé tronquée par la limite de longueur ne serait plus reconnue
+      const rawDetail = [root?.message, root?.error, text].find((value): value is string => typeof value === "string" && value.trim() !== "") ?? "";
+      const detail = shortText(this.redact(rawDetail), 200) ?? (response.statusText || "sans détail");
       if (response.status === 404) return null;
       if (!response.ok) {
         const kind: AdMediaErrorKind =
@@ -298,7 +309,7 @@ export function mockPosterDataUrl(seed: string, label: string): string {
     `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="${mid}"/></linearGradient></defs>` +
     `<rect width="800" height="1000" fill="url(#g)"/>` +
     `<circle cx="${x}" cy="${y}" r="210" fill="${dark}" opacity="0.16"/><circle cx="${800 - x}" cy="${1000 - y}" r="150" fill="#ffffff" opacity="0.35"/>` +
-    `<text x="400" y="930" text-anchor="middle" font-family="sans-serif" font-size="30" fill="${dark}" opacity="0.75">${label}</text>` +
+    `<text x="400" y="870" text-anchor="middle" font-family="sans-serif" font-size="30" fill="${dark}" opacity="0.75">${label}</text>` +
     `</svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

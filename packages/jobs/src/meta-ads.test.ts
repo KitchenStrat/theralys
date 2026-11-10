@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   DEFAULT_SOCIAL_VOICE,
   META_ADS_ANALYSES_PER_MONTH,
@@ -25,6 +27,7 @@ import {
   type MetaAdsMarket,
   type MetaAdsSeed,
   type MetaMarketAd,
+  type MetaMarketInsights,
   type PageSections,
   type SiteTheme,
   type SocialSiteBrief,
@@ -36,6 +39,7 @@ import { GEO_RETRY_DELAY_MS } from "@theralys/providers/meta/geo";
 import {
   META_ADS_ANALYSIS_STALE_MINUTES,
   META_ERROR_MESSAGES,
+  META_MARKET_FAVORITES_FOR_AI,
   META_MARKET_PAGES_PER_TERM,
   META_USAGE_REFUND_TOLERANCE_MS,
   addressFromSections,
@@ -50,6 +54,7 @@ import {
   generateMetaAds,
   hasFreshMetaRunning,
   hasMetaAdsAccess,
+  insightsForMarket,
   isMetaAnalysisStale,
   isMetaMarketBlocking,
   isMetaMarketMessage,
@@ -193,6 +198,11 @@ function silenced<T>(run: () => Promise<T>): Promise<T> {
     warn.mockRestore();
     info.mockRestore();
   });
+}
+
+/** Annonce d'un praticien diffusée dans toute la France (métier dans le nom de page, prise de rendez-vous en ligne : gardée par le filtre de pertinence). */
+function nationalRecord(id: string, overrides: Partial<MetaAdRecord> = {}): MetaAdRecord {
+  return record(id, { pageName: `Sophrologue ${id}`, captions: ["doctolib.fr"], targetLocations: [{ name: "France", type: "country", excluded: false }], ...overrides });
 }
 
 /** Annonce dont la page et le texte signent une boutique (écartée par le filtre de pertinence : commerce). */
@@ -707,11 +717,15 @@ describe("veille : termes, budget d'appels et sélection", () => {
     expect(scopes(buildMetaMarket(collection, SEED, "meta", NOW, { localIndex: null }))).toEqual({ "60001": "france", "60002": "france" });
   });
 
-  it("dropCommercialPages : page classée « Shopping & retail » écartée et comptée dans filtered.commerce, catégories de praticiens gardées", () => {
-    const records = ["70001", "70002", "70003", "70004", "70005", "70006"].map((id, i) => record(id, { pageName: `Cabinet ${i}`, euTotalReach: 9_000 - i * 100 }));
+  it("dropCommercialPages : page classée « Shopping & retail » écartée — retirée des comptes par zone, comptée dans filtered.commerce —, catégories de praticiens gardées", () => {
+    // 70001 et 70002 : signal fort (plus de 30 jours de diffusion, portée ≥ 10 000) ; les autres : signal moyen
+    const reach = [30_000, 20_000, 9_000, 8_900, 8_800, 8_700];
+    const records = ["70001", "70002", "70003", "70004", "70005", "70006"].map((id, i) => record(id, { pageName: `Cabinet ${i}`, euTotalReach: reach[i]! }));
     const market = buildMetaMarket({ records: [...records, shopRecord("20001")], matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
     expect(market.ads.map((a) => a.id)).toEqual(["70001", "70002", "70003", "70004", "70005", "70006"]);
     expect(market.filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    expect(market.counts).toEqual({ ville: 6, departement: 0, region: 0, france: 0 });
+    expect(market.strongCounts).toEqual({ ville: 2, departement: 0, region: 0, france: 0 });
     const mediaByAdId: Record<string, MetaAdMedia> = {
       "70001": mediaOf(["Osteopathic Doctor"]),
       "70002": mediaOf(["Shopping & retail"]),
@@ -724,15 +738,58 @@ describe("veille : termes, budget d'appels et sélection", () => {
     expect(out.ads.map((a) => a.id)).toEqual(["70001", "70003", "70005", "70006"]);
     // Ajoutées au décompte du filtre de pertinence
     expect(out.filtered).toEqual({ formation: 0, commerce: 3, autre: 0 });
+    // Retirées des comptes par zone : une annonce n'est jamais à la fois « repérée » et « écartée » ; le signal fort de 70002 part avec elle
+    expect(out.counts).toEqual({ ville: 4, departement: 0, region: 0, france: 0 });
+    expect(out.strongCounts).toEqual({ ville: 1, departement: 0, region: 0, france: 0 });
     // La veille d'entrée n'est pas modifiée
     expect(market.filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    expect(market.counts).toEqual({ ville: 6, departement: 0, region: 0, france: 0 });
+    expect(market.strongCounts).toEqual({ ville: 2, departement: 0, region: 0, france: 0 });
     expect(market.ads).toHaveLength(6);
+    // Veille enregistrée avant strongCounts : le champ reste absent, les comptes sont ajustés ; un compte ne devient jamais négatif
+    const { strongCounts: _strong, ...legacy } = market;
+    const legacyOut = dropCommercialPages(legacy, mediaByAdId);
+    expect(legacyOut).not.toHaveProperty("strongCounts");
+    expect(legacyOut.counts.ville).toBe(4);
+    expect(dropCommercialPages({ ...market, counts: { ville: 1, departement: 0, region: 0, france: 0 } }, mediaByAdId).counts.ville).toBe(0);
     expect(out).toMatchObject({ source: market.source, terms: market.terms, scopeUsed: market.scopeUsed, calls: market.calls, truncated: market.truncated, insights: null });
     // Aucune page commerciale : annonces et décompte inchangés
     const untouched = dropCommercialPages(market, { "70001": mediaOf(["Osteopathic Doctor"]) });
     expect(untouched.ads).toEqual(market.ads);
     expect(untouched.filtered).toEqual(market.filtered);
+    expect(untouched.counts).toEqual(market.counts);
+    expect(untouched.strongCounts).toEqual(market.strongCounts);
     expect(dropCommercialPages(market, {}).ads).toEqual(market.ads);
+  });
+
+  it("dropCommercialPages : le classement se resserre (rank, rankTotal) et la zone retenue est recalculée sur les comptes restants", () => {
+    // Neuf annonces dans la ville du praticien : zone retenue « ville » (au moins huit annonces locales)
+    const records = Array.from({ length: 9 }, (_, i) => record(String(90_001 + i), { pageName: `Cabinet ${i}`, euTotalReach: 9_000 - i * 100 }));
+    const market = buildMetaMarket({ records, matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
+    expect(market.scopeUsed).toBe("ville");
+    const byRank = [...market.ads].sort((a, b) => a.rank! - b.rank!);
+    expect(byRank.map((a) => a.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const brand = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, mediaOf(["Brand"])]));
+    // Une page commerciale en tête : huit annonces locales restent, la zone tient ; chacune remonte d'un rang
+    const one = dropCommercialPages(market, brand(byRank[0]!.id));
+    expect(one.scopeUsed).toBe("ville");
+    expect([...one.ads].sort((a, b) => a.rank! - b.rank!).map((a) => [a.id, a.rank, a.rankTotal])).toEqual(byRank.slice(1).map((a, i) => [a.id, i + 1, 8]));
+    // Deux pages commerciales (2e et 5e) : sept annonces locales, plus assez pour la zone « ville » — la veille est élargie
+    const dropped = [byRank[1]!.id, byRank[4]!.id];
+    const two = dropCommercialPages(market, brand(...dropped));
+    expect(two.scopeUsed).toBe("france");
+    expect(two.counts).toEqual({ ville: 7, departement: 0, region: 0, france: 0 });
+    const left = [...two.ads].sort((a, b) => a.rank! - b.rank!);
+    expect(left.map((a) => a.id)).toEqual(byRank.filter((a) => !dropped.includes(a.id)).map((a) => a.id));
+    expect(left.map((a) => a.rank)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(left.every((a) => a.rankTotal === 7)).toBe(true);
+    // Seuil explicite ; la veille d'entrée n'est pas modifiée
+    expect(dropCommercialPages(market, brand(...dropped), META_MARKET_MAX_ADS, 7).scopeUsed).toBe("ville");
+    expect(market.ads.map((a) => a.rankTotal)).toEqual(Array.from({ length: 9 }, () => 9));
+    expect(market.scopeUsed).toBe("ville");
+    // Veille enregistrée avant le classement : pas de rang inventé
+    const unranked = { ...market, ads: market.ads.map(({ rank: _rank, rankTotal: _total, ...ad }) => ad) };
+    expect(dropCommercialPages(unranked, brand(byRank[0]!.id)).ads.every((a) => a.rank === undefined && a.rankTotal === undefined)).toBe(true);
   });
 
   it("dropCommercialPages : veille ramenée à max (défaut META_MARKET_MAX_ADS), les annonces de réserve remplacent les pages commerciales", () => {
@@ -751,7 +808,10 @@ describe("veille : termes, budget d'appels et sélection", () => {
     // max explicite
     expect(dropCommercialPages(market, commercial, 3).ads.map((a) => a.id)).toEqual([ids[1], ids[3], ids[4]]);
     // Les annonces écartées hors de la limite sont comptées elles aussi
-    expect(dropCommercialPages(market, { [ids.at(-1)!]: mediaOf(["School"]) }).filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    const beyond = dropCommercialPages(market, { [ids.at(-1)!]: mediaOf(["School"]) });
+    expect(beyond.filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    expect(beyond.counts.ville).toBe(market.counts.ville - 1);
+    expect(replaced.counts.ville).toBe(market.counts.ville - 2);
   });
 
   it("dropCommercialPages : veille sans filtered (antérieure au filtre) → champ absent tant que rien n'est écarté, créé sinon", () => {
@@ -770,7 +830,7 @@ describe("veille : termes, budget d'appels et sélection", () => {
   it("marketSampleForAi : exemples gardés d'abord, puis la moitié de l'échantillon dans la zone retenue, puis les zones plus larges, puis le reste de la zone retenue", () => {
     // 10 annonces autour d'Albi (v0 la mieux notée … v9), 3 nationales (f0 … f2)
     const local = Array.from({ length: 10 }, (_, i) => record(`v${i}`, { pageName: `Cabinet V${i}`, euTotalReach: 9_000 - i * 500 }));
-    const national = Array.from({ length: 3 }, (_, i) => record(`f${i}`, { pageName: `Cabinet F${i}`, euTotalReach: 20_000 - i * 500, targetLocations: [{ name: "France", type: "country", excluded: false }] }));
+    const national = Array.from({ length: 3 }, (_, i) => nationalRecord(`f${i}`, { pageName: `Sophrologue F${i}`, euTotalReach: 20_000 - i * 500 }));
     const market = buildMetaMarket({ records: [...national, ...local], matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
     expect(market.scopeUsed).toBe("ville");
     const ids = (sample: MetaAdsMarket) => sample.ads.map((a) => a.id);
@@ -793,10 +853,59 @@ describe("veille : termes, budget d'appels et sélection", () => {
     expect(marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, [outside]).ads).toHaveLength(14);
   });
 
+  it("marketSampleForAi : au plus META_MARKET_FAVORITES_FOR_AI exemples gardés (les premiers reçus), la veille du moment reste majoritaire", () => {
+    const records = Array.from({ length: 40 }, (_, i) => record(`v${i}`, { pageName: `Cabinet V${i}` }));
+    const market = buildMetaMarket({ records, matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
+    const favorites = Array.from({ length: META_MARKET_FAVORITES_FOR_AI + 5 }, (_, i): MetaMarketAd => ({ ...market.ads[0]!, id: `g${i}`, pageName: `Cabinet gardé ${i}` }));
+    const sample = marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, favorites);
+    const ids = sample.ads.map((a) => a.id);
+    expect(ids).toHaveLength(META_MARKET_SAMPLE_FOR_AI);
+    expect(ids.slice(0, META_MARKET_FAVORITES_FOR_AI)).toEqual(favorites.slice(0, META_MARKET_FAVORITES_FOR_AI).map((a) => a.id));
+    expect(ids.filter((id) => id.startsWith("g"))).toHaveLength(META_MARKET_FAVORITES_FOR_AI);
+    const fromMarket = ids.filter((id) => id.startsWith("v"));
+    expect(fromMarket).toHaveLength(META_MARKET_SAMPLE_FOR_AI - META_MARKET_FAVORITES_FOR_AI);
+    expect(fromMarket.length).toBeGreaterThan(META_MARKET_SAMPLE_FOR_AI / 2);
+    // Moins d'exemples que le plafond : tous transmis
+    expect(marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, favorites.slice(0, 2)).ads.slice(0, 3).map((a) => a.id)).toEqual(["g0", "g1", fromMarket[0]]);
+    expect(META_MARKET_FAVORITES_FOR_AI).toBeLessThan(META_MARKET_SAMPLE_FOR_AI / 2);
+  });
+
+  it("insightsForMarket : les annonces citées en référence sont celles de la veille enregistrée (exemple gardé absent de la veille retiré)", () => {
+    const market = buildMetaMarket({ records: [record("10001"), record("10002"), record("10003")], matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
+    const insights: MetaMarketInsights = {
+      summary: "Trois cabinets annoncent autour d'Albi.",
+      angles: [
+        { label: "Réassurance", description: "Première séance expliquée.", adIds: ["10001", "555000111", "10003"] },
+        { label: "Ancrage local", description: "Le quartier est cité.", adIds: ["555000111"] },
+        { label: "Saisonnier", description: "Rentrée.", adIds: [] },
+      ],
+      hooks: ["Et si vous souffliez ?"],
+      offers: ["Séance découverte"],
+      formats: "Images surtout",
+      seasonality: "Rentrée",
+      gaps: ["Personne ne parle du sommeil"],
+      warnings: [],
+    };
+    const snapshot = structuredClone(insights);
+    const out = insightsForMarket(insights, market);
+    expect(out.angles).toEqual([
+      { label: "Réassurance", description: "Première séance expliquée.", adIds: ["10001", "10003"] },
+      // Un angle garde son libellé et sa description même sans annonce de la veille pour l'illustrer
+      { label: "Ancrage local", description: "Le quartier est cité.", adIds: [] },
+      { label: "Saisonnier", description: "Rentrée.", adIds: [] },
+    ]);
+    const { angles: _angles, ...rest } = out;
+    const { angles: _before, ...restBefore } = snapshot;
+    expect(rest).toEqual(restBefore);
+    // La synthèse d'entrée n'est pas modifiée
+    expect(insights).toEqual(snapshot);
+    expect(insightsForMarket(insights, { ads: [] }).angles.every((angle) => angle.adIds.length === 0)).toBe(true);
+  });
+
   it("marketSampleForAi : la zone retenue comprend les zones plus étroites (département retenu → ville et département confondus, par note)", () => {
     const city = Array.from({ length: 2 }, (_, i) => record(`v${i}`, { pageName: `Cabinet V${i}`, euTotalReach: 2_000 - i * 100 }));
     const department = Array.from({ length: 7 }, (_, i) => record(`d${i}`, { pageName: `Cabinet D${i}`, euTotalReach: 8_000 - i * 100, targetLocations: [{ name: "Tarn", type: "region", excluded: false }] }));
-    const national = Array.from({ length: 2 }, (_, i) => record(`f${i}`, { pageName: `Cabinet F${i}`, euTotalReach: 500 - i * 100, targetLocations: [{ name: "France", type: "country", excluded: false }] }));
+    const national = Array.from({ length: 2 }, (_, i) => nationalRecord(`f${i}`, { pageName: `Sophrologue F${i}`, euTotalReach: 500 - i * 100 }));
     const market = buildMetaMarket({ records: [...city, ...department, ...national], matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false }, SEED, "meta", NOW);
     expect(market.scopeUsed).toBe("departement");
     expect(marketSampleForAi(market, 6).ads.map((a) => a.id)).toEqual(["d0", "d1", "d2", "f0", "f1", "d3"]);
@@ -1088,6 +1197,41 @@ describe("executeMetaAnalysis : visuels, annonces supprimées, exemples gardés"
     expect(samples[0]!.ads.every((a) => known.has(a.id))).toBe(true);
   });
 
+  it("synthèse enregistrée : une annonce citée qui n'est pas dans la veille (exemple gardé, identifiant inventé) est retirée des références", async () => {
+    const base = planner();
+    const favorite: MetaMarketAd = { ...record("555000111"), pageName: "Cabinet gardé", scope: "ville", active: true, runningDays: 40, signal: "moyen", score: 5, matchedTerms: [] };
+    let cited: string[] = [];
+    const citing = {
+      ...base,
+      analyzeMarket: async (...args: Parameters<typeof base.analyzeMarket>) => {
+        const insights = await base.analyzeMarket(...args);
+        // L'IA cite l'exemple gardé (en tête de l'échantillon), une annonce de la veille et un identifiant qui n'existe pas
+        cited = [args[1].ads[0]!.id, args[1].ads[1]!.id, "000000"];
+        return { ...insights, angles: [{ label: "Angle cité", description: "Illustré par trois annonces.", adIds: cited }, ...insights.angles] };
+      },
+    };
+    const result = await executeMetaAnalysis({ ...CONTEXT, favorites: [favorite] }, { provider: wideProvider(20).provider, planner: citing, now: NOW });
+    expect(cited[0]).toBe("555000111");
+    const market = result.market!;
+    const known = new Set(market.ads.map((a) => a.id));
+    expect(known.has(cited[1]!)).toBe(true);
+    expect(market.insights!.angles[0]).toEqual({ label: "Angle cité", description: "Illustré par trois annonces.", adIds: [cited[1]] });
+    expect(market.insights!.angles.flatMap((angle) => angle.adIds).every((id) => known.has(id))).toBe(true);
+    // Les exemples gardés au-delà du plafond ne sont pas transmis
+    const many = Array.from({ length: META_MARKET_FAVORITES_FOR_AI + 3 }, (_, i): MetaMarketAd => ({ ...favorite, id: String(555_000_200 + i) }));
+    const samples: MetaAdsMarket[] = [];
+    const spy = {
+      ...base,
+      analyzeMarket: async (...args: Parameters<typeof base.analyzeMarket>) => {
+        samples.push(args[1]);
+        return base.analyzeMarket(...args);
+      },
+    };
+    await executeMetaAnalysis({ ...CONTEXT, favorites: many }, { provider: wideProvider(40).provider, planner: spy, now: NOW });
+    expect(samples[0]!.ads.filter((a) => a.id.startsWith("555000")).map((a) => a.id)).toEqual(many.slice(0, META_MARKET_FAVORITES_FOR_AI).map((a) => a.id));
+    expect(samples[0]!.ads).toHaveLength(META_MARKET_SAMPLE_FOR_AI);
+  });
+
   it("index des communes (localIndex) : une ville du département ciblée sans son département est comptée dans le département", async () => {
     const gaillac = Array.from({ length: 3 }, (_, i) => record(String(300_000 + i), { pageName: `Cabinet G${i}`, targetLocations: [{ name: "Gaillac", type: "city", excluded: false }] }));
     const provider = () => fakeProvider((_input, index) => ({ ads: index === 0 ? gaillac : [], calls: 1, truncated: false })).provider;
@@ -1249,8 +1393,10 @@ type FakeDbConfig = {
   library?: Record<string, unknown>[];
   /** Lignes `meta_ad_media` déjà en cache */
   media?: Record<string, unknown>[];
-  /** Recherches de visuels déjà comptées ce mois-ci (somme des `requests` des usages `meta_media`) */
+  /** Recherches de visuels déjà comptées ce mois-ci (somme des `requests` des usages `meta_media` et `meta_media_pending`) */
   mediaLookups?: number;
+  /** Réservations de visuels récentes non soldées (un autre lot du site est en cours) */
+  pendingReservations?: { id: string }[];
   /** Tables absentes (migration non appliquée) : toute requête sur elles échoue avec le code 42P01 */
   missingTables?: unknown[];
 };
@@ -1265,15 +1411,22 @@ function fakeDb(config: FakeDbConfig = {}) {
   const updates: FakeWrite[] = [];
   const inserts: FakeWrite[] = [];
   const deletes: unknown[] = [];
+  /** Ménages des réservations de visuels abandonnées (`delete` des `meta_media_pending` trop anciennes, sous verrou) — comptés à part */
+  const purges: unknown[] = [];
+  const dialect = new PgDialect();
   /** Tables lues par `select()` (dans l'ordre) */
   const selects: unknown[] = [];
   let analysisReads = 0;
   const thenable = <T>(value: T) => ({ then: (res: (v: T) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(value).then(res, rej) });
   const failing = () => ({ then: (res: (v: never) => unknown, rej?: (e: unknown) => unknown) => Promise.reject(missingTableError()).then(res, rej) });
   const isMissing = (table: unknown) => config.missingTables?.includes(table) === true;
-  /** Lignes d'une lecture : compteurs d'usage par kind, somme des recherches de visuels, bibliothèque, cache des visuels. */
+  /** Lignes d'une lecture : compteurs d'usage par kind, réservations de visuels en cours, somme des recherches de visuels, bibliothèque, cache des visuels. */
   const rowsOf = (table: unknown, fields: Record<string, unknown> | undefined): unknown[] => {
-    if (table === googleUsage) return fields && !("kind" in fields) ? [{ total: config.mediaLookups ?? 0 }] : (config.usage ?? []);
+    if (table === googleUsage) {
+      if (fields && "kind" in fields) return config.usage ?? [];
+      if (fields && "id" in fields) return config.pendingReservations ?? [];
+      return [{ total: config.mediaLookups ?? 0 }];
+    }
     if (table === metaAdsLibrary) return config.library ?? [];
     if (table === metaAdMedia) return config.media ?? [];
     return [];
@@ -1334,21 +1487,27 @@ function fakeDb(config: FakeDbConfig = {}) {
       }),
     }),
     delete: (table: unknown) => ({
-      where: () => {
-        deletes.push(table);
+      where: (condition?: unknown) => {
+        const text = condition === undefined ? "" : dialect.sqlToQuery(condition as SQL).sql;
+        if (table === googleUsage && /"google_usage"\."kind" = \$\d+ and "google_usage"\."created_at" < \$\d+/.test(text)) purges.push(table);
+        else deletes.push(table);
         return thenable([]);
       },
     }),
   };
   const db = { ...executor, transaction: async <T>(fn: (tx: typeof executor) => Promise<T>) => fn(executor) };
-  return { db: db as unknown as Database, updates, inserts, deletes, selects };
+  return { db: db as unknown as Database, updates, inserts, deletes, purges, selects };
 }
 
 const doneUpdate = (updates: FakeWrite[]) => updates.find((u) => u.table === metaAdsAnalyses && u.values.status === "done");
 /** Visuels mis en cache (une écriture `meta_ad_media` par recherche aboutie). */
 const mediaInserts = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === metaAdMedia);
-/** Usages `meta_media` inscrits (recherches de visuels). */
-const mediaUsageInserts = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === googleUsage && i.values.kind === "meta_media");
+/** Réservations de recherches de visuels (lignes `google_usage` kind `meta_media_pending` insérées sous verrou). */
+const mediaReservations = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === googleUsage && i.values.kind === "meta_media_pending");
+/** Soldes des réservations : la ligne passe en `meta_media` avec les recherches réellement envoyées et leur coût. */
+const mediaSettlements = (updates: FakeWrite[]) => updates.filter((u) => u.table === googleUsage && u.values.kind === "meta_media");
+/** Appels à la bibliothèque inscrits sur l'usage `meta_analysis` en fin d'analyse. */
+const analysisUsageUpdate = (updates: FakeWrite[]) => updates.find((u) => u.table === googleUsage && !("kind" in u.values));
 
 /** Fiche praticien d'Albi (ville, adresse et donc département connus). */
 const PROSPECT = {
@@ -1367,9 +1526,12 @@ const heartbeats = (updates: FakeWrite[]) => updates.filter((u) => u.table === m
 
 describe("loadMetaAdsContext (base simulée)", () => {
   const favorite: MetaMarketAd = { ...record("555000111"), pageName: "Cabinet gardé", scope: "ville", active: true, runningDays: 40, signal: "moyen", score: 5, matchedTerms: [] };
+  const demoFavorite: MetaMarketAd = { ...favorite, id: "555000333", pageName: "Cabinet de démonstration" };
   const library = [
-    { adId: "555000222", status: "dismissed", pageName: "Cabinet écarté", ad: null, media: null, createdAt: NOW, updatedAt: NOW },
-    { adId: favorite.id, status: "kept", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW },
+    { adId: "555000222", status: "dismissed", source: "meta", pageName: "Cabinet écarté", ad: null, media: null, createdAt: NOW, updatedAt: NOW },
+    { adId: favorite.id, status: "kept", source: "meta", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW },
+    { adId: demoFavorite.id, status: "kept", source: "mock", pageName: demoFavorite.pageName, ad: demoFavorite, media: null, createdAt: NOW, updatedAt: NOW },
+    { adId: "555000444", status: "dismissed", source: "mock", pageName: "Démonstration écartée", ad: null, media: null, createdAt: NOW, updatedAt: NOW },
   ];
   const located = () => fakeDb({ site: { ...SITE, prospectId: PROSPECT.id } as Site, prospect: PROSPECT, library });
 
@@ -1402,13 +1564,23 @@ describe("loadMetaAdsContext (base simulée)", () => {
     expect(ctx.localIndex!.department.has("gaillac")).toBe(true);
     expect(ctx.localIndex!.department.has("toulouse")).toBe(false);
     expect(ctx.localIndex!.region.has("toulouse")).toBe(true);
-    expect(ctx.dismissedAdIds).toEqual(["555000222"]);
+    // Toutes les annonces supprimées, mais seuls les exemples gardés de la même origine que la veille à venir (réelle par défaut)
+    expect(ctx.dismissedAdIds).toEqual(["555000222", "555000444"]);
     expect(ctx.favorites).toEqual([favorite]);
     // Chaque option est indépendante
     const onlyLibrary = await loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { library: true, fetchImpl: impl });
     expect(calls).toHaveLength(1);
     expect(onlyLibrary.localIndex).toBeNull();
-    expect(onlyLibrary.dismissedAdIds).toEqual(["555000222"]);
+    expect(onlyLibrary.dismissedAdIds).toEqual(["555000222", "555000444"]);
+  });
+
+  it("library par origine : « meta » (comme true) → exemples d'une vraie veille ; « mock » → exemples de démonstration ; jamais mélangés", async () => {
+    const real = await loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { library: "meta" });
+    expect(real.favorites).toEqual([favorite]);
+    const demo = await loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { library: "mock" });
+    expect(demo.favorites).toEqual([demoFavorite]);
+    expect(demo.dismissedAdIds).toEqual(real.dismissedAdIds);
+    expect((await loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { library: false })).favorites).toEqual([]);
   });
 
   it("geography sans département connu (site sans fiche ni adresse) : aucun appel ; bibliothèque absente (migration 0007) : listes vides", async () => {
@@ -1452,11 +1624,11 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(usageInsert!.values).toMatchObject({ siteId: SITE.id, kind: "meta_analysis", costUsd: 0, requests: 0, createdAt: NOW });
     // Un battement après les visuels, un après la veille, deux entre les générations
     expect(heartbeats(fake.updates)).toHaveLength(4);
-    const usageUpdate = fake.updates.find((u) => u.table === googleUsage);
+    const usageUpdate = analysisUsageUpdate(fake.updates);
     const done = doneUpdate(fake.updates);
     expect(done!.values).toMatchObject({ status: "done", provider: "mock", generator: "mock", error: null, instructions: "Sans tarif" });
     expect(done!.values.calls).toBeGreaterThan(0);
-    expect(usageUpdate!.values.requests).toBe(done!.values.calls);
+    expect(usageUpdate!.values).toEqual({ requests: done!.values.calls });
     expect(done!.values.market).not.toBeNull();
     expect(done!.values.creatives).not.toBeNull();
     expect(done!.values.videoPlan).not.toBeNull();
@@ -1477,12 +1649,16 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
       expect(written.get(ad.id)).toMatchObject({ adId: ad.id, status: "ok", provider: "mock", fetchedAt: NOW, updatedAt: NOW });
       expect((written.get(ad.id)!.media as MetaAdMedia).source).toBe("mock");
     }
-    // Les recherches sont inscrites dans google_usage (kind meta_media) : gratuites en démonstration
-    const mediaUsage = mediaUsageInserts(fake.inserts);
-    expect(mediaUsage).toHaveLength(1);
-    expect(mediaUsage[0]!.values).toEqual({ siteId: SITE.id, month: "2026-10", kind: "meta_media", costUsd: 0, requests: mediaWrites.length, createdAt: NOW });
-    // Rien d'autre n'est inséré : l'analyse, son usage, les visuels, leur usage
-    expect(fake.inserts).toHaveLength(2 + mediaWrites.length + 1);
+    // Recherches réservées sur le quota (meta_media_pending) avant d'être envoyées, puis soldées en meta_media : gratuites en démonstration
+    const reservations = mediaReservations(fake.inserts);
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0]!.values).toEqual({ siteId: SITE.id, month: "2026-10", kind: "meta_media_pending", costUsd: 0, requests: mediaWrites.length, createdAt: NOW });
+    expect(fake.inserts.indexOf(reservations[0]!)).toBeLessThan(fake.inserts.indexOf(mediaWrites[0]!));
+    expect(mediaSettlements(fake.updates).map((u) => u.values)).toEqual([{ kind: "meta_media", requests: mediaWrites.length, costUsd: 0 }]);
+    // Rien d'autre n'est inséré : l'analyse, son usage, la réservation, les visuels ; rien n'est supprimé, hors le ménage des réservations abandonnées (une fois, à la réservation)
+    expect(fake.inserts).toHaveLength(2 + 1 + mediaWrites.length);
+    expect(fake.deletes).toHaveLength(0);
+    expect(fake.purges).toEqual([googleUsage]);
   });
 
   it("démo en mock : aucune requête réseau (ni référentiel des communes, ni fournisseur de visuels réel), même avec une ville et un département connus", async () => {
@@ -1496,8 +1672,9 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     const seed = fake.inserts[0]!.values.seed as MetaAdsSeed;
     expect(seed).toMatchObject({ profession: "Sophrologue", city: "Albi", department: { code: "81" } });
     expect(seed).not.toHaveProperty("nearbyCities");
+    expect(mediaInserts(fake.inserts).length).toBeGreaterThan(0);
     expect(mediaInserts(fake.inserts).every((w) => w.values.provider === "mock")).toBe(true);
-    expect(mediaUsageInserts(fake.inserts)[0]!.values.costUsd).toBe(0);
+    expect(mediaSettlements(fake.updates).map((u) => u.values.costUsd)).toEqual([0]);
   });
 
   it("annonces supprimées et cache des visuels : l'annonce supprimée ne revient pas (dismissed), une annonce déjà en cache n'est pas recherchée à nouveau", async () => {
@@ -1508,7 +1685,7 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(reference).not.toHaveProperty("dismissed");
     const cached = mediaOf(["Alternative & Holistic Health Service"], { source: "mock" });
     const fake = fakeDb({
-      library: [{ adId: dismissedAd!.id, status: "dismissed", pageName: dismissedAd!.pageName, ad: null, media: null, createdAt: NOW, updatedAt: NOW }],
+      library: [{ adId: dismissedAd!.id, status: "dismissed", source: "mock", pageName: dismissedAd!.pageName, ad: null, media: null, createdAt: NOW, updatedAt: NOW }],
       media: [{ adId: cachedAd!.id, status: "ok", media: cached, provider: "mock", fetchedAt: NOW, updatedAt: NOW }],
     });
     const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
@@ -1521,13 +1698,27 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(lookedUp).not.toContain(dismissedAd!.id);
     expect(lookedUp).not.toContain(cachedAd!.id);
     expect(lookedUp.length).toBeGreaterThan(0);
-    // Seules les recherches réellement envoyées sont comptées
-    expect(mediaUsageInserts(fake.inserts)[0]!.values.requests).toBe(lookedUp.length);
+    // Seules les annonces à chercher sont réservées, seules les recherches réellement envoyées sont comptées
+    expect(mediaReservations(fake.inserts).map((i) => i.values.requests)).toEqual([lookedUp.length]);
+    expect(mediaSettlements(fake.updates).map((u) => u.values.requests)).toEqual([lookedUp.length]);
+  });
+
+  it("visuels d'une autre origine en cache (fournisseur réel) : jamais servis à une veille de démonstration, l'annonce est recherchée à nouveau", async () => {
+    const first = fakeDb();
+    await silenced(() => runMetaAdsAnalysis(first.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    const [ad] = (doneUpdate(first.updates)!.values.market as MetaAdsMarket).ads;
+    const real = mediaOf(["Shopping & retail"], { source: "scrapecreators" });
+    const fake = fakeDb({ media: [{ adId: ad!.id, status: "ok", media: real, provider: "scrapecreators", fetchedAt: NOW, updatedAt: NOW }] });
+    await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    const rewritten = mediaInserts(fake.inserts).find((w) => w.values.adId === ad!.id);
+    expect(rewritten!.values).toMatchObject({ provider: "mock", media: { source: "mock" } });
+    // La catégorie « boutique » de la ligne étrangère n'écarte donc pas l'annonce de la veille de démonstration
+    expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.some((a) => a.id === ad!.id)).toBe(true);
   });
 
   it("exemples gardés de la bibliothèque : transmis à l'analyse sans entrer dans la veille enregistrée", async () => {
     const favorite: MetaMarketAd = { ...record("555000111"), pageName: "Cabinet gardé", scope: "ville", active: true, runningDays: 40, signal: "moyen", score: 5, matchedTerms: [] };
-    const fake = fakeDb({ library: [{ adId: favorite.id, status: "kept", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW }] });
+    const fake = fakeDb({ library: [{ adId: favorite.id, status: "kept", source: "mock", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW }] });
     const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
     expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
     const market = doneUpdate(fake.updates)!.values.market as MetaAdsMarket;
@@ -1537,19 +1728,35 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(mediaInserts(fake.inserts).map((w) => w.values.adId)).not.toContain(favorite.id);
   });
 
-  it("quota mensuel de visuels épuisé : aucune recherche, aucun usage meta_media, la veille est enregistrée sans visuels", async () => {
+  it("quota mensuel de visuels épuisé : aucune réservation ni recherche, la veille est enregistrée sans visuels ; quota presque épuisé : seul le reste est réservé", async () => {
     const fake = fakeDb({ mediaLookups: META_MEDIA_LOOKUPS_PER_MONTH });
     const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
     expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
     expect(mediaInserts(fake.inserts)).toHaveLength(0);
-    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaReservations(fake.inserts)).toHaveLength(0);
+    expect(mediaSettlements(fake.updates)).toHaveLength(0);
     expect(fake.inserts).toHaveLength(2);
+    expect(fake.deletes).toHaveLength(0);
     expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.length).toBeGreaterThan(0);
     // Quota presque épuisé : les recherches s'arrêtent au reste
     const almost = fakeDb({ mediaLookups: META_MEDIA_LOOKUPS_PER_MONTH - 3 });
     await silenced(() => runMetaAdsAnalysis(almost.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(mediaReservations(almost.inserts).map((i) => i.values.requests)).toEqual([3]);
     expect(mediaInserts(almost.inserts)).toHaveLength(3);
-    expect(mediaUsageInserts(almost.inserts)[0]!.values.requests).toBe(3);
+    expect(mediaSettlements(almost.updates).map((u) => u.values)).toEqual([{ kind: "meta_media", requests: 3, costUsd: 0 }]);
+  });
+
+  it("un autre lot de visuels du site est en cours (réservation récente non soldée) : aucune recherche, la veille est enregistrée quand même", async () => {
+    const fake = fakeDb({ pendingReservations: [{ id: "reservation-en-cours" }] });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    expect(mediaInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaReservations(fake.inserts)).toHaveLength(0);
+    expect(mediaSettlements(fake.updates)).toHaveLength(0);
+    // La réservation de l'autre lot n'est ni soldée ni supprimée par cette analyse
+    expect(fake.deletes).toHaveLength(0);
+    expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.length).toBeGreaterThan(0);
+    expect(doneUpdate(fake.updates)!.values.error).toBeNull();
   });
 
   it("tables de la migration 0007 absentes (meta_ads_library, meta_ad_media) : l'analyse aboutit sans bibliothèque ni visuels", async () => {
@@ -1563,7 +1770,7 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(done.values.creatives).not.toBeNull();
     expect(done.values.plan).not.toBeNull();
     expect(mediaInserts(fake.inserts)).toHaveLength(0);
-    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaReservations(fake.inserts)).toHaveLength(0);
     expect(fake.inserts).toHaveLength(2);
   });
 
@@ -1641,10 +1848,12 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     // Image principale copiée sur le stockage injecté (opts.mediaStore), à la largeur des affiches
     expect(stored.map((s) => s.key).sort()).toEqual(items.map((i) => `meta-media/${i.id}/0.jpg`).sort());
     expect(stored.every((s) => s.maxWidth === META_MEDIA_POSTER_WIDTH)).toBe(true);
-    // Usage facturé au tarif du fournisseur
-    const mediaUsage = mediaUsageInserts(fake.inserts);
-    expect(mediaUsage).toHaveLength(1);
-    expect(mediaUsage[0]!.values).toEqual({ siteId: SITE.id, month: "2026-10", kind: "meta_media", costUsd: 3 * META_MEDIA_LOOKUP_COST_USD, requests: 3, createdAt: NOW });
+    // Trois recherches réservées puis soldées au tarif du fournisseur
+    expect(mediaReservations(fake.inserts).map((i) => i.values)).toEqual([{ siteId: SITE.id, month: "2026-10", kind: "meta_media_pending", costUsd: 0, requests: 3, createdAt: NOW }]);
+    const settlements = mediaSettlements(fake.updates);
+    expect(settlements).toHaveLength(1);
+    expect(settlements[0]!.values).toMatchObject({ kind: "meta_media", requests: 3 });
+    expect(settlements[0]!.values.costUsd).toBeCloseTo(3 * META_MEDIA_LOOKUP_COST_USD, 10);
 
     // La page classée boutique est écartée une fois les visuels obtenus
     const done = doneUpdate(fake.updates)!;
@@ -1667,7 +1876,7 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(network.calls.every((call) => new URL(call.url).hostname === "graph.facebook.com")).toBe(true);
     expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.map((a) => a.id)).toEqual(["700000000000001"]);
     expect(mediaInserts(fake.inserts)).toHaveLength(0);
-    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaReservations(fake.inserts)).toHaveLength(0);
     expect(fake.selects).not.toContain(metaAdMedia);
     // Pas de visuels : un battement après la veille, deux entre les générations
     expect(heartbeats(fake.updates)).toHaveLength(3);

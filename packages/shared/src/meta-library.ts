@@ -160,10 +160,15 @@ export function isCommercialPageCategory(categories: readonly string[]): boolean
 
 // ─── Note et tendance ────────────────────────────────────────────────────────
 
-/** Note sur 10 d'une annonce, tirée de son score (portée, durée de diffusion, diffusion en cours). */
+/**
+ * Note sur 10 d'une annonce : son score (portée, durée de diffusion,
+ * diffusion en cours) arrondi et borné. Une annonce diffusée quatre mois, à
+ * 100 000 personnes et toujours en ligne atteint 9 ou 10 ; une annonce
+ * récente à faible portée reste sous 5.
+ */
 export function adNote(score: number): number {
   if (!Number.isFinite(score)) return 1;
-  return Math.max(1, Math.min(10, Math.round(score * 1.3)));
+  return Math.max(1, Math.min(10, Math.round(score)));
 }
 
 /** Annonce « tendance » : encore diffusée et au signal fort (longue durée, large portée). */

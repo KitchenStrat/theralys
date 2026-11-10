@@ -193,11 +193,13 @@ function videoTexts(plan: { videos: { hook: string; caption: string; beats: { sa
 // ─── Fixtures : cohérence ────────────────────────────────────────────────────
 
 describe("fixtures", () => {
-  it("la veille fictive est locale (≥ 8 annonces à Albi) et le bilan dépend du Pixel", () => {
+  it("la veille fictive est locale (≥ 8 annonces à Albi), complétée par les mieux notées ailleurs, et le bilan dépend du Pixel", () => {
     const m = market();
     expect(m.scopeUsed).toBe("ville");
     expect(m.counts.ville).toBe(9);
-    expect(m.ads.map((a) => a.id)).not.toContain("a10");
+    // Zone retenue d'abord, puis les annonces des zones plus larges
+    expect(m.ads.slice(0, 9).every((a) => a.scope === "ville")).toBe(true);
+    expect(m.ads.slice(9).map((a) => a.id).sort()).toEqual(["a10", "a11"]);
     expect(input().diagnostic.verdict).toBe("wait");
     expect(input({}, { pixel: true }).diagnostic.checks.find((c) => c.id === "pixel")?.status).toBe("ok");
     expect(META_CREATIVE_TEMPLATES).toEqual(["photo-titre"]);
@@ -295,7 +297,10 @@ describe("prompts", () => {
     expect(user).toContain("id a1 — page « Cabinet Sérénité », zone autour de vous (Albi), en cours, 90 jours de diffusion, portée 30000, signal fort, plateformes facebook+instagram");
     expect(user).toContain("textes : Vous souffrez de stress ? Résultats garantis dès la première séance.");
     expect(user).toContain("id a9 — page « Maison du Bien-être », zone autour de vous (Albi), arrêtée");
-    expect(user).not.toContain("id a10");
+    // Les annonces d'ailleurs complètent la veille, signalées comme telles
+    expect(user).toContain("id a10 — page « Sophro France », zone autres zones et france");
+    expect(user).toContain("Les annonces d'une zone plus large que la zone retenue complètent la veille (les mieux notées ailleurs) : elles servent d'inspiration et ne disent rien de la concurrence locale.");
+    expect(metaMarketUserPrompt(b, market(ADS.slice(0, 9)))).not.toContain("complètent la veille");
     expect(user).toContain('"adIds": ["…"]');
     expect(user).toContain("jamais une accroche recopiée");
     // Balises et chevrons glissés dans une annonce : neutralisés, le bloc <veille> reste unique
@@ -917,7 +922,8 @@ describe("mocks", () => {
     const insights = mockMarketInsights(b, m);
     expect(mockMarketInsights(b, m)).toEqual(insights);
     expect(() => metaMarketInsightsSchema.parse(insights)).not.toThrow();
-    expect(insights.summary).toContain("9 annonces repérées (autour de vous)");
+    expect(insights.summary).toContain("11 annonces étudiées (9 autour de vous, 2 parmi les mieux notées ailleurs)");
+    expect(mockMarketInsights(b, market(ADS.slice(0, 9))).summary).toContain("9 annonces repérées (autour de vous)");
     expect(insights.summary).toContain("Cabinet Sérénité");
     expect(insights.angles.length).toBeGreaterThanOrEqual(3);
     expect(insights.angles.length).toBeLessThanOrEqual(5);
@@ -972,7 +978,7 @@ describe("mocks", () => {
       },
       m,
     );
-    expect(insights.summary).toContain("9 annonces repérées");
+    expect(insights.summary).toContain("11 annonces étudiées (9 autour de vous");
     expect(insights.angles.length).toBeGreaterThanOrEqual(3);
     expect(insights.angles[0]).toEqual({ label: "Offre", description: "Une séance découverte offerte, souvent.", adIds: ["a2"] });
     expect(insights.hooks).toEqual(["Une question qui interpelle."]);

@@ -215,12 +215,12 @@ export type PosterTone = { from: string; to: string; ink: string };
 
 /** Teintes douces des affiches typographiques et des pastilles d'initiales. */
 const POSTER_TONES: readonly PosterTone[] = [
-  { from: "#f0f8ff", to: "#cfe8fa", ink: "#0b5280" },
-  { from: "#f6f1ea", to: "#e8dccb", ink: "#5a452c" },
-  { from: "#eef6f1", to: "#d2e8da", ink: "#24543d" },
-  { from: "#f6eff5", to: "#e6d5e5", ink: "#5a3458" },
-  { from: "#fdf2ea", to: "#f8dcc8", ink: "#7a3f1e" },
-  { from: "#eef2f8", to: "#d6e0ee", ink: "#2f4674" },
+  { from: "#e6f3fd", to: "#bfdff7", ink: "#0b4a73" },
+  { from: "#f5eee4", to: "#e3d2bb", ink: "#553f26" },
+  { from: "#e8f4ec", to: "#c4e0cf", ink: "#1f4e38" },
+  { from: "#f4eaf3", to: "#dfc8de", ink: "#55304f" },
+  { from: "#fdeee3", to: "#f6d2b8", ink: "#733a1a" },
+  { from: "#e9eef7", to: "#c9d6ea", ink: "#2b4170" },
 ];
 
 /** Teinte d'une annonce, toujours la même pour un identifiant donné. */

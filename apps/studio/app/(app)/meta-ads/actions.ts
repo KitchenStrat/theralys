@@ -237,6 +237,8 @@ function libraryRefusal(outcome: LibraryOutcome): string | null {
       return LIBRARY_UNAVAILABLE;
     case "empty":
       return "Aucune annonce sélectionnée.";
+    case "too_many":
+      return `Trop d'annonces à la fois — ${META_LIBRARY_BULK_MAX} au plus par action.`;
   }
 }
 

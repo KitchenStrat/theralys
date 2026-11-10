@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card } from "@theralys/ui";
 import {
   META_GALLERY_DEFAULT_FILTERS,
@@ -52,6 +52,7 @@ export function MarketGallery({
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(NO_SELECTION);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const counts = useMemo(() => galleryCounts(ads, now), [ads, now]);
   // Filtre de zone : dans la veille seulement, et s'il y a plus d'une zone à départager
@@ -93,6 +94,17 @@ export function MarketGallery({
     setSelected(NO_SELECTION);
   }
 
+  /**
+   * Une annonce quitte la vue (supprimée, retirée) : le focus passe à la carte
+   * voisine au lieu de se perdre avec la carte ou la fiche qui disparaît.
+   */
+  function leaving(id: string, action: (ids: readonly string[]) => boolean | void) {
+    const card = [...(listRef.current?.children ?? [])].find((el) => el instanceof HTMLElement && el.dataset.adId === id);
+    const held = card?.contains(document.activeElement) || detailId === id;
+    const neighbour = (card?.nextElementSibling ?? card?.previousElementSibling)?.querySelector<HTMLElement>('[data-testid="meta-card-media"]');
+    if (action([id]) !== false && held) requestAnimationFrame(() => neighbour?.focus({ preventScroll: true }));
+  }
+
   /** Geste groupé sur la sélection ; le mode sélection se referme, sauf si le praticien a renoncé. */
   function bulk(action: (ids: readonly string[]) => boolean | void) {
     if (action(chosen) !== false) stopSelecting();
@@ -101,9 +113,9 @@ export function MarketGallery({
   if (ads.length === 0) {
     return mode === "bibliotheque" ? (
       <Card className="p-8 text-center text-ink-500" data-testid="meta-library-empty">
-        <p className="mx-auto max-w-xl text-sm">
-          <span className="font-medium text-ink-700">Votre bibliothèque est vide.</span> Dans l&apos;onglet Annonces, cliquez sur « Garder comme exemple » pour conserver une annonce, son
-          analyse et ses visuels, même quand elle ne sera plus diffusée.
+        <p className="font-medium text-ink-700">Votre bibliothèque est vide.</p>
+        <p className="mx-auto mt-1 max-w-xl text-sm">
+          Dans l&apos;onglet Annonces, cliquez sur « Garder comme exemple » pour conserver une annonce, son analyse et ses visuels, même quand elle ne sera plus diffusée.
         </p>
         <div className="mt-5">
           <Button variant="secondary" onClick={onShowWatch}>
@@ -113,7 +125,7 @@ export function MarketGallery({
       </Card>
     ) : (
       <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Votre veille ne contient plus d&apos;annonce.</p>
+        <p className="font-medium text-ink-700">Aucune annonce à afficher dans votre veille.</p>
         <p className="mt-1 text-sm">Relancez l&apos;analyse depuis l&apos;onglet Diagnostic pour repérer de nouvelles annonces.</p>
       </Card>
     );
@@ -147,6 +159,7 @@ export function MarketGallery({
         // Conteneur de requêtes : le nombre de colonnes suit la largeur de la galerie, pas celle de la fenêtre
         <div className="@container mt-5">
           <ul
+            ref={listRef}
             role="list"
             data-testid="meta-gallery"
             aria-label={mode === "veille" ? "Annonces de la veille" : "Exemples gardés"}
@@ -169,8 +182,8 @@ export function MarketGallery({
                 onToggle={() => toggle(ad.id)}
                 onKeep={() => library.keep([ad.id])}
                 onUnkeep={() => library.unkeep([ad.id])}
-                onDismiss={() => library.dismiss([ad.id])}
-                onRemove={() => library.removeFromLibrary([ad.id])}
+                onDismiss={() => leaving(ad.id, library.dismiss)}
+                onRemove={() => leaving(ad.id, library.removeFromLibrary)}
               />
             ))}
           </ul>
@@ -211,8 +224,8 @@ export function MarketGallery({
           onKeep={() => library.keep([detail.id])}
           onUnkeep={() => library.unkeep([detail.id])}
           // L'annonce quitte la vue : la fiche se referme d'elle-même
-          onDismiss={() => library.dismiss([detail.id])}
-          onRemove={() => library.removeFromLibrary([detail.id])}
+          onDismiss={() => leaving(detail.id, library.dismiss)}
+          onRemove={() => leaving(detail.id, library.removeFromLibrary)}
         />
       ) : null}
     </div>
