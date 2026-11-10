@@ -3,8 +3,9 @@
 import { clsx } from "clsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { META_MARKET_SCOPE_LABELS, adIsTrending, metaMediaBadge, type MetaAdMedia, type MetaGalleryAd } from "@theralys/shared";
-import { SIGNAL_LABELS, pageInitials, posterTone, rankLabel } from "@/lib/meta-ads/market-view";
+import { SIGNAL_LABELS, VISUAL_STATE_LABELS, pageInitials, posterTone, rankLabel } from "@/lib/meta-ads/market-view";
 import { Icon, type IconName } from "./market-icons";
+import { useVisualState } from "./use-visuals-loader";
 
 /**
  * Briques visuelles partagées par la carte et la fiche d'une annonce : image
@@ -103,13 +104,31 @@ export function PageAvatar({ name, url, seed, className = "h-7 w-7 text-[11px]" 
 
 const FORMAT_ICONS: Record<MetaAdMedia["format"], IconName> = { image: "image", video: "video", carousel: "carousel" };
 
-/** Pastille de format posée sur le visuel : « Vidéo », « Carrousel 1/3 », ou « Texte » sans visuel. */
-export function FormatBadge({ media, className }: { media: MetaAdMedia | null; className?: string }) {
-  const known = media !== null && media.items.length > 0;
+/**
+ * Pastille de format posée sur le visuel : « Vidéo », « Carrousel 1/3 ».
+ * Sans visuel affichable, elle dit pourquoi — en cours de chargement, pas
+ * encore chargé, indisponible — et ne prête jamais un format à l'annonce.
+ */
+export function FormatBadge({ ad, className }: { ad: Pick<MetaGalleryAd, "id" | "media">; className?: string }) {
+  const state = useVisualState(ad);
+  const media = ad.media;
   return (
-    <span className={clsx("inline-flex items-center gap-1 rounded-full bg-ink-900/70 px-2 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm", className)}>
-      <Icon name={known ? FORMAT_ICONS[media.format] : "text"} className="h-3.5 w-3.5" />
-      {known ? metaMediaBadge(media) : "Texte"}
+    <span data-visual={state} className={clsx("inline-flex items-center gap-1 rounded-full bg-ink-900/70 px-2 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm", className)}>
+      {state === "ready" && media ? (
+        <>
+          <Icon name={FORMAT_ICONS[media.format]} className="h-3.5 w-3.5" />
+          {metaMediaBadge(media)}
+        </>
+      ) : (
+        <>
+          {state === "loading" ? (
+            <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-white/40 border-t-white motion-reduce:animate-none" />
+          ) : (
+            <Icon name="image" className="h-3.5 w-3.5" />
+          )}
+          {VISUAL_STATE_LABELS[state === "ready" ? "none" : state]}
+        </>
+      )}
     </span>
   );
 }

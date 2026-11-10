@@ -281,6 +281,40 @@ export function visualsNote(missing: number): string {
   return `Les visuels de ${plural(missing, "annonce")} ne sont pas encore affichés.`;
 }
 
+/** Lots de visuels enchaînés au plus par chargement (une veille compte 60 annonces au plus, réserve comprise). */
+export const META_VISUALS_MAX_ROUNDS = 8;
+export const VISUALS_LOAD_FAILED = "Les visuels n'ont pas pu être chargés — réessayez dans un instant.";
+
+/** « Chargement des visuels… 12 annonces restantes. » */
+export function visualsLoadingNote(missing: number): string {
+  return missing > 0 ? `Chargement des visuels… ${plural(missing, "annonce")} restante${missing > 1 ? "s" : ""}.` : "Chargement des visuels…";
+}
+
+/** Bilan d'un chargement : « Visuels affichés pour 12 annonces. » */
+export function visualsLoadedMessage(found: number): string {
+  return found > 1 ? `Visuels affichés pour ${found.toLocaleString("fr-FR")} annonces.` : found === 1 ? "Visuel affiché pour 1 annonce." : "Aucun visuel disponible pour ces annonces.";
+}
+
+/**
+ * État du visuel d'une annonce : affichable (`ready`), en cours de
+ * chargement, pas encore cherché (`pending`), ou cherché sans résultat
+ * (`none`). Une annonce dont le visuel n'a pas été cherché n'est jamais
+ * présentée comme une annonce « texte » : son format est simplement inconnu.
+ */
+export type VisualState = "ready" | "loading" | "pending" | "none";
+
+export function visualStateOf(ad: Pick<MetaGalleryAd, "id" | "media">, pendingIds: ReadonlySet<string>, loading: boolean): VisualState {
+  if (ad.media && ad.media.items.length > 0) return "ready";
+  if (!pendingIds.has(ad.id)) return "none";
+  return loading ? "loading" : "pending";
+}
+
+export const VISUAL_STATE_LABELS: Record<Exclude<VisualState, "ready">, string> = {
+  loading: "Chargement du visuel…",
+  pending: "Visuel non chargé",
+  none: "Visuel indisponible",
+};
+
 /** Compteur de la galerie : « 60 annonces », ou « 37 annonces sur 60 » quand un filtre joue. */
 export function galleryCountLabel(shown: number, total: number): string {
   return shown === total ? plural(total, "annonce") : `${plural(shown, "annonce")} sur ${total.toLocaleString("fr-FR")}`;

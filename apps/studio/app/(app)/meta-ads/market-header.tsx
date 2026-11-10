@@ -1,14 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
 import { marketScopeNote, type MetaAdsMarket, type MetaAdsSeed, type MetaMarketScope } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import type { MetaVisualsView } from "@/lib/meta-ads/data";
-import { dismissedNote, filteredNote, scopeCounters, visualsNote } from "@/lib/meta-ads/market-view";
-import { loadMarketVisuals } from "./actions";
+import { dismissedNote, filteredNote, scopeCounters, visualsLoadingNote, visualsNote } from "@/lib/meta-ads/market-view";
 import { Icon } from "./market-icons";
+import type { VisualsLoader } from "./use-visuals-loader";
 
 /** Lieu d'une zone (« Albi », « Tarn ») ; null pour les autres zones et la France, que le libellé dit déjà. */
 function zoneName(scope: MetaMarketScope, seed: MetaAdsSeed): string | null {
@@ -79,58 +78,43 @@ export function MarketHeader({ market, seed, dismissed }: { market: MetaAdsMarke
 }
 
 /**
- * Visuels manquants (veille antérieure aux visuels, recherche interrompue) :
- * bandeau discret et bouton qui les charge, dans la limite du quota mensuel.
+ * Visuels manquants (veille antérieure aux visuels, recherche interrompue,
+ * clé ajoutée après coup) : ils se chargent d'eux-mêmes ; le bandeau dit où
+ * en est le chargement, son bilan, et propose de le relancer s'il en reste.
  */
-export function VisualsBanner({ visuals, available }: { visuals: MetaVisualsView; /** Bibliothèque activée (les visuels en dépendent) */ available: boolean }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ error?: string; message?: string }>({});
+export function VisualsBanner({ visuals, available, loader }: { visuals: MetaVisualsView; /** Bibliothèque activée (les visuels en dépendent) */ available: boolean; loader: VisualsLoader }) {
   const missing = visuals.provider && visuals.missing > 0 && available;
 
-  if (!missing && !result.message && !result.error) return null;
-
-  function load() {
-    setResult({});
-    startTransition(async () => {
-      const outcome = await loadMarketVisuals();
-      if (outcome.error) {
-        setResult({ error: outcome.error });
-        return;
-      }
-      setResult({ message: outcome.message ?? "Visuels affichés." });
-      router.refresh();
-    });
-  }
+  if (!missing && !loader.loading && !loader.message && !loader.error) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-3 text-sm text-ink-700">
+    <div data-testid="meta-visuals-banner" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-3 text-sm text-ink-700">
       <Icon name="image" className="h-5 w-5 shrink-0 text-primary-600" />
       <div className="min-w-[12rem] flex-1" aria-live="polite">
-        {missing ? <p>{visualsNote(visuals.missing)}</p> : null}
-        {result.error ? (
-          <p className="text-danger-500" role="alert">
-            {result.error}
+        {loader.loading ? (
+          <p className="inline-flex items-center gap-2" role="status" data-testid="meta-visuals-loading">
+            <Spinner /> {visualsLoadingNote(visuals.missing)}
+          </p>
+        ) : missing ? (
+          <p>{visualsNote(visuals.missing)}</p>
+        ) : null}
+        {loader.error ? (
+          <p className="text-red-700" role="alert">
+            {loader.error}
           </p>
         ) : null}
-        {result.message ? (
-          <p className="text-success-500" role="status">
-            {result.message}
+        {loader.message && !loader.loading ? (
+          <p className="text-green-800" role="status">
+            {loader.message}
           </p>
         ) : null}
       </div>
-      {missing ? (
+      {missing && !loader.loading ? (
         visuals.remaining === 0 ? (
           <p className="text-ink-500">Quota mensuel de visuels atteint.</p>
         ) : (
-          <Button variant="secondary" size="sm" data-testid="meta-visuals-load" onClick={load} disabled={pending}>
-            {pending ? (
-              <>
-                <Spinner /> Chargement…
-              </>
-            ) : (
-              "Afficher les visuels"
-            )}
+          <Button variant="secondary" size="sm" data-testid="meta-visuals-load" onClick={loader.start}>
+            Afficher les visuels
           </Button>
         )
       ) : null}

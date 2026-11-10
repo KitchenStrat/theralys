@@ -13,6 +13,7 @@ import { FOCUS_RING, Icon, type IconName } from "./market-icons";
 import { InsightsCard } from "./market-insights";
 import type { MetaTab } from "./tabs";
 import { useMarketLibrary } from "./use-market-library";
+import { MarketVisualsContext, useVisualsLoader } from "./use-visuals-loader";
 
 type MarketView = "annonces" | "bibliotheque" | "synthese";
 
@@ -102,6 +103,9 @@ function MarketWatch({ market, seed, source, mediaByAdId, visuals }: { market: M
   const [libraryFilters, setLibraryFilters] = useState<MetaGalleryFilters>(META_GALLERY_DEFAULT_FILTERS);
   const library = useMarketLibrary({ market, mediaByAdId, library: source });
   const adsById = useMemo(() => new Map(market.ads.map((a) => [a.id, a])), [market]);
+  // Visuels manquants : chargés d'office, les cartes savent lesquels restent à chercher
+  const loader = useVisualsLoader({ visuals, available: source.available, watchKey: `${market.fetchedAt}:${market.ads.length}` });
+  const visualsContext = useMemo(() => ({ pendingIds: new Set(visuals.pendingIds), loading: loader.loading }), [visuals.pendingIds, loader.loading]);
 
   const views = VIEWS.filter((v) => v.id !== "synthese" || market.insights !== null);
   const view: MarketView = chosenView === "synthese" && !market.insights ? "annonces" : chosenView;
@@ -109,9 +113,10 @@ function MarketWatch({ market, seed, source, mediaByAdId, visuals }: { market: M
   const dismissed = (market.dismissed ?? 0) + (market.ads.length - library.watch.length);
 
   return (
+    <MarketVisualsContext.Provider value={visualsContext}>
     <div className="space-y-5">
       <MarketHeader market={market} seed={seed} dismissed={dismissed} />
-      <VisualsBanner visuals={visuals} available={source.available} />
+      <VisualsBanner visuals={visuals} available={source.available} loader={loader} />
 
       <div role="group" aria-label="Vue de la veille" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-cream-200 bg-white/80 p-1 shadow-(--shadow-card)">
         {views.map((v) => {
@@ -158,5 +163,6 @@ function MarketWatch({ market, seed, source, mediaByAdId, visuals }: { market: M
 
       <MarketToastBar toast={library.toast} onClose={library.closeToast} />
     </div>
+    </MarketVisualsContext.Provider>
   );
 }

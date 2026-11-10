@@ -82,7 +82,7 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
         ) : (
           poster
         )}
-        <FormatBadge media={ad.media} className="absolute left-2.5 top-2.5" />
+        <FormatBadge ad={ad} className="absolute left-2.5 top-2.5" />
         {format === "video" && cover ? (
           <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 pl-0.5 text-ink-900 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 motion-reduce:transform-none">
             <PlayGlyph />

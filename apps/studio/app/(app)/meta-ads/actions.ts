@@ -5,13 +5,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, metaAdsAnalyses, sites } from "@theralys/db";
 import {
-  currentMarket,
   dismissMetaAds,
-  enrichSiteAdsMedia,
   getMetaAdsUsage,
   keepMetaAds,
-  loadMetaLibrary,
-  mediaProviderFor,
   regenerateMetaAds as regenerateMetaAdsJob,
   restoreMetaAds,
   runMetaAdsAnalysis,
@@ -297,41 +293,4 @@ export async function restoreMarketAds(input: unknown): Promise<LibraryResult> {
     (siteId, adIds) => restoreMetaAds(getDb(), siteId, adIds, { store: createMetaMediaStore() }),
     (count) => (count > 1 ? `${count} annonces retirées de votre bibliothèque.` : "Annonce retirée de votre bibliothèque."),
   );
-}
-
-/**
- * Cherche les visuels des annonces affichées de la veille courante qui n'en
- * ont pas encore (veille antérieure aux visuels, recherche interrompue) : ni
- * les annonces supprimées, ni celles que le filtre de pertinence masque. Les
- * recherches sont réservées sur le quota mensuel ; un seul lot à la fois par
- * site.
- */
-export async function loadMarketVisuals(): Promise<LibraryResult> {
-  const session = await requireClient();
-  const site = await getSite(session.siteId);
-  if (!metaAccess(site)) return { error: NOT_INCLUDED };
-  const now = new Date();
-  const db = getDb();
-  try {
-    const [market, library] = await Promise.all([currentMarket(db, site.id), loadMetaLibrary(db, site.id)]);
-    if (!library.available) return { error: LIBRARY_UNAVAILABLE };
-    const provider = mediaProviderFor(process.env, market.providerMode);
-    if (!provider) return { error: "Les visuels des annonces ne sont pas encore activés." };
-    const dismissed = new Set(library.dismissedIds);
-    const adIds = [...market.ads.keys()].filter((id) => !dismissed.has(id));
-    if (adIds.length === 0) return { error: NO_ANALYSIS };
-    const enriched = await enrichSiteAdsMedia(db, site.id, adIds, { provider, store: createMetaMediaStore(), now, exclusive: true });
-    if (enriched.unavailable) return { error: LIBRARY_UNAVAILABLE };
-    if (enriched.busy) return { error: "Les visuels sont déjà en cours de chargement — patientez une minute." };
-    revalidatePath(PATH);
-    const found = Object.keys(enriched.mediaByAdId).length;
-    console.info("[meta-ads] visuels chargés depuis le studio", { siteId: site.id, found, lookups: enriched.lookups, blocked: enriched.blocked, overQuota: enriched.overQuota });
-    if (enriched.lookups === 0 && enriched.overQuota > 0) return { error: "Le quota mensuel de visuels est atteint — ils reviendront le mois prochain." };
-    if (enriched.blocked && found === 0) return { error: "Les visuels sont momentanément indisponibles — réessayez plus tard." };
-    const tail = enriched.overQuota > 0 ? " Le quota mensuel est atteint pour les autres." : enriched.blocked ? " Le chargement a été interrompu : relancez-le dans un instant." : "";
-    return { message: `${found > 1 ? `Visuels affichés pour ${found} annonces.` : found === 1 ? "Visuel affiché pour 1 annonce." : "Aucun visuel disponible pour ces annonces."}${tail}` };
-  } catch (err) {
-    console.error("[meta-ads] chargement des visuels en échec", { siteId: site.id, err });
-    return { error: "Les visuels n'ont pas pu être chargés — réessayez dans un instant." };
-  }
 }

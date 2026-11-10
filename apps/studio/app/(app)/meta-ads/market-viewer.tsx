@@ -6,6 +6,7 @@ import { metaMediaItemImage, type MetaAdMedia, type MetaAdMediaItem, type MetaGa
 import { adHook, metaVideoSrc } from "@/lib/meta-ads/market-view";
 import { FOCUS_RING, Icon, PlayGlyph } from "./market-icons";
 import { AdImage, TextPoster } from "./market-media";
+import { useVisualState } from "./use-visuals-loader";
 
 /** L'attribut n'est pas typé sur `<video>` ; l'affiche et la redirection partent sans référent. */
 const NO_REFERRER = { referrerPolicy: "no-referrer" } as const;
@@ -48,6 +49,7 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
 
   const image = item && media ? metaMediaItemImage(item, media, now) : null;
   const poster = <TextPoster adId={ad.id} hook={adHook(ad)} large />;
+  const visual = useVisualState(ad);
   const alt = `Visuel de l'annonce de ${ad.pageName}${count > 1 ? ` (${unit} ${index + 1} sur ${count})` : ""}`;
 
   return (
@@ -76,6 +78,21 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
           </>
         ) : null}
       </div>
+
+      {visual !== "ready" ? (
+        <p data-testid="meta-detail-visual-note" className="border-t border-cream-200 bg-white/60 px-4 py-3 text-center text-xs leading-relaxed text-ink-500">
+          {visual === "loading"
+            ? "Le visuel de cette annonce est en cours de chargement."
+            : visual === "pending"
+              ? "Le visuel de cette annonce n'est pas encore chargé : seul son texte est affiché."
+              : "Le visuel de cette annonce n'a pas pu être récupéré : seul son texte est affiché."}{" "}
+          {ad.libraryUrl ? (
+            <a href={ad.libraryUrl} target="_blank" rel="noopener noreferrer" className={clsx("font-medium text-primary-700 underline-offset-2 hover:underline", FOCUS_RING)}>
+              Voir sur Meta
+            </a>
+          ) : null}
+        </p>
+      ) : null}
 
       {count > 1 ? (
         <div className="flex flex-col items-center gap-1.5 border-t border-cream-200 bg-white/60 px-4 py-3">

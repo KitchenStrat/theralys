@@ -20,6 +20,11 @@ import {
   rankLabel,
   scopeCounters,
   selectionLabel,
+  META_VISUALS_MAX_ROUNDS,
+  VISUAL_STATE_LABELS,
+  visualStateOf,
+  visualsLoadedMessage,
+  visualsLoadingNote,
   visualsNote,
   watchGalleryAds,
   zonesLabel,
@@ -196,6 +201,14 @@ describe("phrases de l'en-tête et de la barre d'outils", () => {
     expect(dismissedNote(3)).toBe("3 annonces que vous avez supprimées ne sont plus proposées.");
     expect(visualsNote(1)).toBe("Les visuels de 1 annonce ne sont pas encore affichés.");
     expect(visualsNote(12)).toBe("Les visuels de 12 annonces ne sont pas encore affichés.");
+    expect(visualsLoadingNote(12)).toBe("Chargement des visuels… 12 annonces restantes.");
+    expect(visualsLoadingNote(1)).toBe("Chargement des visuels… 1 annonce restante.");
+    expect(visualsLoadingNote(0)).toBe("Chargement des visuels…");
+    expect(visualsLoadedMessage(12)).toBe("Visuels affichés pour 12 annonces.");
+    expect(visualsLoadedMessage(1)).toBe("Visuel affiché pour 1 annonce.");
+    expect(visualsLoadedMessage(0)).toBe("Aucun visuel disponible pour ces annonces.");
+    // Une veille compte 60 annonces au plus, réserve comprise, par lots de 12
+    expect(META_VISUALS_MAX_ROUNDS).toBeGreaterThanOrEqual(6);
     expect(galleryCountLabel(60, 60)).toBe("60 annonces");
     expect(galleryCountLabel(37, 60)).toBe("37 annonces sur 60");
     expect(galleryCountLabel(1, 1)).toBe("1 annonce");
@@ -265,5 +278,28 @@ describe("galerie : état serveur et gestes en attente", () => {
   it("ne duplique pas un exemple déjà gardé que le praticien garde à nouveau", () => {
     const view = libraryGalleryAds([a, b], mediaById, { kept: [entry(b)], dismissedIds: [] }, { "22222": mark("kept") });
     expect(view.map((x) => x.id)).toEqual(["22222"]);
+  });
+});
+
+describe("état du visuel d'une annonce", () => {
+  const pending = new Set(["2"]);
+
+  it("visuel affichable → ready, quel que soit le chargement", () => {
+    expect(visualStateOf({ id: "1", media: media() }, pending, false)).toBe("ready");
+    expect(visualStateOf({ id: "2", media: media() }, pending, true)).toBe("ready");
+  });
+
+  it("visuel jamais cherché → pending, loading pendant le chargement : jamais présenté comme une annonce « texte »", () => {
+    expect(visualStateOf({ id: "2", media: null }, pending, false)).toBe("pending");
+    expect(visualStateOf({ id: "2", media: null }, pending, true)).toBe("loading");
+    expect(VISUAL_STATE_LABELS.pending).toBe("Visuel non chargé");
+    expect(VISUAL_STATE_LABELS.loading).toBe("Chargement du visuel…");
+    expect(Object.values(VISUAL_STATE_LABELS).some((label) => /texte/i.test(label))).toBe(false);
+  });
+
+  it("visuel cherché sans résultat (annonce introuvable, réponse sans visuel) → none, même pendant un chargement", () => {
+    expect(visualStateOf({ id: "1", media: null }, pending, false)).toBe("none");
+    expect(visualStateOf({ id: "1", media: media({ items: [] }) }, pending, true)).toBe("none");
+    expect(VISUAL_STATE_LABELS.none).toBe("Visuel indisponible");
   });
 });

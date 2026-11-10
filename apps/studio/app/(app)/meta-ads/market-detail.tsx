@@ -4,11 +4,12 @@ import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { Modal } from "@theralys/ui";
 import { META_AD_MEDIA_FORMAT_LABELS, adNote, type MetaGalleryAd } from "@theralys/shared";
-import { SIGNAL_LABELS, adDiffusion, adMainText, audienceLabel, formatAdDate, galleryFormatOf, httpUrl, platformsLabel, rankLabel, zonesLabel } from "@/lib/meta-ads/market-view";
+import { SIGNAL_LABELS, VISUAL_STATE_LABELS, adDiffusion, adMainText, audienceLabel, formatAdDate, galleryFormatOf, httpUrl, platformsLabel, rankLabel, zonesLabel } from "@/lib/meta-ads/market-view";
 import type { GalleryMode } from "./market-card";
 import { FOCUS_RING, Icon } from "./market-icons";
 import { PageAvatar, RankChip, SignalBadge, ZoneChip } from "./market-media";
 import { MediaViewer } from "./market-viewer";
+import { useVisualState } from "./use-visuals-loader";
 
 const ACTION = "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors";
 
@@ -42,6 +43,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
   const caption = ad.captions.find((text) => text.trim() !== "") ?? null;
   const landing = httpUrl(media?.linkUrl);
   const format = galleryFormatOf(ad);
+  const visual = useVisualState(ad);
   const diffusion = adDiffusion(ad);
   const about = [
     media?.pageLikes != null ? `${media.pageLikes.toLocaleString("fr-FR")} mention${media.pageLikes > 1 ? "s" : ""} J'aime` : null,
@@ -129,7 +131,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
                 <span className="tabular-nums">{adNote(ad.score)}/10</span>
               </Fact>
               <Fact label="Rang">{rankLabel(ad) ?? "—"}</Fact>
-              <Fact label="Format">{format === "sans" ? "Visuel inconnu" : `${META_AD_MEDIA_FORMAT_LABELS[format]}${media && media.items.length > 1 ? ` · ${media.items.length} ${media.variants ? "déclinaisons" : "diapositives"}` : ""}`}</Fact>
+              <Fact label="Format">{format === "sans" ? VISUAL_STATE_LABELS[visual === "ready" ? "none" : visual] : `${META_AD_MEDIA_FORMAT_LABELS[format]}${media && media.items.length > 1 ? ` · ${media.items.length} ${media.variants ? "déclinaisons" : "diapositives"}` : ""}`}</Fact>
               {savedAt ? <Fact label="Dans votre bibliothèque">Gardée le {formatAdDate(savedAt) ?? "—"}</Fact> : null}
             </dl>
           </div>
