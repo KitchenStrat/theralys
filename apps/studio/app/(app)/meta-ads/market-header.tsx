@@ -70,8 +70,8 @@ export function MarketHeader({ market, seed, dismissed }: { market: MetaAdsMarke
       </div>
 
       <p className="mt-4 rounded-xl bg-cream-100 px-4 py-2.5 text-[13px] leading-relaxed text-ink-700">
-        <strong className="text-ink-900">Le signal</strong> : personne ne paie longtemps une annonce qui ne marche pas. Une annonce diffusée depuis plus de 30 jours avec une large
-        portée européenne est un signal fort. Les visuels sont affichés pour vous inspirer : reprenez l&apos;idée, jamais l&apos;image ni le texte d&apos;un confrère.
+        <strong className="text-ink-900">Le signal</strong> : personne ne paie longtemps une annonce qui ne marche pas. Une annonce diffusée depuis plus de 30 jours et vue par
+        de nombreuses personnes est un signal fort. Les visuels sont affichés pour vous inspirer : reprenez l&apos;idée, jamais l&apos;image ni le texte d&apos;un confrère.
       </p>
     </Card>
   );

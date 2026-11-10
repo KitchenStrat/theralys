@@ -15,6 +15,7 @@
  */
 
 import { adsProfessionFamily, normalizeAdsText } from "./google-ads";
+import { distanceKm } from "./google-profile";
 import { filterRelevantAds, isCountryLevelLocation, type MetaRelevanceSummary } from "./meta-relevance";
 import type { SocialAccentRole, SocialTemplate } from "./social";
 
@@ -431,7 +432,7 @@ export function specialtyKeyword(specialty: string): string | null {
  * Termes de recherche, par priorité. La bibliothèque cherche tous les mots du
  * terme dans le texte des annonces, sans filtre géographique : toute
  * recherche porte donc le métier, seul puis accompagné de la ville du
- * praticien, des grandes villes de son département et de ses spécialités
+ * praticien, des villes voisines (trois au plus) et de ses spécialités
  * (« ostéopathe Reims », « ostéopathe nourrisson »). Une spécialité cherchée
  * seule ramène surtout des marques (lait infantile, équipement sportif).
  * Termes dédoublonnés sans accent, bornés à META_LIBRARY_TERM_MAX caractères ;
@@ -461,7 +462,7 @@ export function buildMetaSearchTerms(
   const local = city ? base.map((term) => bounded(`${term} ${city}`)) : [];
   const nearby = uniqueByKey((seed.nearbyCities ?? []).map(placeName))
     .filter((c) => normalizeAdsText(c) !== cityKey)
-    .slice(0, 2)
+    .slice(0, 3)
     .map((c) => bounded(`${head} ${c}`));
   const specialties = uniqueByKey(seed.specialties.map(specialtyKeyword).filter((k): k is string => k !== null))
     // Une spécialité qui redit le métier (« séance d'hypnose ») n'ajoute rien
@@ -474,7 +475,8 @@ export function buildMetaSearchTerms(
     .map(boundedTerm)
     .filter((c): c is string => c !== null)
     .slice(0, 1);
-  const ordered = [base[0], local[0], base[1], local[1], nearby[0], specialties[0], nearby[1], specialties[1], competitors[0]];
+  // Le concurrent nommé (un confrère du coin) passe avant la troisième ville voisine
+  const ordered = [base[0], local[0], base[1], local[1], nearby[0], specialties[0], nearby[1], specialties[1], competitors[0], nearby[2]];
   return uniqueByKey(ordered.filter((t): t is string => Boolean(t))).slice(0, max);
 }
 
@@ -680,18 +682,38 @@ const REGION_BY_KEY: ReadonlyMap<string, string> = new Map([
  * (« Épernay, France ») : cet index dit qu'Épernay est dans la Marne. Il
  * n'est pas enregistré avec l'analyse (plusieurs milliers de noms).
  */
-export type MetaLocalIndex = { department: ReadonlySet<string>; region: ReadonlySet<string> };
+export type MetaLocalIndex = {
+  department: ReadonlySet<string>;
+  region: ReadonlySet<string>;
+  /** Communes du département à moins de META_AROUND_RADIUS_KM de la ville du praticien : son agglomération, « autour de vous » */
+  around?: ReadonlySet<string>;
+};
 
-export function buildMetaLocalIndex(communes: readonly { name: string; departmentCode: string }[], seed: Pick<MetaAdsSeed, "department">): MetaLocalIndex {
+/** Rayon de l'agglomération du praticien (km) : une annonce qui cible une commune plus proche est « autour de vous ». */
+export const META_AROUND_RADIUS_KM = 15;
+
+type IndexedCommune = { name: string; departmentCode: string; lat?: number; lng?: number };
+
+function located(commune: IndexedCommune): commune is IndexedCommune & { lat: number; lng: number } {
+  return typeof commune.lat === "number" && typeof commune.lng === "number" && Number.isFinite(commune.lat) && Number.isFinite(commune.lng);
+}
+
+export function buildMetaLocalIndex(communes: readonly IndexedCommune[], seed: Pick<MetaAdsSeed, "department"> & Partial<Pick<MetaAdsSeed, "city">>): MetaLocalIndex {
   const department = new Set<string>();
   const region = new Set<string>();
+  const cityKey = locationKey(seed.city ?? "");
+  // Ville du praticien, située : ses voisines à quelques kilomètres forment son agglomération
+  const home = seed.department && cityKey !== "" ? communes.find((c) => c.departmentCode === seed.department!.code && locationKey(c.name) === cityKey && located(c)) : undefined;
+  const around = new Set<string>();
   for (const commune of communes) {
     const key = locationKey(commune.name);
     if (key === "") continue;
     region.add(key);
-    if (seed.department && commune.departmentCode === seed.department.code) department.add(key);
+    if (!seed.department || commune.departmentCode !== seed.department.code) continue;
+    department.add(key);
+    if (home && located(home) && located(commune) && distanceKm(home, commune) <= META_AROUND_RADIUS_KM) around.add(key);
   }
-  return { department, region };
+  return { department, region, ...(around.size > 0 ? { around } : {}) };
 }
 
 type ScopeSeed = Pick<MetaAdsSeed, "city" | "department" | "region"> & Partial<Pick<MetaAdsSeed, "postalCode">>;
@@ -758,6 +780,8 @@ function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: Meta
   // Ville ciblée sans département : reconnue par l'index des communes — jamais pour une zone régionale ou nationale,
   // ni pour un nom de région ou de département que rien ne désigne comme une ville
   const cityLevel = !isCountryLevelLocation(location) && !regionTyped && (cityTyped || (!REGION_BY_KEY.has(first) && !DEPARTMENT_BY_KEY.has(first)));
+  // Commune de l'agglomération du praticien (à quelques kilomètres) : c'est « autour de vous »
+  if (index?.around && cityLevel && places.some((place) => index.around!.has(place))) return "ville";
   if (index && cityLevel && places.some((place) => index.department.has(place))) return "departement";
   if (regionKey !== "" && segments.includes(regionKey)) return "region";
   if (seed.region !== null && named.includes(seed.region)) return "region";
@@ -768,8 +792,9 @@ function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: Meta
 
 /**
  * Zone la plus étroite dans laquelle l'annonce est diffusée, d'après ses zones
- * ciblées (les zones exclues sont ignorées) : ville du praticien, commune ou
- * code postal de son département, puis de sa région (noms actuels et anciens,
+ * ciblées (les zones exclues sont ignorées) : ville du praticien et communes
+ * de son agglomération, commune ou code postal de son département, puis de
+ * sa région (noms actuels et anciens,
  * autres départements, communes de l'index). « france » regroupe les annonces
  * nationales et toutes celles qui ciblent une autre zone : d'où le libellé
  * « Autres zones et France ».
@@ -957,7 +982,11 @@ export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "count
       : extra > 0
         ? `${plural(near, "annonce")} ${where}${complement}.`
         : `${plural(kept, "annonce")} ${where}.`;
-  const widened = market.scopeUsed !== "ville" ? ` Peu d'annonces près de chez vous (${marketNearbyCount(market)}) : la veille a été élargie.` : "";
+  const nearby = marketNearbyCount(market);
+  const widened =
+    market.scopeUsed !== "ville"
+      ? ` Peu de confrères font de la publicité près de chez vous (${nearby === 0 ? "aucune annonce" : plural(nearby, "annonce")}) : la veille a été élargie pour vous inspirer.`
+      : "";
   return `${head}${widened}`;
 }
 

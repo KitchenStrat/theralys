@@ -122,7 +122,16 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
                 </span>
               </Fact>
               <Fact label="Lancée le">{formatAdDate(ad.startedAt) ?? "Date inconnue"}</Fact>
-              <Fact label="Portée européenne">{ad.euTotalReach === null ? "Inconnue" : `≈ ${ad.euTotalReach.toLocaleString("fr-FR")} personnes`}</Fact>
+              {/* Seul chiffre de portée que Meta publie (comptes touchés dans l'Union européenne) : pour une annonce locale, ce sont les personnes de sa zone */}
+              <Fact label="Personnes touchées">
+                {ad.euTotalReach === null ? (
+                  "Non communiqué"
+                ) : (
+                  <>
+                    ≈ {ad.euTotalReach.toLocaleString("fr-FR")} <span className="font-normal text-ink-500">depuis son lancement</span>
+                  </>
+                )}
+              </Fact>
               <Fact label="Plateformes">{platformsLabel(ad.platforms, 6) ?? "Non précisées"}</Fact>
               <Fact label="Audience">{audienceLabel(ad) ?? "Non précisée"}</Fact>
               <Fact label="Zones">{zonesLabel(ad) ?? "Non précisées"}</Fact>

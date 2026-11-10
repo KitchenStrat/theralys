@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { GEO_API_BASE, GEO_COMMUNES_MAX, GEO_RETRY_DELAY_MS, GEO_TIMEOUT_MS, NEARBY_CITY_MIN_POPULATION, communeFromItem, fetchRegionCommunes, nearbyCitiesFrom, regionCommunesUrl, type FrCommune } from "./geo";
+import { GEO_API_BASE, GEO_COMMUNES_MAX, GEO_RETRY_DELAY_MS, GEO_TIMEOUT_MS, NEARBY_CITY_MIN_POPULATION, NEARBY_CITY_RADIUS_KM, communeFromItem, fetchRegionCommunes, nearbyCitiesFrom, regionCommunesUrl, type FrCommune } from "./geo";
 
 type Call = { url: string; method: string; headers: Record<string, string>; signal: AbortSignal | null };
 
@@ -29,13 +29,13 @@ const OCCITANIE = [
 const commune = (name: string, departmentCode: string, population: number): FrCommune => ({ name, departmentCode, population });
 
 describe("regionCommunesUrl", () => {
-  it("API « Découpage administratif » : communes de la région, champs nom, département et population, en JSON", () => {
-    expect(regionCommunesUrl("76")).toBe("https://geo.api.gouv.fr/communes?codeRegion=76&fields=nom,codeDepartement,population&format=json");
+  it("API « Découpage administratif » : communes de la région, champs nom, département, population et centre, en JSON", () => {
+    expect(regionCommunesUrl("76")).toBe("https://geo.api.gouv.fr/communes?codeRegion=76&fields=nom,codeDepartement,population,centre&format=json");
     const url = new URL(regionCommunesUrl("76"));
     expect(url.origin).toBe(GEO_API_BASE);
     expect(url.pathname).toBe("/communes");
     expect(url.searchParams.get("codeRegion")).toBe("76");
-    expect(url.searchParams.get("fields")).toBe("nom,codeDepartement,population");
+    expect(url.searchParams.get("fields")).toBe("nom,codeDepartement,population,centre");
     expect(url.searchParams.get("format")).toBe("json");
     // Le code est encodé : il ne peut pas ajouter de paramètre
     expect(new URL(regionCommunesUrl("76&fields=x")).searchParams.get("codeRegion")).toBe("76&fields=x");
@@ -152,6 +152,60 @@ describe("fetchRegionCommunes", () => {
     const communes = await fetchRegionCommunes("76", { fetchImpl: impl, retryDelayMs: 0 });
     expect(communes).toHaveLength(GEO_COMMUNES_MAX);
     expect(communes.at(-1)).toEqual({ name: `Commune ${GEO_COMMUNES_MAX - 1}`, departmentCode: "81", population: GEO_COMMUNES_MAX - 1 });
+  });
+});
+
+describe("communeFromItem : centre de la commune", () => {
+  it("centre GeoJSON [longitude, latitude] → lat et lng ; absent, mal formé ou hors bornes : commune sans coordonnées", () => {
+    expect(communeFromItem({ nom: "Reims", codeDepartement: "51", population: 177_674, centre: { type: "Point", coordinates: [4.0347, 49.2515] } })).toEqual({ name: "Reims", departmentCode: "51", population: 177_674, lat: 49.2515, lng: 4.0347 });
+    for (const centre of [undefined, null, "Point", {}, { coordinates: [4.03] }, { coordinates: ["4.03", "49.25"] }, { coordinates: [4.03, Number.NaN] }, { coordinates: [4.03, 95] }, { coordinates: [200, 49.25] }]) {
+      const out = communeFromItem({ nom: "Reims", codeDepartement: "51", population: 10, centre });
+      expect(out, JSON.stringify(centre)).toEqual({ name: "Reims", departmentCode: "51", population: 10 });
+      expect("lat" in out! || "lng" in out!).toBe(false);
+    }
+  });
+});
+
+describe("nearbyCitiesFrom : alentours par distance", () => {
+  const at = (name: string, departmentCode: string, population: number, lat: number, lng: number): FrCommune => ({ name, departmentCode, population, lat, lng });
+  // Coordonnées réelles (référentiel public), arrondies
+  const marne: FrCommune[] = [
+    at("Reims", "51", 177_674, 49.2515, 4.0347),
+    at("Châlons-en-Champagne", "51", 43_000, 48.9566, 4.3631),
+    at("Épernay", "51", 22_174, 49.0368, 3.9602),
+    at("Vitry-le-François", "51", 11_500, 48.7247, 4.5845),
+    at("Tinqueux", "51", 10_771, 49.2495, 3.9837),
+    at("Bétheny", "51", 6_975, 49.2853, 4.0575),
+    at("Cormontreuil", "51", 6_534, 49.2196, 4.0562),
+    at("Trigny", "51", 500, 49.2981, 3.8936),
+    // Autre département de la région, à moins de 30 km de Reims
+    at("Guignicourt", "02", 3_200, 49.4369, 3.9686),
+    at("Charleville-Mézières", "08", 46_000, 49.7739, 4.7208),
+  ];
+
+  it("les deux plus peuplées à moins de 30 km d'abord, puis la plus grande ville du département", () => {
+    expect(NEARBY_CITY_RADIUS_KM).toBe(30);
+    // Châlons (≈ 40 km) et Vitry (≈ 70 km) ne sont pas « les alentours » de Reims : Épernay et Tinqueux passent devant
+    expect(nearbyCitiesFrom(marne, "51", "Reims")).toEqual(["Épernay", "Tinqueux", "Châlons-en-Champagne"]);
+    expect(nearbyCitiesFrom(marne, "51", "Reims", 6)).toEqual(["Épernay", "Tinqueux", "Châlons-en-Champagne", "Bétheny", "Cormontreuil", "Guignicourt"]);
+    expect(nearbyCitiesFrom(marne, "51", "reims", 2)).toEqual(["Épernay", "Tinqueux"]);
+  });
+
+  it("une commune proche d'un autre département compte, une commune trop petite non, la ville du praticien jamais", () => {
+    const all = nearbyCitiesFrom(marne, "51", "Reims", 20);
+    expect(all).toContain("Guignicourt");
+    expect(all).not.toContain("Trigny");
+    expect(all).not.toContain("Reims");
+    // Hors rayon et hors département : jamais proposée
+    expect(all).not.toContain("Charleville-Mézières");
+  });
+
+  it("depuis une ville sans voisine dans le rayon, ou sans coordonnées : les plus grandes villes du département", () => {
+    expect(nearbyCitiesFrom(marne, "51", "Vitry-le-François")).toEqual(["Reims", "Châlons-en-Champagne", "Épernay"]);
+    const bare = marne.map(({ lat: _lat, lng: _lng, ...rest }) => rest);
+    expect(nearbyCitiesFrom(bare, "51", "Reims")).toEqual(["Châlons-en-Champagne", "Épernay", "Vitry-le-François"]);
+    // Ville du praticien absente du référentiel : même repli
+    expect(nearbyCitiesFrom(marne, "51", "Ville inconnue")).toEqual(["Reims", "Châlons-en-Champagne", "Épernay"]);
   });
 });
 

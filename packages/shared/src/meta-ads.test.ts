@@ -6,6 +6,7 @@ import {
   META_ADS_BUDGET_EUR,
   META_ADS_LANDING_SUFFIX,
   META_ADS_TEXT,
+  META_AROUND_RADIUS_KM,
   META_LIBRARY_TERMS_MAX,
   META_LIBRARY_TERM_MAX,
   META_MARKET_MAX_ADS,
@@ -361,7 +362,7 @@ describe("buildMetaSearchTerms", () => {
     competitorNames: ["Cabinet Durand", "Cabinet Zen"],
   };
 
-  it("ordre de priorité : métier, métier + ville, synonyme, synonyme + ville, puis villes voisines et spécialités en alternance, un seul concurrent en dernier", () => {
+  it("ordre de priorité : métier, métier + ville, synonyme, synonyme + ville, puis villes voisines et spécialités en alternance, un seul concurrent, la troisième ville voisine en dernier", () => {
     expect(buildMetaSearchTerms(reimsOsteo, 20)).toEqual([
       "ostéopathe",
       "ostéopathe reims",
@@ -372,6 +373,7 @@ describe("buildMetaSearchTerms", () => {
       "ostéopathe épernay",
       "ostéopathe sport",
       "cabinet durand",
+      "ostéopathe vitry-le-françois",
     ]);
   });
 
@@ -441,6 +443,7 @@ describe("buildMetaSearchTerms", () => {
       "ostéopathie paris",
       "ostéopathe boulogne-billancourt",
       "ostéopathe lyon",
+      "ostéopathe montreuil",
     ]);
     // Rien que des chiffres : pas de ville, pas de terme local ; les noms composés restent entiers
     expect(buildMetaSearchTerms({ ...seed, city: "75015" })).toEqual(["ostéopathe", "ostéopathie"]);
@@ -497,7 +500,7 @@ describe("buildMetaSearchTerms", () => {
     expect(buildMetaSearchTerms({ ...seed, city: "", nearbyCities: ["Colomiers"] })).toEqual(["sophrologue", "sophrologie", "sophrologue colomiers"]);
   });
 
-  it("villes voisines : accolées au premier terme, 2 au plus, jamais la ville du praticien (accents et casse indifférents)", () => {
+  it("villes voisines : accolées au premier terme, 3 au plus, jamais la ville du praticien (accents et casse indifférents)", () => {
     const seed = { profession: "Sophrologue", city: "Épernay", specialties: [], competitorNames: [] };
     expect(buildMetaSearchTerms({ ...seed, nearbyCities: ["EPERNAY", "Epernay", "Reims", "Châlons-en-Champagne", "Vitry-le-François"] })).toEqual([
       "sophrologue",
@@ -506,6 +509,7 @@ describe("buildMetaSearchTerms", () => {
       "sophrologie épernay",
       "sophrologue reims",
       "sophrologue châlons-en-champagne",
+      "sophrologue vitry-le-françois",
     ]);
     expect(buildMetaSearchTerms({ ...seed, nearbyCities: ["Épernay"] })).toEqual(["sophrologue", "sophrologue épernay", "sophrologie", "sophrologie épernay"]);
     expect(buildMetaSearchTerms({ ...seed, nearbyCities: [] })).toEqual(buildMetaSearchTerms(seed));
@@ -641,6 +645,7 @@ describe("buildMetaSeed", () => {
       "ostéopathe épernay",
       "ostéopathe nourrisson",
       "ostéopathe châlons-en-champagne",
+      // Huit termes au plus : le concurrent passe avant la troisième ville voisine
       "cabinet durand",
     ]);
     expect(seed.searchTerms).toEqual(buildMetaSearchTerms(seed));
@@ -961,6 +966,34 @@ describe("buildMetaLocalIndex et villes ciblées sans département", () => {
     expect(unknown.department.size).toBe(0);
     expect(unknown.region.size).toBe(7);
     expect(buildMetaLocalIndex([], reims)).toEqual({ department: new Set(), region: new Set() });
+  });
+
+  it("agglomération : une commune du département à moins de META_AROUND_RADIUS_KM de la ville du praticien est « autour de vous »", () => {
+    const located = [
+      { name: "Reims", departmentCode: "51", lat: 49.2515, lng: 4.0347 },
+      { name: "Tinqueux", departmentCode: "51", lat: 49.2495, lng: 3.9837 },
+      { name: "Bétheny", departmentCode: "51", lat: 49.2853, lng: 4.0575 },
+      { name: "Épernay", departmentCode: "51", lat: 49.0368, lng: 3.9602 },
+      // Commune sans coordonnées : jamais dans l'agglomération
+      { name: "Bezannes", departmentCode: "51" },
+      // Autre département, à quelques kilomètres : reste hors de l'agglomération (les homonymes y seraient trop risqués)
+      { name: "Voisine", departmentCode: "02", lat: 49.26, lng: 4.0 },
+    ];
+    const withAround = buildMetaLocalIndex(located, reims);
+    expect(META_AROUND_RADIUS_KM).toBe(15);
+    expect([...withAround.around!].sort()).toEqual(["betheny", "reims", "tinqueux"]);
+    const city = (name: string): MetaAdLocation[] => [{ name: `${name}, France`, type: "CITY", excluded: false }];
+    expect(scope(city("Tinqueux"), reims, withAround)).toBe("ville");
+    expect(scope(city("Bétheny"), reims, withAround)).toBe("ville");
+    // À 25 km : dans le département, pas dans l'agglomération
+    expect(scope(city("Épernay"), reims, withAround)).toBe("departement");
+    expect(scope(city("Bezannes"), reims, withAround)).toBe("departement");
+    expect(scope(city("Voisine"), reims, withAround)).toBe("region");
+    // Sans coordonnées, ou ville du praticien introuvable : pas d'agglomération, les communes restent « département »
+    expect(index.around).toBeUndefined();
+    expect(scope(city("Épernay"))).toBe("departement");
+    expect(buildMetaLocalIndex(located, { department: reims.department, city: "Ville inconnue" }).around).toBeUndefined();
+    expect(buildMetaLocalIndex(located, { department: reims.department }).around).toBeUndefined();
   });
 
   it("commune du département (« Épernay, France ») → département ; sans index, la même zone reste « france »", () => {
@@ -1453,16 +1486,16 @@ describe("marketScopeNote", () => {
   });
 
   it("département, région, France : formulation sans article piégé et mention de l'élargissement avec le compte près de chez vous (la ville seule quand le département est retenu)", () => {
-    expect(marketScopeNote(market("departement", { ville: 3, departement: 5 }, 8), toulouse)).toBe("8 annonces dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (3) : la veille a été élargie.");
-    expect(marketScopeNote(market("region", { ville: 2, departement: 1, region: 6 }, 9), toulouse)).toBe("9 annonces dans votre région (Occitanie). Peu d'annonces près de chez vous (3) : la veille a été élargie.");
-    expect(marketScopeNote(market("france", { france: 4 }, 4), toulouse)).toBe("4 annonces en France et dans d'autres zones. Peu d'annonces près de chez vous (0) : la veille a été élargie.");
+    expect(marketScopeNote(market("departement", { ville: 3, departement: 5 }, 8), toulouse)).toBe("8 annonces dans votre département (Haute-Garonne). Peu de confrères font de la publicité près de chez vous (3 annonces) : la veille a été élargie pour vous inspirer.");
+    expect(marketScopeNote(market("region", { ville: 2, departement: 1, region: 6 }, 9), toulouse)).toBe("9 annonces dans votre région (Occitanie). Peu de confrères font de la publicité près de chez vous (3 annonces) : la veille a été élargie pour vous inspirer.");
+    expect(marketScopeNote(market("france", { france: 4 }, 4), toulouse)).toBe("4 annonces en France et dans d'autres zones. Peu de confrères font de la publicité près de chez vous (aucune annonce) : la veille a été élargie pour vous inspirer.");
     expect(marketScopeNote(market("region", {}, 2), { city: "Lille", department: departmentFromPostalCode("59000"), region: "Hauts-de-France" })).toContain("dans votre région (Hauts-de-France)");
   });
 
   it("annonces conservées sur annonces repérées quand toutes n'ont pas été conservées, puis le compte de la zone retenue", () => {
     expect(marketScopeNote(market("ville", { ville: 12, departement: 3, france: 5 }, 12), toulouse)).toBe("12 annonces conservées sur 20 repérées : 12 autour de Toulouse.");
     expect(marketScopeNote(market("departement", { ville: 2, departement: 9, region: 4 }, 11), toulouse)).toBe(
-      "11 annonces conservées sur 15 repérées : 11 dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (2) : la veille a été élargie.",
+      "11 annonces conservées sur 15 repérées : 11 dans votre département (Haute-Garonne). Peu de confrères font de la publicité près de chez vous (2 annonces) : la veille a été élargie pour vous inspirer.",
     );
     expect(marketScopeNote(market("ville", { ville: 1, france: 1 }, 1), toulouse)).toBe("1 annonce conservée sur 2 repérées : 1 autour de Toulouse.");
     expect(marketNearbyCount({ scopeUsed: "departement", counts: { ville: 2, departement: 9, region: 0, france: 0 } })).toBe(2);
@@ -1477,10 +1510,10 @@ describe("marketScopeNote", () => {
     expect(marketScopeNote(market("ville", { ville: 2, departement: 1 }, 2, ["departement"]), toulouse)).toBe("2 annonces autour de Toulouse, complétées par la mieux notée ailleurs en France.");
     // Zone élargie : le complément précède la mention de l'élargissement
     expect(marketScopeNote(market("departement", { ville: 3, departement: 5, region: 2, france: 4 }, 8, ["region", "region", "france", "france", "france", "france"]), toulouse)).toBe(
-      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu d'annonces près de chez vous (3) : la veille a été élargie.",
+      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu de confrères font de la publicité près de chez vous (3 annonces) : la veille a été élargie pour vous inspirer.",
     );
     expect(marketScopeNote(market("region", { ville: 1, region: 8, france: 1 }, 9, ["france"]), toulouse)).toBe(
-      "9 annonces dans votre région (Occitanie), complétées par la mieux notée ailleurs en France. Peu d'annonces près de chez vous (1) : la veille a été élargie.",
+      "9 annonces dans votre région (Occitanie), complétées par la mieux notée ailleurs en France. Peu de confrères font de la publicité près de chez vous (1 annonce) : la veille a été élargie pour vous inspirer.",
     );
     // Toutes les annonces repérées n'ont pas été conservées : les trois comptes se suivent
     expect(marketScopeNote(market("ville", { ville: 3, france: 17 }, 3, ["france", "france"]), toulouse)).toBe(
@@ -1502,7 +1535,7 @@ describe("marketScopeNote", () => {
   it("de la sélection à la phrase : veille locale maigre complétée, veille locale pleine sans complément", () => {
     const thin = selectMarketAds([...inZone("ville", 3), ...inZone("departement", 5), ...inZone("region", 2), ...inZone("france", 4)], toulouse, now);
     expect(marketScopeNote(thin, toulouse)).toBe(
-      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu d'annonces près de chez vous (3) : la veille a été élargie.",
+      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu de confrères font de la publicité près de chez vous (3 annonces) : la veille a été élargie pour vous inspirer.",
     );
     const full = selectMarketAds([...inZone("ville", META_MARKET_MAX_ADS), ...inZone("france", 5)], toulouse, now);
     expect(marketScopeNote(full, toulouse)).toBe(`${META_MARKET_MAX_ADS} annonces conservées sur ${META_MARKET_MAX_ADS + 5} repérées : ${META_MARKET_MAX_ADS} autour de Toulouse.`);
@@ -1512,7 +1545,7 @@ describe("marketScopeNote", () => {
 
   it("département ou région inconnus : pas de parenthèse vide", () => {
     const seed = { city: "Albi", department: null, region: null };
-    expect(marketScopeNote(market("departement", {}, 0), seed)).toBe("0 annonce dans votre département. Peu d'annonces près de chez vous (0) : la veille a été élargie.");
+    expect(marketScopeNote(market("departement", {}, 0), seed)).toBe("0 annonce dans votre département. Peu de confrères font de la publicité près de chez vous (aucune annonce) : la veille a été élargie pour vous inspirer.");
     expect(marketScopeNote(market("region", {}, 0), seed)).toContain("0 annonce dans votre région.");
   });
 });
