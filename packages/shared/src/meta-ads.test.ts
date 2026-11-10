@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   FR_DEPARTMENTS,
+  FR_FORMER_REGIONS,
+  FR_REGION_CODES,
   META_ADS_BUDGET_EUR,
   META_ADS_LANDING_SUFFIX,
   META_ADS_TEXT,
   META_LIBRARY_TERMS_MAX,
   META_LIBRARY_TERM_MAX,
   META_MARKET_MAX_ADS,
+  META_MARKET_MAX_PER_PAGE,
   META_MARKET_MIN_LOCAL,
   META_MARKET_SCOPES,
   META_MARKET_SCOPE_LABELS,
@@ -17,6 +20,7 @@ import {
   adRunningDays,
   adScore,
   adSignal,
+  buildMetaLocalIndex,
   buildMetaSearchTerms,
   buildMetaSeed,
   clampMetaText,
@@ -26,6 +30,7 @@ import {
   isMetaAdsAngle,
   isMetaAdsCta,
   isMetaAdsLanding,
+  marketNearCount,
   marketNearbyCount,
   marketScopeNote,
   marketTotalCount,
@@ -39,6 +44,7 @@ import {
   postalCodeFrom,
   scopeOfAd,
   selectMarketAds,
+  specialtyKeyword,
   type MetaAdCreative,
   type MetaAdLocation,
   type MetaAdRecord,
@@ -47,6 +53,7 @@ import {
   type MetaAdsPlan,
   type MetaAdsSeed,
   type MetaAdsVideoPlan,
+  type MetaLocalIndex,
   type MetaMarketAd,
   type MetaMarketScope,
   type MetaVideoBrief,
@@ -66,8 +73,18 @@ const toulouse: Pick<MetaAdsSeed, "city" | "department" | "region"> = { city: "T
 const lyon: Pick<MetaAdsSeed, "city" | "department" | "region"> = { city: "Lyon", department: departmentFromPostalCode("69003"), region: "Auvergne-Rhône-Alpes" };
 const saintEtienne: Pick<MetaAdsSeed, "city" | "department" | "region"> = { city: "Saint-Étienne", department: departmentFromPostalCode("42000"), region: "Auvergne-Rhône-Alpes" };
 
+/** Graine de zone avec code postal (codes postaux ciblés, index des communes). */
+type ScopeSeed = Parameters<typeof scopeOfAd>[1];
+const marne = departmentFromPostalCode("51100")!;
+const reims: ScopeSeed = { city: "Reims", department: marne, region: "Grand Est", postalCode: "51100" };
+
 function loc(name: string, excluded = false): MetaAdLocation {
   return { name, type: null, excluded };
+}
+
+/** Zone ciblée avec son type de la bibliothèque (`CITY`, `zips`, `regions`, `countries`…). */
+function zone(name: string, type: string, excluded = false): MetaAdLocation {
+  return { name, type, excluded };
 }
 
 function record(id: string, extra: Partial<MetaAdRecord> = {}): MetaAdRecord {
@@ -288,45 +305,201 @@ describe("departmentFromPostalCode", () => {
   });
 });
 
+describe("FR_REGION_CODES / FR_FORMER_REGIONS", () => {
+  const overseas = ["Guadeloupe", "Martinique", "Guyane", "La Réunion", "Mayotte"];
+
+  it("18 régions : 13 métropolitaines et 5 d'outre-mer, codes INSEE à deux chiffres, tous différents", () => {
+    const names = Object.keys(FR_REGION_CODES);
+    expect(names).toHaveLength(18);
+    expect(overseas.every((name) => names.includes(name))).toBe(true);
+    expect(names.filter((name) => !overseas.includes(name))).toHaveLength(13);
+    const codes = Object.values(FR_REGION_CODES);
+    expect(codes.every((code) => /^\d{2}$/.test(code))).toBe(true);
+    expect(new Set(codes).size).toBe(18);
+    expect(FR_REGION_CODES["Île-de-France"]).toBe("11");
+    expect(FR_REGION_CODES["Grand Est"]).toBe("44");
+    expect(FR_REGION_CODES["Occitanie"]).toBe("76");
+    expect(FR_REGION_CODES["Auvergne-Rhône-Alpes"]).toBe("84");
+    expect(FR_REGION_CODES["Corse"]).toBe("94");
+    expect(FR_REGION_CODES["La Réunion"]).toBe("04");
+  });
+
+  it("chaque région de FR_DEPARTMENTS a son code, et chaque code a au moins un département", () => {
+    const regions = new Set(FR_DEPARTMENTS.map((d) => d.region));
+    expect(regions.size).toBe(18);
+    for (const region of regions) expect(FR_REGION_CODES[region], region).toBeDefined();
+    for (const name of Object.keys(FR_REGION_CODES)) expect(regions.has(name), name).toBe(true);
+  });
+
+  it("anciennes régions : chacune renvoie à une région actuelle de métropole, aucune n'est elle-même une région actuelle", () => {
+    const former = Object.entries(FR_FORMER_REGIONS);
+    expect(former).toHaveLength(17);
+    for (const [name, current] of former) {
+      expect(FR_REGION_CODES[current], `${name} → ${current}`).toBeDefined();
+      expect(overseas, name).not.toContain(current);
+      expect(FR_REGION_CODES[name], name).toBeUndefined();
+    }
+    expect(FR_FORMER_REGIONS["Rhône-Alpes"]).toBe("Auvergne-Rhône-Alpes");
+    expect(FR_FORMER_REGIONS["Auvergne"]).toBe("Auvergne-Rhône-Alpes");
+    expect(FR_FORMER_REGIONS["Midi-Pyrénées"]).toBe("Occitanie");
+    expect(FR_FORMER_REGIONS["Languedoc-Roussillon"]).toBe("Occitanie");
+    expect(FR_FORMER_REGIONS["Champagne-Ardenne"]).toBe("Grand Est");
+    expect(FR_FORMER_REGIONS["Centre"]).toBe("Centre-Val de Loire");
+  });
+});
+
 // ─── Graine ──────────────────────────────────────────────────────────────────
 
 describe("buildMetaSearchTerms", () => {
-  it("métier et synonymes d'abord, puis les spécialités les plus courtes (≤ 4 mots), puis les concurrents ; parenthèses retirées", () => {
+  /** Graine complète : ville, villes voisines, spécialités et concurrents. */
+  const reimsOsteo = {
+    profession: "Ostéopathe",
+    city: "Reims",
+    nearbyCities: ["Châlons-en-Champagne", "Épernay", "Vitry-le-François"],
+    specialties: ["Accompagnement du nourrisson", "Ostéopathie du sport", "Femme enceinte"],
+    competitorNames: ["Cabinet Durand", "Cabinet Zen"],
+  };
+
+  it("ordre de priorité : métier, métier + ville, synonyme, synonyme + ville, puis villes voisines et spécialités en alternance, un seul concurrent en dernier", () => {
+    expect(buildMetaSearchTerms(reimsOsteo, 20)).toEqual([
+      "ostéopathe",
+      "ostéopathe reims",
+      "ostéopathie",
+      "ostéopathie reims",
+      "ostéopathe châlons-en-champagne",
+      "ostéopathe nourrisson",
+      "ostéopathe épernay",
+      "ostéopathe sport",
+      "cabinet durand",
+    ]);
+  });
+
+  it("sans ville ni ville voisine : métier et synonyme, puis les spécialités ramenées à « métier + mot-clé » (2 au plus), puis un seul concurrent", () => {
     expect(
       buildMetaSearchTerms({
         profession: "Sophrologue",
         specialties: ["Sophrologie et gestion du stress", "Sommeil", "Confiance en soi (adultes)"],
         competitorNames: ["Cabinet Zen Toulouse", "Léa Dupont"],
       }),
-    ).toEqual(["sophrologue", "sophrologie", "sommeil", "confiance en soi adultes", "cabinet zen toulouse", "léa dupont"]);
+    ).toEqual(["sophrologue", "sophrologie", "sophrologue stress", "sophrologue sommeil", "cabinet zen toulouse"]);
   });
 
-  it("au plus META_LIBRARY_TERMS_MAX termes (ou `max`) : 3 du métier, 2 spécialités, le reste pour les concurrents", () => {
-    const seed = { profession: "Masseuse bien-être", specialties: ["Massage californien", "Massage suédois"], competitorNames: ["Spa Albi", "Institut Belle Vie"] };
-    const terms = buildMetaSearchTerms(seed);
-    expect(terms).toEqual(["masseuse bien-être", "massage", "masseur", "massage suédois", "massage californien", "spa albi"]);
+  it("au plus META_LIBRARY_TERMS_MAX termes (8) ou `max` : la coupe suit l'ordre de priorité, le concurrent saute le premier", () => {
+    expect(META_LIBRARY_TERMS_MAX).toBe(8);
+    const terms = buildMetaSearchTerms(reimsOsteo);
     expect(terms).toHaveLength(META_LIBRARY_TERMS_MAX);
-    expect(buildMetaSearchTerms(seed, 3)).toEqual(["masseuse bien-être", "massage", "masseur"]);
+    expect(terms).toEqual(buildMetaSearchTerms(reimsOsteo, 20).slice(0, META_LIBRARY_TERMS_MAX));
+    expect(terms).not.toContain("cabinet durand");
+    expect(buildMetaSearchTerms(reimsOsteo, 3)).toEqual(["ostéopathe", "ostéopathe reims", "ostéopathie"]);
+    expect(buildMetaSearchTerms(reimsOsteo, 0)).toEqual([]);
+    // Intitulé de deux mots : il reste en tête, suivi d'un seul nom de la famille (2 termes de base au plus)
+    const seed = { profession: "Masseuse bien-être", specialties: ["Massage californien", "Massage suédois"], competitorNames: ["Spa Albi", "Institut Belle Vie"] };
+    expect(buildMetaSearchTerms(seed)).toEqual(["masseuse bien-être", "massage", "masseuse bien-être californien", "masseuse bien-être suédois", "spa albi"]);
+    expect(buildMetaSearchTerms(seed, 3)).toEqual(["masseuse bien-être", "massage", "masseuse bien-être californien"]);
   });
 
-  it("dédoublonne (spécialité qui répète le métier) et ignore les termes trop courts", () => {
+  it("une spécialité qui redit le métier est ignorée, comme les mots de moins de 3 lettres et les concurrents de moins de 4", () => {
     expect(buildMetaSearchTerms({ profession: "Sophrologue", specialties: ["Sophrologie", "sophrologue", "Dos"], competitorNames: ["Zen", "Sophrologie Toulouse"] })).toEqual([
       "sophrologue",
+      "sophrologie",
+      "sophrologue dos",
+      "sophrologie toulouse",
+    ]);
+    expect(buildMetaSearchTerms({ profession: "Sophrologue", specialties: ["Do", "Qi", "Sophrologie caycédienne"], competitorNames: ["Zen"] })).toEqual(["sophrologue", "sophrologie", "sophrologue caycédienne"]);
+    // « Hypnose ericksonienne » garde son mot propre ; « Hypnothérapie » seule redit le métier
+    expect(buildMetaSearchTerms({ profession: "Hypnothérapeute", specialties: ["Hypnothérapie", "Hypnose ericksonienne", "Arrêt du tabac"], competitorNames: [] })).toEqual([
+      "hypnothérapeute",
+      "hypnose",
+      "hypnothérapeute ericksonienne",
+      "hypnothérapeute tabac",
+    ]);
+  });
+
+  // Bogue suspecté (specialtyKeyword) : l'article ou la préposition élidés restent collés au mot (« d'hypnose »,
+  // « l'anxiété »). La spécialité qui redit le métier n'est alors plus reconnue (« d hypnose » ne commence pas par
+  // « hypno ») et le terme « hypnothérapeute d'hypnose » part à la bibliothèque, contrairement au commentaire du source.
+  it.fails("une spécialité qui redit le métier derrière une élision (« Séance d'hypnose ») n'ajoute aucun terme", () => {
+    expect(buildMetaSearchTerms({ profession: "Hypnothérapeute", specialties: ["Séance d'hypnose"], competitorNames: [] })).toEqual(["hypnothérapeute", "hypnose"]);
+  });
+
+  it("guillemets, crochets et parenthèses retirés des termes (ville, spécialités, concurrent), espaces repliés", () => {
+    expect(buildMetaSearchTerms({ profession: "Ostéopathe", specialties: ['« Ostéopathie   du sport »', "EFT [libération émotionnelle]"], competitorNames: [] })).toEqual([
+      "ostéopathe",
+      "ostéopathie",
+      "ostéopathe sport",
+      "ostéopathe émotionnelle",
+    ]);
+    expect(
+      buildMetaSearchTerms({ profession: "Ostéopathe", city: "  Saint-Étienne  ", nearbyCities: ["« Firminy »"], specialties: [], competitorNames: ['« Cabinet   "Zen" (Loire) »'] }),
+    ).toEqual(["ostéopathe", "ostéopathe saint-étienne", "ostéopathie", "ostéopathie saint-étienne", "ostéopathe firminy", "cabinet zen loire"]);
+  });
+
+  it("dédoublonnage sans accent ni casse : « osteopathe » et « ostéopathe » ne font qu'un terme, comme les villes et les spécialités répétées", () => {
+    expect(buildMetaSearchTerms({ profession: "osteopathe", specialties: [], competitorNames: [] })).toEqual(["osteopathe", "ostéopathie"]);
+    expect(buildMetaSearchTerms({ profession: "OSTEOPATHE", city: "Reims", specialties: [], competitorNames: [] })).toEqual(["osteopathe", "osteopathe reims", "ostéopathie", "ostéopathie reims"]);
+    const terms = buildMetaSearchTerms(
+      {
+        profession: "osteopathe",
+        city: "Épernay",
+        nearbyCities: ["Reims", "reims", "Châlons-en-Champagne"],
+        specialties: ["Stress", "Gestion du stress", "Le STRESS", "Sommeil"],
+        competitorNames: [],
+      },
+      20,
+    );
+    expect(terms).toEqual(["osteopathe", "osteopathe épernay", "ostéopathie", "ostéopathie épernay", "osteopathe reims", "osteopathe stress", "osteopathe châlons-en-champagne", "osteopathe sommeil"]);
+    expect(terms.filter((t) => t.includes("stress"))).toHaveLength(1);
+    // Un concurrent qui redit un terme déjà présent disparaît (le suivant ne le remplace pas)
+    expect(buildMetaSearchTerms({ profession: "Sophrologue", city: "Toulouse", specialties: [], competitorNames: ["Sophrologue Toulouse", "Cabinet Zen"] })).toEqual([
+      "sophrologue",
+      "sophrologue toulouse",
       "sophrologie",
       "sophrologie toulouse",
     ]);
   });
 
-  it("guillemets et crochets retirés des termes, espaces repliés", () => {
-    expect(buildMetaSearchTerms({ profession: "Ostéopathe", specialties: ['« Ostéopathie   du sport »', "EFT [libération émotionnelle]"], competitorNames: [] })).toEqual([
-      "ostéopathe",
-      "ostéopathie",
-      "ostéopathie du sport",
-      "eft libération émotionnelle",
-    ]);
+  it("sans ville (absente, vide ou espaces) : aucun terme local, les villes voisines restent cherchées", () => {
+    const seed = { profession: "Sophrologue", specialties: [], competitorNames: [] };
+    for (const city of [undefined, "", "   "]) {
+      expect(buildMetaSearchTerms({ ...seed, city }), JSON.stringify(city)).toEqual(["sophrologue", "sophrologie"]);
+    }
+    expect(buildMetaSearchTerms({ ...seed, city: "", nearbyCities: ["Colomiers"] })).toEqual(["sophrologue", "sophrologie", "sophrologue colomiers"]);
   });
 
-  it("chaque terme tient en META_LIBRARY_TERM_MAX caractères (coupé au mot) ; un concurrent impossible à tronquer proprement est ignoré", () => {
+  it("villes voisines : accolées au premier terme, 2 au plus, jamais la ville du praticien (accents et casse indifférents)", () => {
+    const seed = { profession: "Sophrologue", city: "Épernay", specialties: [], competitorNames: [] };
+    expect(buildMetaSearchTerms({ ...seed, nearbyCities: ["EPERNAY", "Epernay", "Reims", "Châlons-en-Champagne", "Vitry-le-François"] })).toEqual([
+      "sophrologue",
+      "sophrologue épernay",
+      "sophrologie",
+      "sophrologie épernay",
+      "sophrologue reims",
+      "sophrologue châlons-en-champagne",
+    ]);
+    expect(buildMetaSearchTerms({ ...seed, nearbyCities: ["Épernay"] })).toEqual(["sophrologue", "sophrologue épernay", "sophrologie", "sophrologie épernay"]);
+    expect(buildMetaSearchTerms({ ...seed, nearbyCities: [] })).toEqual(buildMetaSearchTerms(seed));
+  });
+
+  it("intitulé long (« Praticienne en massage bien-être ») : les noms courts de la famille passent devant, l'intitulé entier n'est pas cherché", () => {
+    const terms = buildMetaSearchTerms({
+      profession: "Praticienne en massage bien-être",
+      city: "Albi",
+      specialties: ["Massage", "Massage californien", "Drainage lymphatique"],
+      competitorNames: ["Spa Albi"],
+    });
+    expect(terms).toEqual(["massage", "massage albi", "masseur", "masseur albi", "massage californien", "massage lymphatique", "spa albi"]);
+    expect(terms.some((t) => t.includes("praticienne"))).toBe(false);
+    // Métier d'enseignement en trois mots : mêmes règles
+    expect(buildMetaSearchTerms({ profession: "Professeur de yoga", city: "Lyon", specialties: [], competitorNames: [] })).toEqual(["cours de yoga", "cours de yoga lyon", "professeur de yoga", "professeur de yoga lyon"]);
+  });
+
+  it("sans métier exploitable (vide ou moins de 3 lettres) : aucun terme, même avec une ville et un concurrent", () => {
+    for (const profession of ["", "  ", "Qi"]) {
+      expect(buildMetaSearchTerms({ profession, city: "Reims", specialties: ["Stress"], competitorNames: ["Cabinet Zen"] }), JSON.stringify(profession)).toEqual([]);
+    }
+  });
+
+  it("chaque terme tient en META_LIBRARY_TERM_MAX caractères (coupé au mot) ; un concurrent impossible à tronquer proprement est ignoré au profit du suivant", () => {
     const longName = `${"Cabinet des Thérapies Douces et Naturelles de la Vallée ".repeat(3)}Toulouse`;
     expect(longName.length).toBeGreaterThan(META_LIBRARY_TERM_MAX);
     const terms = buildMetaSearchTerms({ profession: "Sophrologue", specialties: [], competitorNames: [longName, "x".repeat(140), "Cabinet Zen"] });
@@ -335,13 +508,51 @@ describe("buildMetaSearchTerms", () => {
     expect(competitor).toBeDefined();
     expect(competitor!.endsWith(" ")).toBe(false);
     expect(longName.toLowerCase().startsWith(competitor!)).toBe(true);
-    expect(terms.some((t) => /^x+$/.test(t))).toBe(false);
-    expect(terms).toContain("cabinet zen");
+    // Un seul concurrent : le premier exploitable, tronqué au mot
+    expect(terms).toEqual(["sophrologue", "sophrologie", competitor]);
+    const skipped = buildMetaSearchTerms({ profession: "Sophrologue", specialties: [], competitorNames: ["x".repeat(140), "Cabinet Zen"] });
+    expect(skipped.some((t) => /^x+$/.test(t))).toBe(false);
+    expect(skipped).toEqual(["sophrologue", "sophrologie", "cabinet zen"]);
     // Métier et spécialité démesurés : tronqués, jamais ignorés
     const specialty = `Accompagnement ${"très ".repeat(30)}long`;
-    const bounded = buildMetaSearchTerms({ profession: `Praticienne ${"bien-être ".repeat(15)}holistique`, specialties: [specialty], competitorNames: [] });
+    const bounded = buildMetaSearchTerms({ profession: `Praticienne ${"bien-être ".repeat(15)}holistique`, city: "Saint-Rémy-de-Provence", specialties: [specialty], competitorNames: [] });
     expect(bounded.length).toBeGreaterThan(0);
     expect(bounded.every((t) => t.length <= META_LIBRARY_TERM_MAX && t.length >= 3)).toBe(true);
+    expect(bounded.every((t) => t === t.trim())).toBe(true);
+  });
+});
+
+describe("specialtyKeyword", () => {
+  it("dernier mot significatif d'une spécialité : « accompagnement du nourrisson » → « nourrisson », « arrêt du tabac » → « tabac »", () => {
+    expect(specialtyKeyword("accompagnement du nourrisson")).toBe("nourrisson");
+    expect(specialtyKeyword("arrêt du tabac")).toBe("tabac");
+    expect(specialtyKeyword("gestion du stress")).toBe("stress");
+    expect(specialtyKeyword("confiance en soi")).toBe("confiance");
+    expect(specialtyKeyword("Troubles du sommeil")).toBe("sommeil");
+    expect(specialtyKeyword("Ostéopathie du sport")).toBe("sport");
+  });
+
+  it("mot seul, casse, accents et ponctuation : minuscules, accents gardés, parenthèses et crochets retirés", () => {
+    expect(specialtyKeyword("Sommeil")).toBe("sommeil");
+    expect(specialtyKeyword("  SOMMEIL  ")).toBe("sommeil");
+    expect(specialtyKeyword("Maux de tête")).toBe("tête");
+    expect(specialtyKeyword("Confiance en soi (adultes)")).toBe("adultes");
+    expect(specialtyKeyword("EFT [libération émotionnelle]")).toBe("émotionnelle");
+    expect(specialtyKeyword("Burn-out")).toBe("burn-out");
+  });
+
+  it("rien que des mots génériques, des mots de moins de 3 lettres ou une chaîne vide → null", () => {
+    for (const specialty of ["Accompagnement", "Prise en charge des douleurs", "Soins", "Aide et soutien", "Suivi de séances", "de la", "Qi", "", "   "]) {
+      expect(specialtyKeyword(specialty), JSON.stringify(specialty)).toBeNull();
+    }
+  });
+
+  // Bogue suspecté : le découpage se fait sur les espaces seulement, l'élision reste collée au mot retenu
+  // (« d'hypnose », « l'anxiété », « l'accouchement ») et part telle quelle dans le terme de recherche.
+  it.fails("une élision n'est pas un mot : « Séance d'hypnose » → « hypnose », « Gestion de l'anxiété » → « anxiété »", () => {
+    expect(specialtyKeyword("Séance d'hypnose")).toBe("hypnose");
+    expect(specialtyKeyword("Gestion de l'anxiété")).toBe("anxiété");
+    expect(specialtyKeyword("Préparation à l'accouchement")).toBe("accouchement");
   });
 });
 
@@ -372,8 +583,37 @@ describe("buildMetaSeed", () => {
     expect(seed.postalCode).toBeNull();
     expect(seed.department).toBeNull();
     expect(seed.region).toBeNull();
-    expect(seed.searchTerms).toEqual(["ostéopathe", "ostéopathie"]);
+    expect(seed.searchTerms).toEqual(["ostéopathe", "ostéopathe albi", "ostéopathie", "ostéopathie albi"]);
     expect(buildMetaSeed({ profession: "Ostéopathe", city: "Albi", address: "Rue de la Paix, Albi", specialties: [], competitorNames: [] }).department).toBeNull();
+  });
+
+  it("villes voisines nettoyées, sans doublon ni vide, 4 au plus ; les termes écartent la ville du praticien ; champ absent sans ville voisine", () => {
+    const seed = buildMetaSeed({
+      profession: "Ostéopathe",
+      city: "Reims",
+      address: "12 rue de Vesle, 51100 Reims",
+      specialties: ["Accompagnement du nourrisson"],
+      competitorNames: ["Cabinet Durand"],
+      nearbyCities: [" Reims ", "Épernay", "Épernay", "", "Châlons-en-Champagne", "Vitry-le-François", "Tinqueux"],
+    });
+    expect(seed.nearbyCities).toEqual(["Reims", "Épernay", "Châlons-en-Champagne", "Vitry-le-François"]);
+    expect(seed.department).toEqual({ code: "51", name: "Marne", region: "Grand Est" });
+    expect(seed.searchTerms).toEqual([
+      "ostéopathe",
+      "ostéopathe reims",
+      "ostéopathie",
+      "ostéopathie reims",
+      "ostéopathe épernay",
+      "ostéopathe nourrisson",
+      "ostéopathe châlons-en-champagne",
+      "cabinet durand",
+    ]);
+    expect(seed.searchTerms).toEqual(buildMetaSearchTerms(seed));
+    for (const nearbyCities of [undefined, [], ["", "  "]]) {
+      const bare = buildMetaSeed({ profession: "Ostéopathe", city: "Reims", address: null, specialties: [], competitorNames: [], nearbyCities });
+      expect("nearbyCities" in bare, JSON.stringify(nearbyCities)).toBe(false);
+      expect(bare.searchTerms).toEqual(["ostéopathe", "ostéopathe reims", "ostéopathie", "ostéopathie reims"]);
+    }
   });
 });
 
@@ -508,6 +748,189 @@ describe("scopeOfAd", () => {
   });
 });
 
+describe("scopeOfAd : codes postaux, anciennes régions, arrondissements", () => {
+  const scope = (locations: MetaAdLocation[], seed: ScopeSeed = reims) => scopeOfAd({ targetLocations: locations }, seed);
+
+  it("code postal ciblé (« 51100, France ») : celui du praticien → ville, un autre code de son département → département", () => {
+    expect(scope([zone("51100, France", "zips")])).toBe("ville");
+    expect(scope([zone("51100", "zips")])).toBe("ville");
+    expect(scope([zone("51200, France", "zips")])).toBe("departement");
+    expect(scope([zone("51000, France", "zips")])).toBe("departement");
+    // Graine sans code postal (adresse inconnue, graines antérieures) : le code ne dit que le département
+    expect(scope([zone("51100, France", "zips")], { city: "Reims", department: marne, region: "Grand Est" })).toBe("departement");
+    expect(scope([zone("51100, France", "zips")], { ...reims, postalCode: null })).toBe("departement");
+  });
+
+  it("code postal d'un autre département de la région → région ; ailleurs, inconnu ou sans département connu → France", () => {
+    expect(scope([zone("10000, France", "zips")])).toBe("region");
+    expect(scope([zone("67000, France", "zips")])).toBe("region");
+    // L'Aisne touche la Marne mais relève des Hauts-de-France
+    expect(scope([zone("02100, France", "zips")])).toBe("france");
+    expect(scope([zone("75001, France", "zips")])).toBe("france");
+    expect(scope([zone("00000, France", "zips")])).toBe("france");
+    expect(scope([zone("51200, France", "zips")], { city: "Reims", department: null, region: null })).toBe("france");
+    // Corse (2A / 2B) et outre-mer (trois chiffres)
+    expect(scope([zone("20200, France", "zips")], { city: "Ajaccio", department: departmentFromPostalCode("20000"), region: "Corse", postalCode: "20000" })).toBe("region");
+    expect(scope([zone("97410, France", "zips")], { city: "Saint-Denis", department: departmentFromPostalCode("97400"), region: "La Réunion", postalCode: "97400" })).toBe("departement");
+  });
+
+  it("plusieurs codes postaux : le plus proche l'emporte ; un code exclu est ignoré", () => {
+    expect(scope([zone("75001, France", "zips"), zone("10000, France", "zips")])).toBe("region");
+    expect(scope([zone("75001, France", "zips"), zone("10000, France", "zips"), zone("51200, France", "zips")])).toBe("departement");
+    expect(scope([zone("France", "countries"), zone("51100, France", "zips")])).toBe("ville");
+    expect(scope([zone("France", "countries"), zone("51100, France", "zips", true)])).toBe("france");
+  });
+
+  // Bogue suspecté (scopeOfLocation) : le pays qui suit le code n'est pas lu. Tout code à 5 chiffres est pris pour
+  // un code postal français (Allemagne, Italie, Espagne et États-Unis ont aussi des codes à 5 chiffres) : une annonce
+  // diffusée à l'étranger peut compter « autour de vous ».
+  it.fails("un code postal étranger à 5 chiffres (« 51100, Germany ») ne désigne ni la ville ni le département du praticien", () => {
+    expect(scope([zone("51100, Germany", "zips")])).toBe("france");
+    expect(scope([zone("51200, Italy", "zips")])).toBe("france");
+  });
+
+  it("anciennes régions, que la bibliothèque emploie encore : « Genas, Rhône-Alpes, France » → région pour un praticien d'Auvergne-Rhône-Alpes", () => {
+    expect(scope([zone("Genas, Rhône-Alpes, France", "CITY")], lyon)).toBe("region");
+    expect(scope([zone("Rhône-Alpes, France", "regions")], lyon)).toBe("region");
+    expect(scope([zone("Auvergne", "regions")], lyon)).toBe("region");
+    expect(scope([zone("Lyon, Rhône-Alpes, France", "CITY")], lyon)).toBe("ville");
+    expect(scope([zone("Champagne-Ardenne, France", "regions")])).toBe("region");
+    expect(scope([zone("Metz, Lorraine, France", "CITY")])).toBe("region");
+    expect(scope([zone("Midi-Pyrénées", "regions")], toulouse)).toBe("region");
+    expect(scope([zone("languedoc roussillon", "regions")], toulouse)).toBe("region");
+    // Ancienne région d'une autre région actuelle → France
+    expect(scope([zone("Aquitaine", "regions")], toulouse)).toBe("france");
+    expect(scope([zone("Bordeaux, Aquitaine, France", "CITY")], toulouse)).toBe("france");
+    expect(scope([zone("Rhône-Alpes", "regions")], { city: "Lyon", department: null, region: null })).toBe("france");
+  });
+
+  it("ville homonyme : la région nommée départage (« Valence, Midi-Pyrénées » n'est pas Valence dans la Drôme, même si le nom est celui de la ville du praticien)", () => {
+    const valence: ScopeSeed = { city: "Valence", department: departmentFromPostalCode("26000"), region: "Auvergne-Rhône-Alpes", postalCode: "26000" };
+    expect(scope([zone("Valence, Midi-Pyrénées, France", "CITY")], valence)).toBe("france");
+    expect(scope([zone("Valence, Occitanie, France", "CITY")], valence)).toBe("france");
+    expect(scope([zone("Valence, Rhône-Alpes, France", "CITY")], valence)).toBe("ville");
+    expect(scope([zone("Valence, Auvergne-Rhône-Alpes, France", "CITY")], valence)).toBe("ville");
+    expect(scope([zone("Valence, France", "CITY")], valence)).toBe("ville");
+    expect(scope([zone("Valence", "CITY")], valence)).toBe("ville");
+    // Praticien de La Réunion : Saint-Denis d'Île-de-France est ailleurs
+    expect(scope([zone("Saint-Denis, Île-de-France, France", "CITY")], { city: "Saint-Denis", department: departmentFromPostalCode("97400"), region: "La Réunion" })).toBe("france");
+    // Région du praticien inconnue : rien ne départage, le nom de la ville l'emporte
+    expect(scope([zone("Valence, Midi-Pyrénées, France", "CITY")], { city: "Valence", department: null, region: null })).toBe("ville");
+  });
+
+  // Bogue suspecté (REGION_BY_KEY) : seules les 13 régions de métropole et les anciennes régions départagent les
+  // homonymes. Les 5 régions d'outre-mer de FR_REGION_CODES n'y sont pas : « Saint-Denis, La Réunion » compte pour
+  // la ville d'un praticien de Saint-Denis (Seine-Saint-Denis).
+  it.fails("ville homonyme d'outre-mer : « Saint-Denis, La Réunion, France » n'est pas Saint-Denis en Île-de-France", () => {
+    const saintDenis: ScopeSeed = { city: "Saint-Denis", department: departmentFromPostalCode("93200"), region: "Île-de-France", postalCode: "93200" };
+    expect(scope([zone("Saint-Denis, La Réunion, France", "CITY")], saintDenis)).toBe("france");
+  });
+
+  it("« 5e arrondissement de Paris » → ville pour un praticien parisien (« 1er », « 15ème », Lyon de même)", () => {
+    const paris: ScopeSeed = { city: "Paris", department: departmentFromPostalCode("75005"), region: "Île-de-France", postalCode: "75005" };
+    expect(scope([zone("5e arrondissement de Paris", "NEIGHBORHOOD")], paris)).toBe("ville");
+    expect(scope([zone("5e arrondissement de Paris, Île-de-France, France", "NEIGHBORHOOD")], paris)).toBe("ville");
+    expect(scope([zone("1er arrondissement de Paris", "NEIGHBORHOOD")], paris)).toBe("ville");
+    expect(scope([zone("15ème arrondissement de Paris", "NEIGHBORHOOD")], paris)).toBe("ville");
+    expect(scope([zone("5e arrondissement de Paris", "NEIGHBORHOOD")], { ...paris, city: "Paris 15e" })).toBe("ville");
+    expect(scope([zone("3e arrondissement de Lyon", "NEIGHBORHOOD")], lyon)).toBe("ville");
+    // Pour un praticien d'ailleurs : Paris reste un département d'Île-de-France, rien de plus
+    expect(scope([zone("5e arrondissement de Paris", "NEIGHBORHOOD")], lyon)).toBe("france");
+    expect(scope([zone("5e arrondissement de Paris", "NEIGHBORHOOD")], { city: "Versailles", department: departmentFromPostalCode("78000"), region: "Île-de-France" })).toBe("region");
+  });
+});
+
+describe("buildMetaLocalIndex et villes ciblées sans département", () => {
+  const communes = [
+    { name: "Reims", departmentCode: "51" },
+    { name: "Épernay", departmentCode: "51" },
+    { name: "Châlons-en-Champagne", departmentCode: "51" },
+    // Commune de la Marne qui porte le nom d'une ancienne région
+    { name: "Bourgogne", departmentCode: "51" },
+    { name: "Troyes", departmentCode: "10" },
+    { name: "Metz", departmentCode: "57" },
+    // Commune de Meurthe-et-Moselle, homonyme d'une collectivité d'outre-mer (zone de niveau pays)
+    { name: "Saint-Martin", departmentCode: "54" },
+    { name: "", departmentCode: "51" },
+  ];
+  const index = buildMetaLocalIndex(communes, reims);
+  /** Zone de l'annonce avec l'index de la Marne ; `null` = sans index. */
+  const scope = (locations: MetaAdLocation[], seed: ScopeSeed = reims, localIndex: MetaLocalIndex | null = index) => scopeOfAd({ targetLocations: locations }, seed, localIndex ?? undefined);
+
+  it("index : communes du département du praticien d'un côté, toutes les communes fournies (sa région) de l'autre, noms normalisés", () => {
+    expect([...index.department].sort()).toEqual(["bourgogne", "chalons en champagne", "epernay", "reims"]);
+    expect([...index.region].sort()).toEqual(["bourgogne", "chalons en champagne", "epernay", "metz", "reims", "saint martin", "troyes"]);
+    expect(index.department.has("troyes")).toBe(false);
+    // Sans département connu : aucune commune « du département », la région reste indexée
+    const unknown = buildMetaLocalIndex(communes, { department: null });
+    expect(unknown.department.size).toBe(0);
+    expect(unknown.region.size).toBe(7);
+    expect(buildMetaLocalIndex([], reims)).toEqual({ department: new Set(), region: new Set() });
+  });
+
+  it("commune du département (« Épernay, France ») → département ; sans index, la même zone reste « france »", () => {
+    expect(scope([zone("Épernay, France", "CITY")])).toBe("departement");
+    expect(scope([zone("epernay", "COMMUNE")])).toBe("departement");
+    expect(scope([zone("ÉPERNAY, France", "MUNICIPALITY")])).toBe("departement");
+    expect(scope([zone("Châlons-en-Champagne, France", "CITY")])).toBe("departement");
+    expect(scope([loc("Épernay, France")])).toBe("departement");
+    expect(scope([zone("Épernay, France", "CITY")], reims, null)).toBe("france");
+    // La ville du praticien reste sa ville, index ou non
+    expect(scope([zone("Reims, France", "CITY")])).toBe("ville");
+  });
+
+  it("commune d'un autre département de la région (« Troyes, France ») → région ; commune inconnue de l'index → France", () => {
+    expect(scope([zone("Troyes, France", "CITY")])).toBe("region");
+    expect(scope([zone("Metz, France", "CITY")])).toBe("region");
+    expect(scope([zone("Troyes, France", "CITY")], reims, null)).toBe("france");
+    expect(scope([zone("Bordeaux, France", "CITY")])).toBe("france");
+    expect(scope([zone("Épernay-sous-Gevrey, France", "CITY")])).toBe("france");
+  });
+
+  it("zone la plus étroite parmi plusieurs ; une commune exclue ou située par la zone dans une autre région ne compte pas", () => {
+    expect(scope([zone("France", "countries"), zone("Troyes, France", "CITY"), zone("Épernay, France", "CITY")])).toBe("departement");
+    expect(scope([zone("Bordeaux, France", "CITY"), zone("Troyes, France", "CITY")])).toBe("region");
+    expect(scope([zone("France", "countries"), zone("Épernay, France", "CITY", true)])).toBe("france");
+    expect(scope([zone("Saint-Martin, Midi-Pyrénées, France", "CITY")])).toBe("france");
+    expect(scope([zone("Saint-Martin, Lorraine, France", "CITY")])).toBe("region");
+  });
+
+  it("l'index ne s'applique jamais à une zone de niveau pays (types `countries`, `country_groups`, `country`), même si son nom est celui d'une commune", () => {
+    expect(scope([zone("Saint-Martin", "CITY")])).toBe("region");
+    for (const type of ["countries", "country_groups", "country", "COUNTRIES"]) {
+      expect(scope([zone("Saint-Martin", type)]), type).toBe("france");
+      expect(scope([zone("Épernay", type)]), type).toBe("france");
+    }
+    expect(scope([zone("France", "countries")])).toBe("france");
+    expect(scope([loc("France")])).toBe("france");
+  });
+
+  it("l'index ne s'applique jamais à un nom de région ou de département : « Bourgogne » reste la région, « Vienne » le département", () => {
+    // « Bourgogne » est aussi une commune de la Marne : la zone désigne d'abord l'ancienne région (autre région → France)
+    for (const type of ["regions", "CITY"]) expect(scope([zone("Bourgogne, France", type)]), type).toBe("france");
+    expect(scope([loc("Bourgogne")])).toBe("france");
+    // Les zones régionales du praticien restent des régions, jamais « département »
+    expect(scope([zone("Grand Est", "regions")])).toBe("region");
+    expect(scope([zone("Champagne-Ardenne, France", "regions")])).toBe("region");
+    expect(scope([zone("Aube", "DEPARTMENT")])).toBe("region");
+    expect(scope([zone("Marne", "DEPARTMENT")])).toBe("departement");
+    // Vienne (Isère) est une commune du département du praticien, mais le nom est celui d'un département de Nouvelle-Aquitaine
+    const grenoble: ScopeSeed = { city: "Grenoble", department: departmentFromPostalCode("38000"), region: "Auvergne-Rhône-Alpes", postalCode: "38000" };
+    const isere = buildMetaLocalIndex([{ name: "Vienne", departmentCode: "38" }, { name: "Voiron", departmentCode: "38" }], grenoble);
+    expect(isere.department.has("vienne")).toBe(true);
+    expect(scope([zone("Voiron, France", "CITY")], grenoble, isere)).toBe("departement");
+    expect(scope([zone("Vienne, France", "CITY")], grenoble, isere)).toBe("france");
+  });
+
+  // Bogue suspecté (scopeOfLocation) : seul le niveau pays est lu dans le type de la zone. Une zone de type
+  // `regions` dont le nom n'est pas une région française connue (région étrangère, graphie inattendue) mais
+  // coïncide avec une commune de l'index est prise pour cette commune.
+  it.fails("l'index ne s'applique jamais à une zone de type `regions`, même si son nom est celui d'une commune", () => {
+    expect(scope([zone("Épernay", "regions")])).toBe("france");
+    expect(scope([zone("Saint-Martin", "region")])).toBe("france");
+  });
+});
+
 // ─── Sélection de la veille ──────────────────────────────────────────────────
 
 describe("selectMarketAds", () => {
@@ -518,43 +941,65 @@ describe("selectMarketAds", () => {
     expect(counts).toEqual({ ville: 0, departement: 0, region: 0, france: 2 });
   });
 
-  it("3 annonces en ville → département si ≥ 8 cumulées, sinon région, sinon France ; `counts` par zone", () => {
+  it("3 annonces en ville → département si ≥ 8 cumulées, sinon région, sinon France ; `counts` par zone ; la zone retenue en tête de `ads`, le reste en complément", () => {
     const ville = inZone("ville", 3);
     const dept = selectMarketAds([...ville, ...inZone("departement", 5), ...inZone("region", 2), ...inZone("france", 4)], toulouse, now);
     expect(dept.scopeUsed).toBe("departement");
     expect(dept.counts).toEqual({ ville: 3, departement: 5, region: 2, france: 4 });
-    expect(dept.ads).toHaveLength(8);
-    expect(dept.ads.every((a) => a.scope === "ville" || a.scope === "departement")).toBe(true);
+    expect(marketNearCount(dept)).toBe(8);
+    expect(dept.ads).toHaveLength(14);
+    expect(dept.ads.slice(0, 3).every((a) => a.scope === "ville")).toBe(true);
+    expect(dept.ads.slice(3, 8).every((a) => a.scope === "departement")).toBe(true);
+    expect(dept.ads.slice(8).every((a) => a.scope === "region" || a.scope === "france")).toBe(true);
 
     const region = selectMarketAds([...ville, ...inZone("departement", 2), ...inZone("region", 4), ...inZone("france", 5)], toulouse, now);
     expect(region.scopeUsed).toBe("region");
-    expect(region.ads).toHaveLength(9);
-    expect(region.ads.some((a) => a.scope === "france")).toBe(false);
+    expect(marketNearCount(region)).toBe(9);
+    expect(region.ads).toHaveLength(14);
+    expect(region.ads.slice(0, 9).some((a) => a.scope === "france")).toBe(false);
+    expect(region.ads.slice(9).every((a) => a.scope === "france")).toBe(true);
 
     const france = selectMarketAds([...ville, ...inZone("departement", 1), ...inZone("region", 2), ...inZone("france", 1)], toulouse, now);
     expect(france.scopeUsed).toBe("france");
     expect(france.ads).toHaveLength(7);
+    expect(marketNearCount(france)).toBe(7);
+    expect(france.ads.map((a) => a.scope)).toEqual(["ville", "ville", "ville", "departement", "region", "region", "france"]);
   });
 
   it("8 annonces en ville suffisent : zone ville, sans élargissement ; `minLocal` ajustable", () => {
     const records = [...inZone("ville", META_MARKET_MIN_LOCAL), ...inZone("france", 3)];
-    expect(selectMarketAds(records, toulouse, now).scopeUsed).toBe("ville");
-    expect(selectMarketAds(records, toulouse, now).ads).toHaveLength(8);
+    const selected = selectMarketAds(records, toulouse, now);
+    expect(selected.scopeUsed).toBe("ville");
+    expect(marketNearCount(selected)).toBe(8);
+    expect(selected.ads.slice(0, 8).every((a) => a.scope === "ville")).toBe(true);
+    expect(selected.ads).toHaveLength(11);
     expect(selectMarketAds(inZone("ville", 2), toulouse, now, { minLocal: 2 }).scopeUsed).toBe("ville");
-    expect(selectMarketAds([], toulouse, now)).toEqual({ ads: [], scopeUsed: "france", counts: { ville: 0, departement: 0, region: 0, france: 0 }, strongCounts: { ville: 0, departement: 0, region: 0, france: 0 } });
+    expect(selectMarketAds([], toulouse, now)).toEqual({
+      ads: [],
+      scopeUsed: "france",
+      counts: { ville: 0, departement: 0, region: 0, france: 0 },
+      strongCounts: { ville: 0, departement: 0, region: 0, france: 0 },
+      filtered: null,
+      dismissed: 0,
+    });
   });
 
   it("`strongCounts` : signaux forts par zone sur toutes les annonces repérées, même hors des annonces conservées", () => {
     const strong = { startedAt: daysAgo(60), euTotalReach: 20_000 };
     const records = [...inZone("ville", META_MARKET_MIN_LOCAL, strong), ...inZone("departement", 2, strong), ...inZone("region", 1, strong), ...inZone("france", 3)];
-    const selected = selectMarketAds(records, toulouse, now);
+    const selected = selectMarketAds(records, toulouse, now, { max: META_MARKET_MIN_LOCAL });
     expect(selected.scopeUsed).toBe("ville");
+    expect(selected.ads).toHaveLength(META_MARKET_MIN_LOCAL);
     expect(selected.ads.every((a) => a.scope === "ville")).toBe(true);
     expect(selected.counts).toEqual({ ville: 8, departement: 2, region: 1, france: 3 });
     expect(selected.strongCounts).toEqual({ ville: 8, departement: 2, region: 1, france: 0 });
+    // Sans plafond serré : mêmes comptes, les autres zones viennent seulement compléter `ads`
+    const completed = selectMarketAds(records, toulouse, now);
+    expect(completed.strongCounts).toEqual(selected.strongCounts);
+    expect(completed.ads).toHaveLength(14);
   });
 
-  it("tri : zone la plus proche d'abord, puis score décroissant, puis nom de page ; `max` tronque", () => {
+  it("tri : la zone retenue d'abord (zone la plus proche, puis score décroissant, puis nom de page), ensuite les mieux notées des zones plus larges ; `max` tronque", () => {
     const records = [
       record("f-fort", { targetLocations: [loc("France")], euTotalReach: 60_000, startedAt: daysAgo(100) }),
       record("v-faible", { targetLocations: [loc("Toulouse")], euTotalReach: 100, startedAt: daysAgo(2), pageName: "Cabinet Zen" }),
@@ -564,14 +1009,17 @@ describe("selectMarketAds", () => {
     ];
     const { ads, scopeUsed } = selectMarketAds(records, toulouse, now, { minLocal: 2 });
     expect(scopeUsed).toBe("ville");
-    expect(ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis", "v-faible"]);
+    // Complément : l'annonce nationale (mieux notée) passe avant celle du département
+    expect(ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis", "v-faible", "f-fort", "d-moyen"]);
     expect(ads[0]?.signal).toBe("fort");
     expect(ads[0]?.score).toBe(adScore(60, 50_000, true));
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 2, max: 4 }).ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis", "v-faible", "f-fort"]);
 
     const widened = selectMarketAds(records, toulouse, now, { minLocal: 4 });
     expect(widened.scopeUsed).toBe("departement");
-    expect(widened.ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis", "v-faible", "d-moyen"]);
+    expect(widened.ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis", "v-faible", "d-moyen", "f-fort"]);
     expect(selectMarketAds(records, toulouse, now, { minLocal: 4, max: 2 }).ads.map((a) => a.id)).toEqual(["v-fort", "v-faible-bis"]);
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 4, max: 0 }).ads).toEqual([]);
   });
 
   it("au plus META_MARKET_MAX_ADS annonces par défaut", () => {
@@ -592,11 +1040,252 @@ describe("selectMarketAds", () => {
   });
 });
 
+describe("selectMarketAds : pertinence, annonces supprimées, rang, index des communes", () => {
+  /** Annonce de praticien que le filtre de pertinence garde pour un sophrologue (ciblage national par défaut). */
+  function practitioner(id: string, extra: Partial<MetaAdRecord> = {}): MetaAdRecord {
+    return record(id, { pageName: `Sophrologue ${id}`, bodies: ["Séances de sophrologie au cabinet, sur rendez-vous."], ...extra });
+  }
+  const boutique = record("boutique", { pageName: "Zenova", captions: ["zenova-shop.com"], bodies: ["Code promo : livraison offerte sur nos compléments alimentaires."] });
+  const ecole = record("ecole", { pageName: "École de Sophrologie du Sud", bodies: ["Devenez sophrologue : formation certifiante, éligible au CPF."] });
+  const etranger = practitioner("etranger", { languages: ["nl"] });
+
+  it("`profession` active le filtre de pertinence : commerce, formation et hors sujet écartés d'office et comptés dans `filtered`", () => {
+    const records = [practitioner("p1", { targetLocations: [loc("Toulouse")] }), boutique, practitioner("p2"), ecole, etranger];
+    const selected = selectMarketAds(records, toulouse, now, { profession: "Sophrologue" });
+    expect(selected.ads.map((a) => a.id)).toEqual(["p1", "p2"]);
+    expect(selected.filtered).toEqual({ formation: 1, commerce: 1, autre: 1 });
+    expect(selected.dismissed).toBe(0);
+    // `counts`, `strongCounts` et `rankTotal` ne portent que sur les annonces pertinentes
+    expect(selected.counts).toEqual({ ville: 1, departement: 0, region: 0, france: 1 });
+    expect(marketTotalCount(selected.counts)).toBe(2);
+    expect(selected.ads.every((a) => a.rankTotal === 2)).toBe(true);
+    // Tout est pertinent : compteurs à zéro, pas null
+    expect(selectMarketAds([practitioner("p1")], toulouse, now, { profession: "Sophrologue" }).filtered).toEqual({ formation: 0, commerce: 0, autre: 0 });
+  });
+
+  it("sans `profession` (absente ou vide) : le filtre ne tourne pas, `filtered` vaut null et tout est conservé", () => {
+    const records = [practitioner("p1"), boutique, ecole, etranger];
+    for (const opts of [undefined, {}, { profession: "" }]) {
+      const selected = selectMarketAds(records, toulouse, now, opts);
+      expect(selected.filtered, JSON.stringify(opts)).toBeNull();
+      expect(selected.ads).toHaveLength(4);
+      expect(selected.counts.france).toBe(4);
+    }
+  });
+
+  it("`excludedIds` : les annonces supprimées par le praticien ne reviennent pas et sont comptées dans `dismissed`", () => {
+    const records = [...inZone("ville", 3), ...inZone("france", 2)];
+    const selected = selectMarketAds(records, toulouse, now, { excludedIds: new Set(["ville-2", "france-1", "jamais-vue"]) });
+    expect(selected.dismissed).toBe(2);
+    expect(selected.ads.map((a) => a.id).sort()).toEqual(["france-2", "ville-1", "ville-3"]);
+    expect(selected.counts).toEqual({ ville: 2, departement: 0, region: 0, france: 1 });
+    expect(selected.ads.every((a) => a.rankTotal === 3)).toBe(true);
+    expect(selected.filtered).toBeNull();
+    expect(selectMarketAds(records, toulouse, now, { excludedIds: new Set() }).dismissed).toBe(0);
+    expect(selectMarketAds(records, toulouse, now).dismissed).toBe(0);
+    // Tout supprimé : veille vide, sans erreur
+    const none = selectMarketAds(records, toulouse, now, { excludedIds: new Set(records.map((r) => r.id)) });
+    expect(none).toMatchObject({ ads: [], scopeUsed: "france", dismissed: 5 });
+    expect(marketTotalCount(none.counts)).toBe(0);
+  });
+
+  it("`excludedIds` : la zone retenue se calcule après le retrait ; une annonce déjà écartée par le filtre de pertinence n'est pas comptée comme supprimée", () => {
+    const records = [...inZone("ville", META_MARKET_MIN_LOCAL), ...inZone("departement", 1)];
+    expect(selectMarketAds(records, toulouse, now).scopeUsed).toBe("ville");
+    const widened = selectMarketAds(records, toulouse, now, { excludedIds: new Set(["ville-1"]) });
+    expect(widened.scopeUsed).toBe("departement");
+    expect(widened.ads).toHaveLength(META_MARKET_MIN_LOCAL);
+    expect(widened.ads.some((a) => a.id === "ville-1")).toBe(false);
+
+    const both = selectMarketAds([practitioner("p1"), practitioner("p2"), boutique], toulouse, now, { profession: "Sophrologue", excludedIds: new Set(["p2", "boutique"]) });
+    expect(both.ads.map((a) => a.id)).toEqual(["p1"]);
+    expect(both.filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    expect(both.dismissed).toBe(1);
+  });
+
+  it("`rank` et `rankTotal` sur chaque annonce : 1 = la mieux notée, total = toutes les annonces pertinentes repérées, pas seulement celles conservées", () => {
+    const records = [
+      record("f-fort", { targetLocations: [loc("France")], euTotalReach: 60_000, startedAt: daysAgo(100) }),
+      record("v-faible", { targetLocations: [loc("Toulouse")], euTotalReach: 100, startedAt: daysAgo(2), pageName: "Cabinet Zen" }),
+      record("v-fort", { targetLocations: [loc("Toulouse")], euTotalReach: 50_000, startedAt: daysAgo(60) }),
+      record("v-faible-bis", { targetLocations: [loc("Toulouse")], euTotalReach: 100, startedAt: daysAgo(2), pageName: "Cabinet Alpha" }),
+      record("d-moyen", { targetLocations: [loc("Haute-Garonne")], euTotalReach: 5_000, startedAt: daysAgo(20) }),
+    ];
+    const all = selectMarketAds(records, toulouse, now, { minLocal: 99 });
+    expect(all.scopeUsed).toBe("france");
+    // À note égale : nom de page (« Cabinet Alpha » avant « Cabinet Zen »)
+    expect(Object.fromEntries(all.ads.map((a) => [a.id, a.rank]))).toEqual({ "f-fort": 1, "v-fort": 2, "d-moyen": 3, "v-faible-bis": 4, "v-faible": 5 });
+    expect(all.ads.every((a) => a.rankTotal === 5)).toBe(true);
+    const byRank = [...all.ads].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+    expect(byRank.map((a) => a.rank)).toEqual([1, 2, 3, 4, 5]);
+    for (let i = 1; i < byRank.length; i++) expect(byRank[i - 1]!.score).toBeGreaterThanOrEqual(byRank[i]!.score);
+
+    // Zone « ville » retenue et plafond à 3 : la meilleure annonce (nationale) n'est pas conservée, les autres gardent leur rang global
+    const ville = selectMarketAds(records, toulouse, now, { minLocal: 2, max: 3 });
+    expect(ville.scopeUsed).toBe("ville");
+    expect(ville.ads.map((a) => [a.id, a.rank, a.rankTotal])).toEqual([
+      ["v-fort", 2, 5],
+      ["v-faible-bis", 4, 5],
+      ["v-faible", 5, 5],
+    ]);
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 2, max: 1 }).ads.map((a) => [a.id, a.rank, a.rankTotal])).toEqual([["v-fort", 2, 5]]);
+    // L'ordre de `ads` (zone d'abord) n'est pas celui du rang (note seule)
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 2 }).ads.map((a) => a.rank)).toEqual([2, 4, 5, 1, 3]);
+    // Les annonces du relevé ne sont pas modifiées : le rang est porté par les annonces de la veille
+    expect(records.some((r) => "rank" in r || "rankTotal" in r || "scope" in r)).toBe(false);
+  });
+
+  it("`rank` : à note et nom de page égaux, l'identifiant départage ; une seule annonce → 1 sur 1", () => {
+    const twins = selectMarketAds([record("b", { pageName: "Cabinet Jumeau" }), record("a", { pageName: "Cabinet Jumeau" })], toulouse, now);
+    expect(Object.fromEntries(twins.ads.map((a) => [a.id, a.rank]))).toEqual({ a: 1, b: 2 });
+    expect(selectMarketAds([record("seule")], toulouse, now).ads[0]).toMatchObject({ rank: 1, rankTotal: 1 });
+  });
+
+  it("`localIndex` : une ville ciblée sans département est rattachée au département ou à la région du praticien", () => {
+    const index = buildMetaLocalIndex(
+      [
+        { name: "Épernay", departmentCode: "51" },
+        { name: "Troyes", departmentCode: "10" },
+      ],
+      reims,
+    );
+    const records = [
+      record("reims", { targetLocations: [zone("Reims, France", "CITY")] }),
+      record("epernay", { targetLocations: [zone("Épernay, France", "CITY")] }),
+      record("troyes", { targetLocations: [zone("Troyes, France", "CITY")] }),
+      record("bordeaux", { targetLocations: [zone("Bordeaux, France", "CITY")] }),
+      record("code-postal", { targetLocations: [zone("51200, France", "zips")] }),
+    ];
+    const withIndex = selectMarketAds(records, reims, now, { localIndex: index, minLocal: 3 });
+    expect(withIndex.counts).toEqual({ ville: 1, departement: 2, region: 1, france: 1 });
+    expect(withIndex.scopeUsed).toBe("departement");
+    expect(marketNearCount(withIndex)).toBe(3);
+    expect(Object.fromEntries(withIndex.ads.map((a) => [a.id, a.scope]))).toEqual({ reims: "ville", epernay: "departement", "code-postal": "departement", troyes: "region", bordeaux: "france" });
+
+    const withoutIndex = selectMarketAds(records, reims, now, { minLocal: 3 });
+    expect(withoutIndex.counts).toEqual({ ville: 1, departement: 1, region: 0, france: 3 });
+    expect(withoutIndex.scopeUsed).toBe("france");
+    expect(Object.fromEntries(withoutIndex.ads.map((a) => [a.id, a.scope]))).toEqual({ reims: "ville", "code-postal": "departement", epernay: "france", troyes: "france", bordeaux: "france" });
+  });
+});
+
+describe("selectMarketAds : complément des zones plus larges et plafond par page", () => {
+  const strong = { startedAt: daysAgo(90), euTotalReach: 40_000 };
+  const weak = { startedAt: daysAgo(3), euTotalReach: 200 };
+
+  it("zone locale maigre : ses annonces d'abord, puis les mieux notées des zones plus larges, toutes zones confondues", () => {
+    const records = [
+      ...inZone("france", 2, weak),
+      ...inZone("region", 2, { startedAt: daysAgo(20), euTotalReach: 2_000 }),
+      ...inZone("ville", 2, weak),
+      record("france-forte", { ...strong, targetLocations: [loc("France")] }),
+      ...inZone("departement", 1, strong),
+    ];
+    const selected = selectMarketAds(records, toulouse, now, { minLocal: 3 });
+    expect(selected.scopeUsed).toBe("departement");
+    expect(selected.counts).toEqual({ ville: 2, departement: 1, region: 2, france: 3 });
+    expect(marketNearCount(selected)).toBe(3);
+    // Zone retenue : la ville avant le département, même moins bien notée ; complément : par note, la zone ne compte plus
+    expect(selected.ads.map((a) => a.id)).toEqual(["ville-1", "ville-2", "departement-1", "france-forte", "region-1", "region-2", "france-1", "france-2"]);
+    const complement = selected.ads.slice(marketNearCount(selected));
+    for (let i = 1; i < complement.length; i++) expect(complement[i - 1]!.score).toBeGreaterThanOrEqual(complement[i]!.score);
+    // `max` coupe dans le complément, jamais dans la zone retenue tant qu'elle tient
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 3, max: 5 }).ads.map((a) => a.id)).toEqual(["ville-1", "ville-2", "departement-1", "france-forte", "region-1"]);
+  });
+
+  it("zone locale qui remplit la veille : aucune annonce des zones plus larges, même mieux notées", () => {
+    const records = [...inZone("france", 5, strong), ...inZone("ville", META_MARKET_MAX_ADS, weak)];
+    const selected = selectMarketAds(records, toulouse, now);
+    expect(selected.scopeUsed).toBe("ville");
+    expect(selected.ads).toHaveLength(META_MARKET_MAX_ADS);
+    expect(selected.ads.every((a) => a.scope === "ville")).toBe(true);
+    expect(marketNearCount(selected)).toBe(META_MARKET_MAX_ADS);
+    expect(selected.counts).toEqual({ ville: META_MARKET_MAX_ADS, departement: 0, region: 0, france: 5 });
+    // Les annonces nationales gardent les premiers rangs sans être conservées
+    expect(Math.min(...selected.ads.map((a) => a.rank ?? 0))).toBe(6);
+    const tight = selectMarketAds([...inZone("france", 3, strong), ...inZone("ville", 8, weak)], toulouse, now, { max: 8 });
+    expect(tight.ads.every((a) => a.scope === "ville")).toBe(true);
+    expect(tight.ads).toHaveLength(8);
+  });
+
+  it("zone retenue « france » : rien à compléter, tout est dans la zone", () => {
+    const selected = selectMarketAds([...inZone("ville", 2), ...inZone("region", 1), ...inZone("france", 2)], toulouse, now);
+    expect(selected.scopeUsed).toBe("france");
+    expect(marketNearCount(selected)).toBe(5);
+    expect(selected.ads.map((a) => a.scope)).toEqual(["ville", "ville", "region", "france", "france"]);
+  });
+
+  it("au plus META_MARKET_MAX_PER_PAGE annonces par page : 4 annonces d'une page → les 3 mieux notées", () => {
+    expect(META_MARKET_MAX_PER_PAGE).toBe(3);
+    const variants = [
+      record("faible", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 100 }),
+      record("forte", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 50_000 }),
+      record("moyenne", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 5_000 }),
+      record("correcte", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 1_000 }),
+    ];
+    const selected = selectMarketAds([...variants, record("autre", { pageId: "page-2", euTotalReach: 10 })], toulouse, now);
+    expect(selected.ads.map((a) => a.id)).toEqual(["forte", "moyenne", "correcte", "autre"]);
+    // Le plafond ne touche que `ads` : comptes et rangs portent sur toutes les annonces repérées
+    expect(selected.counts.france).toBe(5);
+    expect(selected.ads.every((a) => a.rankTotal === 5)).toBe(true);
+    expect(selected.ads.map((a) => a.rank)).toEqual([1, 2, 3, 5]);
+    // Trois annonces ou moins : rien n'est écarté
+    expect(selectMarketAds(variants.slice(0, 3), toulouse, now).ads).toHaveLength(3);
+  });
+
+  it("plafond par page : sans `pageId`, la page se reconnaît à son nom normalisé (casse, accents, traits d'union) ; deux `pageId` différents restent deux pages", () => {
+    const sameName = [
+      record("n1", { pageName: "Cabinet Zénith", euTotalReach: 4_000 }),
+      record("n2", { pageName: "CABINET ZENITH", euTotalReach: 3_000 }),
+      record("n3", { pageName: "cabinet-zénith", euTotalReach: 2_000 }),
+      record("n4", { pageName: "Cabinet Zenith", euTotalReach: 1_000 }),
+    ];
+    expect(selectMarketAds(sameName, toulouse, now).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3"]);
+    // Homonymes aux identifiants de page différents : chacun garde ses annonces
+    const homonyms = sameName.map((ad, i) => ({ ...ad, pageId: i < 2 ? "page-a" : "page-b" }));
+    expect(selectMarketAds(homonyms, toulouse, now).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3", "n4"]);
+  });
+
+  it("plafond par page appliqué dans l'ordre de `ads` : la zone retenue prend les places de la page avant le complément, une annonce écartée ne consomme pas de place", () => {
+    const page = { pageId: "page-1", pageName: "Cabinet Zen" };
+    const records = [
+      record("local-1", { ...page, ...weak, targetLocations: [loc("Toulouse")] }),
+      record("local-2", { ...page, ...weak, euTotalReach: 100, targetLocations: [loc("Toulouse")] }),
+      record("national-1", { ...page, ...strong }),
+      record("national-2", { ...page, ...strong, euTotalReach: 30_000 }),
+      record("voisin", { pageId: "page-2", targetLocations: [loc("Toulouse")], euTotalReach: 10 }),
+      record("ailleurs", { pageId: "page-3", euTotalReach: 10 }),
+    ];
+    const selected = selectMarketAds(records, toulouse, now, { minLocal: 3 });
+    expect(selected.scopeUsed).toBe("ville");
+    // Les deux annonces locales de la page passent, puis sa meilleure annonce nationale ; la quatrième saute
+    expect(selected.ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1", "ailleurs"]);
+    // `max` compte les annonces conservées, pas celles que le plafond a écartées
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 3, max: 5 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1", "ailleurs"]);
+    expect(selectMarketAds(records, toulouse, now, { minLocal: 3, max: 4 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1"]);
+  });
+
+  it("`maxPerPage` remplace le plafond : 1 → une annonce par page, large → aucune limite ; la zone retenue se décide avant le plafond", () => {
+    const variants = Array.from({ length: 5 }, (_, i) => record(`v${i + 1}`, { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 10_000 - i * 1_000, targetLocations: [loc("Toulouse")] }));
+    const records = [...variants, record("autre", { pageId: "page-2", euTotalReach: 10 })];
+    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 1 }).ads.map((a) => a.id)).toEqual(["v1", "autre"]);
+    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 2 }).ads.map((a) => a.id)).toEqual(["v1", "v2", "autre"]);
+    expect(selectMarketAds(records, toulouse, now).ads.map((a) => a.id)).toEqual(["v1", "v2", "v3", "autre"]);
+    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 99 }).ads).toHaveLength(6);
+    // 5 annonces repérées en ville suffisent à retenir la zone, même si 3 seulement sont conservées
+    const local = selectMarketAds(records, toulouse, now, { minLocal: 5 });
+    expect(local.scopeUsed).toBe("ville");
+    expect(local.counts.ville).toBe(5);
+    expect(marketNearCount(local)).toBe(META_MARKET_MAX_PER_PAGE);
+  });
+});
+
 describe("marketScopeNote", () => {
-  const market = (scopeUsed: MetaMarketScope, counts: Partial<Record<MetaMarketScope, number>>, adsCount: number) => ({
+  /** Veille : `adsCount` annonces conservées dans la zone retenue, puis le complément des zones plus larges (`wider`). */
+  const market = (scopeUsed: MetaMarketScope, counts: Partial<Record<MetaMarketScope, number>>, adsCount: number, wider: MetaMarketScope[] = []) => ({
     scopeUsed,
     counts: { ville: 0, departement: 0, region: 0, france: 0, ...counts },
-    ads: Array.from({ length: adsCount }, () => marketAd(scopeUsed)),
+    ads: [...Array.from({ length: adsCount }, () => marketAd(scopeUsed)), ...wider.map((scope) => marketAd(scope))],
   });
 
   it("ville : phrase simple, sans mention d'élargissement ; singulier pour une annonce", () => {
@@ -611,15 +1300,55 @@ describe("marketScopeNote", () => {
     expect(marketScopeNote(market("region", {}, 2), { city: "Lille", department: departmentFromPostalCode("59000"), region: "Hauts-de-France" })).toContain("dans votre région (Hauts-de-France)");
   });
 
-  it("annonces conservées sur annonces repérées quand des annonces plus lointaines ont été écartées", () => {
-    expect(marketScopeNote(market("ville", { ville: 12, departement: 3, france: 5 }, 12), toulouse)).toBe("12 annonces conservées sur 20 repérées, autour de Toulouse.");
+  it("annonces conservées sur annonces repérées quand toutes n'ont pas été conservées, puis le compte de la zone retenue", () => {
+    expect(marketScopeNote(market("ville", { ville: 12, departement: 3, france: 5 }, 12), toulouse)).toBe("12 annonces conservées sur 20 repérées : 12 autour de Toulouse.");
     expect(marketScopeNote(market("departement", { ville: 2, departement: 9, region: 4 }, 11), toulouse)).toBe(
-      "11 annonces conservées sur 15 repérées, dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (2) : la veille a été élargie.",
+      "11 annonces conservées sur 15 repérées : 11 dans votre département (Haute-Garonne). Peu d'annonces près de chez vous (2) : la veille a été élargie.",
     );
-    expect(marketScopeNote(market("ville", { ville: 1, france: 1 }, 1), toulouse)).toBe("1 annonce conservée sur 2 repérées, autour de Toulouse.");
+    expect(marketScopeNote(market("ville", { ville: 1, france: 1 }, 1), toulouse)).toBe("1 annonce conservée sur 2 repérées : 1 autour de Toulouse.");
     expect(marketNearbyCount({ scopeUsed: "departement", counts: { ville: 2, departement: 9, region: 0, france: 0 } })).toBe(2);
     expect(marketNearbyCount({ scopeUsed: "region", counts: { ville: 2, departement: 3, region: 9, france: 0 } })).toBe(5);
     expect(marketTotalCount({ ville: 2, departement: 3, region: 9, france: 1 })).toBe(15);
+  });
+
+  it("complément des zones plus larges : « complétée(s) par les N mieux notées ailleurs en France », accordé au nombre d'annonces de la zone", () => {
+    expect(marketScopeNote(market("ville", { ville: 3, france: 2 }, 3, ["france", "france"]), toulouse)).toBe("3 annonces autour de Toulouse, complétées par les 2 mieux notées ailleurs en France.");
+    expect(marketScopeNote(market("ville", { ville: 1, region: 1 }, 1, ["region"]), toulouse)).toBe("1 annonce autour de Toulouse, complétée par la mieux notée ailleurs en France.");
+    expect(marketScopeNote(market("ville", { ville: 1, region: 1, france: 2 }, 1, ["region", "france", "france"]), toulouse)).toBe("1 annonce autour de Toulouse, complétée par les 3 mieux notées ailleurs en France.");
+    expect(marketScopeNote(market("ville", { ville: 2, departement: 1 }, 2, ["departement"]), toulouse)).toBe("2 annonces autour de Toulouse, complétées par la mieux notée ailleurs en France.");
+    // Zone élargie : le complément précède la mention de l'élargissement
+    expect(marketScopeNote(market("departement", { ville: 3, departement: 5, region: 2, france: 4 }, 8, ["region", "region", "france", "france", "france", "france"]), toulouse)).toBe(
+      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu d'annonces près de chez vous (3) : la veille a été élargie.",
+    );
+    expect(marketScopeNote(market("region", { ville: 1, region: 8, france: 1 }, 9, ["france"]), toulouse)).toBe(
+      "9 annonces dans votre région (Occitanie), complétées par la mieux notée ailleurs en France. Peu d'annonces près de chez vous (1) : la veille a été élargie.",
+    );
+    // Toutes les annonces repérées n'ont pas été conservées : les trois comptes se suivent
+    expect(marketScopeNote(market("ville", { ville: 3, france: 17 }, 3, ["france", "france"]), toulouse)).toBe(
+      "5 annonces conservées sur 20 repérées : 3 autour de Toulouse, complétées par les 2 mieux notées ailleurs en France.",
+    );
+  });
+
+  it("marketNearCount : annonces conservées de la zone retenue et des plus étroites, complément exclu", () => {
+    const ads = [marketAd("ville"), marketAd("departement"), marketAd("region"), marketAd("france"), marketAd("france")];
+    expect(marketNearCount({ scopeUsed: "ville", ads })).toBe(1);
+    expect(marketNearCount({ scopeUsed: "departement", ads })).toBe(2);
+    expect(marketNearCount({ scopeUsed: "region", ads })).toBe(3);
+    expect(marketNearCount({ scopeUsed: "france", ads })).toBe(5);
+    expect(marketNearCount({ scopeUsed: "ville", ads: [] })).toBe(0);
+    // Veille enregistrée avant le complément : `ads` ne contient que la zone retenue
+    expect(marketNearCount(market("departement", {}, 4))).toBe(4);
+  });
+
+  it("de la sélection à la phrase : veille locale maigre complétée, veille locale pleine sans complément", () => {
+    const thin = selectMarketAds([...inZone("ville", 3), ...inZone("departement", 5), ...inZone("region", 2), ...inZone("france", 4)], toulouse, now);
+    expect(marketScopeNote(thin, toulouse)).toBe(
+      "8 annonces dans votre département (Haute-Garonne), complétées par les 6 mieux notées ailleurs en France. Peu d'annonces près de chez vous (3) : la veille a été élargie.",
+    );
+    const full = selectMarketAds([...inZone("ville", META_MARKET_MAX_ADS), ...inZone("france", 5)], toulouse, now);
+    expect(marketScopeNote(full, toulouse)).toBe(`${META_MARKET_MAX_ADS} annonces conservées sur ${META_MARKET_MAX_ADS + 5} repérées : ${META_MARKET_MAX_ADS} autour de Toulouse.`);
+    const capped = selectMarketAds([...inZone("ville", 9), ...inZone("france", 4)], toulouse, now, { max: 10 });
+    expect(marketScopeNote(capped, toulouse)).toBe("10 annonces conservées sur 13 repérées : 9 autour de Toulouse, complétées par la mieux notée ailleurs en France.");
   });
 
   it("département ou région inconnus : pas de parenthèse vide", () => {
