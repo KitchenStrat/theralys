@@ -12,6 +12,7 @@ import { MarketHeader, VisualsBanner } from "./market-header";
 import { FOCUS_RING, Icon, type IconName } from "./market-icons";
 import { InsightsCard } from "./market-insights";
 import type { MetaTab } from "./tabs";
+import type { AnalysisLaunch } from "./use-analysis-launch";
 import { useMarketLibrary } from "./use-market-library";
 import { MarketVisualsContext, useVisualsLoader } from "./use-visuals-loader";
 
@@ -34,6 +35,8 @@ export function MarketTab({
   library,
   mediaByAdId,
   visuals,
+  launcher,
+  analysesRemaining,
   onSelectTab,
 }: {
   market: MetaAdsMarket | null;
@@ -51,6 +54,9 @@ export function MarketTab({
   /** Visuels des annonces de la veille, par identifiant d'annonce */
   mediaByAdId: Record<string, MetaAdMedia>;
   visuals: MetaVisualsView;
+  /** Lancement de l'analyse, partagé avec l'onglet « Diagnostic » */
+  launcher: AnalysisLaunch;
+  analysesRemaining: number;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   if (!analysisReady || !seed) {
@@ -88,7 +94,7 @@ export function MarketTab({
     );
   }
 
-  return <MarketWatch market={market} seed={seed} source={library} mediaByAdId={mediaByAdId} visuals={visuals} />;
+  return <MarketWatch market={market} seed={seed} source={library} mediaByAdId={mediaByAdId} visuals={visuals} launcher={launcher} analysesRemaining={analysesRemaining} />;
 }
 
 /**
@@ -96,7 +102,23 @@ export function MarketTab({
  * veille), « Ma bibliothèque » (exemples gardés) et « Synthèse » (lecture de
  * l'IA). Les filtres de chaque galerie survivent au changement de vue.
  */
-function MarketWatch({ market, seed, source, mediaByAdId, visuals }: { market: MetaAdsMarket; seed: MetaAdsSeed; source: MetaLibraryView; mediaByAdId: Record<string, MetaAdMedia>; visuals: MetaVisualsView }) {
+function MarketWatch({
+  market,
+  seed,
+  source,
+  mediaByAdId,
+  visuals,
+  launcher,
+  analysesRemaining,
+}: {
+  market: MetaAdsMarket;
+  seed: MetaAdsSeed;
+  source: MetaLibraryView;
+  mediaByAdId: Record<string, MetaAdMedia>;
+  visuals: MetaVisualsView;
+  launcher: AnalysisLaunch;
+  analysesRemaining: number;
+}) {
   const [chosenView, setView] = useState<MarketView>("annonces");
   const [now] = useState(() => new Date());
   const [watchFilters, setWatchFilters] = useState<MetaGalleryFilters>(META_GALLERY_DEFAULT_FILTERS);
@@ -115,7 +137,7 @@ function MarketWatch({ market, seed, source, mediaByAdId, visuals }: { market: M
   return (
     <MarketVisualsContext.Provider value={visualsContext}>
     <div className="space-y-5">
-      <MarketHeader market={market} seed={seed} dismissed={dismissed} />
+      <MarketHeader market={market} seed={seed} dismissed={dismissed} launcher={launcher} analysesRemaining={analysesRemaining} />
       <VisualsBanner visuals={visuals} available={source.available} loader={loader} />
 
       <div role="group" aria-label="Vue de la veille" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-cream-200 bg-white/80 p-1 shadow-(--shadow-card)">

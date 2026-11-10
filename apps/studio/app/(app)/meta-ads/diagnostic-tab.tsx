@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, Spinner } from "@theralys/ui";
 import {
@@ -19,9 +17,9 @@ import {
 import { formatDayFr } from "@/lib/calendar";
 import type { MetaAdsAnalysisView, MetaAdsUsageView } from "@/lib/meta-ads/data";
 import { marketUnavailableNotice } from "@/lib/meta-ads/market-status";
-import { launchMetaAnalysis } from "./actions";
 import type { MetaSiteInfo } from "./meta-client";
 import type { MetaTab } from "./tabs";
+import type { AnalysisLaunch } from "./use-analysis-launch";
 
 const eur = (value: number, digits = 0) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 const num = (value: number) => value.toLocaleString("fr-FR");
@@ -35,8 +33,6 @@ export function budgetBenchmarksLabel(): string {
 }
 
 const ANALYSIS_FAILED_FALLBACK = "L'analyse a échoué : réessayez dans un instant.";
-/** Analyse lancée ailleurs (autre onglet, autre session) : la page se relit à cet intervalle jusqu'à la fin */
-const RUNNING_REFRESH_MS = 10_000;
 
 /** Couleurs et libellés du verdict — jetons du thème (`packages/ui/src/styles.css`). */
 const VERDICT: Record<MetaAdsVerdict, { color: string; tone: "success" | "warning" | "danger"; label: string }> = {
@@ -90,49 +86,22 @@ export function DiagnosticTab({
   current,
   usage,
   site,
+  launcher,
   onSelectTab,
 }: {
   latest: MetaAdsAnalysisView | null;
   current: MetaAdsAnalysisView | null;
   usage: MetaAdsUsageView;
   site: MetaSiteInfo;
+  /** Lancement de l'analyse, partagé avec l'onglet « Marché » */
+  launcher: AnalysisLaunch;
   onSelectTab: (tab: MetaTab) => void;
 }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const runningElsewhere = latest?.status === "running" && !pending;
-  const running = pending || latest?.status === "running";
-  const canLaunch = usage.analysesRemaining > 0;
+  const { pending, running, runningElsewhere, canLaunch, error, message, launch } = launcher;
   const diagnostic = current?.diagnostic ?? null;
   const generationMissing = Boolean(current && (!current.creatives || !current.videoPlan || !current.plan));
   // Analyse aboutie sans veille : jeton absent (client / démo) ou échec signalé par le service (`error`)
   const marketNotice = current && current.market === null ? marketUnavailableNotice({ provider: current.provider, error: current.error, siteType: site.type, generationMissing }) : null;
-
-  // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin
-  useEffect(() => {
-    if (!runningElsewhere) return;
-    const timer = setInterval(() => router.refresh(), RUNNING_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [runningElsewhere, router]);
-
-  function launch() {
-    setError(null);
-    setMessage(null);
-    startTransition(async () => {
-      const result = await launchMetaAnalysis();
-      if (result.error) {
-        const remaining = typeof result.remaining === "number" ? ` Il vous reste ${result.remaining} analyse${result.remaining > 1 ? "s" : ""} ce mois-ci.` : "";
-        setError(`${result.error}${remaining}`);
-        // La ligne en erreur et le quota consommé sont relus
-        router.refresh();
-        return;
-      }
-      setMessage(result.message ?? "Analyse terminée.");
-      router.refresh();
-    });
-  }
 
   const subject = [site.profession, site.city].filter(Boolean).join(" à ") || "votre cabinet";
 

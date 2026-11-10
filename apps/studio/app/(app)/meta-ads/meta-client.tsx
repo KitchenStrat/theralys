@@ -9,6 +9,7 @@ import { MarketTab } from "./market-tab";
 import { PlanTab } from "./plan-tab";
 import { SetupTab } from "./setup-tab";
 import { META_TABS, metaTabHref, type MetaTab } from "./tabs";
+import { useAnalysisLaunch } from "./use-analysis-launch";
 
 export type MetaSiteInfo = {
   name: string;
@@ -21,6 +22,8 @@ export type MetaSiteInfo = {
 
 export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; data: MetaAdsData; site: MetaSiteInfo }) {
   const [tab, setTab] = useState<MetaTab>(initialTab);
+  // Un seul lancement pour toute la section : suivi depuis « Diagnostic » comme depuis « Marché »
+  const launcher = useAnalysisLaunch({ latest: data.latest, usage: data.usage });
 
   function select(next: MetaTab) {
     setTab(next);
@@ -83,7 +86,7 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
       </nav>
 
       <section className="mt-6" aria-label={META_TABS.find((t) => t.id === tab)?.label}>
-        {tab === "diagnostic" ? <DiagnosticTab latest={data.latest} current={current} usage={data.usage} site={site} onSelectTab={select} /> : null}
+        {tab === "diagnostic" ? <DiagnosticTab latest={data.latest} current={current} usage={data.usage} site={site} launcher={launcher} onSelectTab={select} /> : null}
         {tab === "marche" ? (
           <MarketTab
             market={current?.market ?? null}
@@ -96,6 +99,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             library={data.library}
             mediaByAdId={data.mediaByAdId}
             visuals={data.visuals}
+            launcher={launcher}
+            analysesRemaining={data.usage.analysesRemaining}
             onSelectTab={select}
           />
         ) : null}
