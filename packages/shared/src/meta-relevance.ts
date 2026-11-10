@@ -14,7 +14,7 @@
  */
 
 import { adsProfessionFamily, normalizeAdsText } from "./google-ads";
-import type { MetaAdLocation, MetaAdRecord } from "./meta-ads";
+import { metaPageKey, type MetaAdLocation, type MetaAdRecord } from "./meta-ads";
 
 export const META_AD_KINDS = ["praticien", "formation", "commerce", "autre"] as const;
 export type MetaAdKind = (typeof META_AD_KINDS)[number];
@@ -71,15 +71,15 @@ const COMMERCE_WEAK: readonly string[] = [
 const TRAINING_STRONG: readonly string[] = [
   "cpf", "certifiante", "diplomante", "se former", "formez vous", "devenez", "reconversion", "cursus", "portes ouvertes", "webinaire", "webinar",
   "masterclass", "professionnels de sante", "professionnels du bien etre", "votre patientele", "attirer des patients", "attirer des clients",
-  "plus de patients", "plus de clients", "nouveaux patients", "remplir votre agenda", "votre agenda", "developper votre cabinet",
+  "plus de patients", "plus de clients", "remplir votre agenda", "votre agenda", "developper votre cabinet",
   "developper votre activite", "developpez votre", "boostez votre", "remplissez votre agenda", "votre activite", "lancer votre activite", "vos patients",
-  "vos clients", "formation continue", "formation professionnelle", "etudiant", "etudiants", "logiciel", "recrute", "recrutement", "franchise", "franchises",
+  "vos clients", "formation continue", "formation professionnelle", "logiciel", "recrute", "recrutement", "franchise", "franchises",
   "rejoignez notre reseau", "bouche a oreille", "annuaire", "chiffre d affaires",
 ];
 /** Mots que la présentation d'un praticien emploie aussi (« diplômé de l'institut… », « mon site internet ») : un point au plus sans indice fort. */
 const TRAINING_WEAK: readonly string[] = [
   "formation", "formations", "ecole", "institut", "diplome", "certification", "inscription", "inscriptions", "rentree", "therapeutes", "praticiens",
-  "coachs", "module", "modules", "stagiaires", "site internet",
+  "coachs", "module", "modules", "stagiaires", "site internet", "etudiant", "etudiants",
 ];
 /** Un nom de page qui porte ces mots est un organisme de formation. */
 const TRAINING_PAGE_WORDS: readonly string[] = ["formation", "formations", "ecole", "academie", "academy", "campus", "college", "universite", "school", "institut de formation"];
@@ -96,12 +96,17 @@ const FOREIGN_ZONES: readonly string[] = [
 ];
 
 /** Mots d'un domaine qui signent une boutique ou une application. */
-const SHOP_DOMAIN_WORDS: readonly string[] = ["shop", "store", "boutique"];
 /** Hébergeurs et messageries dont le nom finit par « app » sans être une application à vendre. */
 const APP_SUFFIX_EXCEPTIONS = new Set(["app", "whatsapp"]);
 
+/** Mot d'un lien qui signe une boutique ou une application (« shop-xyz », « eshop », « kureapp ») — pas « bishop ». */
+function isShopToken(token: string): boolean {
+  if (token === "eshop" || token.startsWith("shop") || token.startsWith("store") || token.endsWith("store") || token.includes("boutique")) return true;
+  return token.endsWith("app") && !APP_SUFFIX_EXCEPTIONS.has(token);
+}
+
 /** « Remboursé par votre mutuelle », « prise en charge par certaines mutuelles » : la phrase d'un praticien, pas celle d'un assureur. */
-const REIMBURSEMENT = /(?:rembours\w*|prise? en charge|pris en charge)[^.·!?]{0,40}?mutuelles?/g;
+const REIMBURSEMENT = /(?:rembours\p{L}*|prises? en charge|pris en charge)[^.·!?\n]{0,40}?mutuelles?/giu;
 
 const COUNTRY_TYPES = new Set(["country", "countries", "country_group", "country_groups"]);
 const REGION_TYPES = new Set(["region", "regions"]);
@@ -161,10 +166,16 @@ export function metaAdRelevance(ad: MetaAdRecord, ctx: MetaRelevanceContext): Me
   const family = adsProfessionFamily(ctx.profession);
   const ownRoots = family.roots.filter((r) => r.length >= 3);
   const page = normalizeAdsText(ad.pageName);
+  // Exclusions fermes, lues dans le nom de la page : aucun autre indice ne les rattrape
+  if (markerHits(page, TRAINING_PAGE_WORDS).length > 0) return { kind: "formation", keep: false, score: -9, reasons: ["organisme de formation (nom de page)"] };
+  if (markerHits(page, SHOW_MARKERS).length > 0) return { kind: "autre", keep: false, score: -9, reasons: ["spectacle ou événement (nom de page)"] };
+  const ownAnimal = hasRootIn(normalizeAdsText(ctx.profession), ANIMAL_MARKERS);
+  if (!ownAnimal && markerHits(page, ANIMAL_MARKERS).length > 0) return { kind: "autre", keep: false, score: -9, reasons: ["pratique animalière (nom de page)"] };
   const rawText = [...realTexts(ad.bodies), ...realTexts(ad.titles), ...realTexts(ad.descriptions)].join(" · ");
   const text = normalizeAdsText(rawText);
-  // Texte sans les mentions de remboursement : « mutuelle » y reste un indice de commerce
-  const commerceText = normalizeAdsText(rawText).replace(REIMBURSEMENT, " ");
+  // Texte sans les mentions de remboursement (retirées avant la normalisation, tant que la ponctuation borne la phrase) :
+  // « mutuelle » y reste un indice de commerce
+  const commerceText = normalizeAdsText(rawText.replace(REIMBURSEMENT, " "));
   const caption = normalizeAdsText(ad.captions.join(" "));
   const everything = `${page} ${text} ${caption}`;
 
@@ -201,9 +212,7 @@ export function metaAdRelevance(ad: MetaAdRecord, ctx: MetaRelevanceContext): Me
   if (commercePoints >= 4) add(-5, `commerce (${commerceWords})`);
   else if (commercePoints >= 2) add(-3, `commerce (${commerceWords})`);
   else if (commercePoints === 1) add(-1, `commerce (${commerceWords})`);
-  const shopDomain = caption
-    .split(" ")
-    .some((token) => SHOP_DOMAIN_WORDS.some((w) => token.includes(w)) || (token.endsWith("app") && !APP_SUFFIX_EXCEPTIONS.has(token)));
+  const shopDomain = caption.split(" ").some(isShopToken) || caption.includes("apps apple") || caption.includes("play google");
   if (shopDomain) add(-3, "lien de boutique ou d'application");
 
   const trainingStrong = markerHits(everything, TRAINING_STRONG);
@@ -217,16 +226,15 @@ export function metaAdRelevance(ad: MetaAdRecord, ctx: MetaRelevanceContext): Me
   if (trainingPoints >= 4) add(-6, `formation ou service aux praticiens (${trainingWords})`);
   else if (trainingPoints >= 2) add(-4, `formation ou service aux praticiens (${trainingWords})`);
   else if (trainingPoints === 1) add(-1, `formation ou service aux praticiens (${trainingWords})`);
-  const trainingPage = markerHits(page, TRAINING_PAGE_WORDS).length > 0;
-  if (trainingPage) add(-6, "organisme de formation");
   if (!isLocal && !pagePractice && distinctRoots(text, PROFESSION_LIST_ROOTS) >= 3) add(-3, "s'adresse aux praticiens (métiers en liste)");
 
-  const show = markerHits(`${page} ${text}`, SHOW_MARKERS).length > 0;
+  const show = markerHits(text, SHOW_MARKERS).length > 0;
   if (show) add(-6, "spectacle ou événement");
 
-  const ownAnimal = hasRootIn(normalizeAdsText(ctx.profession), ANIMAL_MARKERS);
-  const animal = !ownAnimal && markerHits(`${page} ${text}`, ANIMAL_MARKERS).length > 0;
-  if (animal) add(-4, "pratique animalière");
+  // Un animal cité une fois peut être une précision (« animaux non admis ») ; plusieurs, c'est la pratique
+  const animals = ownAnimal ? 0 : markerHits(text, ANIMAL_MARKERS).length;
+  if (animals >= 2) return { kind: "autre", keep: false, score: -9, reasons: ["pratique animalière"] };
+  if (animals === 1) add(-4, "animal cité dans l'annonce");
 
   const brandVariants = (ctx.pageAdCount ?? 1) >= META_RELEVANCE_BRAND_VARIANTS && !isLocal;
   if (brandVariants) add(-3, `${ctx.pageAdCount} annonces nationales de la même page`);
@@ -237,7 +245,7 @@ export function metaAdRelevance(ad: MetaAdRecord, ctx: MetaRelevanceContext): Me
   const keep = score >= META_RELEVANCE_MIN_SCORE;
   const kind: MetaAdKind = keep
     ? "praticien"
-    : trainingPage || (trainingPoints >= 2 && trainingPoints >= commercePoints)
+    : trainingPoints >= 2 && trainingPoints >= commercePoints
       ? "formation"
       : commercePoints >= 1 || shopDomain || brandVariants || brandReach
         ? "commerce"
@@ -256,7 +264,7 @@ export function filterRelevantAds(records: readonly MetaAdRecord[], ctx: Pick<Me
   const unique = new Map<string, MetaAdRecord>();
   for (const record of records) if (record.id && !unique.has(record.id)) unique.set(record.id, record);
   const perPage = new Map<string, number>();
-  const pageKey = (ad: MetaAdRecord) => ad.pageId ?? normalizeAdsText(ad.pageName);
+  const pageKey = metaPageKey;
   for (const ad of unique.values()) perPage.set(pageKey(ad), (perPage.get(pageKey(ad)) ?? 0) + 1);
   const kept: MetaAdRecord[] = [];
   const filtered: MetaRelevanceSummary = { formation: 0, commerce: 0, autre: 0 };

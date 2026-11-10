@@ -417,8 +417,9 @@ const SPECIALTY_GENERIC = new Set([
 
 /** Mot le plus parlant d'une spécialité : son dernier mot significatif (« arrêt du tabac » → « tabac ») ; null si aucun. */
 export function specialtyKeyword(specialty: string): string | null {
+  // Les articles élidés sont détachés du mot (« séance d'hypnose » → « hypnose », « gestion de l'anxiété » → « anxiété »)
   const tokens = cleanTerm(specialty)
-    .split(" ")
+    .split(/[\s'’]+/)
     .filter((token) => {
       const key = normalizeAdsText(token);
       return key.length >= 3 && !SPECIALTY_GENERIC.has(key);
@@ -449,10 +450,16 @@ export function buildMetaSearchTerms(
   const base = uniqueByKey(candidates.filter((t) => t.length >= 3).map(bounded)).slice(0, 2);
   const head = base[0];
   if (!head) return [];
-  const city = cleanTerm(seed.city ?? "");
+  // La bibliothèque exige tous les mots : « Paris 15e » ou « Toulouse (31) » ne ramèneraient presque rien
+  const placeName = (text: string) =>
+    cleanTerm(text)
+      .split(" ")
+      .filter((token) => !/^\d+(?:e|er|eme|ème)?$/.test(token))
+      .join(" ");
+  const city = placeName(seed.city ?? "");
   const cityKey = normalizeAdsText(city);
   const local = city ? base.map((term) => bounded(`${term} ${city}`)) : [];
-  const nearby = uniqueByKey((seed.nearbyCities ?? []).map(cleanTerm))
+  const nearby = uniqueByKey((seed.nearbyCities ?? []).map(placeName))
     .filter((c) => normalizeAdsText(c) !== cityKey)
     .slice(0, 2)
     .map((c) => bounded(`${head} ${c}`));
@@ -663,7 +670,7 @@ function locationSegments(name: string): string[] {
 const DEPARTMENT_BY_KEY: ReadonlyMap<string, FrDepartment> = new Map(FR_DEPARTMENTS.map((d) => [locationKey(d.name), d]));
 /** Régions actuelles et anciennes (clé normalisée → région actuelle). */
 const REGION_BY_KEY: ReadonlyMap<string, string> = new Map([
-  ...Object.values(R).map((name): [string, string] => [locationKey(name), name]),
+  ...Object.keys(FR_REGION_CODES).map((name): [string, string] => [locationKey(name), name]),
   ...Object.entries(FR_FORMER_REGIONS).map(([former, current]): [string, string] => [locationKey(former), current]),
 ]);
 
@@ -691,30 +698,48 @@ type ScopeSeed = Pick<MetaAdsSeed, "city" | "department" | "region"> & Partial<P
 
 const SCOPE_RANK: Record<MetaMarketScope, number> = { ville: 0, departement: 1, region: 2, france: 3 };
 
+const CITY_LOCATION_TYPES = new Set(["city", "commune", "municipality", "neighborhood", "subcity", "subneighborhood"]);
+const REGION_LOCATION_TYPES = new Set(["region", "regions"]);
+
 /** Zone d'une seule zone ciblée (non exclue) par rapport au praticien. */
 function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: MetaLocalIndex): MetaMarketScope {
   const segments = locationSegments(location.name);
   const first = segments[0] ?? "";
   if (first === "") return "france";
-  // Code postal (« 51100, France ») : le département se lit dans ses premiers chiffres
+  const type = (location.type ?? "").toLowerCase();
+  const cityTyped = CITY_LOCATION_TYPES.has(type);
+  const regionTyped = REGION_LOCATION_TYPES.has(type);
+  const cityKey = locationKey(seed.city);
+  const departmentKey = locationKey(seed.department?.name ?? "");
+  const regionKey = locationKey(seed.region ?? "");
+  // Code postal (« 51100, France ») : le département se lit dans ses premiers chiffres — en France seulement
   if (/^\d{5}$/.test(first)) {
+    const country = segments.length > 1 ? segments[segments.length - 1]! : "france";
+    if (country !== "france" && country !== regionKey && country !== departmentKey) return "france";
     if (seed.postalCode && first === seed.postalCode) return "ville";
     const department = departmentFromPostalCode(first);
     if (!department) return "france";
     if (seed.department && department.code === seed.department.code) return "departement";
     return seed.region !== null && department.region === seed.region ? "region" : "france";
   }
-  // Région nommée dans la zone, actuelle ou ancienne (« Genas, Rhône-Alpes, France ») : elle départage les homonymes
-  const named = segments.map((segment) => REGION_BY_KEY.get(segment)).filter((r): r is string => r !== undefined);
-  const elsewhere = seed.region !== null && named.length > 0 && !named.includes(seed.region);
-  const cityKey = locationKey(seed.city);
-  const departmentKey = locationKey(seed.department?.name ?? "");
-  if (cityKey !== "" && segments.includes(cityKey) && !elsewhere) return "ville";
+  // Ce qui situe le lieu : les segments qui le suivent (« Genas, Rhône-Alpes, France »), et le lieu lui-même quand
+  // c'est une région (« Alsace, France ») — jamais le nom d'un quartier ou d'une ville (« Centre, Rennes »)
+  const firstIsRegion = !cityTyped && REGION_BY_KEY.has(first);
+  const qualifiers = firstIsRegion ? segments : segments.slice(1);
+  const named = qualifiers.map((segment) => REGION_BY_KEY.get(segment)).filter((r): r is string => r !== undefined);
+  const departments = segments.slice(1).map((segment) => DEPARTMENT_BY_KEY.get(segment)).filter((d): d is FrDepartment => d !== undefined);
+  const otherRegion = seed.region !== null && named.length > 0 && !named.includes(seed.region);
+  const otherDepartment = seed.department !== null && departments.length > 0 && !departments.some((d) => d.code === seed.department!.code);
+  // Un département nommé après la ville tranche les homonymes (« Valence, Tarn-et-Garonne »)
+  if (otherDepartment) return seed.region !== null && departments.some((d) => d.region === seed.region) ? "region" : "france";
+  if (cityKey !== "" && !regionTyped && segments.includes(cityKey) && !otherRegion) return "ville";
   if (departmentKey !== "" && segments.includes(departmentKey)) return "departement";
-  if (elsewhere) return "france";
-  // Ville ciblée sans département : reconnue par l'index des communes (jamais pour une zone régionale ou nationale)
-  const cityLevel = !isCountryLevelLocation(location) && !REGION_BY_KEY.has(first) && !DEPARTMENT_BY_KEY.has(first);
+  if (otherRegion) return "france";
+  // Ville ciblée sans département : reconnue par l'index des communes — jamais pour une zone régionale ou nationale,
+  // ni pour un nom de région ou de département que rien ne désigne comme une ville
+  const cityLevel = !isCountryLevelLocation(location) && !regionTyped && (cityTyped || (!REGION_BY_KEY.has(first) && !DEPARTMENT_BY_KEY.has(first)));
   if (index && cityLevel && index.department.has(first)) return "departement";
+  if (regionKey !== "" && segments.includes(regionKey)) return "region";
   if (seed.region !== null && named.includes(seed.region)) return "region";
   if (seed.region !== null && segments.some((segment) => DEPARTMENT_BY_KEY.get(segment)?.region === seed.region)) return "region";
   if (index && cityLevel && index.region.has(first)) return "region";
@@ -738,6 +763,17 @@ export function scopeOfAd(ad: Pick<MetaAdRecord, "targetLocations">, seed: Scope
     if (best === "ville") break;
   }
   return best;
+}
+
+/**
+ * Clé d'une page Facebook : son identifiant, sinon son nom normalisé, sinon
+ * son nom brut (cyrillique, émojis…), sinon l'annonce elle-même — deux pages
+ * sans rapport ne sont jamais confondues.
+ */
+export function metaPageKey(ad: Pick<MetaAdRecord, "id" | "pageId" | "pageName">): string {
+  if (ad.pageId) return `id:${ad.pageId}`;
+  const name = normalizeAdsText(ad.pageName) || ad.pageName.trim().toLowerCase();
+  return name !== "" ? `nom:${name}` : `annonce:${ad.id}`;
 }
 
 export type SelectMarketAdsOptions = {
@@ -844,7 +880,7 @@ export function selectMarketAds(
   const ads: MetaMarketAd[] = [];
   for (const ad of [...near, ...wider]) {
     if (ads.length >= max) break;
-    const page = ad.pageId ?? `nom:${normalizeAdsText(ad.pageName)}`;
+    const page = metaPageKey(ad);
     const taken = perPage.get(page) ?? 0;
     if (taken >= maxPerPage) continue;
     perPage.set(page, taken + 1);

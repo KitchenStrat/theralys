@@ -171,9 +171,16 @@ export function adIsTrending(ad: Pick<MetaMarketAd, "active" | "signal">): boole
   return ad.active && ad.signal === "fort";
 }
 
-/** Part des annonces repérées qu'une annonce devance : « top 23 % » (arrondi supérieur, 1 au minimum) ; null sans rang. */
+/** Annonces repérées en deçà desquelles un pourcentage n'a pas de sens (« top 34 % » de trois annonces). */
+export const AD_TOP_PERCENT_MIN_TOTAL = 10;
+
+/**
+ * Tranche des mieux notées à laquelle l'annonce appartient : « top 23 % »
+ * (arrondi supérieur, 1 au minimum) ; null sans rang ou sur moins de
+ * AD_TOP_PERCENT_MIN_TOTAL annonces repérées.
+ */
 export function adTopPercent(ad: Pick<MetaMarketAd, "rank" | "rankTotal">): number | null {
-  if (!ad.rank || !ad.rankTotal || ad.rankTotal <= 0) return null;
+  if (!ad.rank || !ad.rankTotal || ad.rankTotal < AD_TOP_PERCENT_MIN_TOTAL) return null;
   return Math.max(1, Math.min(100, Math.ceil((ad.rank / ad.rankTotal) * 100)));
 }
 
