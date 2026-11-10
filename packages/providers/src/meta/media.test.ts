@@ -292,7 +292,8 @@ describe("ScrapeCreatorsMediaProvider", () => {
     expect(call.headers.accept).toBe("application/json");
     expect(call.url).not.toContain(KEY);
     expect(call.signal).toBeInstanceOf(AbortSignal);
-    expect(AD_MEDIA_TIMEOUT_MS).toBe(20_000);
+    // Délai de 15 s par recherche, relance après 1,5 s
+    expect(AD_MEDIA_TIMEOUT_MS).toBe(15_000);
     expect(AD_MEDIA_RETRY_DELAY_MS).toBe(1_500);
   });
 
@@ -331,7 +332,7 @@ describe("ScrapeCreatorsMediaProvider", () => {
     }
   });
 
-  it("429 → « rate », jamais relancé sur-le-champ", async () => {
+  it("429 → « rate » (limite de débit), jamais relancé", async () => {
     const { calls, impl } = stubFetch(() => jsonResponse({ error: "Too many requests" }, 429));
     const err = await failure(provider(impl).lookup(AD_ID));
     expect(err).toMatchObject({ kind: "rate", status: 429 });
@@ -339,7 +340,7 @@ describe("ScrapeCreatorsMediaProvider", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("500 puis 200 → une seule relance, visuels rendus ; 5xx deux fois → erreur transitoire", async () => {
+  it("500 puis 200 → une seule relance (rien n'a été facturé), visuels rendus ; 5xx deux fois → erreur « retry » après deux tentatives", async () => {
     const recovered = stubFetch((_call, index) => (index === 0 ? jsonResponse({ message: "Internal error" }, 500) : jsonResponse(payload(snapshot({ images: [{ original_image_url: image("origine") }] })))));
     const media = await provider(recovered.impl).lookup(AD_ID);
     expect(media!.items).toHaveLength(1);
@@ -347,16 +348,17 @@ describe("ScrapeCreatorsMediaProvider", () => {
     expect(recovered.calls[1]!.url).toBe(recovered.calls[0]!.url);
     const down = stubFetch((_call, index) => jsonResponse({ message: "Bad gateway" }, index === 0 ? 502 : 503));
     const err = await failure(provider(down.impl).lookup(AD_ID));
-    expect(err).toMatchObject({ kind: "transient", status: 503 });
+    expect(err).toMatchObject({ kind: "retry", status: 503 });
+    expect(err.message).toContain("HTTP 503");
     expect(down.calls).toHaveLength(2);
   });
 
-  it("erreur réseau deux fois → erreur transitoire (deux tentatives) ; une seule fois → relance aboutie", async () => {
+  it("connexion impossible deux fois → erreur « retry » (deux tentatives, pas davantage) ; une seule fois → relance aboutie", async () => {
     const dead = stubFetch(() => {
       throw new TypeError("fetch failed");
     });
     const err = await failure(provider(dead.impl).lookup(AD_ID));
-    expect(err).toMatchObject({ kind: "transient", status: null });
+    expect(err).toMatchObject({ kind: "retry", status: null });
     expect(err.message).toContain("fetch failed");
     expect(dead.calls).toHaveLength(2);
     const flaky = stubFetch((_call, index) => {
@@ -367,16 +369,19 @@ describe("ScrapeCreatorsMediaProvider", () => {
     expect(flaky.calls).toHaveLength(2);
   });
 
-  it("réponse 200 illisible (HTML, JSON qui n'est pas un objet) → transitoire, relancée une fois", async () => {
+  it("réponse 200 illisible (HTML, JSON qui n'est pas un objet) → « transient », jamais relancée (la recherche a pu être facturée)", async () => {
     const html = stubFetch(() => new Response("<html><body>Bad gateway</body></html>", { status: 200, headers: { "Content-Type": "text/html" } }));
     expect(await failure(provider(html.impl).lookup(AD_ID))).toMatchObject({ kind: "transient", status: 200 });
-    expect(html.calls).toHaveLength(2);
-    const list = stubFetch((_call, index) => (index === 0 ? jsonResponse([payload()]) : jsonResponse(payload())));
-    expect(await provider(list.impl).lookup(AD_ID)).toMatchObject({ adId: AD_ID });
-    expect(list.calls).toHaveLength(2);
+    expect(html.calls).toHaveLength(1);
+    const list = stubFetch(() => jsonResponse([payload()]));
+    expect(await failure(provider(list.impl).lookup(AD_ID))).toMatchObject({ kind: "transient", status: 200 });
+    expect(list.calls).toHaveLength(1);
+    const empty = stubFetch(() => new Response("", { status: 200 }));
+    expect(await failure(provider(empty.impl).lookup(AD_ID))).toMatchObject({ kind: "transient" });
+    expect(empty.calls).toHaveLength(1);
   });
 
-  it("délai dépassé : la requête est annulée par son signal, relancée une fois, puis erreur transitoire", async () => {
+  it("délai dépassé : la requête est annulée par son signal → « transient », jamais relancée (elle a pu arriver et être facturée)", async () => {
     const { calls, impl } = stubFetch(
       (call) =>
         new Promise<Response>((_resolve, reject) => {
@@ -384,9 +389,21 @@ describe("ScrapeCreatorsMediaProvider", () => {
         }),
     );
     const err = await failure(provider(impl, { timeoutMs: 5 }).lookup(AD_ID));
-    expect(err.kind).toBe("transient");
-    expect(calls).toHaveLength(2);
-    expect(calls.every((call) => call.signal?.aborted === true)).toBe(true);
+    expect(err).toMatchObject({ kind: "transient", status: null });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.signal?.aborted).toBe(true);
+  });
+
+  it("une relance au plus : erreur relançable puis refus → le refus est rendu tel quel ; relançable puis introuvable → null", async () => {
+    const refused = stubFetch((_call, index) => (index === 0 ? jsonResponse({ message: "Internal error" }, 500) : jsonResponse({ message: "Unauthorized" }, 401)));
+    expect(await failure(provider(refused.impl).lookup(AD_ID))).toMatchObject({ kind: "auth", status: 401 });
+    expect(refused.calls).toHaveLength(2);
+    const gone = stubFetch((_call, index) => {
+      if (index === 0) throw new TypeError("fetch failed");
+      return jsonResponse({ success: false }, 404);
+    });
+    expect(await provider(gone.impl).lookup(AD_ID)).toBeNull();
+    expect(gone.calls).toHaveLength(2);
   });
 
   it("les messages d'erreur ne contiennent jamais la clé (réponse du serveur, texte brut, erreur réseau)", async () => {
@@ -401,10 +418,10 @@ describe("ScrapeCreatorsMediaProvider", () => {
     const network = stubFetch(() => {
       throw new TypeError(`request to ${SCRAPECREATORS_BASE} failed, headers: {"x-api-key":"${KEY}"}`);
     });
-    const transient = await failure(provider(network.impl).lookup(AD_ID));
-    expect(transient.message).not.toContain(KEY);
-    expect(String(transient)).not.toContain(KEY);
-    expect(JSON.stringify({ ...transient })).not.toContain(KEY);
+    const unreachable = await failure(provider(network.impl).lookup(AD_ID));
+    expect(unreachable.message).not.toContain(KEY);
+    expect(String(unreachable)).not.toContain(KEY);
+    expect(JSON.stringify({ ...unreachable })).not.toContain(KEY);
   });
 
   // Constat : le détail renvoyé par le serveur est coupé à 200 caractères AVANT le masquage de la clé. Une clé à cheval
@@ -435,11 +452,12 @@ describe("ScrapeCreatorsMediaProvider", () => {
 });
 
 describe("isAdMediaBlocking", () => {
-  it("clé refusée ou crédits épuisés condamnent le lot ; débit, transitoire, autre et erreurs étrangères non", () => {
+  it("clé refusée, crédits épuisés ou limite de débit condamnent le lot ; relançable, transitoire, autre et erreurs étrangères non", () => {
     expect(isAdMediaBlocking(new AdMediaError("clé refusée", { status: 401, kind: "auth" }))).toBe(true);
     expect(isAdMediaBlocking(new AdMediaError("crédits épuisés", { status: 402, kind: "credits" }))).toBe(true);
-    expect(isAdMediaBlocking(new AdMediaError("débit", { status: 429, kind: "rate" }))).toBe(false);
-    expect(isAdMediaBlocking(new AdMediaError("5xx", { status: 500, kind: "transient" }))).toBe(false);
+    expect(isAdMediaBlocking(new AdMediaError("débit", { status: 429, kind: "rate" }))).toBe(true);
+    expect(isAdMediaBlocking(new AdMediaError("5xx", { status: 500, kind: "retry" }))).toBe(false);
+    expect(isAdMediaBlocking(new AdMediaError("délai", { kind: "transient" }))).toBe(false);
     expect(isAdMediaBlocking(new AdMediaError("autre"))).toBe(false);
     expect(isAdMediaBlocking(Object.assign(new Error("faux ami"), { kind: "auth" }))).toBe(false);
     expect(isAdMediaBlocking(null)).toBe(false);

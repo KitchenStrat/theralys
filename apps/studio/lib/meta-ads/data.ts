@@ -8,7 +8,7 @@
 
 import { and, desc, eq, gte } from "drizzle-orm";
 import { analyticsEvents, getDb, metaAdsAnalyses, type Site } from "@theralys/db";
-import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage, loadMetaLibrary, loadMetaMedia, mediaLookupsRemaining, mediaProviderFor } from "@theralys/jobs";
+import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage, loadMetaLibrary, loadMetaMediaState, mediaLookupsRemaining, mediaProviderFor, mediaSourceFor } from "@theralys/jobs";
 import {
   filterRelevantAds,
   type MetaAdMedia,
@@ -69,7 +69,7 @@ export type MetaLibraryView = {
 export type MetaVisualsView = {
   /** Un fournisseur de visuels est configuré pour cette veille */
   provider: boolean;
-  /** Annonces de la veille dont les visuels n'ont pas encore été cherchés */
+  /** Annonces affichées dont les visuels n'ont pas encore été cherchés (une annonce cherchée sans résultat n'en fait pas partie) */
   missing: number;
   /** Recherches de visuels encore possibles ce mois-ci */
   remaining: number;
@@ -179,9 +179,13 @@ export async function getMetaAdsData(site: Site, now = new Date()): Promise<Meta
     loadMetaLibrary(db, site.id),
     mediaLookupsRemaining(db, site.id, now),
   ]);
-  const ads = analyses.current?.market?.ads ?? [];
-  const mediaByAdId = await loadMetaMedia(db, ads.map((ad) => ad.id));
-  const provider = analyses.current ? mediaProviderFor(process.env, analyses.current.provider) !== null : false;
+  // Annonces affichées : celles de la veille courante que le praticien n'a pas supprimées
+  const dismissed = new Set(library.dismissedIds);
+  const ads = (analyses.current?.market?.ads ?? []).filter((ad) => !dismissed.has(ad.id));
+  const mode = analyses.current?.provider ?? "none";
+  // Visuels de la même origine que la veille (jamais de visuel de démonstration sur une vraie veille)
+  const { mediaByAdId, known } = await loadMetaMediaState(db, ads.map((ad) => ad.id), mediaSourceFor(mode));
+  const provider = analyses.current ? mediaProviderFor(process.env, mode) !== null : false;
   return {
     latest: analyses.latest,
     current: analyses.current,
@@ -192,6 +196,6 @@ export async function getMetaAdsData(site: Site, now = new Date()): Promise<Meta
     resultsDays: META_RESULTS_DAYS,
     library,
     mediaByAdId,
-    visuals: { provider, missing: library.available ? ads.filter((ad) => mediaByAdId[ad.id] === undefined).length : 0, remaining },
+    visuals: { provider, missing: library.available ? ads.filter((ad) => !known.has(ad.id)).length : 0, remaining },
   };
 }

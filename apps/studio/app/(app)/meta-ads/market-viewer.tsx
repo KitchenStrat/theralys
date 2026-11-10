@@ -53,10 +53,11 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-cream-100">
       <div className="relative aspect-[4/5] max-h-[62vh] w-full overflow-hidden md:aspect-auto md:max-h-none md:min-h-0 md:flex-1" aria-roledescription={count > 1 ? "carrousel" : undefined}>
+        {image ? <img key={image} src={image} alt="" aria-hidden loading="lazy" decoding="async" referrerPolicy="no-referrer" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-2xl" /> : null}
         {item && media && item.kind === "video" ? (
           <VideoStage key={`${ad.id}-${index}`} adId={ad.id} index={index} item={item} media={media} image={image} alt={alt} libraryUrl={ad.libraryUrl} fallback={poster} />
         ) : image ? (
-          <AdImage src={image} alt={alt} fallback={poster} className="h-full w-full object-contain" />
+          <AdImage src={image} alt={alt} fallback={poster} className="relative h-full w-full object-contain" />
         ) : (
           poster
         )}
@@ -139,7 +140,7 @@ function VideoStage({
         src={metaVideoSrc(adId, index)}
         onError={() => setFailed(true)}
         aria-label={alt.replace(/^Visuel/, "Vidéo")}
-        className="h-full w-full bg-ink-900 object-contain"
+        className="relative h-full w-full bg-ink-900 object-contain"
         {...NO_REFERRER}
       />
     );
@@ -147,7 +148,7 @@ function VideoStage({
 
   return (
     <div data-testid="meta-detail-video" data-state={demo ? "demonstration" : "indisponible"} className="relative h-full w-full">
-      {image ? <AdImage src={image} alt={alt} fallback={fallback} className="h-full w-full object-contain" /> : fallback}
+      {image ? <AdImage src={image} alt={alt} fallback={fallback} className="relative h-full w-full object-contain" /> : fallback}
       <span aria-hidden className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 pl-0.5 text-ink-500 shadow-lg backdrop-blur-sm">
         <PlayGlyph className="h-6 w-6" />
       </span>

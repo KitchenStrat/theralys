@@ -10,7 +10,7 @@ import { FOCUS_RING, Icon } from "./market-icons";
 import { PageAvatar, RankChip, SignalBadge, ZoneChip } from "./market-media";
 import { MediaViewer } from "./market-viewer";
 
-const ACTION = "inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold transition-colors";
+const ACTION = "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors";
 
 export type MarketDetailProps = {
   ad: MetaGalleryAd;
@@ -53,14 +53,14 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
       <div
         data-testid="meta-detail"
         data-ad-id={ad.id}
-        className="relative flex max-h-[90vh] flex-col md:grid md:h-[min(90vh,45rem)] md:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] md:grid-rows-[minmax(0,1fr)_auto]"
+        className="relative flex max-h-[90vh] flex-col md:grid md:h-[min(90vh,45rem)] md:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)] md:grid-rows-[minmax(0,1fr)_auto]"
       >
         <div className="min-h-0 flex-1 overflow-y-auto md:contents">
           <div className="md:row-span-2 md:min-h-0">
             <MediaViewer key={ad.id} ad={ad} now={now} />
           </div>
 
-          <div className="px-5 pb-6 pt-5 md:min-h-0 md:overflow-y-auto md:px-7 md:pt-6">
+          <div className="px-5 pb-6 pt-5 md:min-h-0 md:overflow-y-auto md:px-6 md:pt-6">
             <header className="flex items-center gap-3 pr-10">
               <PageAvatar name={ad.pageName} url={media?.avatarUrl} seed={ad.pageId ?? ad.pageName} className="h-11 w-11 text-sm" />
               <div className="min-w-0">
@@ -114,8 +114,8 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
 
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
               <Fact label="Diffusion">
-                <span className="inline-flex items-center gap-1.5">
-                  <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
+                <span className="flex items-start gap-1.5">
+                  <span aria-hidden className={clsx("mt-1.5 h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
                   {diffusion.long}
                 </span>
               </Fact>
@@ -135,12 +135,13 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
           </div>
         </div>
 
-        <div className="border-t border-cream-200 bg-white px-5 py-3.5 md:col-start-2 md:px-7">
+        <div className="border-t border-cream-200 bg-white px-5 py-3.5 md:col-start-2 md:px-6">
           {error ? (
             <p role="alert" className="mb-3 rounded-lg bg-danger-100 px-3 py-2 text-sm text-danger-500">
               {error}
             </p>
           ) : null}
+          {/* Mobile : le geste principal sur toute la largeur, puis « Supprimer » et le lien Meta sur une ligne */}
           <div className="flex flex-wrap items-center gap-2">
             {canEdit && mode === "veille" ? (
               <>
@@ -150,10 +151,10 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
                   aria-pressed={ad.kept}
                   onClick={ad.kept ? onUnkeep : onKeep}
                   title={ad.kept ? "Retirer de ma bibliothèque" : "Conserver l'annonce, son analyse et ses visuels dans ma bibliothèque"}
-                  className={clsx(ACTION, FOCUS_RING, "min-w-0 flex-1 sm:flex-none", ad.kept ? "bg-primary-600 text-white hover:bg-primary-700" : "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200 hover:bg-primary-100")}
+                  className={clsx(ACTION, FOCUS_RING, "basis-full whitespace-nowrap sm:basis-auto", ad.kept ? "bg-primary-600 text-white hover:bg-primary-700" : "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200 hover:bg-primary-100")}
                 >
                   <Icon name="bookmark" filled={ad.kept} className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{ad.kept ? "Gardée" : "Garder comme exemple"}</span>
+                  {ad.kept ? "Gardée" : "Garder comme exemple"}
                 </button>
                 <button type="button" data-testid="meta-dismiss" onClick={onDismiss} className={clsx(ACTION, FOCUS_RING, "text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30")}>
                   <Icon name="trash" className="h-4 w-4 shrink-0" />
@@ -162,16 +163,16 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
               </>
             ) : null}
             {canEdit && mode === "bibliotheque" ? (
-              <button type="button" data-testid="meta-unkeep" onClick={onRemove} className={clsx(ACTION, FOCUS_RING, "min-w-0 flex-1 text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30 sm:flex-none")}>
+              <button type="button" data-testid="meta-unkeep" onClick={onRemove} className={clsx(ACTION, FOCUS_RING, "basis-full whitespace-nowrap text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30 sm:basis-auto")}>
                 <Icon name="bookmark" className="h-4 w-4 shrink-0" />
-                <span className="truncate">Retirer de ma bibliothèque</span>
+                Retirer de ma bibliothèque
               </button>
             ) : null}
             <a
               href={ad.libraryUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={clsx("ml-auto inline-flex h-10 items-center gap-1 rounded-full px-3 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
+              className={clsx("ml-auto inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-2 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
             >
               Voir sur Meta ↗<span className="sr-only"> (nouvel onglet)</span>
             </a>

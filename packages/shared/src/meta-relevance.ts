@@ -88,6 +88,11 @@ const TRAINING_PAGE_WORDS: readonly string[] = ["formation", "formations", "ecol
 const SHOW_MARKERS: readonly string[] = ["spectacle", "spectacles", "concert", "one man show", "stand up", "humour", "humoriste", "billetterie", "hypnose de rue", "show"];
 
 const ANIMAL_MARKERS: readonly string[] = ["animalier", "animaliere", "animaux", "animal", "equin", "equine", "canin", "canine", "cheval", "chevaux", "chien", "chiens", "veterinaire", "equestre"];
+/** Formes d'un même animal ou d'une même notion (singulier, pluriel, genre) : comptées une seule fois. */
+const ANIMAL_STEMS: Readonly<Record<string, string>> = {
+  animalier: "animalier", animaliere: "animalier", animaux: "animal", animal: "animal", equin: "equin", equine: "equin", equestre: "equin", canin: "canin",
+  canine: "canin", cheval: "cheval", chevaux: "cheval", chien: "chien", chiens: "chien", veterinaire: "veterinaire",
+};
 
 /** Pays et groupes de pays hors de France : un ciblage qui les inclut n'est pas celui d'un cabinet. */
 const FOREIGN_ZONES: readonly string[] = [
@@ -99,9 +104,9 @@ const FOREIGN_ZONES: readonly string[] = [
 /** Hébergeurs et messageries dont le nom finit par « app » sans être une application à vendre. */
 const APP_SUFFIX_EXCEPTIONS = new Set(["app", "whatsapp"]);
 
-/** Mot d'un lien qui signe une boutique ou une application (« shop-xyz », « eshop », « kureapp ») — pas « bishop ». */
+/** Mot d'un lien qui signe une boutique ou une application (« shop-xyz », « eshop », « kureapp ») — pas « bishop », « pastore » ni « restore ». */
 function isShopToken(token: string): boolean {
-  if (token === "eshop" || token.startsWith("shop") || token.startsWith("store") || token.endsWith("store") || token.includes("boutique")) return true;
+  if (token === "eshop" || token.startsWith("shop") || token.startsWith("store") || token.includes("boutique")) return true;
   return token.endsWith("app") && !APP_SUFFIX_EXCEPTIONS.has(token);
 }
 
@@ -228,11 +233,15 @@ export function metaAdRelevance(ad: MetaAdRecord, ctx: MetaRelevanceContext): Me
   else if (trainingPoints === 1) add(-1, `formation ou service aux praticiens (${trainingWords})`);
   if (!isLocal && !pagePractice && distinctRoots(text, PROFESSION_LIST_ROOTS) >= 3) add(-3, "s'adresse aux praticiens (métiers en liste)");
 
-  const show = markerHits(text, SHOW_MARKERS).length > 0;
-  if (show) add(-6, "spectacle ou événement");
+  // Un mot de spectacle peut être une image (« un vrai show de couleurs ») ; deux, c'est l'affiche d'une représentation
+  const showHits = markerHits(text, SHOW_MARKERS);
+  // « one man show » contient « show », « spectacles » redit « spectacle » : comptés une fois
+  const shows = new Set(showHits.filter((marker) => !(marker === "show" && showHits.includes("one man show"))).map((marker) => (marker === "spectacles" ? "spectacle" : marker))).size;
+  if (shows >= 2) return { kind: "autre", keep: false, score: -9, reasons: ["spectacle ou événement"] };
+  if (shows === 1) add(-6, "spectacle ou événement");
 
   // Un animal cité une fois peut être une précision (« animaux non admis ») ; plusieurs, c'est la pratique
-  const animals = ownAnimal ? 0 : markerHits(text, ANIMAL_MARKERS).length;
+  const animals = ownAnimal ? 0 : new Set(markerHits(text, ANIMAL_MARKERS).map((marker) => ANIMAL_STEMS[marker] ?? marker)).size;
   if (animals >= 2) return { kind: "autre", keep: false, score: -9, reasons: ["pratique animalière"] };
   if (animals === 1) add(-4, "animal cité dans l'annonce");
 

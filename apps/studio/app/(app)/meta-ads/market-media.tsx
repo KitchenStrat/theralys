@@ -118,14 +118,18 @@ export function FormatBadge({ media, className }: { media: MetaAdMedia | null; c
 export function SignalBadge({ ad }: { ad: Pick<MetaGalleryAd, "active" | "signal"> }) {
   if (adIsTrending(ad)) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
         <Icon name="trend" className="h-3.5 w-3.5" />
         Tendance
       </span>
     );
   }
   const signal = SIGNAL_LABELS[ad.signal];
-  return <Badge tone={signal.tone}>{signal.label}</Badge>;
+  return (
+    <Badge tone={signal.tone} className="px-2">
+      {signal.label}
+    </Badge>
+  );
 }
 
 /** Zone de l'annonce (« Autour de vous ») ; rien pour les annonces nationales ou d'autres zones. */
@@ -149,7 +153,7 @@ export function RankChip({ ad }: { ad: Pick<MetaGalleryAd, "rank" | "rankTotal">
   const label = rankLabel(ad);
   if (!label) return null;
   return (
-    <span className="inline-flex items-center rounded-full border border-cream-300 px-2 py-0.5 text-[11px] font-medium tabular-nums text-ink-700" title="Rang par note parmi les annonces repérées">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-cream-100 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-ink-700" title="Rang par note parmi les annonces repérées">
       <span className="sr-only">Rang </span>
       {label}
     </span>

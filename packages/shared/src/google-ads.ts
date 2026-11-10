@@ -104,7 +104,7 @@ export function normalizeAdsText(text: string): string {
     .toLowerCase()
     .replace(/œ/g, "oe")
     .replace(/æ/g, "ae")
-    .normalize("NFD")
+    .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[’‘'`´\-_/]/g, " ")
     .replace(/[^a-z0-9 ]+/g, " ")

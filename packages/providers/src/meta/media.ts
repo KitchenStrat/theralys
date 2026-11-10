@@ -16,11 +16,12 @@
  */
 
 import { META_MEDIA_ITEMS_MAX, isMetaCdnUrl, metaCdnExpiry, normalizeAdsText, type MetaAdMediaFormat } from "@theralys/shared";
+import { boundedText } from "./index";
 
 export const SCRAPECREATORS_BASE = "https://api.scrapecreators.com";
 export const SCRAPECREATORS_AD_PATH = "/v1/facebook/adLibrary/ad";
 /** Délai maximal d'une recherche (ms). */
-export const AD_MEDIA_TIMEOUT_MS = 20_000;
+export const AD_MEDIA_TIMEOUT_MS = 15_000;
 /** Attente avant l'unique relance d'une erreur transitoire (ms). */
 export const AD_MEDIA_RETRY_DELAY_MS = 1_500;
 
@@ -55,9 +56,15 @@ export interface AdMediaProvider {
   lookup(adId: string): Promise<AdMediaLookup | null>;
 }
 
-export type AdMediaErrorKind = "auth" | "credits" | "rate" | "transient" | "other";
+/**
+ * `retry` : échec avant toute réponse exploitable du fournisseur (connexion
+ * refusée, 5xx) — rien n'a été facturé, une relance est utile. `transient` :
+ * délai dépassé ou réponse 200 illisible — la recherche a pu être facturée,
+ * elle n'est pas relancée.
+ */
+export type AdMediaErrorKind = "auth" | "credits" | "rate" | "retry" | "transient" | "other";
 
-/** Erreur du fournisseur de visuels : `auth` et `credits` condamnent tout le lot, `transient` mérite une relance. */
+/** Erreur du fournisseur de visuels : `auth`, `credits` et `rate` condamnent tout le lot, `retry` mérite une relance. */
 export class AdMediaError extends Error {
   readonly status: number | null;
   readonly kind: AdMediaErrorKind;
@@ -70,9 +77,9 @@ export class AdMediaError extends Error {
   }
 }
 
-/** Clé refusée ou crédits épuisés : inutile de poursuivre le lot. */
+/** Clé refusée, crédits épuisés ou limite de débit : inutile de poursuivre le lot. */
 export function isAdMediaBlocking(err: unknown): boolean {
-  return err instanceof AdMediaError && (err.kind === "auth" || err.kind === "credits");
+  return err instanceof AdMediaError && (err.kind === "auth" || err.kind === "credits" || err.kind === "rate");
 }
 
 // ─── Normalisation ───────────────────────────────────────────────────────────
@@ -89,10 +96,9 @@ function cdnUrl(value: unknown): string | null {
   return typeof value === "string" && value.length <= 2_000 && isMetaCdnUrl(value) ? value : null;
 }
 
+/** Texte court sans caractère de contrôle ni marque de direction, borné (mêmes règles que les textes d'annonces). */
 function shortText(value: unknown, max: number): string | null {
-  if (typeof value !== "string") return null;
-  const clean = value.replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, " ").replace(/\s+/g, " ").trim();
-  return clean === "" ? null : clean.slice(0, max);
+  return boundedText(value, max);
 }
 
 /** Page de destination : http(s) seulement, bornée. */
@@ -117,7 +123,7 @@ function imageItem(raw: Record<string, unknown>): AdMediaLookupItem | null {
   return imageUrl ? { kind: "image", imageUrl, videoUrl: null } : null;
 }
 
-/** Formats de la bibliothèque dont les cartes sont des diapositives (les autres multi-cartes sont des déclinaisons DCO). */
+/** Formats de la bibliothèque dont les cartes sont des déclinaisons d'une annonce dynamique (les autres multi-cartes sont des diapositives). */
 const VARIANT_FORMATS = new Set(["dco"]);
 
 /**
@@ -178,10 +184,11 @@ function isAdId(value: string): boolean {
 }
 
 /**
- * Fournisseur réel : un GET par annonce, délai de 20 s, une relance après
- * 1,5 s sur erreur transitoire (5xx, délai, réseau, réponse illisible).
- * 401 / 403 → clé refusée ; 402 → crédits épuisés ; 429 → limite de débit
- * (jamais relancée sur-le-champ) ; 404 ou `success: false` → annonce
+ * Fournisseur réel : un GET par annonce, délai de 15 s, une seule relance
+ * après 1,5 s quand rien n'a pu être facturé (connexion refusée, 5xx). Un
+ * délai dépassé ou une réponse 200 illisible ne sont pas relancés (la
+ * recherche a pu être comptée). 401 / 403 → clé refusée ; 402 → crédits
+ * épuisés ; 429 → limite de débit ; 404 ou `success: false` → annonce
  * introuvable (null). `creditsRemaining` suit le solde renvoyé par l'API.
  */
 export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
@@ -207,14 +214,14 @@ export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
       try {
         return await this.lookupOnce(adId);
       } catch (err) {
-        if (err instanceof AdMediaError && err.kind === "transient") {
+        if (err instanceof AdMediaError && err.kind === "retry") {
           last = err;
           continue;
         }
         throw err;
       }
     }
-    throw last ?? new AdMediaError("ScrapeCreators : échec", { kind: "transient" });
+    throw last ?? new AdMediaError("ScrapeCreators : échec", { kind: "retry" });
   }
 
   private redact(text: string): string {
@@ -230,7 +237,9 @@ export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
       try {
         response = await this.fetchImpl(url, { method: "GET", headers: { Accept: "application/json", "x-api-key": this.apiKey }, signal: controller.signal });
       } catch (err) {
-        throw new AdMediaError(`ScrapeCreators réseau : ${this.redact(err instanceof Error ? err.message : String(err)).slice(0, 200)}`, { kind: "transient" });
+        // Délai dépassé : la requête est peut-être arrivée (et facturée) — pas de relance ; connexion impossible : relance
+        const kind: AdMediaErrorKind = controller.signal.aborted ? "transient" : "retry";
+        throw new AdMediaError(`ScrapeCreators réseau : ${this.redact(err instanceof Error ? err.message : String(err)).slice(0, 200)}`, { kind });
       }
       let text = "";
       try {
@@ -249,7 +258,7 @@ export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
       if (response.status === 404) return null;
       if (!response.ok) {
         const kind: AdMediaErrorKind =
-          response.status === 401 || response.status === 403 ? "auth" : response.status === 402 ? "credits" : response.status === 429 ? "rate" : response.status >= 500 ? "transient" : "other";
+          response.status === 401 || response.status === 403 ? "auth" : response.status === 402 ? "credits" : response.status === 429 ? "rate" : response.status >= 500 ? "retry" : "other";
         throw new AdMediaError(`ScrapeCreators HTTP ${response.status} : ${detail}`, { status: response.status, kind });
       }
       if (!root) throw new AdMediaError("ScrapeCreators : réponse illisible", { status: response.status, kind: "transient" });

@@ -112,9 +112,21 @@ const ERROR_MESSAGE_MAX = 300;
  * bibliothèque publicitaire, coût 0) ; `meta_regen` : régénération des
  * créas, du plan vidéo et du plan de campagne (compteur, coût 0).
  * `meta_media` : recherches de visuels d'annonces chez le fournisseur
- * (`requests` = recherches, coût réel ; plafond mensuel par site).
+ * (`requests` = recherches, coût réel ; plafond mensuel par site, hors
+ * budget Google) ; `meta_media_pending` : réservation en cours, soldée en
+ * `meta_media` à la fin du lot.
  */
-export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan" | "meta_analysis" | "meta_regen" | "meta_media";
+export type GoogleUsageKind =
+  | "business_info"
+  | "reviews"
+  | "scan"
+  | "sync_attempt"
+  | "ads_keywords"
+  | "ads_plan"
+  | "meta_analysis"
+  | "meta_regen"
+  | "meta_media"
+  | "meta_media_pending";
 
 export type GoogleBudget = {
   month: string;
@@ -127,12 +139,15 @@ export type GoogleBudget = {
 export type DbTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type DbExecutor = Database | DbTransaction;
 
-/** Dépenses fournisseur du mois courant (USD) pour un site. */
+/** Kinds de `google_usage` hors budget Google : visuels des annonces Meta Ads (leur plafond est un nombre de recherches). */
+const NON_GOOGLE_BUDGET_KINDS = ["meta_media", "meta_media_pending"];
+
+/** Dépenses fournisseur du mois courant (USD) pour un site, au titre du budget Google (DataForSEO). */
 export async function monthlyGoogleSpendUsd(db: DbExecutor, siteId: string, now = new Date()): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${googleUsage.costUsd}), 0)` })
     .from(googleUsage)
-    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now))));
+    .where(and(eq(googleUsage.siteId, siteId), eq(googleUsage.month, usageMonthKey(now)), notInArray(googleUsage.kind, NON_GOOGLE_BUDGET_KINDS)));
   return Number(row?.total ?? 0);
 }
 

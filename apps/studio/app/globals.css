@@ -33,6 +33,29 @@
   .brand-word { animation: none; }
 }
 
+/* ── Galerie du marché (Meta Ads) : apparition en cascade des cartes
+   (`--mg-i` : rang dans la grille) et du bandeau de confirmation.
+   `backwards` : aucun transform conservé après l'animation. ──────────────── */
+@keyframes mg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mg-card {
+    animation: mg-rise 0.45s cubic-bezier(0.22, 0.8, 0.35, 1) backwards;
+    animation-delay: calc(var(--mg-i, 0) * 30ms);
+  }
+  .mg-toast {
+    animation: mg-rise 0.3s cubic-bezier(0.22, 0.8, 0.35, 1) backwards;
+  }
+}
+
 /* ── Carte de visibilité (Fiche Google) : fond adouci, nappe floutée, pastilles
    en relief qui apparaissent en vague depuis le cabinet, ondes du cabinet.
    Classes injectées par Leaflet (DivIcon) : hors portée des utilitaires Tailwind. */

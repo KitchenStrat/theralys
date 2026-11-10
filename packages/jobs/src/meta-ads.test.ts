@@ -1243,17 +1243,55 @@ type FakeDbConfig = {
   usage?: { kind: string; total: number }[];
   /** Lignes rendues par `update().returning()` (défaut : une ligne) */
   updateReturning?: (values: Record<string, unknown>) => { id: string }[];
+  /** Fiche praticien, lue quand le site porte un `prospectId` */
+  prospect?: Record<string, unknown>;
+  /** Lignes `meta_ads_library` du site (exemples gardés, annonces supprimées) */
+  library?: Record<string, unknown>[];
+  /** Lignes `meta_ad_media` déjà en cache */
+  media?: Record<string, unknown>[];
+  /** Recherches de visuels déjà comptées ce mois-ci (somme des `requests` des usages `meta_media`) */
+  mediaLookups?: number;
+  /** Tables absentes (migration non appliquée) : toute requête sur elles échoue avec le code 42P01 */
+  missingTables?: unknown[];
 };
 
-/** Base simulée : lectures configurées, verrou acquis (sauf demande contraire), écritures enregistrées. */
+/** Erreur du pilote pour une table absente, enveloppée comme le fait drizzle (`cause`). */
+function missingTableError(): Error {
+  return new Error("Failed query", { cause: Object.assign(new Error("relation does not exist"), { code: "42P01" }) });
+}
+
+/** Base simulée : lectures configurées par table, verrou acquis (sauf demande contraire), écritures enregistrées. */
 function fakeDb(config: FakeDbConfig = {}) {
   const updates: FakeWrite[] = [];
   const inserts: FakeWrite[] = [];
   const deletes: unknown[] = [];
+  /** Tables lues par `select()` (dans l'ordre) */
+  const selects: unknown[] = [];
   let analysisReads = 0;
   const thenable = <T>(value: T) => ({ then: (res: (v: T) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(value).then(res, rej) });
-  const selectChain = () => {
-    const chain = { from: () => chain, where: () => chain, groupBy: () => chain, orderBy: () => chain, limit: () => chain, ...thenable(config.usage ?? []) };
+  const failing = () => ({ then: (res: (v: never) => unknown, rej?: (e: unknown) => unknown) => Promise.reject(missingTableError()).then(res, rej) });
+  const isMissing = (table: unknown) => config.missingTables?.includes(table) === true;
+  /** Lignes d'une lecture : compteurs d'usage par kind, somme des recherches de visuels, bibliothèque, cache des visuels. */
+  const rowsOf = (table: unknown, fields: Record<string, unknown> | undefined): unknown[] => {
+    if (table === googleUsage) return fields && !("kind" in fields) ? [{ total: config.mediaLookups ?? 0 }] : (config.usage ?? []);
+    if (table === metaAdsLibrary) return config.library ?? [];
+    if (table === metaAdMedia) return config.media ?? [];
+    return [];
+  };
+  const selectChain = (fields: Record<string, unknown> | undefined) => {
+    let table: unknown = null;
+    const chain = {
+      from: (source: unknown) => {
+        table = source;
+        selects.push(source);
+        return chain;
+      },
+      where: () => chain,
+      groupBy: () => chain,
+      orderBy: () => chain,
+      limit: () => chain,
+      then: (res: (v: unknown[]) => unknown, rej?: (e: unknown) => unknown) => (isMissing(table) ? Promise.reject(missingTableError()) : Promise.resolve(rowsOf(table, fields))).then(res, rej),
+    };
     return chain;
   };
   const query = {
@@ -1266,7 +1304,7 @@ function fakeDb(config: FakeDbConfig = {}) {
       },
       findMany: async () => config.running ?? [],
     },
-    prospects: { findFirst: async () => undefined },
+    prospects: { findFirst: async () => config.prospect },
     pages: { findMany: async () => [] },
     googleProfileAudits: { findFirst: async () => undefined },
     googleRankScans: { findFirst: async () => undefined },
@@ -1278,11 +1316,12 @@ function fakeDb(config: FakeDbConfig = {}) {
   const executor = {
     query,
     execute: async () => ({ rows: [{ locked: config.locked ?? true }] }),
-    select: () => selectChain(),
+    select: (fields?: Record<string, unknown>) => selectChain(fields),
     insert: (table: unknown) => ({
       values: (values: Record<string, unknown>) => {
+        if (isMissing(table)) return { ...failing(), returning: () => failing(), onConflictDoUpdate: () => failing() };
         inserts.push({ table, values });
-        return { ...thenable([]), returning: () => thenable([{ id: `new-${inserts.length}` }]) };
+        return { ...thenable([]), returning: () => thenable([{ id: `new-${inserts.length}` }]), onConflictDoUpdate: () => thenable([]) };
       },
     }),
     update: (table: unknown) => ({
@@ -1302,11 +1341,103 @@ function fakeDb(config: FakeDbConfig = {}) {
     }),
   };
   const db = { ...executor, transaction: async <T>(fn: (tx: typeof executor) => Promise<T>) => fn(executor) };
-  return { db: db as unknown as Database, updates, inserts, deletes };
+  return { db: db as unknown as Database, updates, inserts, deletes, selects };
 }
 
 const doneUpdate = (updates: FakeWrite[]) => updates.find((u) => u.table === metaAdsAnalyses && u.values.status === "done");
+/** Visuels mis en cache (une écriture `meta_ad_media` par recherche aboutie). */
+const mediaInserts = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === metaAdMedia);
+/** Usages `meta_media` inscrits (recherches de visuels). */
+const mediaUsageInserts = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === googleUsage && i.values.kind === "meta_media");
+
+/** Fiche praticien d'Albi (ville, adresse et donc département connus). */
+const PROSPECT = {
+  id: "44444444-4444-4444-8444-444444444444",
+  firstName: "Claire",
+  lastName: "Dupont",
+  profession: "Sophrologue",
+  city: "Albi",
+  gender: "feminin",
+  googlePlaceId: null,
+  googleAddress: "12 rue de la Paix, 81000 Albi",
+  googleRating: null,
+  googleReviewCount: null,
+};
 const heartbeats = (updates: FakeWrite[]) => updates.filter((u) => u.table === metaAdsAnalyses && Object.keys(u.values).length === 1 && u.values.updatedAt instanceof Date);
+
+describe("loadMetaAdsContext (base simulée)", () => {
+  const favorite: MetaMarketAd = { ...record("555000111"), pageName: "Cabinet gardé", scope: "ville", active: true, runningDays: 40, signal: "moyen", score: 5, matchedTerms: [] };
+  const library = [
+    { adId: "555000222", status: "dismissed", pageName: "Cabinet écarté", ad: null, media: null, createdAt: NOW, updatedAt: NOW },
+    { adId: favorite.id, status: "kept", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW },
+  ];
+  const located = () => fakeDb({ site: { ...SITE, prospectId: PROSPECT.id } as Site, prospect: PROSPECT, library });
+
+  it("sans option : ni référentiel des communes ni bibliothèque (graine sans villes voisines, index nul, listes vides)", async () => {
+    const fake = located();
+    const network = stubFetch(() => jsonResponse(OCCITANIE_COMMUNES));
+    const ctx = await withGlobalFetch(network.impl, () => loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV));
+    expect(network.calls).toHaveLength(0);
+    expect(ctx.seed).toMatchObject({ profession: "Sophrologue", city: "Albi", postalCode: "81000", region: "Occitanie" });
+    expect(ctx.seed).not.toHaveProperty("nearbyCities");
+    expect(ctx.localIndex).toBeNull();
+    expect(ctx.dismissedAdIds).toEqual([]);
+    expect(ctx.favorites).toEqual([]);
+    expect(fake.selects).not.toContain(metaAdsLibrary);
+  });
+
+  it("geography : villes voisines ajoutées à la graine et à ses termes de recherche, index des communes ; library : annonces supprimées et exemples gardés", async () => {
+    const fake = located();
+    const { calls, impl } = stubFetch(() => jsonResponse(OCCITANIE_COMMUNES));
+    const ctx = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { geography: true, library: true, fetchImpl: impl });
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0]!.url).searchParams.get("codeRegion")).toBe("76");
+    expect(ctx.seed.nearbyCities).toEqual(["Castres", "Gaillac", "Graulhet"]);
+    expect(ctx.seed.searchTerms).toEqual(
+      buildMetaSeed({ profession: "Sophrologue", city: "Albi", address: PROSPECT.googleAddress, specialties: [], competitorNames: [], nearbyCities: ["Castres", "Gaillac", "Graulhet"] }).searchTerms,
+    );
+    expect(ctx.seed.searchTerms).toContain("sophrologue castres");
+    expect(ctx.seed.searchTerms).toContain("sophrologue gaillac");
+    expect(ctx.seed.searchTerms.length).toBeLessThanOrEqual(META_LIBRARY_TERMS_MAX);
+    expect(ctx.localIndex!.department.has("gaillac")).toBe(true);
+    expect(ctx.localIndex!.department.has("toulouse")).toBe(false);
+    expect(ctx.localIndex!.region.has("toulouse")).toBe(true);
+    expect(ctx.dismissedAdIds).toEqual(["555000222"]);
+    expect(ctx.favorites).toEqual([favorite]);
+    // Chaque option est indépendante
+    const onlyLibrary = await loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { library: true, fetchImpl: impl });
+    expect(calls).toHaveLength(1);
+    expect(onlyLibrary.localIndex).toBeNull();
+    expect(onlyLibrary.dismissedAdIds).toEqual(["555000222"]);
+  });
+
+  it("geography sans département connu (site sans fiche ni adresse) : aucun appel ; bibliothèque absente (migration 0007) : listes vides", async () => {
+    const { calls, impl } = stubFetch(() => jsonResponse(OCCITANIE_COMMUNES));
+    const fake = fakeDb({ missingTables: [metaAdsLibrary] });
+    const ctx = await silenced(() => loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { geography: true, library: true, fetchImpl: impl }));
+    expect(calls).toHaveLength(0);
+    expect(ctx.seed.department).toBeNull();
+    expect(ctx.localIndex).toBeNull();
+    expect(ctx.dismissedAdIds).toEqual([]);
+    expect(ctx.favorites).toEqual([]);
+  });
+
+  it("référentiel des communes en échec : contexte rendu quand même, sans villes voisines ni index", async () => {
+    vi.useFakeTimers();
+    try {
+      const { calls, impl } = stubFetch(() => new Response("Bad Gateway", { status: 502 }));
+      const pending = silenced(() => loadMetaAdsContext(located().db, SITE.id, MOCK_ENV, { geography: true, fetchImpl: impl }));
+      await vi.advanceTimersByTimeAsync(GEO_RETRY_DELAY_MS + 100);
+      const ctx = await pending;
+      expect(calls).toHaveLength(2);
+      expect(ctx.seed).not.toHaveProperty("nearbyCities");
+      expect(ctx.seed.city).toBe("Albi");
+      expect(ctx.localIndex).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 describe("runMetaAdsAnalysis (base simulée)", () => {
   it("démo en mock : ligne running + usage meta_analysis au même createdAt, battements, puis done avec veille, créas, plans et appels réels", async () => {
@@ -1319,8 +1450,8 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(analysisInsert!.values).toMatchObject({ siteId: SITE.id, status: "running", provider: "mock", generator: "mock", instructions: "Sans tarif", calls: 0, createdAt: NOW });
     expect(usageInsert!.table).toBe(googleUsage);
     expect(usageInsert!.values).toMatchObject({ siteId: SITE.id, kind: "meta_analysis", costUsd: 0, requests: 0, createdAt: NOW });
-    // Un battement après la veille, deux entre les générations
-    expect(heartbeats(fake.updates)).toHaveLength(3);
+    // Un battement après les visuels, un après la veille, deux entre les générations
+    expect(heartbeats(fake.updates)).toHaveLength(4);
     const usageUpdate = fake.updates.find((u) => u.table === googleUsage);
     const done = doneUpdate(fake.updates);
     expect(done!.values).toMatchObject({ status: "done", provider: "mock", generator: "mock", error: null, instructions: "Sans tarif" });
@@ -1331,6 +1462,215 @@ describe("runMetaAdsAnalysis (base simulée)", () => {
     expect(done!.values.videoPlan).not.toBeNull();
     expect(done!.values.plan).not.toBeNull();
     expect(fake.deletes).toHaveLength(0);
+    // Le type du site est lu d'abord, puis la bibliothèque (annonces supprimées, exemples gardés) avec le contexte
+    expect(fake.selects).toContain(metaAdsLibrary);
+    // Visuels de démonstration : une recherche par annonce retenue (réserve comprise), mise en cache dans meta_ad_media
+    const market = done!.values.market as MetaAdsMarket;
+    const mediaWrites = mediaInserts(fake.inserts);
+    expect(market.ads.length).toBeGreaterThan(0);
+    expect(market.ads.length).toBeLessThanOrEqual(META_MARKET_MAX_ADS);
+    expect(mediaWrites.length).toBeGreaterThanOrEqual(market.ads.length);
+    expect(mediaWrites.length).toBeLessThanOrEqual(META_MARKET_MAX_ADS + META_MARKET_MEDIA_SPARE);
+    const written = new Map(mediaWrites.map((w) => [w.values.adId as string, w.values]));
+    expect(written.size).toBe(mediaWrites.length);
+    for (const ad of market.ads) {
+      expect(written.get(ad.id)).toMatchObject({ adId: ad.id, status: "ok", provider: "mock", fetchedAt: NOW, updatedAt: NOW });
+      expect((written.get(ad.id)!.media as MetaAdMedia).source).toBe("mock");
+    }
+    // Les recherches sont inscrites dans google_usage (kind meta_media) : gratuites en démonstration
+    const mediaUsage = mediaUsageInserts(fake.inserts);
+    expect(mediaUsage).toHaveLength(1);
+    expect(mediaUsage[0]!.values).toEqual({ siteId: SITE.id, month: "2026-10", kind: "meta_media", costUsd: 0, requests: mediaWrites.length, createdAt: NOW });
+    // Rien d'autre n'est inséré : l'analyse, son usage, les visuels, leur usage
+    expect(fake.inserts).toHaveLength(2 + mediaWrites.length + 1);
+  });
+
+  it("démo en mock : aucune requête réseau (ni référentiel des communes, ni fournisseur de visuels réel), même avec une ville et un département connus", async () => {
+    const fake = fakeDb({ site: { ...SITE, prospectId: PROSPECT.id } as Site, prospect: PROSPECT });
+    const network = stubFetch(() => jsonResponse(OCCITANIE_COMMUNES));
+    // Clés réelles présentes : la démo garde la veille et les visuels simulés
+    const env = { ...MOCK_ENV, META_AD_LIBRARY_TOKEN: "EAAB-jeton", SCRAPECREATORS_API_KEY: "sc-cle-secrete-0123456789" } as NodeJS.ProcessEnv;
+    const outcome = await withGlobalFetch(network.impl, () => silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env })));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    expect(network.calls).toHaveLength(0);
+    const seed = fake.inserts[0]!.values.seed as MetaAdsSeed;
+    expect(seed).toMatchObject({ profession: "Sophrologue", city: "Albi", department: { code: "81" } });
+    expect(seed).not.toHaveProperty("nearbyCities");
+    expect(mediaInserts(fake.inserts).every((w) => w.values.provider === "mock")).toBe(true);
+    expect(mediaUsageInserts(fake.inserts)[0]!.values.costUsd).toBe(0);
+  });
+
+  it("annonces supprimées et cache des visuels : l'annonce supprimée ne revient pas (dismissed), une annonce déjà en cache n'est pas recherchée à nouveau", async () => {
+    const first = fakeDb();
+    await silenced(() => runMetaAdsAnalysis(first.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    const reference = doneUpdate(first.updates)!.values.market as MetaAdsMarket;
+    const [dismissedAd, cachedAd] = reference.ads;
+    expect(reference).not.toHaveProperty("dismissed");
+    const cached = mediaOf(["Alternative & Holistic Health Service"], { source: "mock" });
+    const fake = fakeDb({
+      library: [{ adId: dismissedAd!.id, status: "dismissed", pageName: dismissedAd!.pageName, ad: null, media: null, createdAt: NOW, updatedAt: NOW }],
+      media: [{ adId: cachedAd!.id, status: "ok", media: cached, provider: "mock", fetchedAt: NOW, updatedAt: NOW }],
+    });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    const market = doneUpdate(fake.updates)!.values.market as MetaAdsMarket;
+    expect(market.ads.some((ad) => ad.id === dismissedAd!.id)).toBe(false);
+    expect(market.ads.some((ad) => ad.id === cachedAd!.id)).toBe(true);
+    expect(market.dismissed).toBe(1);
+    const lookedUp = mediaInserts(fake.inserts).map((w) => w.values.adId);
+    expect(lookedUp).not.toContain(dismissedAd!.id);
+    expect(lookedUp).not.toContain(cachedAd!.id);
+    expect(lookedUp.length).toBeGreaterThan(0);
+    // Seules les recherches réellement envoyées sont comptées
+    expect(mediaUsageInserts(fake.inserts)[0]!.values.requests).toBe(lookedUp.length);
+  });
+
+  it("exemples gardés de la bibliothèque : transmis à l'analyse sans entrer dans la veille enregistrée", async () => {
+    const favorite: MetaMarketAd = { ...record("555000111"), pageName: "Cabinet gardé", scope: "ville", active: true, runningDays: 40, signal: "moyen", score: 5, matchedTerms: [] };
+    const fake = fakeDb({ library: [{ adId: favorite.id, status: "kept", pageName: favorite.pageName, ad: favorite, media: null, createdAt: NOW, updatedAt: NOW }] });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    const market = doneUpdate(fake.updates)!.values.market as MetaAdsMarket;
+    expect(market.ads.some((ad) => ad.id === favorite.id)).toBe(false);
+    expect(market).not.toHaveProperty("dismissed");
+    expect(market.insights).not.toBeNull();
+    expect(mediaInserts(fake.inserts).map((w) => w.values.adId)).not.toContain(favorite.id);
+  });
+
+  it("quota mensuel de visuels épuisé : aucune recherche, aucun usage meta_media, la veille est enregistrée sans visuels", async () => {
+    const fake = fakeDb({ mediaLookups: META_MEDIA_LOOKUPS_PER_MONTH });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    expect(mediaInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(fake.inserts).toHaveLength(2);
+    expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.length).toBeGreaterThan(0);
+    // Quota presque épuisé : les recherches s'arrêtent au reste
+    const almost = fakeDb({ mediaLookups: META_MEDIA_LOOKUPS_PER_MONTH - 3 });
+    await silenced(() => runMetaAdsAnalysis(almost.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(mediaInserts(almost.inserts)).toHaveLength(3);
+    expect(mediaUsageInserts(almost.inserts)[0]!.values.requests).toBe(3);
+  });
+
+  it("tables de la migration 0007 absentes (meta_ads_library, meta_ad_media) : l'analyse aboutit sans bibliothèque ni visuels", async () => {
+    const fake = fakeDb({ missingTables: [metaAdsLibrary, metaAdMedia] });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", analysisId: "new-1", marketAvailable: true });
+    expect("generationError" in outcome).toBe(false);
+    const done = doneUpdate(fake.updates)!;
+    expect(done.values).toMatchObject({ status: "done", provider: "mock", error: null });
+    expect((done.values.market as MetaAdsMarket).ads.length).toBeGreaterThan(0);
+    expect(done.values.creatives).not.toBeNull();
+    expect(done.values.plan).not.toBeNull();
+    expect(mediaInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(fake.inserts).toHaveLength(2);
+  });
+
+  it("site client sur la vraie bibliothèque : référentiel des communes interrogé (villes voisines dans la graine), visuels du fournisseur réel copiés sur le stockage, usage meta_media facturé, page commerciale écartée", async () => {
+    const SCRAPER_KEY = "sc-cle-secrete-0123456789";
+    const TOKEN = "EAAB-jeton-0123456789";
+    const fake = fakeDb({ site: { ...SITE, type: "client", prospectId: PROSPECT.id } as Site, prospect: PROSPECT });
+    const item = (id: string, page: string) => ({
+      id,
+      page_id: `9${id}`,
+      page_name: page,
+      ad_delivery_start_time: "2026-09-01",
+      ad_creative_bodies: ["Une séance de sophrologie pour souffler."],
+      ad_creative_link_titles: ["Sophrologie à Albi"],
+      publisher_platforms: ["facebook"],
+      languages: ["fr"],
+      eu_total_reach: 5_000,
+      target_locations: [{ name: "Albi", type: "city", excluded: false }],
+    });
+    const SHOP_ID = "700000000000002";
+    const items = [item("700000000000001", "Cabinet Martin"), item(SHOP_ID, "Cabinet Zen"), item("700000000000003", "Cabinet Roux")];
+    const poster = (id: string) => `https://scontent-cdg4-2.xx.fbcdn.net/v/t39.35426-6/${id}_n.jpg?ccb=1-7&oe=6B000000`;
+    const network = stubFetch((url) => {
+      if (url.hostname === "geo.api.gouv.fr") return jsonResponse(OCCITANIE_COMMUNES);
+      if (url.hostname === "graph.facebook.com") return jsonResponse({ data: url.searchParams.get("search_terms") === "sophrologue" ? items : [] });
+      if (url.hostname === "api.scrapecreators.com") {
+        const id = url.searchParams.get("id")!;
+        return jsonResponse({
+          success: true,
+          credits_remaining: 990,
+          snapshot: { display_format: "IMAGE", images: [{ original_image_url: poster(id) }], page_categories: [id === SHOP_ID ? "Shopping & retail" : "Alternative & Holistic Health Service"], page_like_count: 250, cta_text: "En savoir plus" },
+        });
+      }
+      if (url.hostname.endsWith(".fbcdn.net")) return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { status: 200, headers: { "content-type": "image/jpeg" } });
+      return new Response("inattendu", { status: 418 });
+    });
+    const stored: { key: string; maxWidth: number }[] = [];
+    const mediaStore: MetaMediaStore = {
+      putImage: async (key, _bytes, opts) => {
+        stored.push({ key, maxWidth: opts.maxWidth });
+        return `https://blob.test/${key}`;
+      },
+      putFile: async () => null,
+      remove: async () => undefined,
+    };
+    // META_ADS_MOCK présent : jamais de données simulées sur un site client (veille et visuels réels)
+    const env = { AI_MOCK: "1", META_ADS_MOCK: "1", META_AD_LIBRARY_TOKEN: TOKEN, SCRAPECREATORS_API_KEY: SCRAPER_KEY } as NodeJS.ProcessEnv;
+    const outcome = await withGlobalFetch(network.impl, () => silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env, mediaStore })));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+
+    // Référentiel des communes : une requête pour l'Occitanie, villes voisines ajoutées à la graine et aux termes recherchés
+    const hosts = network.calls.map((call) => new URL(call.url).hostname);
+    expect(hosts.filter((host) => host === "geo.api.gouv.fr")).toHaveLength(1);
+    const seed = fake.inserts[0]!.values.seed as MetaAdsSeed;
+    expect(seed.nearbyCities).toEqual(["Castres", "Gaillac", "Graulhet"]);
+    expect(seed.searchTerms).toContain("sophrologue castres");
+    const searched = network.calls.filter((call) => new URL(call.url).hostname === "graph.facebook.com").map((call) => new URL(call.url).searchParams.get("search_terms"));
+    expect(searched).toEqual(seed.searchTerms);
+
+    // Visuels : une recherche par annonce retenue chez le fournisseur réel, clé dans l'en-tête seulement
+    const lookups = network.calls.filter((call) => new URL(call.url).hostname === "api.scrapecreators.com");
+    expect(lookups.map((call) => new URL(call.url).searchParams.get("id")).sort()).toEqual(items.map((i) => i.id).sort());
+    for (const call of lookups) {
+      expect(new Headers(call.init?.headers).get("x-api-key")).toBe(SCRAPER_KEY);
+      expect(call.url).not.toContain(SCRAPER_KEY);
+    }
+    for (const call of network.calls) if (new URL(call.url).hostname !== "graph.facebook.com") expect(call.url).not.toContain(TOKEN);
+    const mediaWrites = mediaInserts(fake.inserts);
+    expect(mediaWrites).toHaveLength(3);
+    for (const write of mediaWrites) {
+      const id = write.values.adId as string;
+      expect(write.values).toMatchObject({ status: "ok", provider: "scrapecreators", fetchedAt: NOW });
+      expect(write.values.media).toMatchObject({ source: "scrapecreators", format: "image", items: [{ kind: "image", posterUrl: `https://blob.test/meta-media/${id}/0.jpg`, sourceImageUrl: poster(id), sourceVideoUrl: null }] });
+    }
+    // Image principale copiée sur le stockage injecté (opts.mediaStore), à la largeur des affiches
+    expect(stored.map((s) => s.key).sort()).toEqual(items.map((i) => `meta-media/${i.id}/0.jpg`).sort());
+    expect(stored.every((s) => s.maxWidth === META_MEDIA_POSTER_WIDTH)).toBe(true);
+    // Usage facturé au tarif du fournisseur
+    const mediaUsage = mediaUsageInserts(fake.inserts);
+    expect(mediaUsage).toHaveLength(1);
+    expect(mediaUsage[0]!.values).toEqual({ siteId: SITE.id, month: "2026-10", kind: "meta_media", costUsd: 3 * META_MEDIA_LOOKUP_COST_USD, requests: 3, createdAt: NOW });
+
+    // La page classée boutique est écartée une fois les visuels obtenus
+    const done = doneUpdate(fake.updates)!;
+    expect(done.values).toMatchObject({ status: "done", provider: "meta", error: null });
+    const market = done.values.market as MetaAdsMarket;
+    expect(market.source).toBe("meta");
+    expect(market.ads.map((ad) => ad.id).sort()).toEqual(["700000000000001", "700000000000003"]);
+    expect(market.filtered).toEqual({ formation: 0, commerce: 1, autre: 0 });
+    expect(done.values.calls).toBe(seed.searchTerms.length);
+    expect(heartbeats(fake.updates)).toHaveLength(4);
+  });
+
+  it("site client avec jeton mais sans clé de visuels : veille réelle sans visuels (jamais de visuels simulés, même sous META_ADS_MOCK)", async () => {
+    const fake = fakeDb({ site: { ...SITE, type: "client" } as Site });
+    const ad = { id: "700000000000001", page_name: "Cabinet Martin", ad_delivery_start_time: "2026-09-01", ad_creative_bodies: ["Une séance de sophrologie pour souffler."], languages: ["fr"], target_locations: [{ name: "Albi", type: "city", excluded: false }] };
+    const network = stubFetch((url) => (url.hostname === "graph.facebook.com" ? jsonResponse({ data: [ad] }) : new Response("inattendu", { status: 418 })));
+    const env = { AI_MOCK: "1", META_ADS_MOCK: "1", META_AD_LIBRARY_TOKEN: "EAAB-jeton" } as NodeJS.ProcessEnv;
+    const outcome = await withGlobalFetch(network.impl, () => silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env })));
+    expect(outcome).toMatchObject({ status: "done", marketAvailable: true });
+    expect(network.calls.every((call) => new URL(call.url).hostname === "graph.facebook.com")).toBe(true);
+    expect((doneUpdate(fake.updates)!.values.market as MetaAdsMarket).ads.map((a) => a.id)).toEqual(["700000000000001"]);
+    expect(mediaInserts(fake.inserts)).toHaveLength(0);
+    expect(mediaUsageInserts(fake.inserts)).toHaveLength(0);
+    expect(fake.selects).not.toContain(metaAdMedia);
+    // Pas de visuels : un battement après la veille, deux entre les générations
+    expect(heartbeats(fake.updates)).toHaveLength(3);
   });
 
   it("verrou refusé → busy ; quota atteint → quota (périmés clos avant, usage remboursé) ; running récent → busy", async () => {

@@ -121,29 +121,33 @@ if (Object.keys(regenerated.assets.renders).length !== 0) throw new Error("Les r
 if (JSON.stringify(regenerated.market) !== JSON.stringify(market)) throw new Error("La veille a été modifiée par la régénération.");
 console.log(`✔ régénéré (${regen.remaining} régénération(s) restante(s), ${regen.removedRenderUrls?.length ?? 0} rendu(s) à supprimer) : instructions « ${regenerated.instructions ?? "" } », ${regenerated.creatives.creatives.length} créas, ${regenerated.videoPlan.videos.length} vidéos, veille et diagnostic conservés, aucun écart`);
 
-// 5. Visuels et bibliothèque personnelle (garder, supprimer, restaurer)
+// 5. Visuels et bibliothèque personnelle (garder, supprimer, restaurer) — sur des annonces absentes de la bibliothèque existante
 if (market && market.ads.length >= 3) {
-  const { loadMetaMedia, loadMetaLibrary, keepMetaAds, dismissMetaAds, restoreMetaAds, mediaProviderFor } = await import("../src/meta-library.ts");
+  const { loadMetaMedia, loadMetaLibrary, keepMetaAds, dismissMetaAds, restoreMetaAds, mediaSourceFor } = await import("../src/meta-library.ts");
   const ids = market.ads.map((ad) => ad.id);
-  const media = await loadMetaMedia(db, ids);
+  const media = await loadMetaMedia(db, ids, mediaSourceFor(analysis.provider));
   const withVisual = ids.filter((id) => (media[id]?.items.length ?? 0) > 0).length;
   console.log(`✔ visuels : ${Object.keys(media).length}/${ids.length} annonce(s) en cache, ${withVisual} avec visuel${market.filtered ? `, écartées d'office : ${market.filtered.commerce} commerce, ${market.filtered.formation} formation, ${market.filtered.autre} hors sujet` : ""}`);
-  const provider = mediaProviderFor(process.env, analysis.provider);
   if (analysis.provider === "mock" && withVisual === 0) throw new Error("Veille simulée sans visuels de démonstration.");
   const library = await loadMetaLibrary(db, site.id);
   if (!library.available) throw new Error("Tables de la bibliothèque absentes : appliquez la migration 0007.");
-  const [first, second, third] = ids as [string, string, string];
-  const kept = await keepMetaAds(db, site.id, [first, second], { provider, store: null, now: new Date() });
-  const dismissed = await dismissMetaAds(db, site.id, [third], { store: null, now: new Date() });
-  const unknown = await keepMetaAds(db, site.id, ["99999999999999"], { provider, store: null, now: new Date() });
-  const afterLibrary = await loadMetaLibrary(db, site.id);
-  if (kept.status !== "done" || dismissed.status !== "done") throw new Error(`Bibliothèque : ${JSON.stringify({ kept, dismissed })}`);
-  if (unknown.status !== "skipped" || unknown.reason !== "unknown_ad") throw new Error(`Une annonce inconnue a été acceptée : ${JSON.stringify(unknown)}`);
-  if (!afterLibrary.kept.some((e) => e.adId === first) || !afterLibrary.dismissedIds.includes(third)) throw new Error("Bibliothèque incohérente après garder / supprimer.");
-  console.log(`✔ bibliothèque : ${afterLibrary.kept.length} exemple(s) gardé(s), ${afterLibrary.dismissedIds.length} annonce(s) supprimée(s), annonce inconnue refusée`);
-  const restored = await restoreMetaAds(db, site.id, [first, second, third], { store: null });
-  if (restored.status !== "done" || restored.count !== 3) throw new Error(`Restauration : ${JSON.stringify(restored)}`);
-  console.log("✔ bibliothèque restaurée (3 lignes retirées)");
+  const already = new Set([...library.kept.map((e) => e.adId), ...library.dismissedIds]);
+  const [first, second, third] = ids.filter((id) => !already.has(id));
+  if (first && second && third) {
+    const kept = await keepMetaAds(db, site.id, [first, second], { store: null, now: new Date() });
+    const dismissed = await dismissMetaAds(db, site.id, [third], { store: null, now: new Date() });
+    const unknown = await keepMetaAds(db, site.id, ["99999999999999"], { store: null, now: new Date() });
+    const afterLibrary = await loadMetaLibrary(db, site.id);
+    if (kept.status !== "done" || dismissed.status !== "done") throw new Error(`Bibliothèque : ${JSON.stringify({ kept, dismissed })}`);
+    if (unknown.status !== "skipped" || unknown.reason !== "unknown_ad") throw new Error(`Une annonce inconnue a été acceptée : ${JSON.stringify(unknown)}`);
+    if (!afterLibrary.kept.some((e) => e.adId === first) || !afterLibrary.dismissedIds.includes(third)) throw new Error("Bibliothèque incohérente après garder / supprimer.");
+    console.log(`✔ bibliothèque : ${afterLibrary.kept.length} exemple(s) gardé(s), ${afterLibrary.dismissedIds.length} annonce(s) supprimée(s), annonce inconnue refusée`);
+    const restored = await restoreMetaAds(db, site.id, [first, second, third], { store: null });
+    if (restored.status !== "done" || restored.count !== 3) throw new Error(`Restauration : ${JSON.stringify(restored)}`);
+    console.log("✔ bibliothèque restaurée (3 lignes retirées)");
+  } else {
+    console.log("→ bibliothèque : pas assez d'annonces hors bibliothèque pour le test garder / supprimer");
+  }
 }
 
 // 6. Bilan
@@ -157,7 +161,7 @@ if (cleanup) {
   const analyses = await db.delete(metaAdsAnalyses).where(and(eq(metaAdsAnalyses.siteId, site.id), gte(metaAdsAnalyses.createdAt, start))).returning({ id: metaAdsAnalyses.id });
   const usages = await db
     .delete(googleUsage)
-    .where(and(eq(googleUsage.siteId, site.id), inArray(googleUsage.kind, ["meta_analysis", "meta_regen", "meta_media"]), gte(googleUsage.createdAt, start)))
+    .where(and(eq(googleUsage.siteId, site.id), inArray(googleUsage.kind, ["meta_analysis", "meta_regen", "meta_media", "meta_media_pending"]), gte(googleUsage.createdAt, start)))
     .returning({ id: googleUsage.id });
   console.log(`→ nettoyage effectué : ${analyses.length} analyse(s), ${usages.length} usage(s)`);
 }

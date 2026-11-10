@@ -178,7 +178,7 @@ export type AdDiffusion = {
 
 export function adDiffusion(ad: Pick<MetaMarketAd, "active" | "runningDays">): AdDiffusion {
   if (ad.runningDays === null) return { state: "unknown", short: "—", long: ad.active ? "En diffusion, durée inconnue" : "Durée inconnue" };
-  const days = `${ad.runningDays} j`;
+  const days = `${ad.runningDays}\u00a0j`;
   return ad.active
     ? { state: "active", short: days, long: `En diffusion depuis ${days}` }
     : { state: "stopped", short: `${days} · arrêtée`, long: `Diffusée ${days}, arrêtée` };
@@ -188,7 +188,7 @@ export function adDiffusion(ad: Pick<MetaMarketAd, "active" | "runningDays">): A
 export function rankLabel(ad: Pick<MetaMarketAd, "rank" | "rankTotal">): string | null {
   if (!ad.rank) return null;
   const top = adTopPercent(ad);
-  return top === null || !ad.rankTotal ? `#${ad.rank}` : `#${ad.rank} /${ad.rankTotal} · top ${top} %`;
+  return top === null || !ad.rankTotal ? `#${ad.rank}` : `#${ad.rank} /${ad.rankTotal} · top ${top}\u00a0%`;
 }
 
 const INITIALS_SKIPPED = new Set(["de", "du", "des", "la", "le", "les", "et", "en", "au", "aux", "a", "à"]);

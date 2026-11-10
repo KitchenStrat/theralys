@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, leads, prospects, sites, subscriptions, users } from "@theralys/db";
+import { purgeMockLibrary } from "@theralys/jobs";
 import { createBillingProvider } from "@theralys/providers/billing";
 import { requireAdmin } from "@/lib/auth";
 import { createClientInvitation } from "@/lib/invitations";
@@ -104,6 +105,14 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
       updatedAt: new Date(),
     })
     .where(eq(sites.id, siteId));
+
+  // Jamais de données simulées chez un client : les exemples gardés pendant la démo sur une veille de démonstration sont retirés
+  try {
+    const purged = await purgeMockLibrary(db, siteId);
+    if (purged > 0) console.info("[conversion] exemples Meta Ads de démonstration retirés", { siteId, purged });
+  } catch (err) {
+    console.error("[conversion] purge de la bibliothèque Meta Ads en échec", { siteId, err });
+  }
 
   // Pipeline commercial : le lead de ce prospect est gagné
   if (site.prospectId) {

@@ -140,15 +140,15 @@ describe("textes d'une annonce", () => {
   });
 
   it("distingue diffusion en cours, arrêtée et inconnue", () => {
-    expect(adDiffusion(ad())).toEqual({ state: "active", short: "209 j", long: "En diffusion depuis 209 j" });
-    expect(adDiffusion(ad({ active: false, runningDays: 42 }))).toEqual({ state: "stopped", short: "42 j · arrêtée", long: "Diffusée 42 j, arrêtée" });
+    expect(adDiffusion(ad())).toEqual({ state: "active", short: "209\u00a0j", long: "En diffusion depuis 209\u00a0j" });
+    expect(adDiffusion(ad({ active: false, runningDays: 42 }))).toEqual({ state: "stopped", short: "42\u00a0j · arrêtée", long: "Diffusée 42\u00a0j, arrêtée" });
     expect(adDiffusion(ad({ runningDays: null })).short).toBe("—");
     expect(adDiffusion(ad({ runningDays: null })).state).toBe("unknown");
   });
 
   it("écrit le rang et la part devancée", () => {
-    expect(rankLabel(ad())).toBe("#25 /111 · top 23 %");
-    expect(rankLabel(ad({ rank: 1, rankTotal: 64 }))).toBe("#1 /64 · top 2 %");
+    expect(rankLabel(ad())).toBe("#25 /111 · top 23\u00a0%");
+    expect(rankLabel(ad({ rank: 1, rankTotal: 64 }))).toBe("#1 /64 · top 2\u00a0%");
     expect(rankLabel(ad({ rank: 3, rankTotal: undefined }))).toBe("#3");
     expect(rankLabel(ad({ rank: undefined, rankTotal: undefined }))).toBeNull();
   });

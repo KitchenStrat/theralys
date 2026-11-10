@@ -93,6 +93,9 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             generationMissing={generationMissing}
             analysisReady={analysisReady}
             siteType={site.type}
+            library={data.library}
+            mediaByAdId={data.mediaByAdId}
+            visuals={data.visuals}
             onSelectTab={select}
           />
         ) : null}

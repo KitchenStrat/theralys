@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { META_MARKET_SCOPES, adScore, metaLibraryUrl, type MetaMarketAd, type MetaMarketScope } from "./meta-ads";
 import {
+  AD_TOP_PERCENT_MIN_TOTAL,
   META_AD_MEDIA_FORMATS,
   META_AD_MEDIA_FORMAT_LABELS,
   META_GALLERY_DEFAULT_FILTERS,
@@ -454,29 +455,40 @@ describe("adIsTrending", () => {
 });
 
 describe("adTopPercent", () => {
-  it("part des annonces repérées, arrondie au pourcent supérieur : 23e sur 100 → 23, 1re sur 3 → 34", () => {
+  it("tranche des mieux notées, arrondie au pourcent supérieur : 23e sur 100 → 23, 2e sur 15 → 14", () => {
     expect(adTopPercent({ rank: 23, rankTotal: 100 })).toBe(23);
-    expect(adTopPercent({ rank: 1, rankTotal: 3 })).toBe(34);
-    expect(adTopPercent({ rank: 2, rankTotal: 3 })).toBe(67);
     expect(adTopPercent({ rank: 1, rankTotal: 100 })).toBe(1);
     expect(adTopPercent({ rank: 50, rankTotal: 100 })).toBe(50);
+    expect(adTopPercent({ rank: 2, rankTotal: 15 })).toBe(14);
+    expect(adTopPercent({ rank: 1, rankTotal: 30 })).toBe(4);
+    expect(adTopPercent(marketAd("rang", { rank: 3, rankTotal: 12 }))).toBe(25);
   });
 
   it("bornes : 1 au minimum (1re sur 1 000), 100 au maximum (dernière, ou rang au-delà du total)", () => {
     expect(adTopPercent({ rank: 1, rankTotal: 1_000 })).toBe(1);
-    expect(adTopPercent({ rank: 3, rankTotal: 3 })).toBe(100);
-    expect(adTopPercent({ rank: 1, rankTotal: 1 })).toBe(100);
+    expect(adTopPercent({ rank: 100, rankTotal: 100 })).toBe(100);
     expect(adTopPercent({ rank: 12, rankTotal: 10 })).toBe(100);
+  });
+
+  it("moins de AD_TOP_PERCENT_MIN_TOTAL annonces repérées : un pourcentage n'a pas de sens → null ; à partir du seuil, il revient", () => {
+    expect(AD_TOP_PERCENT_MIN_TOTAL).toBe(10);
+    expect(adTopPercent({ rank: 1, rankTotal: 3 })).toBeNull();
+    expect(adTopPercent({ rank: 1, rankTotal: 1 })).toBeNull();
+    for (let rank = 1; rank < AD_TOP_PERCENT_MIN_TOTAL; rank++) {
+      expect(adTopPercent({ rank, rankTotal: AD_TOP_PERCENT_MIN_TOTAL - 1 }), String(rank)).toBeNull();
+    }
+    expect(adTopPercent({ rank: 1, rankTotal: AD_TOP_PERCENT_MIN_TOTAL })).toBe(10);
+    expect(adTopPercent({ rank: 3, rankTotal: AD_TOP_PERCENT_MIN_TOTAL })).toBe(30);
+    expect(adTopPercent({ rank: AD_TOP_PERCENT_MIN_TOTAL, rankTotal: AD_TOP_PERCENT_MIN_TOTAL })).toBe(100);
   });
 
   it("sans rang (veilles antérieures) ou total nul → null", () => {
     expect(adTopPercent({})).toBeNull();
     expect(adTopPercent({ rank: 3 })).toBeNull();
-    expect(adTopPercent({ rankTotal: 10 })).toBeNull();
-    expect(adTopPercent({ rank: 0, rankTotal: 10 })).toBeNull();
+    expect(adTopPercent({ rankTotal: 100 })).toBeNull();
+    expect(adTopPercent({ rank: 0, rankTotal: 100 })).toBeNull();
     expect(adTopPercent({ rank: 5, rankTotal: 0 })).toBeNull();
     expect(adTopPercent(marketAd("sans-rang"))).toBeNull();
-    expect(adTopPercent(marketAd("rang", { rank: 2, rankTotal: 8 }))).toBe(25);
   });
 });
 

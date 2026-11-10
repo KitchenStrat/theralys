@@ -734,6 +734,8 @@ export const metaAdsLibrary = pgTable(
       .references(() => sites.id, { onDelete: "cascade" }),
     adId: text("ad_id").notNull(),
     status: text("status").$type<MetaLibraryStatus>().notNull().default("kept"),
+    /** Origine de la veille d'où vient l'annonce : `meta` (réelle) | `mock` (démonstration, purgée à la conversion en site client) */
+    source: text("source").notNull().default("meta"),
     pageName: text("page_name").notNull().default(""),
     /** Annonce et son analyse au moment de la garde (null pour une annonce supprimée) */
     ad: jsonb("ad").$type<MetaMarketAd>(),

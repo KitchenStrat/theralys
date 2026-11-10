@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS "meta_ads_library" (
   "site_id" uuid NOT NULL,
   "ad_id" text NOT NULL,
   "status" text DEFAULT 'kept' NOT NULL,
+  "source" text DEFAULT 'meta' NOT NULL,
   "page_name" text DEFAULT '' NOT NULL,
   "ad" jsonb,
   "media" jsonb,
@@ -23,4 +24,5 @@ CREATE TABLE IF NOT EXISTS "meta_ads_library" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );--> statement-breakpoint
 DO $$ BEGIN ALTER TABLE "meta_ads_library" ADD CONSTRAINT "meta_ads_library_site_id_sites_id_fk" FOREIGN KEY ("site_id") REFERENCES "public"."sites"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "meta_ads_library_site_ad_idx" ON "meta_ads_library" USING btree ("site_id","ad_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "meta_ads_library_site_ad_idx" ON "meta_ads_library" USING btree ("site_id","ad_id");--> statement-breakpoint
+ALTER TABLE "meta_ads_library" ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'meta' NOT NULL;

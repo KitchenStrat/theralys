@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getDb } from "@theralys/db";
-import { metaAdVideoSource, mediaProviderFor } from "@theralys/jobs";
+import { metaAdVideoSource } from "@theralys/jobs";
 import { META_MEDIA_ITEMS_MAX } from "@theralys/shared";
 import { getSession } from "@/lib/auth";
 import { getSite } from "@/lib/data";
@@ -21,9 +21,10 @@ const NO_STORE = "private, no-store";
  * GET /api/meta-ads/media/[adId]/video?i=0 — redirige vers la vidéo d'une
  * annonce de la veille ou de la bibliothèque du site : copie durable d'un
  * exemple gardé, sinon lien d'origine (rafraîchi chez le fournisseur s'il a
- * expiré, dans la limite du quota). Accès : session, formule, annonce du
- * site. 404 si l'annonce n'est pas celle du site ou si la vidéo n'est plus
- * disponible.
+ * expiré : une recherche réservée sur le quota, au plus une tentative toutes
+ * les quelques heures). Accès : session, formule, annonce du site. 404 si
+ * l'annonce n'est pas celle du site, si ce visuel n'est pas une vidéo ou si
+ * la vidéo n'est plus disponible.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ adId: string }> }) {
   const session = await getSession();
@@ -36,17 +37,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ adI
   if (!params.success || !query.success) return NextResponse.json({ error: "Paramètres invalides." }, { status: 400 });
 
   try {
-    const db = getDb();
-    const analysis = await db.query.metaAdsAnalyses.findFirst({
-      where: (table, { and, eq }) => and(eq(table.siteId, site.id), eq(table.status, "done")),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-      columns: { provider: true },
-    });
-    const source = await metaAdVideoSource(db, site, params.data.adId, query.data.i, {
-      provider: mediaProviderFor(process.env, analysis?.provider ?? "none"),
-      store: createMetaMediaStore(),
-      now: new Date(),
-    });
+    // Le fournisseur éventuel (lien expiré à rafraîchir) est déduit de l'origine de l'annonce par le service
+    const source = await metaAdVideoSource(getDb(), site, params.data.adId, query.data.i, { store: createMetaMediaStore(), now: new Date() });
     if (!source) return NextResponse.json({ error: "Vidéo indisponible." }, { status: 404, headers: { "Cache-Control": NO_STORE } });
     return new NextResponse(null, { status: 302, headers: { Location: source.url, "Cache-Control": NO_STORE, "Referrer-Policy": "no-referrer" } });
   } catch (err) {

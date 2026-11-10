@@ -33,8 +33,11 @@ export type MarketLibrary = {
   /** Bascule « Gardée » de la veille : l'exemple quitte la bibliothèque, l'annonce reste dans la veille */
   unkeep: (adIds: readonly string[]) => void;
   dismiss: (adIds: readonly string[]) => void;
-  /** « Retirer de ma bibliothèque » : avec « Annuler » tant que l'annonce est dans la veille, confirmation sinon */
-  removeFromLibrary: (adIds: readonly string[]) => void;
+  /**
+   * « Retirer de ma bibliothèque » : avec « Annuler » tant que l'annonce est
+   * dans la veille, confirmation sinon. Rend false si le praticien renonce.
+   */
+  removeFromLibrary: (adIds: readonly string[]) => boolean;
 };
 
 type LibraryAction = (input: { adIds: string[] }) => Promise<{ error?: string; message?: string }>;
@@ -64,8 +67,17 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
   const [toast, setToast] = useState<MarketToast | null>(null);
   const tokens = useRef(0);
 
-  const watch = useMemo(() => watchGalleryAds(market.ads, mediaByAdId, library, overrides), [market.ads, mediaByAdId, library, overrides]);
-  const kept = useMemo(() => libraryGalleryAds(market.ads, mediaByAdId, library, overrides), [market.ads, mediaByAdId, library, overrides]);
+  // Le serveur ne renvoie pas les visuels d'une annonce supprimée : à l'annulation, la carte reprend
+  // ceux qu'elle avait, le temps que les données reviennent (sinon elle passerait par l'affiche typographique).
+  const seen = useRef<Record<string, MetaAdMedia | undefined>>({});
+  const media = useMemo(() => {
+    seen.current = { ...seen.current, ...mediaByAdId };
+    const restored = library.dismissedIds.filter((id) => mediaByAdId[id] === undefined && seen.current[id] !== undefined).map((id) => [id, seen.current[id]] as const);
+    return restored.length > 0 ? { ...mediaByAdId, ...Object.fromEntries(restored) } : mediaByAdId;
+  }, [mediaByAdId, library.dismissedIds]);
+
+  const watch = useMemo(() => watchGalleryAds(market.ads, media, library, overrides), [market.ads, media, library, overrides]);
+  const kept = useMemo(() => libraryGalleryAds(market.ads, media, library, overrides), [market.ads, media, library, overrides]);
 
   const refresh = useCallback(() => startTransition(() => router.refresh()), [router]);
   /** Bandeau du bas ; `key` : jeton du geste annoncé (un échec de ce geste le referme), nouveau jeton sinon. */
@@ -144,9 +156,9 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
     void run(dismissMarketAds, ids).then((error) => (error ? fail(ids, token, error) : refresh()));
   }
 
-  function removeFromLibrary(adIds: readonly string[]) {
+  function removeFromLibrary(adIds: readonly string[]): boolean {
     const ids = bulk(adIds);
-    if (ids.length === 0) return;
+    if (ids.length === 0) return false;
     const inWatch = new Set(market.ads.map((ad) => ad.id));
     const lost = ids.filter((id) => !inWatch.has(id));
     if (lost.length > 0) {
@@ -155,7 +167,7 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
         ids.length === 1
           ? "Cette annonce n'est plus dans votre veille : une fois retirée de votre bibliothèque, elle ne pourra pas être retrouvée. La retirer ?"
           : `${lost.length} de ces annonces ${many ? "ne sont" : "n'est"} plus dans votre veille : une fois ${many ? "retirées" : "retirée"} de votre bibliothèque, ${many ? "elles ne pourront" : "elle ne pourra"} pas être ${many ? "retrouvées" : "retrouvée"}. Retirer la sélection ?`;
-      if (!window.confirm(question)) return;
+      if (!window.confirm(question)) return false;
     }
     const token = mark(Object.fromEntries(ids.map((id) => [id, "none"])));
     // « Annuler » seulement si toutes les annonces sont encore dans la veille (elles peuvent être gardées à nouveau)
@@ -168,6 +180,7 @@ export function useMarketLibrary({ market, mediaByAdId, library }: { market: Met
         : null;
     say(ids.length > 1 ? `${ids.length} annonces retirées de votre bibliothèque.` : "Annonce retirée de votre bibliothèque.", { key: token, undo });
     void run(restoreMarketAds, ids).then((error) => (error ? fail(ids, token, error) : refresh()));
+    return true;
   }
 
   return { available: library.available, watch, kept, errors, toast, closeToast, keep, unkeep, dismiss, removeFromLibrary };

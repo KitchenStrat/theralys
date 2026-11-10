@@ -36,6 +36,7 @@ import {
   marketTotalCount,
   metaCreativeIssues,
   metaLibraryUrl,
+  metaPageKey,
   metaPersonalAttributeViolations,
   metaPlanIssues,
   metaProfessionAffinity,
@@ -415,11 +416,41 @@ describe("buildMetaSearchTerms", () => {
     ]);
   });
 
-  // Bogue suspecté (specialtyKeyword) : l'article ou la préposition élidés restent collés au mot (« d'hypnose »,
-  // « l'anxiété »). La spécialité qui redit le métier n'est alors plus reconnue (« d hypnose » ne commence pas par
-  // « hypno ») et le terme « hypnothérapeute d'hypnose » part à la bibliothèque, contrairement au commentaire du source.
-  it.fails("une spécialité qui redit le métier derrière une élision (« Séance d'hypnose ») n'ajoute aucun terme", () => {
+  it("une spécialité qui redit le métier derrière une élision (« Séance d'hypnose ») n'ajoute aucun terme ; l'article élidé ne part jamais dans un terme", () => {
     expect(buildMetaSearchTerms({ profession: "Hypnothérapeute", specialties: ["Séance d'hypnose"], competitorNames: [] })).toEqual(["hypnothérapeute", "hypnose"]);
+    expect(buildMetaSearchTerms({ profession: "Hypnothérapeute", specialties: ["Séance d’hypnose", "Gestion de l'anxiété", "Préparation à l’accouchement"], competitorNames: [] })).toEqual([
+      "hypnothérapeute",
+      "hypnose",
+      "hypnothérapeute anxiété",
+      "hypnothérapeute accouchement",
+    ]);
+  });
+
+  it("ville à arrondissement ou à code (« Paris 15e », « Toulouse (31) ») : nombres et ordinaux retirés des termes, la bibliothèque exigeant tous les mots", () => {
+    const seed = { profession: "Ostéopathe", specialties: [], competitorNames: [] };
+    expect(buildMetaSearchTerms({ ...seed, city: "Paris 15e" })).toEqual(["ostéopathe", "ostéopathe paris", "ostéopathie", "ostéopathie paris"]);
+    expect(buildMetaSearchTerms({ ...seed, city: "Toulouse (31)" })).toEqual(["ostéopathe", "ostéopathe toulouse", "ostéopathie", "ostéopathie toulouse"]);
+    for (const city of ["Paris 1er", "Paris 15ème", "Paris 15eme", "75015 Paris", "Paris 75015"]) {
+      expect(buildMetaSearchTerms({ ...seed, city }), city).toEqual(["ostéopathe", "ostéopathe paris", "ostéopathie", "ostéopathie paris"]);
+    }
+    // Villes voisines : même nettoyage, et un autre arrondissement de la ville du praticien n'est pas une ville voisine
+    expect(buildMetaSearchTerms({ ...seed, city: "Paris 15e", nearbyCities: ["Paris 14e", "Boulogne-Billancourt", "Lyon 3ème", "Montreuil (93)"] })).toEqual([
+      "ostéopathe",
+      "ostéopathe paris",
+      "ostéopathie",
+      "ostéopathie paris",
+      "ostéopathe boulogne-billancourt",
+      "ostéopathe lyon",
+    ]);
+    // Rien que des chiffres : pas de ville, pas de terme local ; les noms composés restent entiers
+    expect(buildMetaSearchTerms({ ...seed, city: "75015" })).toEqual(["ostéopathe", "ostéopathie"]);
+    expect(buildMetaSearchTerms({ ...seed, city: "Saint-Étienne", nearbyCities: ["Le Puy-en-Velay"] })).toEqual([
+      "ostéopathe",
+      "ostéopathe saint-étienne",
+      "ostéopathie",
+      "ostéopathie saint-étienne",
+      "ostéopathe le puy-en-velay",
+    ]);
   });
 
   it("guillemets, crochets et parenthèses retirés des termes (ville, spécialités, concurrent), espaces repliés", () => {
@@ -547,12 +578,16 @@ describe("specialtyKeyword", () => {
     }
   });
 
-  // Bogue suspecté : le découpage se fait sur les espaces seulement, l'élision reste collée au mot retenu
-  // (« d'hypnose », « l'anxiété », « l'accouchement ») et part telle quelle dans le terme de recherche.
-  it.fails("une élision n'est pas un mot : « Séance d'hypnose » → « hypnose », « Gestion de l'anxiété » → « anxiété »", () => {
+  it("l'article élidé est détaché du mot : « Séance d'hypnose » → « hypnose », « Gestion de l'anxiété » → « anxiété » (apostrophe droite ou typographique)", () => {
     expect(specialtyKeyword("Séance d'hypnose")).toBe("hypnose");
     expect(specialtyKeyword("Gestion de l'anxiété")).toBe("anxiété");
+    expect(specialtyKeyword("Gestion de l’anxiété")).toBe("anxiété");
     expect(specialtyKeyword("Préparation à l'accouchement")).toBe("accouchement");
+    expect(specialtyKeyword("Troubles de l'enfant et de l'adolescent")).toBe("adolescent");
+    // L'article seul ne fait pas un mot-clé ; le trait d'union ne coupe pas
+    expect(specialtyKeyword("L'")).toBeNull();
+    expect(specialtyKeyword("Soin d'un")).toBeNull();
+    expect(specialtyKeyword("Burn-out")).toBe("burn-out");
   });
 });
 
@@ -781,12 +816,19 @@ describe("scopeOfAd : codes postaux, anciennes régions, arrondissements", () =>
     expect(scope([zone("France", "countries"), zone("51100, France", "zips", true)])).toBe("france");
   });
 
-  // Bogue suspecté (scopeOfLocation) : le pays qui suit le code n'est pas lu. Tout code à 5 chiffres est pris pour
-  // un code postal français (Allemagne, Italie, Espagne et États-Unis ont aussi des codes à 5 chiffres) : une annonce
-  // diffusée à l'étranger peut compter « autour de vous ».
-  it.fails("un code postal étranger à 5 chiffres (« 51100, Germany ») ne désigne ni la ville ni le département du praticien", () => {
+  it("un code postal étranger à 5 chiffres (« 51100, Germany ») ne désigne ni la ville ni le département du praticien : le dernier segment dit le pays", () => {
     expect(scope([zone("51100, Germany", "zips")])).toBe("france");
     expect(scope([zone("51200, Italy", "zips")])).toBe("france");
+    expect(scope([zone("10000, Deutschland", "zips")])).toBe("france");
+    expect(scope([zone("10000, Allemagne", "zips")])).toBe("france");
+    // En France (casse indifférente), avec ou sans la ville entre le code et le pays
+    expect(scope([zone("10000, FRANCE", "zips")])).toBe("region");
+    expect(scope([zone("51100, Reims, France", "zips")])).toBe("ville");
+    expect(scope([zone("51200, Épernay, France", "zips")])).toBe("departement");
+    // Le code suivi de la région ou du département du praticien reste un code de chez lui (outre-mer compris)
+    expect(scope([zone("51200, Grand Est", "zips")])).toBe("departement");
+    expect(scope([zone("51200, Marne", "zips")])).toBe("departement");
+    expect(scope([zone("97410, La Réunion", "zips")], { city: "Saint-Denis", department: departmentFromPostalCode("97400"), region: "La Réunion", postalCode: "97400" })).toBe("departement");
   });
 
   it("anciennes régions, que la bibliothèque emploie encore : « Genas, Rhône-Alpes, France » → région pour un praticien d'Auvergne-Rhône-Alpes", () => {
@@ -818,12 +860,65 @@ describe("scopeOfAd : codes postaux, anciennes régions, arrondissements", () =>
     expect(scope([zone("Valence, Midi-Pyrénées, France", "CITY")], { city: "Valence", department: null, region: null })).toBe("ville");
   });
 
-  // Bogue suspecté (REGION_BY_KEY) : seules les 13 régions de métropole et les anciennes régions départagent les
-  // homonymes. Les 5 régions d'outre-mer de FR_REGION_CODES n'y sont pas : « Saint-Denis, La Réunion » compte pour
-  // la ville d'un praticien de Saint-Denis (Seine-Saint-Denis).
-  it.fails("ville homonyme d'outre-mer : « Saint-Denis, La Réunion, France » n'est pas Saint-Denis en Île-de-France", () => {
+  it("ville homonyme d'outre-mer : « Saint-Denis, La Réunion, France » n'est pas Saint-Denis en Île-de-France ; les régions d'outre-mer situent comme les autres", () => {
     const saintDenis: ScopeSeed = { city: "Saint-Denis", department: departmentFromPostalCode("93200"), region: "Île-de-France", postalCode: "93200" };
     expect(scope([zone("Saint-Denis, La Réunion, France", "CITY")], saintDenis)).toBe("france");
+    expect(scope([zone("La Réunion", "regions")], saintDenis)).toBe("france");
+    expect(scope([zone("Saint-Denis, Île-de-France, France", "CITY")], saintDenis)).toBe("ville");
+    const reunion: ScopeSeed = { city: "Saint-Denis", department: departmentFromPostalCode("97400"), region: "La Réunion", postalCode: "97400" };
+    expect(scope([zone("Saint-Denis, La Réunion, France", "CITY")], reunion)).toBe("ville");
+    expect(scope([zone("Saint-Pierre, La Réunion, France", "CITY")], reunion)).toBe("departement");
+    expect(scope([zone("Guadeloupe", "regions")], reunion)).toBe("france");
+    expect(scope([zone("Pointe-à-Pitre, Guadeloupe, France", "CITY")], reunion)).toBe("france");
+  });
+
+  it("un département nommé après la ville départage aussi : « Valence, Tarn-et-Garonne, France » → France, un département de la même région → région", () => {
+    const valence: ScopeSeed = { city: "Valence", department: departmentFromPostalCode("26000"), region: "Auvergne-Rhône-Alpes", postalCode: "26000" };
+    expect(scope([zone("Valence, Tarn-et-Garonne, France", "CITY")], valence)).toBe("france");
+    expect(scope([zone("Valence, Isère, France", "CITY")], valence)).toBe("region");
+    expect(scope([zone("Valence, Drôme, France", "CITY")], valence)).toBe("ville");
+    expect(scope([zone("Valence, Drôme, Rhône-Alpes, France", "CITY")], valence)).toBe("ville");
+    // Département du praticien inconnu : rien ne départage
+    expect(scope([zone("Valence, Tarn-et-Garonne, France", "CITY")], { city: "Valence", department: null, region: "Auvergne-Rhône-Alpes" })).toBe("ville");
+    // Une autre ville, située par son département
+    expect(scope([zone("Colomiers, Haute-Garonne, France", "CITY")], toulouse)).toBe("departement");
+    expect(scope([zone("Albi, Tarn, France", "CITY")], toulouse)).toBe("region");
+    expect(scope([zone("Bordeaux, Gironde, France", "CITY")], toulouse)).toBe("france");
+  });
+
+  it("le nom d'un quartier n'est pas une région : « Centre, Rennes, France » → ville pour un praticien de Rennes ; « Centre, France » reste l'ancienne région", () => {
+    const rennes: ScopeSeed = { city: "Rennes", department: departmentFromPostalCode("35000"), region: "Bretagne" };
+    expect(scope([zone("Centre, Rennes, France", "NEIGHBORHOOD")], rennes)).toBe("ville");
+    expect(scope([zone("Centre, Rennes, Bretagne, France", "NEIGHBORHOOD")], rennes)).toBe("ville");
+    expect(scope([zone("Centre, France", "regions")], rennes)).toBe("france");
+    expect(scope([zone("Centre, France", "regions")], { city: "Orléans", department: departmentFromPostalCode("45000"), region: "Centre-Val de Loire" })).toBe("region");
+    // Quartier d'une ville d'un autre département de la région, ou d'ailleurs
+    const paris: ScopeSeed = { city: "Paris", department: departmentFromPostalCode("75005"), region: "Île-de-France" };
+    expect(scope([zone("Montmartre, Paris, Île-de-France, France", "NEIGHBORHOOD")], paris)).toBe("ville");
+    expect(scope([zone("Montmartre, Paris, France", "NEIGHBORHOOD")], { city: "Versailles", department: departmentFromPostalCode("78000"), region: "Île-de-France" })).toBe("region");
+    expect(scope([zone("Montmartre, Paris, Île-de-France, France", "NEIGHBORHOOD")], lyon)).toBe("france");
+  });
+
+  it("quartier d'une ville qui porte le nom d'un département d'ailleurs (« Estressin, Vienne, France ») : ville pour un praticien de Vienne en Isère", () => {
+    const vienne: ScopeSeed = { city: "Vienne", department: departmentFromPostalCode("38200"), region: "Auvergne-Rhône-Alpes", postalCode: "38200" };
+    expect(scope([zone("Vienne, France", "CITY")], vienne)).toBe("ville");
+    expect(scope([zone("Estressin, Vienne, Auvergne-Rhône-Alpes, France", "NEIGHBORHOOD")], vienne)).toBe("ville");
+    expect(scope([zone("Estressin, Vienne, France", "NEIGHBORHOOD")], vienne)).toBe("ville");
+    // Vu de Grenoble, avec l'index des communes de l'Isère : le quartier d'une commune du département
+    const grenoble: ScopeSeed = { city: "Grenoble", department: departmentFromPostalCode("38000"), region: "Auvergne-Rhône-Alpes", postalCode: "38000" };
+    const isere = buildMetaLocalIndex([{ name: "Vienne", departmentCode: "38" }, { name: "Grenoble", departmentCode: "38" }], grenoble);
+    expect(scopeOfAd({ targetLocations: [zone("Centre-ville, Vienne, France", "NEIGHBORHOOD")] }, grenoble, isere)).toBe("departement");
+    // Un pays étranger en fin de zone l'emporte toujours (« Delémont, Jura, Suisse » n'est pas dans le Jura français)
+    const besancon: ScopeSeed = { city: "Besançon", department: departmentFromPostalCode("25000"), region: "Bourgogne-Franche-Comté", postalCode: "25000" };
+    expect(scope([zone("Delémont, Jura, Suisse", "CITY")], besancon)).toBe("france");
+  });
+
+  it("une zone typée région n'est jamais « ville », même si elle porte le nom de la ville du praticien (Paris : ville et département)", () => {
+    const paris: ScopeSeed = { city: "Paris", department: departmentFromPostalCode("75005"), region: "Île-de-France" };
+    expect(scope([zone("Paris", "CITY")], paris)).toBe("ville");
+    expect(scope([loc("Paris")], paris)).toBe("ville");
+    expect(scope([zone("Paris", "region")], paris)).toBe("departement");
+    expect(scope([zone("Paris, Île-de-France", "regions")], paris)).toBe("departement");
   });
 
   it("« 5e arrondissement de Paris » → ville pour un praticien parisien (« 1er », « 15ème », Lyon de même)", () => {
@@ -905,29 +1000,45 @@ describe("buildMetaLocalIndex et villes ciblées sans département", () => {
     expect(scope([loc("France")])).toBe("france");
   });
 
-  it("l'index ne s'applique jamais à un nom de région ou de département : « Bourgogne » reste la région, « Vienne » le département", () => {
-    // « Bourgogne » est aussi une commune de la Marne : la zone désigne d'abord l'ancienne région (autre région → France)
-    for (const type of ["regions", "CITY"]) expect(scope([zone("Bourgogne, France", type)]), type).toBe("france");
+  it("un nom de région ou de département que rien ne désigne comme une ville n'est pas cherché dans l'index : « Bourgogne » reste la région, « Vienne » le département", () => {
+    // « Bourgogne » est aussi une commune de la Marne : sans type de ville, la zone désigne l'ancienne région (autre région → France)
+    for (const type of ["regions", "DEPARTMENT", "zips"]) expect(scope([zone("Bourgogne, France", type)]), type).toBe("france");
     expect(scope([loc("Bourgogne")])).toBe("france");
     // Les zones régionales du praticien restent des régions, jamais « département »
     expect(scope([zone("Grand Est", "regions")])).toBe("region");
     expect(scope([zone("Champagne-Ardenne, France", "regions")])).toBe("region");
     expect(scope([zone("Aube", "DEPARTMENT")])).toBe("region");
     expect(scope([zone("Marne", "DEPARTMENT")])).toBe("departement");
-    // Vienne (Isère) est une commune du département du praticien, mais le nom est celui d'un département de Nouvelle-Aquitaine
+    // Vienne (Isère) est une commune du département du praticien, mais le nom est d'abord celui d'un département de Nouvelle-Aquitaine
     const grenoble: ScopeSeed = { city: "Grenoble", department: departmentFromPostalCode("38000"), region: "Auvergne-Rhône-Alpes", postalCode: "38000" };
     const isere = buildMetaLocalIndex([{ name: "Vienne", departmentCode: "38" }, { name: "Voiron", departmentCode: "38" }], grenoble);
     expect(isere.department.has("vienne")).toBe(true);
-    expect(scope([zone("Voiron, France", "CITY")], grenoble, isere)).toBe("departement");
-    expect(scope([zone("Vienne, France", "CITY")], grenoble, isere)).toBe("france");
+    expect(scope([loc("Vienne, France")], grenoble, isere)).toBe("france");
+    expect(scope([zone("Vienne", "DEPARTMENT")], grenoble, isere)).toBe("france");
+    expect(scope([zone("Vienne", "regions")], grenoble, isere)).toBe("france");
   });
 
-  // Bogue suspecté (scopeOfLocation) : seul le niveau pays est lu dans le type de la zone. Une zone de type
-  // `regions` dont le nom n'est pas une région française connue (région étrangère, graphie inattendue) mais
-  // coïncide avec une commune de l'index est prise pour cette commune.
-  it.fails("l'index ne s'applique jamais à une zone de type `regions`, même si son nom est celui d'une commune", () => {
-    expect(scope([zone("Épernay", "regions")])).toBe("france");
-    expect(scope([zone("Saint-Martin", "region")])).toBe("france");
+  it("zone typée ville (`CITY`, `COMMUNE`, `MUNICIPALITY`, `NEIGHBORHOOD`…) : l'index s'applique même si le nom est celui d'un département ou d'une région (« Vienne, France » → département en Isère)", () => {
+    const grenoble: ScopeSeed = { city: "Grenoble", department: departmentFromPostalCode("38000"), region: "Auvergne-Rhône-Alpes", postalCode: "38000" };
+    const isere = buildMetaLocalIndex([{ name: "Vienne", departmentCode: "38" }, { name: "Voiron", departmentCode: "38" }, { name: "Valence", departmentCode: "26" }], grenoble);
+    for (const type of ["CITY", "city", "COMMUNE", "MUNICIPALITY", "NEIGHBORHOOD", "subcity", "subneighborhood"]) {
+      expect(scope([zone("Vienne, France", type)], grenoble, isere), type).toBe("departement");
+      expect(scope([zone("Bourgogne, France", type)]), type).toBe("departement");
+    }
+    expect(scope([zone("Voiron, France", "CITY")], grenoble, isere)).toBe("departement");
+    expect(scope([zone("Valence, France", "CITY")], grenoble, isere)).toBe("region");
+    // Sans index, ou quand la zone situe la ville dans une autre région : rien ne la rattache au praticien
+    expect(scope([zone("Vienne, France", "CITY")], grenoble, null)).toBe("france");
+    expect(scope([zone("Vienne, Nouvelle-Aquitaine, France", "CITY")], grenoble, isere)).toBe("france");
+    expect(scope([zone("Bourgogne, Bourgogne-Franche-Comté, France", "CITY")])).toBe("france");
+  });
+
+  it("l'index ne s'applique jamais à une zone typée région (`regions`, `region`), même si son nom est celui d'une commune", () => {
+    for (const type of ["regions", "region", "REGIONS"]) {
+      expect(scope([zone("Épernay", type)]), type).toBe("france");
+      expect(scope([zone("Saint-Martin", type)]), type).toBe("france");
+      expect(scope([zone("Troyes, France", type)]), type).toBe("france");
+    }
   });
 });
 
@@ -1246,6 +1357,18 @@ describe("selectMarketAds : complément des zones plus larges et plafond par pag
     expect(selectMarketAds(homonyms, toulouse, now).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3", "n4"]);
   });
 
+  it("plafond par page : des pages sans rapport ne sont jamais confondues (noms en cyrillique, en idéogrammes, en émojis, ou sans nom)", () => {
+    const names = ["Йога Студия", "瑜伽", "🌿", "✨✨", "Ёлка"];
+    const distinct = names.map((pageName, i) => record(`d${i + 1}`, { pageName, euTotalReach: 5_000 - i * 500 }));
+    expect(selectMarketAds(distinct, toulouse, now).ads.map((a) => a.id)).toEqual(["d1", "d2", "d3", "d4", "d5"]);
+    // Sans nom du tout : chaque annonce est sa propre page
+    const nameless = Array.from({ length: 5 }, (_, i) => record(`s${i + 1}`, { pageName: i % 2 === 0 ? "" : "   ", euTotalReach: 5_000 - i * 500 }));
+    expect(selectMarketAds(nameless, toulouse, now).ads).toHaveLength(5);
+    // La même page au nom non latin reste plafonnée
+    const same = Array.from({ length: 5 }, (_, i) => record(`c${i + 1}`, { pageName: i % 2 === 0 ? "Йога Студия" : " йога студия ", euTotalReach: 5_000 - i * 500 }));
+    expect(selectMarketAds(same, toulouse, now).ads.map((a) => a.id)).toEqual(["c1", "c2", "c3"]);
+  });
+
   it("plafond par page appliqué dans l'ordre de `ads` : la zone retenue prend les places de la page avant le complément, une annonce écartée ne consomme pas de place", () => {
     const page = { pageId: "page-1", pageName: "Cabinet Zen" };
     const records = [
@@ -1277,6 +1400,42 @@ describe("selectMarketAds : complément des zones plus larges et plafond par pag
     expect(local.scopeUsed).toBe("ville");
     expect(local.counts.ville).toBe(5);
     expect(marketNearCount(local)).toBe(META_MARKET_MAX_PER_PAGE);
+  });
+});
+
+describe("metaPageKey", () => {
+  const key = (id: string, pageId: string | null, pageName: string) => metaPageKey({ id, pageId, pageName });
+
+  it("l'identifiant de page d'abord, quel que soit le nom", () => {
+    expect(key("1", "123456", "Cabinet Zen")).toBe("id:123456");
+    expect(key("2", "123456", "Un autre nom")).toBe(key("1", "123456", "Cabinet Zen"));
+    expect(key("3", "654321", "Cabinet Zen")).not.toBe(key("1", "123456", "Cabinet Zen"));
+  });
+
+  it("sans identifiant (null ou vide) : le nom normalisé — casse, accents et traits d'union indifférents", () => {
+    expect(key("1", null, "Cabinet Zénith")).toBe("nom:cabinet zenith");
+    for (const name of ["CABINET ZENITH", "cabinet-zénith", "  Cabinet   Zenith ", "Cabinet Zénith !"]) {
+      expect(key("2", null, name), name).toBe("nom:cabinet zenith");
+    }
+    expect(key("3", "", "Cabinet Zénith")).toBe("nom:cabinet zenith");
+    expect(key("4", null, "Cabinet Zen")).not.toBe(key("1", null, "Cabinet Zénith"));
+  });
+
+  it("nom sans lettre latine ni chiffre (cyrillique, idéogrammes, émojis) : le nom brut en minuscules, jamais une clé commune", () => {
+    expect(key("1", null, "Йога Студия")).toBe("nom:йога студия");
+    expect(key("2", null, "  йога студия ")).toBe(key("1", null, "Йога Студия"));
+    const keys = ["Йога Студия", "瑜伽", "🌿", "✨✨"].map((name, i) => key(String(i), null, name));
+    expect(new Set(keys).size).toBe(4);
+    expect(keys.every((k) => k.startsWith("nom:") && k.length > "nom:".length)).toBe(true);
+  });
+
+  it("ni identifiant ni nom : l'annonce elle-même ; une clé d'identifiant ne se confond jamais avec une clé de nom", () => {
+    expect(key("a1", null, "")).toBe("annonce:a1");
+    expect(key("a2", null, "   ")).toBe("annonce:a2");
+    expect(key("a3", "", "")).toBe("annonce:a3");
+    expect(key("a1", null, "")).not.toBe(key("a2", null, ""));
+    expect(key("x", "cabinet zen", "Sans importance")).not.toBe(key("y", null, "Cabinet Zen"));
+    expect(key("x", "a1", "")).not.toBe(key("a1", null, ""));
   });
 });
 

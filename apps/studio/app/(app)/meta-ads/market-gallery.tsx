@@ -93,9 +93,9 @@ export function MarketGallery({
     setSelected(NO_SELECTION);
   }
 
-  function bulk(action: (ids: readonly string[]) => void) {
-    action(chosen);
-    stopSelecting();
+  /** Geste groupé sur la sélection ; le mode sélection se referme, sauf si le praticien a renoncé. */
+  function bulk(action: (ids: readonly string[]) => boolean | void) {
+    if (action(chosen) !== false) stopSelecting();
   }
 
   if (ads.length === 0) {
@@ -150,7 +150,8 @@ export function MarketGallery({
             role="list"
             data-testid="meta-gallery"
             aria-label={mode === "veille" ? "Annonces de la veille" : "Exemples gardés"}
-            className="grid grid-cols-1 gap-4 @[30rem]:grid-cols-2 @[46rem]:grid-cols-3 @[62rem]:grid-cols-4 @[62rem]:gap-5"
+            // Seuils choisis pour qu'une carte fasse au moins 244 px : « Garder comme exemple » tient sur une ligne
+            className="grid grid-cols-1 gap-4 @[32rem]:grid-cols-2 @[48rem]:grid-cols-3 @[64rem]:grid-cols-4"
           >
             {visible.map((ad, index) => (
               <MarketCard
@@ -209,14 +210,9 @@ export function MarketGallery({
           onClose={() => setDetailId(null)}
           onKeep={() => library.keep([detail.id])}
           onUnkeep={() => library.unkeep([detail.id])}
-          onDismiss={() => {
-            setDetailId(null);
-            library.dismiss([detail.id]);
-          }}
-          onRemove={() => {
-            setDetailId(null);
-            library.removeFromLibrary([detail.id]);
-          }}
+          // L'annonce quitte la vue : la fiche se referme d'elle-même
+          onDismiss={() => library.dismiss([detail.id])}
+          onRemove={() => library.removeFromLibrary([detail.id])}
         />
       ) : null}
     </div>

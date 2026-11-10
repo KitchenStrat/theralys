@@ -103,10 +103,12 @@ import { fetchRegionCommunes, nearbyCitiesFrom } from "@theralys/providers/meta/
 import { landingPagesFrom, onlineMotifPages, phoneFromSections } from "./google-ads";
 import { loadGoogleBrief } from "./google-brief";
 import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
-import { enrichAdsMedia, libraryForAnalysis, mediaLookupsRemaining, mediaProviderFor, recordMediaUsage, type MetaMediaStore } from "./meta-library";
+import { enrichSiteAdsMedia, libraryForAnalysis, mediaProviderFor, type MetaMediaStore } from "./meta-library";
 
 /** Analyse `running` plus ancienne : le processus est mort, la ligne passe en erreur. */
 export const META_ADS_ANALYSIS_STALE_MINUTES = 15;
+/** Exemples gardés transmis au plus à la synthèse : la veille du moment doit rester majoritaire. */
+export const META_MARKET_FAVORITES_FOR_AI = 6;
 /** Pages suivies par terme (`maxPages` de `searchAds`). */
 export const META_MARKET_PAGES_PER_TERM = 2;
 /** Tolérance entre `created_at` d'une analyse périmée et celui de son usage `meta_analysis` à rembourser (ms). */
@@ -515,20 +517,28 @@ export function buildMetaMarket(
 /**
  * Second filtre, une fois les visuels obtenus : les annonces dont la page
  * Facebook est classée boutique, marque, école, média ou assurance sont
- * écartées (comptées dans `filtered.commerce`), puis la veille est ramenée à
- * `max` annonces.
+ * écartées — retirées des comptes par zone et comptées dans
+ * `filtered.commerce` — puis la veille est ramenée à `max` annonces.
  */
 export function dropCommercialPages(market: MetaAdsMarket, mediaByAdId: Readonly<Record<string, MetaAdMedia | undefined>>, max = META_MARKET_MAX_ADS): MetaAdsMarket {
-  const kept = market.ads.filter((ad) => !isCommercialPageCategory(mediaByAdId[ad.id]?.pageCategories ?? []));
-  const dropped = market.ads.length - kept.length;
-  const filtered = market.filtered || dropped > 0 ? { formation: 0, commerce: 0, autre: 0, ...market.filtered } : undefined;
-  if (filtered) filtered.commerce += dropped;
-  return { ...market, ads: kept.slice(0, max), ...(filtered ? { filtered } : {}) };
+  const dropped = market.ads.filter((ad) => isCommercialPageCategory(mediaByAdId[ad.id]?.pageCategories ?? []));
+  if (dropped.length === 0) return { ...market, ads: market.ads.slice(0, max) };
+  const droppedIds = new Set(dropped.map((ad) => ad.id));
+  const counts = { ...market.counts };
+  const strongCounts = market.strongCounts ? { ...market.strongCounts } : undefined;
+  for (const ad of dropped) {
+    counts[ad.scope] = Math.max(0, counts[ad.scope] - 1);
+    if (strongCounts && ad.signal === "fort") strongCounts[ad.scope] = Math.max(0, strongCounts[ad.scope] - 1);
+  }
+  const filtered = { formation: 0, commerce: 0, autre: 0, ...market.filtered };
+  filtered.commerce += dropped.length;
+  return { ...market, ads: market.ads.filter((ad) => !droppedIds.has(ad.id)).slice(0, max), counts, ...(strongCounts ? { strongCounts } : {}), filtered };
 }
 
 /**
- * Veille transmise à l'IA (≤ META_MARKET_SAMPLE_FOR_AI annonces) : les
- * exemples gardés par le praticien d'abord (ce qu'il a jugé inspirant), puis
+ * Veille transmise à l'IA (≤ META_MARKET_SAMPLE_FOR_AI annonces) : quelques
+ * exemples gardés par le praticien d'abord (META_MARKET_FAVORITES_FOR_AI au
+ * plus : ce qu'il a jugé inspirant, sans éclipser la veille du moment), puis
  * les annonces de la zone retenue les mieux notées (la moitié de
  * l'échantillon au plus), puis les mieux notées des zones plus larges, et le
  * reste de la zone retenue s'il reste de la place.
@@ -541,13 +551,19 @@ export function marketSampleForAi(market: MetaAdsMarket, max = META_MARKET_SAMPL
   const half = Math.ceil(max / 2);
   const seen = new Set<string>();
   const ads: MetaMarketAd[] = [];
-  for (const ad of [...favorites, ...near.slice(0, half), ...wider, ...near.slice(half)]) {
+  for (const ad of [...favorites.slice(0, META_MARKET_FAVORITES_FOR_AI), ...near.slice(0, half), ...wider, ...near.slice(half)]) {
     if (ads.length >= max) break;
     if (seen.has(ad.id)) continue;
     seen.add(ad.id);
     ads.push(ad);
   }
   return { ...market, ads };
+}
+
+/** Synthèse enregistrée : les annonces citées en référence sont celles de la veille (un exemple gardé absent de la veille n'y figure pas). */
+export function insightsForMarket(insights: MetaMarketInsights, market: Pick<MetaAdsMarket, "ads">): MetaMarketInsights {
+  const known = new Set(market.ads.map((ad) => ad.id));
+  return { ...insights, angles: insights.angles.map((angle) => ({ ...angle, adIds: angle.adIds.filter((id) => known.has(id)) })) };
 }
 
 export function renderUrlsOf(assets: SocialPostAssets | null | undefined): string[] {
@@ -724,7 +740,7 @@ export async function executeMetaAnalysis(
       let insights: MetaMarketInsights | null = null;
       if (market.ads.length > 0) {
         try {
-          insights = await planner.analyzeMarket(ctx.brief, marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, ctx.favorites ?? []));
+          insights = insightsForMarket(await planner.analyzeMarket(ctx.brief, marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, ctx.favorites ?? [])), market);
         } catch (err) {
           console.error(`[meta-ads] ${label} : synthèse de la veille non générée :`, err);
         }
@@ -822,7 +838,7 @@ export async function loadMetaAdsContext(
   db: Database,
   siteId: string,
   env: NodeJS.ProcessEnv = process.env,
-  opts: { geography?: boolean; library?: boolean; fetchImpl?: typeof fetch } = {},
+  opts: { geography?: boolean; library?: boolean | "meta" | "mock"; fetchImpl?: typeof fetch } = {},
 ): Promise<MetaAdsContext> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) throw new Error(`Site introuvable : ${siteId}`);
@@ -858,7 +874,7 @@ export async function loadMetaAdsContext(
     localIndex = geography.localIndex;
     if (geography.nearbyCities.length > 0) seed = buildMetaSeed({ ...seedInput, nearbyCities: geography.nearbyCities });
   }
-  const library = opts.library ? await libraryForAnalysis(db, siteId) : { dismissedIds: [], favorites: [] };
+  const library = opts.library ? await libraryForAnalysis(db, siteId, opts.library === true ? "meta" : opts.library) : { dismissedIds: [], favorites: [] };
   const tracking = site.theme.tracking;
   const social = site.theme.social;
   return {
@@ -914,8 +930,8 @@ export async function runMetaAdsAnalysis(
   try {
     // Le référentiel des communes ne sert que la vraie bibliothèque (la veille simulée porte ses propres zones)
     const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { type: true } });
-    const realMarket = site ? marketProviderFor(env, site.type)?.mode === "meta" : false;
-    ctx = await loadMetaAdsContext(db, siteId, env, { geography: realMarket, library: true });
+    const marketMode = site ? (marketProviderFor(env, site.type)?.mode ?? "none") : "none";
+    ctx = await loadMetaAdsContext(db, siteId, env, { geography: marketMode === "meta", library: marketMode === "mock" ? "mock" : "meta" });
   } catch (err) {
     console.error(`[meta-ads] contexte du site ${siteId} indisponible :`, err);
     return { status: "error", analysisId: null, message: metaErrorMessage(err) };
@@ -986,15 +1002,15 @@ export async function runMetaAdsAnalysis(
     await db.update(metaAdsAnalyses).set({ updatedAt: new Date() }).where(stillRunning);
   };
 
-  // Visuels des annonces retenues : cache, fournisseur dans la limite du quota mensuel, usage inscrit
+  // Visuels des annonces retenues : cache, puis fournisseur — recherches réservées sur le quota mensuel et soldées, lot borné dans le temps
   const mediaProvider = mediaProviderFor(env, provider?.mode ?? "none");
   const enrichMedia = mediaProvider
     ? async (ads: MetaMarketAd[]): Promise<Record<string, MetaAdMedia>> => {
-        const budget = await mediaLookupsRemaining(db, siteId, now);
-        const enriched = await enrichAdsMedia(db, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now, budget });
-        await recordMediaUsage(db, siteId, enriched.lookups, mediaProvider.mode, now);
+        const enriched = await enrichSiteAdsMedia(db, siteId, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now, exclusive: true });
         await heartbeat().catch(() => undefined);
-        console.info(`[meta-ads] ${label} : visuels de ${Object.keys(enriched.mediaByAdId).length}/${ads.length} annonce(s), ${enriched.lookups} recherche(s) (${mediaProvider.mode})${enriched.blocked ? ", fournisseur interrompu" : ""}`);
+        console.info(
+          `[meta-ads] ${label} : visuels de ${Object.keys(enriched.mediaByAdId).length}/${ads.length} annonce(s), ${enriched.lookups} recherche(s) (${mediaProvider.mode})${enriched.blocked ? ", lot interrompu" : ""}${enriched.busy ? ", autre lot en cours" : ""}${enriched.overQuota > 0 ? `, ${enriched.overQuota} hors quota` : ""}`,
+        );
         return enriched.mediaByAdId;
       }
     : undefined;

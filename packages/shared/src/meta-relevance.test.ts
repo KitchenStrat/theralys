@@ -69,6 +69,7 @@ const WHY = {
   list: "s'adresse aux praticiens",
   show: "spectacle ou événement",
   animal: "pratique animalière",
+  animalCited: "animal cité dans l'annonce",
   variants: "annonces nationales de la même page",
   reach: "portée d'une marque",
   empty: "annonce sans texte",
@@ -88,6 +89,18 @@ function points(result: MetaAdRelevance, fragment: string): number {
   const reason = reasonOf(result, fragment);
   return reason ? Number.parseInt(reason, 10) : 0;
 }
+
+/** Exclusion ferme : un seul motif, sans points, qu'aucun autre indice ne rattrape. */
+function isHardExclusion(result: MetaAdRelevance): boolean {
+  return result.reasons.length === 1 && !/^[+-]\d/.test(result.reasons[0] ?? "");
+}
+
+const HARD = {
+  school: "organisme de formation (nom de page)",
+  show: "spectacle ou événement (nom de page)",
+  animalPage: "pratique animalière (nom de page)",
+  animalText: "pratique animalière",
+} as const;
 
 // Praticiens
 const claire = ad("claire", {
@@ -238,6 +251,31 @@ describe("metaAdRelevance : annonces de praticiens gardées", () => {
   });
 });
 
+describe("metaAdRelevance : phrases de praticien qui ne sont pas de la formation", () => {
+  const local = ad("local", { pageName: "Paul Girard Ostéopathe", targetLocations: [REIMS] });
+
+  it("« Nouveaux patients bienvenus. » sur la page d'un praticien local : gardée, sans indice de formation", () => {
+    const result = relevance({ ...local, bodies: ["Nouveaux patients bienvenus."] });
+    expect(result).toMatchObject({ keep: true, kind: "praticien" });
+    expect(hasReason(result, WHY.training)).toBe(false);
+    const booking = relevance({ ...rendezVous, bodies: ["Le cabinet accueille de nouveaux patients. Prise de rendez-vous en ligne."] });
+    expect(booking).toMatchObject({ keep: true, kind: "praticien" });
+    expect(hasReason(booking, WHY.training)).toBe(false);
+  });
+
+  it("« Tarif réduit pour les étudiants. » sur la page d'un praticien local : gardée — « étudiants » n'est qu'un mot faible", () => {
+    const result = relevance({ ...local, bodies: ["Tarif réduit pour les étudiants."] });
+    expect(result).toMatchObject({ keep: true, kind: "praticien" });
+    expect(reasonOf(result, WHY.training)).toContain("etudiants");
+    // Même poids qu'un autre mot faible seul, et plafonné en local comme eux
+    expect(points(result, WHY.training)).toBe(points(relevance({ ...local, bodies: ["Passé par l'institut."] }), WHY.training));
+    expect(points(relevance({ ...local, bodies: ["Tarif étudiant, sur inscription, à la rentrée."] }), WHY.training)).toBe(points(result, WHY.training));
+    // Les indices forts gardent tout leur poids (« attirer des patients », « plus de patients »)
+    const strong = relevance({ ...local, bodies: ["Attirer des patients sans effort."] });
+    expect(points(strong, WHY.training)).toBeLessThan(points(result, WHY.training));
+  });
+});
+
 // ─── Indices de ciblage ──────────────────────────────────────────────────────
 
 describe("metaAdRelevance : ciblage local, régional, national, étranger", () => {
@@ -370,38 +408,75 @@ describe("metaAdRelevance : commerce écarté", () => {
     const shop = relevance(ad("shop", { pageName: "Zenova", captions: ["shop-xyz.com"], bodies: ["Le coussin qui soulage votre dos."] }));
     expect(shop).toMatchObject({ keep: false, kind: "commerce" });
     expect(hasReason(shop, WHY.shop)).toBe(true);
-    for (const caption of ["zenova-store.com", "MA-BOUTIQUE-ZEN.FR", "eshop.zenova.fr", "sereniteapp.io"]) {
+    for (const caption of ["zenova-store.com", "store-zen.com", "MA-BOUTIQUE-ZEN.FR", "eshop.zenova.fr", "shopping-zen.fr", "sereniteapp.io"]) {
       expect(hasReason(relevance({ ...claire, captions: [caption] }), WHY.shop), caption).toBe(true);
+    }
+    // Un nom qui finit par « store » ou « shop » n'est pas une boutique (« Pastore », « restore », « bishop »)
+    for (const caption of ["pastore-osteopathe.fr", "restore-osteo.fr", "bishop-osteo.fr"]) {
+      expect(hasReason(relevance({ ...claire, captions: [caption] }), WHY.shop), caption).toBe(false);
     }
   });
 
-  it("« whatsapp » et « monsite.lovable.app » ne sont ni une boutique ni une application à vendre", () => {
-    for (const caption of ["whatsapp", "WHATSAPP", "api.whatsapp.com", "wa.me", "monsite.lovable.app", "clairemartin-osteopathe.fr", "doctolib.fr"]) {
+  it("lien vers un magasin d'applications (« apps.apple.com », « play.google.com ») : même indice", () => {
+    for (const caption of ["apps.apple.com", "APPS.APPLE.COM", "play.google.com"]) {
+      const result = relevance(ad("store", { pageName: "Respire Demain", captions: [caption], bodies: ["Arrêtez de fumer grâce à l'hypnose."] }), "Hypnothérapeute");
+      expect(hasReason(result, WHY.shop), caption).toBe(true);
+      expect(result.keep, caption).toBe(false);
+      expect(result.kind, caption).toBe("commerce");
+    }
+    for (const caption of ["apple.com", "google.com", "maps.google.com"]) {
+      expect(hasReason(relevance({ ...claire, captions: [caption] }), WHY.shop), caption).toBe(false);
+    }
+  });
+
+  it("« whatsapp », « monsite.lovable.app » ou « bishop-osteo.fr » ne sont ni une boutique ni une application à vendre", () => {
+    for (const caption of ["whatsapp", "WHATSAPP", "api.whatsapp.com", "wa.me", "monsite.lovable.app", "bishop-osteo.fr", "workshop-zen.fr", "clairemartin-osteopathe.fr", "doctolib.fr"]) {
       const result = relevance({ ...claire, captions: [caption] });
       expect(hasReason(result, WHY.shop), caption).toBe(false);
       expect(result.keep, caption).toBe(true);
     }
   });
 
-  // Bogue suspecté (REIMBURSEMENT) : le motif s'arrête en principe à la fin de la phrase (`[^.·!?]`), mais il est
-  // appliqué au texte déjà normalisé, sans ponctuation. « Satisfait ou remboursé. Mutuelle santé… » est donc lu comme
-  // une mention de remboursement : les deux indices forts (« satisfait ou remboursé », « mutuelle ») disparaissent.
-  it.fails("« Satisfait ou remboursé. Mutuelle santé dès 15 € » : deux phrases distinctes, les indices de commerce restent", () => {
+  it("« Satisfait ou remboursé. Mutuelle santé dès 15 € » : deux phrases distinctes, la ponctuation borne la mention de remboursement et les indices de commerce restent", () => {
     const result = relevance(ad("garantie", { pageName: "Nova Santé", bodies: ["Satisfait ou remboursé. Mutuelle santé dès 15 € par mois."] }));
-    expect(hasReason(result, WHY.commerce)).toBe(true);
-    expect(result.kind).toBe("commerce");
+    expect(result).toMatchObject({ keep: false, kind: "commerce" });
+    expect(reasonOf(result, WHY.commerce)).toContain("satisfait ou rembourse");
+    expect(reasonOf(result, WHY.commerce)).toContain("mutuelle");
+    // Même lecture quand les deux phrases sont séparées par « ! », un retour à la ligne ou deux champs de l'annonce
+    for (const extra of [
+      { bodies: ["Satisfait ou remboursé ! Mutuelle santé dès 15 € par mois"] },
+      { bodies: ["Satisfait ou remboursé\nMutuelle santé dès 15 € par mois"] },
+      { titles: ["Satisfait ou remboursé"], bodies: ["Mutuelle santé dès 15 € par mois"] },
+    ]) {
+      const other = relevance(ad("garantie", { pageName: "Nova Santé", ...extra }));
+      expect(reasonOf(other, WHY.commerce), JSON.stringify(extra)).toContain("mutuelle");
+      expect(other.kind, JSON.stringify(extra)).toBe("commerce");
+    }
+    // Dans la même phrase, la mention d'un praticien reste neutre, majuscules et pluriels compris
+    for (const body of ["SÉANCES REMBOURSÉES PAR VOTRE MUTUELLE", "Consultations prises en charge par de nombreuses mutuelles."]) {
+      expect(hasReason(relevance({ ...paul, bodies: [body] }), WHY.commerce), body).toBe(false);
+    }
   });
 });
 
 // ─── Formation et services aux praticiens ────────────────────────────────────
 
 describe("metaAdRelevance : formation et services aux praticiens écartés", () => {
-  it("école : « Institut de Formation en Ostéopathie », « portes ouvertes », « cursus » — malgré le métier dans le nom de page et le ciblage local", () => {
+  it("école : « Institut de Formation en Ostéopathie » — écartée d'office sur son nom de page, malgré le métier dans ce nom et le ciblage local", () => {
     const result = relevance(ecole);
+    expect(result).toMatchObject({ keep: false, kind: "formation", reasons: [HARD.school] });
+    expect(result.score).toBeLessThan(META_RELEVANCE_MIN_SCORE);
+    expect(isHardExclusion(result)).toBe(true);
+  });
+
+  it("école dont le nom de page ne dit rien : « portes ouvertes » et « cursus » dans le texte suffisent à l'écarter", () => {
+    const result = relevance({ ...ecole, pageName: "IFO Lyon", bodies: ["Portes ouvertes le 14 mars : découvrez notre cursus d'ostéopathie en 5 ans."] });
     expect(result).toMatchObject({ keep: false, kind: "formation" });
-    for (const why of [WHY.school, WHY.training, WHY.ownPage, WHY.local]) expect(hasReason(result, why), why).toBe(true);
+    expect(isHardExclusion(result)).toBe(false);
     expect(reasonOf(result, WHY.training)).toContain("portes ouvertes");
     expect(reasonOf(result, WHY.training)).toContain("cursus");
+    for (const why of [WHY.link, WHY.local, WHY.ownText]) expect(hasReason(result, why), why).toBe(true);
+    expect(hasReason(result, WHY.school)).toBe(false);
   });
 
   it("marketing vendu aux praticiens : « Thérapeute, sophrologue, naturopathe : remplissez votre agenda », ciblage national", () => {
@@ -447,13 +522,20 @@ describe("metaAdRelevance : formation et services aux praticiens écartés", () 
     expect(hasReason(relevance({ ...devenir, bodies: ["Devenir plus serein, séance après séance."] }, "Sophrologue"), WHY.training)).toBe(false);
   });
 
-  it("un nom de page qui porte « Formation », « École », « Académie » (ou Campus, Academy) est un organisme de formation", () => {
-    for (const pageName of ["Sophro Formation", "École du Souffle", "Académie Sophrologie Nantes", "Campus Bien-Être", "Hypno Academy", "Sophrologie - Formations en ligne"]) {
+  it("un nom de page qui porte « Formation », « École », « Académie » (ou Campus, Academy) est un organisme de formation : exclusion ferme, un seul motif", () => {
+    for (const pageName of ["Sophro Formation", "École du Souffle", "Académie Sophrologie Nantes", "Campus Bien-Être", "Hypno Academy", "Sophrologie - Formations en ligne", "Institut de formation Respire"]) {
       const result = relevance(ad("organisme", { pageName, bodies: ["Des séances pour souffler."] }), "Sophrologue");
-      expect(hasReason(result, WHY.school), pageName).toBe(true);
+      expect(result.reasons, pageName).toEqual([HARD.school]);
       expect(result.keep, pageName).toBe(false);
       expect(result.kind, pageName).toBe("formation");
+      expect(result.score, pageName).toBeLessThan(META_RELEVANCE_MIN_SCORE);
     }
+    // Aucun indice de praticien ne la rattrape : métier dans le nom et le lien, ville ciblée, prise de rendez-vous, vocabulaire de soin
+    const rescued = relevance(
+      ad("organisme-local", { pageName: "Sophro Formation", captions: ["sophro-formation.fr", "doctolib.fr"], targetLocations: [REIMS], bodies: ["Séances et ateliers au cabinet, sur rendez-vous."] }),
+      "Sophrologue",
+    );
+    expect(rescued).toMatchObject({ keep: false, kind: "formation", reasons: [HARD.school] });
     // Mot entier seulement : « Transformation », « Informations » ne sont pas « Formation »
     for (const pageName of ["Sophrologie & Transformation", "Informations Sophrologie Nantes", "Sophrologue Lucie Bernard"]) {
       expect(hasReason(relevance(ad("praticien", { pageName, bodies: ["Des séances pour souffler."] }), "Sophrologue"), WHY.school), pageName).toBe(false);
@@ -485,47 +567,94 @@ describe("metaAdRelevance : hors sujet écarté (« autre »)", () => {
     }
   });
 
-  it("spectacle d'hypnose (« spectacle », « one man show ») : ce n'est pas une séance", () => {
+  it("spectacle d'hypnose dans le texte : deux mots de spectacle (« spectacle », « one man show ») → exclusion ferme ; un seul → indice contraire", () => {
     const result = relevance(spectacle, "Hypnothérapeute");
     expect(result).toMatchObject({ keep: false, kind: "autre" });
-    expect(hasReason(result, WHY.show)).toBe(true);
-    expect(hasReason(result, WHY.ownPage)).toBe(true);
+    expect(isHardExclusion(result)).toBe(true);
+    expect(result.reasons).toEqual(["spectacle ou événement"]);
     for (const body of ["Billetterie ouverte pour la tournée.", "Hypnose de rue ce samedi place de la mairie.", "Un one man show d'hypnose."]) {
-      expect(hasReason(relevance({ ...spectacle, bodies: [body] }, "Hypnothérapeute"), WHY.show), body).toBe(true);
+      const single = relevance({ ...spectacle, bodies: [body] }, "Hypnothérapeute");
+      expect(hasReason(single, WHY.show), body).toBe(true);
+      expect(points(single, WHY.show), body).toBeLessThan(0);
+      expect(isHardExclusion(single), body).toBe(false);
+      expect(hasReason(single, WHY.ownPage), body).toBe(true);
     }
+    // L'affiche d'une représentation locale, avec le métier dans le nom de page et le lien : écartée malgré tout
+    const affiche = relevance(
+      { ...spectacle, pageName: "Théo Lambert - Hypnose en scène", captions: ["hypnose-lambert.fr"], bodies: ["Spectacle d'hypnose : deux séances samedi, billetterie en ligne."] },
+      "Hypnothérapeute",
+    );
+    expect(affiche).toMatchObject({ keep: false, kind: "autre" });
     expect(hasReason(relevance({ ...spectacle, bodies: ["Séance d'hypnose au cabinet, sur rendez-vous."] }, "Hypnothérapeute"), WHY.show)).toBe(false);
   });
 
-  it("ostéopathe animalier pour un ostéopathe : pratique animalière écartée ; l'indice disparaît quand le praticien est lui-même animalier", () => {
+  it("spectacle annoncé par le nom de page (« Spectacle », « Show », « Humoriste ») : exclusion ferme, quoi que dise l'annonce", () => {
+    for (const pageName of ["Théo Lambert - Spectacle d'hypnose", "Hypno Show", "Théo Lambert, humoriste et hypnotiseur", "Billetterie Hypnose Lille"]) {
+      const result = relevance({ ...spectacle, pageName, captions: ["hypnose-lambert.fr"], bodies: ["Séances d'hypnose au cabinet, sur rendez-vous."] }, "Hypnothérapeute");
+      expect(result.reasons, pageName).toEqual([HARD.show]);
+      expect(result.keep, pageName).toBe(false);
+      expect(result.kind, pageName).toBe("autre");
+      expect(result.score, pageName).toBeLessThan(META_RELEVANCE_MIN_SCORE);
+    }
+    // Mot entier seulement
+    expect(isHardExclusion(relevance({ ...spectacle, pageName: "Showroom Hypnose Lille", bodies: ["Séances d'hypnose au cabinet."] }, "Hypnothérapeute"))).toBe(false);
+  });
+
+  it("ostéopathe animalier pour un ostéopathe : écarté d'office sur son nom de page ; rien de tel quand le praticien est lui-même animalier", () => {
     const result = relevance(animalier, "Ostéopathe");
-    expect(result).toMatchObject({ keep: false, kind: "autre" });
-    expect(hasReason(result, WHY.animal)).toBe(true);
-    expect(hasReason(relevance(ad("equin", { pageName: "Ostéopathie équine du Val", bodies: ["Je me déplace dans votre écurie."] })), WHY.animal)).toBe(true);
+    expect(result).toMatchObject({ keep: false, kind: "autre", reasons: [HARD.animalPage] });
+    expect(result.score).toBeLessThan(META_RELEVANCE_MIN_SCORE);
+    for (const pageName of ["Ostéopathie équine du Val", "Cabinet d'ostéopathie canine", "Ostéopathe pour chevaux et chiens", "Léa Petit - Ostéo animaux"]) {
+      expect(relevance(ad("animal", { pageName, bodies: ["Séances à domicile."] })).reasons, pageName).toEqual([HARD.animalPage]);
+    }
 
     for (const profession of ["Ostéopathe animalier", "Ostéopathe équin et canin"]) {
       const own = relevance(animalier, profession);
       expect(hasReason(own, WHY.animal), profession).toBe(false);
+      expect(hasReason(own, WHY.animalCited), profession).toBe(false);
       expect(own.keep, profession).toBe(true);
       expect(own.kind, profession).toBe("praticien");
     }
     // Aucun mot animalier : rien à signaler pour un praticien « humain »
     expect(hasReason(relevance(claire), WHY.animal)).toBe(false);
+    expect(hasReason(relevance(claire), WHY.animalCited)).toBe(false);
   });
 
-  // Bogue suspecté (barème) : la pratique animalière ne retire que 4 points. Une annonce locale d'ostéopathe
-  // animalier comme on en voit partout (métier dans le nom de page et dans le lien, ville ciblée, « séances »,
-  // « rendez-vous ») garde assez de points pour rester dans la veille d'un ostéopathe, alors que le module annonce
-  // les pratiques animalières « écartées d'office ».
-  it.fails("ostéopathe animalier local, avec son site et son vocabulaire de soin : écarté de la veille d'un ostéopathe", () => {
+  it("ostéopathe animalier local, avec son site et son vocabulaire de soin : écarté de la veille d'un ostéopathe, aucun indice ne le rattrape", () => {
     const typical = ad("animalier-local", {
       pageName: "Léa Petit - Ostéopathe animalier",
-      captions: ["leapetit-osteopathe-animalier.fr"],
+      captions: ["leapetit-osteopathe-animalier.fr", "doctolib.fr"],
       targetLocations: [REIMS],
       bodies: ["Séances d'ostéopathie pour votre cheval ou votre chien, à domicile et sur rendez-vous."],
     });
-    const result = relevance(typical, "Ostéopathe");
-    expect(hasReason(result, WHY.animal)).toBe(true);
-    expect(result.keep).toBe(false);
+    expect(relevance(typical, "Ostéopathe")).toMatchObject({ keep: false, kind: "autre", reasons: [HARD.animalPage] });
+    expect(relevance(typical, "Ostéopathe animalier")).toMatchObject({ keep: true, kind: "praticien" });
+  });
+
+  it("animaux dans le texte : plusieurs mots (« cheval », « chien ») → pratique animalière, exclusion ferme ; un seul (« animaux non admis ») → simple indice contraire", () => {
+    // Page sans mot animalier : c'est le texte qui tranche
+    const practice = ad("texte-animal", {
+      pageName: "Léa Petit - Ostéopathe",
+      captions: ["leapetit-osteopathe.fr"],
+      targetLocations: [REIMS],
+      bodies: ["Séances d'ostéopathie pour votre cheval ou votre chien, à domicile et sur rendez-vous."],
+    });
+    const excluded = relevance(practice);
+    expect(excluded).toMatchObject({ keep: false, kind: "autre", reasons: [HARD.animalText] });
+    expect(excluded.score).toBeLessThan(META_RELEVANCE_MIN_SCORE);
+    expect(relevance({ ...practice, bodies: ["Ostéopathie équine et canine dans toute la Marne."] }).reasons).toEqual([HARD.animalText]);
+
+    const mention = relevance({ ...paul, bodies: ["Je vous reçois au cabinet sur rendez-vous. Animaux non admis."] });
+    expect(mention).toMatchObject({ keep: true, kind: "praticien" });
+    expect(isHardExclusion(mention)).toBe(false);
+    expect(points(mention, WHY.animalCited)).toBeLessThan(0);
+    expect(hasReason(mention, WHY.animal)).toBe(false);
+    expect(mention.score).toBeLessThan(relevance({ ...paul, bodies: ["Je vous reçois au cabinet sur rendez-vous."] }).score);
+
+    // Praticien animalier : ses propres mots ne comptent pas contre lui
+    const own = relevance(practice, "Ostéopathe animalier");
+    expect(own).toMatchObject({ keep: true, kind: "praticien" });
+    expect(hasReason(own, WHY.animal) || hasReason(own, WHY.animalCited)).toBe(false);
   });
 
   it("gabarits dynamiques seuls (« {{product.brand}} ») et page sans pratique : annonce sans texte, écartée", () => {
@@ -551,6 +680,17 @@ describe("metaAdRelevance : hors sujet écarté (« autre »)", () => {
 });
 
 // ─── Barème : invariants ─────────────────────────────────────────────────────
+
+describe("metaAdRelevance : un même animal cité au singulier et au pluriel", () => {
+  it("« animaux » et « animal », « chien » et « chiens » : un seul indice, pas une exclusion ferme", () => {
+    for (const body of ["Animaux non admis au cabinet. Merci de laisser votre animal à la maison.", "Votre chien est le bienvenu, les chiens d'assistance aussi."]) {
+      const result = relevance({ ...claire, bodies: [`${claire.bodies[0] ?? ""} ${body}`] });
+      expect(isHardExclusion(result), body).toBe(false);
+      expect(result.reasons.some((reason) => reason.includes("animal cité dans l'annonce")), body).toBe(true);
+      expect(result.keep, body).toBe(true);
+    }
+  });
+});
 
 describe("metaAdRelevance : invariants du classement", () => {
   const cases: [MetaAdRecord, string, number?][] = [
@@ -580,13 +720,31 @@ describe("metaAdRelevance : invariants du classement", () => {
     }
   });
 
-  it("journal : chaque indice est signé, et le score est la somme des points", () => {
-    for (const [record, profession, pageAdCount] of cases) {
-      const result = relevance(record, profession, pageAdCount);
-      if (hasReason(result, WHY.language)) continue;
-      expect(result.reasons.length, record.id).toBeGreaterThan(0);
-      for (const reason of result.reasons) expect(reason, record.id).toMatch(/^[+-]\d+ \S/);
-      expect(result.reasons.reduce((sum, reason) => sum + Number.parseInt(reason, 10), 0), record.id).toBe(result.score);
+  it("journal : hors exclusion ferme, chaque indice est signé et le score est la somme des points", () => {
+    const scored = cases.map(([record, profession, pageAdCount]) => [record.id, relevance(record, profession, pageAdCount)] as const).filter(([, result]) => !isHardExclusion(result));
+    expect(scored.map(([id]) => id)).toEqual(["claire", "rdv", "visio", "paul", "lait", "promo", "assurance", "agenda", "devenir", "gabarit"]);
+    for (const [id, result] of scored) {
+      expect(result.reasons.length, id).toBeGreaterThan(0);
+      for (const reason of result.reasons) expect(reason, id).toMatch(/^[+-]\d+ \S/);
+      expect(result.reasons.reduce((sum, reason) => sum + Number.parseInt(reason, 10), 0), id).toBe(result.score);
+    }
+  });
+
+  it("exclusions fermes (langue étrangère, nom de page, pratique animalière) : un seul motif sans points, même score pour toutes, jamais gardées", () => {
+    const hard = [
+      relevance({ ...claire, languages: ["nl"] }),
+      relevance(ecole),
+      relevance({ ...spectacle, pageName: "Hypno Show" }, "Hypnothérapeute"),
+      relevance(animalier),
+      relevance({ ...paul, bodies: ["Pour votre cheval ou votre chien."] }),
+    ];
+    expect(hard.map((result) => result.reasons)).toEqual([[WHY.language], [HARD.school], [HARD.show], [HARD.animalPage], [HARD.animalText]]);
+    expect(hard.map((result) => result.kind)).toEqual(["autre", "formation", "autre", "autre", "autre"]);
+    for (const result of hard) {
+      expect(isHardExclusion(result)).toBe(true);
+      expect(result.keep).toBe(false);
+      expect(result.score).toBeLessThan(META_RELEVANCE_MIN_SCORE);
+      expect(result.score).toBe(hard[0]!.score);
     }
   });
 
@@ -720,6 +878,21 @@ describe("filterRelevantAds", () => {
       expect(filterRelevantAds(byName, { profession: "Ostéopathe" }).kept).toEqual([]);
       const twoPages = series(META_RELEVANCE_BRAND_VARIANTS).map((record, i) => ({ ...record, pageId: i % 2 === 0 ? "page-a" : "page-b" }));
       expect(filterRelevantAds(twoPages, { profession: "Ostéopathe" }).kept).toHaveLength(META_RELEVANCE_BRAND_VARIANTS);
+    });
+
+    it("des pages sans rapport ne sont jamais comptées ensemble : noms en cyrillique, en idéogrammes, en émojis, ou sans nom du tout", () => {
+      const names = ["Йога Студия", "瑜伽", "🌿", "✨✨", "Ёлка", "•", "—", "♥"];
+      expect(names).toHaveLength(META_RELEVANCE_BRAND_VARIANTS);
+      const practitioner = { pageId: null, captions: ["osteopathe-exemple.fr"], bodies: ["Ostéopathe : séances au cabinet, sur rendez-vous."] };
+      const distinct = names.map((pageName, i) => ad(`d${i + 1}`, { ...practitioner, pageName }));
+      expect(filterRelevantAds(distinct, { profession: "Ostéopathe" }).kept).toHaveLength(META_RELEVANCE_BRAND_VARIANTS);
+      const nameless = names.map((_, i) => ad(`s${i + 1}`, { ...practitioner, pageName: i % 2 === 0 ? "" : "  " }));
+      expect(filterRelevantAds(nameless, { profession: "Ostéopathe" }).kept).toHaveLength(META_RELEVANCE_BRAND_VARIANTS);
+      // La même page au nom non latin, elle, reste une seule page
+      const same = names.map((_, i) => ad(`c${i + 1}`, { ...practitioner, pageName: i % 2 === 0 ? "Йога Студия" : " йога студия " }));
+      const merged = filterRelevantAds(same, { profession: "Ostéopathe" });
+      expect(merged.kept).toEqual([]);
+      expect(merged.filtered.commerce).toBe(META_RELEVANCE_BRAND_VARIANTS);
     });
 
     it("même verdict que metaAdRelevance appelé avec le compte de la page", () => {

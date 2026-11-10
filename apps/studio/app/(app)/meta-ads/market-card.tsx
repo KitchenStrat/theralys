@@ -108,7 +108,7 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
         ) : null}
       </button>
 
-      <div className="flex flex-1 flex-col gap-2.5 p-3.5">
+      <div className="flex flex-1 flex-col gap-2.5 p-3">
         <div className="flex min-h-[22px] flex-wrap items-center justify-between gap-1.5">
           <SignalBadge ad={ad} />
           <RankChip ad={ad} />
@@ -129,24 +129,29 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
 
         <p className="truncate text-[13px] leading-5 text-ink-700">{hook || <span className="italic text-ink-500">Annonce sans texte</span>}</p>
 
-        <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 rounded-xl bg-cream-100/70 px-3 py-2.5">
-          <Fact label="Diffusion">
-            <span className="inline-flex items-center gap-1.5">
-              <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
-              <span className={diffusion.state === "active" ? undefined : "font-normal text-ink-500"}>{diffusion.short}</span>
-              {diffusion.state === "active" ? <span className="sr-only"> (en cours)</span> : null}
-            </span>
-          </Fact>
-          <Fact label="Lancée le">
-            <span className="tabular-nums">{formatAdDate(ad.startedAt) ?? "—"}</span>
-          </Fact>
-          <Fact label="Plateformes">{platforms ?? "—"}</Fact>
-          <Fact label="Note">
-            <span className="tabular-nums">
-              {adNote(ad.score)}
-              <span className="font-normal text-ink-500">/10</span>
-            </span>
-          </Fact>
+        {/* Deux lignes : la colonne de droite (date, note) prend sa largeur, les plateformes ont le reste */}
+        <dl className="space-y-2 rounded-xl bg-cream-100/70 px-2.5 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <Fact label="Diffusion">
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
+                <span className={diffusion.state === "active" ? undefined : "font-normal text-ink-500"}>{diffusion.short}</span>
+                {diffusion.state === "active" ? <span className="sr-only"> (en cours)</span> : null}
+              </span>
+            </Fact>
+            <Fact label="Lancée le" end>
+              <span className="tabular-nums">{formatAdDate(ad.startedAt) ?? "—"}</span>
+            </Fact>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <Fact label="Plateformes">{platforms ?? "—"}</Fact>
+            <Fact label="Note" end>
+              <span className="tabular-nums">
+                {adNote(ad.score)}
+                <span className="font-normal text-ink-500">/10</span>
+              </span>
+            </Fact>
+          </div>
         </dl>
 
         {savedAt ? <p className="text-[11px] leading-4 text-ink-500">Gardée le {formatAdDate(savedAt) ?? "—"}</p> : null}
@@ -158,7 +163,7 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
         ) : null}
 
         {canEdit && !selecting ? (
-          <div className="mt-auto flex items-center gap-2 pt-0.5">
+          <div className="mt-auto flex items-center gap-1.5 pt-0.5">
             {mode === "veille" ? (
               <>
                 <button
@@ -168,12 +173,12 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
                   onClick={ad.kept ? onUnkeep : onKeep}
                   title={ad.kept ? "Retirer de ma bibliothèque" : "Conserver l'annonce, son analyse et ses visuels dans ma bibliothèque"}
                   className={clsx(
-                    "inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors",
+                    "inline-flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center gap-[5px] rounded-full px-2.5 text-xs font-semibold transition-colors",
                     FOCUS_RING,
                     ad.kept ? "bg-primary-600 text-white hover:bg-primary-700" : "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200 hover:bg-primary-100",
                   )}
                 >
-                  <Icon name="bookmark" filled={ad.kept} className="h-4 w-4 shrink-0" />
+                  <Icon name="bookmark" filled={ad.kept} className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{ad.kept ? "Gardée" : "Garder comme exemple"}</span>
                   <span className="sr-only"> : annonce de {ad.pageName}</span>
                 </button>
@@ -184,13 +189,13 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
                   aria-label={`Supprimer l'annonce de ${ad.pageName}`}
                   title="Supprimer de ma veille"
                   className={clsx(
-                    "inline-flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-ink-500 ring-1 ring-inset ring-cream-300 transition-colors hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30",
+                    "inline-flex h-9 min-w-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-ink-500 @[19rem]:px-3 ring-1 ring-inset ring-cream-300 transition-colors hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30",
                     FOCUS_RING,
                   )}
                 >
                   <Icon name="trash" className="h-4 w-4 shrink-0" />
                   {/* Libellé visible dès que la carte est assez large (mobile, grille à trois colonnes) */}
-                  <span className="hidden @[18.5rem]:inline">Supprimer</span>
+                  <span className="hidden @[19rem]:inline">Supprimer</span>
                 </button>
               </>
             ) : (
@@ -215,9 +220,9 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
   );
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+function Fact({ label, end = false, children }: { label: string; /** Colonne de droite : alignée à droite, jamais rognée */ end?: boolean; children: ReactNode }) {
   return (
-    <div className="min-w-0">
+    <div className={end ? "shrink-0 text-right" : "min-w-0 flex-1"}>
       <dt className="text-[11px] leading-4 text-ink-500">{label}</dt>
       <dd className="truncate text-[13px] font-medium leading-5 text-ink-900">{children}</dd>
     </div>

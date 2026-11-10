@@ -5,14 +5,13 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, metaAdsAnalyses, sites } from "@theralys/db";
 import {
-  currentMarketAds,
+  currentMarket,
   dismissMetaAds,
-  enrichAdsMedia,
+  enrichSiteAdsMedia,
   getMetaAdsUsage,
   keepMetaAds,
-  mediaLookupsRemaining,
+  loadMetaLibrary,
   mediaProviderFor,
-  recordMediaUsage,
   regenerateMetaAds as regenerateMetaAdsJob,
   restoreMetaAds,
   runMetaAdsAnalysis,
@@ -266,19 +265,14 @@ async function libraryAction(input: unknown, label: string, run: (siteId: string
 
 /**
  * « Garder comme exemple » : l'annonce, son analyse et ses visuels sont
- * conservés indéfiniment dans la bibliothèque du site (vidéos copiées).
+ * conservés indéfiniment dans la bibliothèque du site (vidéos copiées ; un
+ * lien expiré est rafraîchi chez le fournisseur de la veille courante).
  */
 export async function keepMarketAds(input: unknown): Promise<LibraryResult> {
   return libraryAction(
     input,
     "exemple(s) gardé(s)",
-    (siteId, adIds) => {
-      const now = new Date();
-      // Le fournisseur ne sert qu'à rafraîchir des liens expirés : il suit la veille courante du site
-      return currentProviderMode(siteId).then((mode) =>
-        keepMetaAds(getDb(), siteId, adIds, { provider: mediaProviderFor(process.env, mode), store: createMetaMediaStore(), now }),
-      );
-    },
+    (siteId, adIds) => keepMetaAds(getDb(), siteId, adIds, { store: createMetaMediaStore(), now: new Date() }),
     (count) => (count > 1 ? `${count} annonces gardées dans votre bibliothèque.` : count === 1 ? "Annonce gardée dans votre bibliothèque." : "Déjà dans votre bibliothèque."),
   );
 }
@@ -303,20 +297,12 @@ export async function restoreMarketAds(input: unknown): Promise<LibraryResult> {
   );
 }
 
-/** Mode du fournisseur de la dernière veille aboutie du site (`meta` | `mock` | `none`). */
-async function currentProviderMode(siteId: string): Promise<string> {
-  const row = await getDb().query.metaAdsAnalyses.findFirst({
-    where: (table, { and: both, eq: equals }) => both(equals(table.siteId, siteId), equals(table.status, "done")),
-    orderBy: (table, { desc: latest }) => [latest(table.createdAt)],
-    columns: { provider: true },
-  });
-  return row?.provider ?? "none";
-}
-
 /**
- * Cherche les visuels des annonces de la veille courante qui n'en ont pas
- * encore (veille antérieure aux visuels, recherche interrompue), dans la
- * limite du quota mensuel.
+ * Cherche les visuels des annonces affichées de la veille courante qui n'en
+ * ont pas encore (veille antérieure aux visuels, recherche interrompue) : ni
+ * les annonces supprimées, ni celles que le filtre de pertinence masque. Les
+ * recherches sont réservées sur le quota mensuel ; un seul lot à la fois par
+ * site.
  */
 export async function loadMarketVisuals(): Promise<LibraryResult> {
   const session = await requireClient();
@@ -325,20 +311,23 @@ export async function loadMarketVisuals(): Promise<LibraryResult> {
   const now = new Date();
   const db = getDb();
   try {
-    const provider = mediaProviderFor(process.env, await currentProviderMode(site.id));
+    const [market, library] = await Promise.all([currentMarket(db, site.id), loadMetaLibrary(db, site.id)]);
+    if (!library.available) return { error: LIBRARY_UNAVAILABLE };
+    const provider = mediaProviderFor(process.env, market.providerMode);
     if (!provider) return { error: "Les visuels des annonces ne sont pas encore activés." };
-    const ads = await currentMarketAds(db, site.id);
-    if (ads.size === 0) return { error: NO_ANALYSIS };
-    const budget = await mediaLookupsRemaining(db, site.id, now);
-    if (budget <= 0) return { error: "Le quota mensuel de visuels est atteint — ils reviendront le mois prochain." };
-    const enriched = await enrichAdsMedia(db, [...ads.keys()], { provider, store: createMetaMediaStore(), now, budget });
+    const dismissed = new Set(library.dismissedIds);
+    const adIds = [...market.ads.keys()].filter((id) => !dismissed.has(id));
+    if (adIds.length === 0) return { error: NO_ANALYSIS };
+    const enriched = await enrichSiteAdsMedia(db, site.id, adIds, { provider, store: createMetaMediaStore(), now, exclusive: true });
     if (enriched.unavailable) return { error: LIBRARY_UNAVAILABLE };
-    await recordMediaUsage(db, site.id, enriched.lookups, provider.mode, now);
+    if (enriched.busy) return { error: "Les visuels sont déjà en cours de chargement — patientez une minute." };
     revalidatePath(PATH);
     const found = Object.keys(enriched.mediaByAdId).length;
-    console.info("[meta-ads] visuels chargés depuis le studio", { siteId: site.id, found, lookups: enriched.lookups, blocked: enriched.blocked });
+    console.info("[meta-ads] visuels chargés depuis le studio", { siteId: site.id, found, lookups: enriched.lookups, blocked: enriched.blocked, overQuota: enriched.overQuota });
+    if (enriched.lookups === 0 && enriched.overQuota > 0) return { error: "Le quota mensuel de visuels est atteint — ils reviendront le mois prochain." };
     if (enriched.blocked && found === 0) return { error: "Les visuels sont momentanément indisponibles — réessayez plus tard." };
-    return { message: found > 1 ? `Visuels affichés pour ${found} annonces.` : found === 1 ? "Visuel affiché pour 1 annonce." : "Aucun visuel disponible pour ces annonces." };
+    const tail = enriched.overQuota > 0 ? " Le quota mensuel est atteint pour les autres." : enriched.blocked ? " Le chargement a été interrompu : relancez-le dans un instant." : "";
+    return { message: `${found > 1 ? `Visuels affichés pour ${found} annonces.` : found === 1 ? "Visuel affiché pour 1 annonce." : "Aucun visuel disponible pour ces annonces."}${tail}` };
   } catch (err) {
     console.error("[meta-ads] chargement des visuels en échec", { siteId: site.id, err });
     return { error: "Les visuels n'ont pas pu être chargés — réessayez dans un instant." };

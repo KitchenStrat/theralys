@@ -454,7 +454,7 @@ export function buildMetaSearchTerms(
   const placeName = (text: string) =>
     cleanTerm(text)
       .split(" ")
-      .filter((token) => !/^\d+(?:e|er|eme|ème)?$/.test(token))
+      .filter((token) => !/^\d+(?:e|er|eme|ème)?$/.test(token) && normalizeAdsText(token) !== "arrondissement")
       .join(" ");
   const city = placeName(seed.city ?? "");
   const cityKey = normalizeAdsText(city);
@@ -699,6 +699,17 @@ type ScopeSeed = Pick<MetaAdsSeed, "city" | "department" | "region"> & Partial<P
 const SCOPE_RANK: Record<MetaMarketScope, number> = { ville: 0, departement: 1, region: 2, france: 3 };
 
 const CITY_LOCATION_TYPES = new Set(["city", "commune", "municipality", "neighborhood", "subcity", "subneighborhood"]);
+/** Types d'un quartier : la ville est alors le deuxième segment (« Estressin, Vienne, France »). */
+const NEIGHBORHOOD_LOCATION_TYPES = new Set(["neighborhood", "subcity", "subneighborhood"]);
+/** Pays étrangers tels que la bibliothèque les nomme (français, et anglais par précaution) : une zone qui s'y termine n'est pas en France. */
+const FOREIGN_COUNTRY_KEYS = new Set(
+  [
+    "Belgique", "Luxembourg", "Suisse", "Espagne", "Portugal", "Italie", "Allemagne", "Pays-Bas", "Royaume-Uni", "Irlande", "Autriche", "Canada", "Monaco",
+    "Andorre", "Maroc", "Algérie", "Tunisie", "États-Unis", "Belgium", "Switzerland", "Spain", "Italy", "Germany", "Netherlands", "United Kingdom", "Ireland",
+    "Austria", "United States", "Morocco", "Algeria", "Tunisia", "Andorra", "Deutschland", "España", "Italia", "Schweiz", "België", "Nederland",
+    "Österreich",
+  ].map((name) => normalizeAdsText(name)),
+);
 const REGION_LOCATION_TYPES = new Set(["region", "regions"]);
 
 /** Zone d'une seule zone ciblée (non exclue) par rapport au praticien. */
@@ -706,16 +717,17 @@ function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: Meta
   const segments = locationSegments(location.name);
   const first = segments[0] ?? "";
   if (first === "") return "france";
+  const last = segments[segments.length - 1]!;
+  // Zone située dans un pays étranger (« Delémont, Jura, Suisse », « 51100, Germany ») : jamais locale
+  if (segments.length > 1 && FOREIGN_COUNTRY_KEYS.has(last)) return "france";
   const type = (location.type ?? "").toLowerCase();
   const cityTyped = CITY_LOCATION_TYPES.has(type);
   const regionTyped = REGION_LOCATION_TYPES.has(type);
   const cityKey = locationKey(seed.city);
   const departmentKey = locationKey(seed.department?.name ?? "");
   const regionKey = locationKey(seed.region ?? "");
-  // Code postal (« 51100, France ») : le département se lit dans ses premiers chiffres — en France seulement
+  // Code postal (« 51100, France ») : le département se lit dans ses premiers chiffres
   if (/^\d{5}$/.test(first)) {
-    const country = segments.length > 1 ? segments[segments.length - 1]! : "france";
-    if (country !== "france" && country !== regionKey && country !== departmentKey) return "france";
     if (seed.postalCode && first === seed.postalCode) return "ville";
     const department = departmentFromPostalCode(first);
     if (!department) return "france";
@@ -727,22 +739,30 @@ function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: Meta
   const firstIsRegion = !cityTyped && REGION_BY_KEY.has(first);
   const qualifiers = firstIsRegion ? segments : segments.slice(1);
   const named = qualifiers.map((segment) => REGION_BY_KEY.get(segment)).filter((r): r is string => r !== undefined);
-  const departments = segments.slice(1).map((segment) => DEPARTMENT_BY_KEY.get(segment)).filter((d): d is FrDepartment => d !== undefined);
   const otherRegion = seed.region !== null && named.length > 0 && !named.includes(seed.region);
+  // Lieux possibles : le premier segment, et le suivant pour un quartier (sa ville)
+  const places = NEIGHBORHOOD_LOCATION_TYPES.has(type) ? segments.slice(0, 2) : [first];
+  // Un département nommé après la ville tranche les homonymes (« Valence, Tarn-et-Garonne ») — sauf si ce segment est la
+  // ville du praticien ou une commune de son département (« Estressin, Vienne »), ou si la région nommée le contredit
+  const departments = segments
+    .slice(1)
+    .filter((segment) => segment !== cityKey && !(index?.department.has(segment) && places.includes(segment)))
+    .map((segment) => DEPARTMENT_BY_KEY.get(segment))
+    .filter((d): d is FrDepartment => d !== undefined)
+    .filter((d) => named.length === 0 || named.includes(d.region));
   const otherDepartment = seed.department !== null && departments.length > 0 && !departments.some((d) => d.code === seed.department!.code);
-  // Un département nommé après la ville tranche les homonymes (« Valence, Tarn-et-Garonne »)
   if (otherDepartment) return seed.region !== null && departments.some((d) => d.region === seed.region) ? "region" : "france";
   if (cityKey !== "" && !regionTyped && segments.includes(cityKey) && !otherRegion) return "ville";
-  if (departmentKey !== "" && segments.includes(departmentKey)) return "departement";
+  if (departmentKey !== "" && segments.includes(departmentKey) && !otherRegion) return "departement";
   if (otherRegion) return "france";
   // Ville ciblée sans département : reconnue par l'index des communes — jamais pour une zone régionale ou nationale,
   // ni pour un nom de région ou de département que rien ne désigne comme une ville
   const cityLevel = !isCountryLevelLocation(location) && !regionTyped && (cityTyped || (!REGION_BY_KEY.has(first) && !DEPARTMENT_BY_KEY.has(first)));
-  if (index && cityLevel && index.department.has(first)) return "departement";
+  if (index && cityLevel && places.some((place) => index.department.has(place))) return "departement";
   if (regionKey !== "" && segments.includes(regionKey)) return "region";
   if (seed.region !== null && named.includes(seed.region)) return "region";
   if (seed.region !== null && segments.some((segment) => DEPARTMENT_BY_KEY.get(segment)?.region === seed.region)) return "region";
-  if (index && cityLevel && index.region.has(first)) return "region";
+  if (index && cityLevel && places.some((place) => index.region.has(place))) return "region";
   return "france";
 }
 
