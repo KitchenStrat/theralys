@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0005_google_ads puis 0006_meta_ads, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0006_meta_ads puis 0007_meta_library, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -60,6 +60,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0004_social_followup",
       "0005_google_ads",
       "0006_meta_ads",
+      "0007_meta_library",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);

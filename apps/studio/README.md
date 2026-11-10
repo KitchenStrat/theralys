@@ -219,16 +219,37 @@ depuis son compte. Onglets
   environnement » sur une démo, sinon le message d'échec du service
   (`error`) ; rafraîchissement toutes les 10 s pendant une analyse lancée
   ailleurs.
-- **Marché** (`market-tab.tsx`) : `marketScopeNote`, compteurs « repérées /
-  conservées » des zones explorées (jusqu'à `scopeUsed`), segments « Autour
-  de vous » (ville + département) / « Votre région » / « Autres zones et
-  France » (`META_MARKET_SCOPE_LABELS`) selon la zone retenue, cartes
-  d'annonces (annonceur, texte avec « voir plus », titre
-  de lien, signal fort / moyen / faible, durée de diffusion, portée
-  européenne, plateformes, âges et genre, zones, lien public vers la
-  bibliothèque — jamais d'image des confrères), synthèse IA (angles avec
-  annonces de référence, accroches, offres, saisonnalité, ce que personne ne
-  fait, avertissements).
+- **Marché** (`market-tab.tsx` et `market-*.tsx`) : trois vues. « Annonces » :
+  galerie de cartes (visuel, format, tendance, rang, annonceur, diffusion,
+  date de lancement, plateformes, note sur 10) avec recherche, filtres
+  (format, actives, nouveautés, zone), tri et fiche détaillée (image, vidéo,
+  carrousel, textes, ciblage, lien public) — logique pure dans
+  `packages/shared/src/meta-library.ts` (`filterGalleryAds`, `galleryCounts`).
+  « Ma bibliothèque » : exemples gardés. « Synthèse » : lecture IA de la
+  veille (angles, accroches, offres, saisonnalité, opportunités,
+  avertissements). En tête : `marketScopeNote`, compteurs par zone, annonces
+  écartées d'office (`market.filtered`).
+  - **Pertinence** : `metaAdRelevance` (`packages/shared/src/meta-relevance.ts`)
+    écarte d'office le commerce (produits, applications, assurances), la
+    formation et les services vendus aux praticiens, le hors-sujet ; une
+    veille enregistrée avant le filtre est filtrée à l'affichage
+    (`withRelevanceFilter` de `lib/meta-ads/data.ts`).
+  - **Visuels** : l'API officielle ne renvoie que les textes ; images, vidéos
+    et carrousels viennent de ScrapeCreators (`SCRAPECREATORS_API_KEY`,
+    `@theralys/providers/meta/media`), mis en cache dans `meta_ad_media`,
+    l'image principale copiée sur Vercel Blob (`lib/meta-ads/media-store.ts`,
+    `meta-media/<annonce>/…`). Lecture d'une vidéo :
+    `GET /api/meta-ads/media/[adId]/video?i=…` (redirection vers la copie
+    durable ou le lien d'origine, rafraîchi s'il a expiré). « Afficher les
+    visuels » (`loadMarketVisuals`) complète une veille antérieure. Usage
+    `google_usage` kind `meta_media`, plafonné par site et par mois.
+  - **Bibliothèque personnelle** (`meta_ads_library`, migration 0007 ; repli
+    sans garder ni supprimer tant qu'elle n'est pas appliquée) : « Garder
+    comme exemple » (`keepMarketAds`) fige l'annonce, son analyse et ses
+    visuels (vidéos copiées dans `meta-library/<site>/<annonce>/…`) ;
+    « Supprimer » (`dismissMarketAds`) retire l'annonce de la veille pour de
+    bon ; `restoreMarketAds` annule l'un et l'autre. Les exemples gardés
+    passent en tête de l'échantillon transmis à l'IA à l'analyse suivante.
 - **Annonces** (`creatives-tab.tsx`, `video-plan.tsx`) : cartes de créas
   (aperçu rendu par le moteur des posts sociaux, URL versionnée par
   `generatedAt` via `lib/meta-ads/urls.ts` pour recharger le visuel après une

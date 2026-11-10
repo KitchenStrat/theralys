@@ -72,7 +72,7 @@ export default async function OverviewPage() {
         .select({ value: count() })
         .from(sites)
         .where(and(eq(sites.type, "demo"), gte(sites.createdAt, monthStart))),
-      // Fournisseurs facturés en dollars (DataForSEO) : coûts réels inscrits par
+      // Fournisseurs facturés en dollars (DataForSEO, ScrapeCreators) : coûts réels inscrits par
       // les jobs, par kind — seuls les appels facturés comptent (summarizeProviderUsage)
       db
         .select({
@@ -128,7 +128,7 @@ export default async function OverviewPage() {
         <StatCard
           label="Coûts API du mois"
           value={`${(costs.totalEur + providerEur).toFixed(2)} €`}
-          detail="estimation Claude + fal.ai, réel DataForSEO"
+          detail="estimation Claude + fal.ai, réel DataForSEO et ScrapeCreators"
         />
       </div>
 
@@ -235,18 +235,19 @@ export default async function OverviewPage() {
             </div>
           ))}
           <div className="rounded-2xl bg-cream-100 p-4">
-            <p className="text-xs text-ink-500">Fournisseurs (DataForSEO)</p>
+            <p className="text-xs text-ink-500">Fournisseurs (DataForSEO, ScrapeCreators)</p>
             <p className="mt-1 text-xl font-bold">{providerRequests}</p>
             <p className="text-xs text-ink-500">
-              {providerEur.toFixed(2)} € ({providerUsd.toFixed(2)} $ facturés, fiche Google)
+              {providerEur.toFixed(2)} € ({providerUsd.toFixed(2)} $ facturés, fiche Google et visuels Meta Ads)
             </p>
           </div>
         </div>
         <p className="mt-4 text-xs text-ink-500">
           Barème estimatif : article ≈ 0,03 € (claude-sonnet-5) · image ≈ 0,0025 € (fal.ai
           FLUX.1 schnell) · démo complète ≈ 0,30 €. DataForSEO (fiche Google) : coût réel
-          renvoyé par l&apos;API, plafonné à 5 $ par site et par mois. En mode mock, rien
-          n&apos;est facturé.
+          renvoyé par l&apos;API, plafonné à 5 $ par site et par mois. ScrapeCreators (visuels
+          des annonces Meta Ads) : ≈ 0,002 $ par annonce, 400 recherches au plus par site et
+          par mois. En mode mock, rien n&apos;est facturé.
         </p>
       </Card>
     </div>

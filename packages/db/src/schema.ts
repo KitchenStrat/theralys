@@ -21,6 +21,7 @@ import type {
   GoogleAdsPlan,
   GoogleAdsSeed,
   GoogleAudit,
+  MetaAdMedia,
   MetaAdsAnalysisStatus,
   MetaAdsCreativeSet,
   MetaAdsDiagnostic,
@@ -28,6 +29,8 @@ import type {
   MetaAdsPlan,
   MetaAdsSeed,
   MetaAdsVideoPlan,
+  MetaLibraryStatus,
+  MetaMarketAd,
   GoogleCompetitor,
   GoogleGridPoint,
   GooglePostContent,
@@ -698,6 +701,50 @@ export const metaAdsAnalyses = pgTable(
   (t) => [index("meta_ads_analyses_site_created_idx").on(t.siteId, t.createdAt)],
 );
 
+/**
+ * Visuels des annonces Meta (images, vidéos, carrousels, avatar), par
+ * identifiant d'annonce : cache commun à tous les sites (une même annonce
+ * peut remonter dans plusieurs veilles), alimenté par le fournisseur de
+ * visuels. Les copies durables des images vivent sur Vercel Blob
+ * (`meta-media/<adId>/…`).
+ */
+export const metaAdMedia = pgTable("meta_ad_media", {
+  adId: text("ad_id").primaryKey(),
+  /** ok | empty (annonce sans visuel exploitable) | missing (introuvable chez le fournisseur) */
+  status: text("status").notNull().default("ok"),
+  media: jsonb("media").$type<MetaAdMedia>(),
+  /** scrapecreators | mock */
+  provider: text("provider").notNull().default("scrapecreators"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Bibliothèque personnelle Meta Ads d'un site : annonces gardées comme
+ * exemples (contenu, analyse et visuels conservés indéfiniment) et annonces
+ * supprimées de la veille (elles ne reviennent pas aux analyses suivantes).
+ * Une ligne par annonce et par site.
+ */
+export const metaAdsLibrary = pgTable(
+  "meta_ads_library",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    adId: text("ad_id").notNull(),
+    status: text("status").$type<MetaLibraryStatus>().notNull().default("kept"),
+    pageName: text("page_name").notNull().default(""),
+    /** Annonce et son analyse au moment de la garde (null pour une annonce supprimée) */
+    ad: jsonb("ad").$type<MetaMarketAd>(),
+    /** Visuels durables de l'exemple gardé (images et vidéos copiées) */
+    media: jsonb("media").$type<MetaAdMedia>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("meta_ads_library_site_ad_idx").on(t.siteId, t.adId)],
+);
+
 /** Tâches asynchrones « avis Google » (DataForSEO : task_post → task_get). */
 export const googleReviewTasks = pgTable(
   "google_review_tasks",
@@ -752,5 +799,7 @@ export type GoogleAdsAnalysis = typeof googleAdsAnalyses.$inferSelect;
 export type NewGoogleAdsAnalysis = typeof googleAdsAnalyses.$inferInsert;
 export type MetaAdsAnalysis = typeof metaAdsAnalyses.$inferSelect;
 export type NewMetaAdsAnalysis = typeof metaAdsAnalyses.$inferInsert;
+export type MetaAdMediaRow = typeof metaAdMedia.$inferSelect;
+export type MetaAdsLibraryRow = typeof metaAdsLibrary.$inferSelect;
 export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;
 export type NotificationLogEntry = typeof notificationLog.$inferSelect;

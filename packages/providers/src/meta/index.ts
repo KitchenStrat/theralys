@@ -483,19 +483,19 @@ const MOCK_ANGLES: readonly MockAngle[] = [
     caption: "Prendre rendez-vous en ligne",
   },
   {
-    body: "Séance découverte à 35 € jusqu'à la fin du mois. Une heure pour faire connaissance, comprendre la démarche et repartir avec un premier exercice. Rendez-vous en ligne en deux clics.",
+    body: "Séance découverte à 35 € jusqu'à la fin du mois. Une heure pour faire connaissance, comprendre la démarche et repartir avec un premier exercice. « {term} » : rendez-vous en ligne en deux clics.",
     title: "Séance découverte à 35 €",
     description: "Offre valable jusqu'à la fin du mois",
     caption: "Réserver ma séance découverte",
   },
   {
-    body: "Comment se passe une séance ? Un échange, des exercices de respiration et de relâchement, puis un temps de retour. Pas besoin d'expérience : on avance à votre rythme. Cabinet à {city}, aussi en visio.",
+    body: "Comment se passe une séance ? Un échange, des exercices de respiration et de relâchement, puis un temps de retour. Pas besoin d'expérience : on avance à votre rythme. « {term} », au cabinet à {city}, aussi en visio.",
     title: "Une séance, concrètement",
     description: "Respiration, détente, écoute",
     caption: "En savoir plus sur la méthode",
   },
   {
-    body: "« Un accueil chaleureux et des outils concrets que je réutilise au quotidien. » Merci pour vos avis : ils nous encouragent chaque jour. Cabinet ouvert du lundi au samedi à {city}.",
+    body: "« Un accueil chaleureux et des outils concrets que je réutilise au quotidien. » Merci pour vos avis : ils nous encouragent chaque jour. « {term} » : cabinet ouvert du lundi au samedi à {city}.",
     title: "Ils en parlent mieux que nous",
     description: "Avis Google vérifiés",
     caption: "Lire les avis",
@@ -507,13 +507,13 @@ const MOCK_ANGLES: readonly MockAngle[] = [
     caption: "Voir les dates",
   },
   {
-    body: "L'hiver approche : des séances pour garder son énergie et préparer les fêtes en douceur. Créneaux du soir ouverts jusqu'à 20 h, sur rendez-vous.",
+    body: "L'hiver approche : des séances pour garder son énergie et préparer les fêtes en douceur. « {term} » : créneaux du soir ouverts jusqu'à 20 h, sur rendez-vous.",
     title: "Prendre soin de soi cet hiver",
     description: "Créneaux du soir jusqu'à 20 h",
     caption: "Choisir un créneau",
   },
   {
-    body: "Nouveau cabinet au centre de {city}, à deux pas de la gare. Parking gratuit, accès facile. Prise de rendez-vous en ligne, réponse sous 24 h.",
+    body: "Nouveau cabinet au centre de {city}, à deux pas de la gare. Parking gratuit, accès facile. « {term} » : prise de rendez-vous en ligne, réponse sous 24 h.",
     title: "Nouveau cabinet à {city}",
     description: "Centre-ville, parking gratuit",
     caption: "Découvrir le cabinet",

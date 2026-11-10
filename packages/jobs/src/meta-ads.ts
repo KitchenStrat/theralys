@@ -45,19 +45,26 @@
 import { and, between, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   EMPTY_SOCIAL_ASSETS,
+  FR_REGION_CODES,
   META_ADS_ANALYSES_PER_MONTH,
   META_ADS_INSTRUCTIONS_MAX,
   META_ADS_REGENERATIONS_PER_MONTH,
   META_LIBRARY_MAX_CALLS,
   META_LIBRARY_PAGE_LIMIT,
   META_LIBRARY_TERMS_MAX,
+  META_MARKET_MAX_ADS,
+  META_MARKET_MEDIA_SPARE,
   META_MARKET_SAMPLE_FOR_AI,
+  META_MARKET_SCOPES,
+  buildMetaLocalIndex,
   buildMetaSeed,
   cleanSocialInstructions,
   diagnoseMetaAds,
+  isCommercialPageCategory,
   isMockPlaceId,
   selectMarketAds,
   usageMonthKey,
+  type MetaAdMedia,
   type MetaAdRecord,
   type MetaAdsCreativeSet,
   type MetaAdsDiagnostic,
@@ -68,6 +75,8 @@ import {
   type MetaAdsPlan,
   type MetaAdsSeed,
   type MetaAdsVideoPlan,
+  type MetaLocalIndex,
+  type MetaMarketAd,
   type MetaMarketInsights,
   type PageSections,
   type SocialPostAssets,
@@ -90,9 +99,11 @@ import {
 } from "@theralys/db";
 import { createMetaAdsPlanner, resolveProfession, type MetaAdsPlanner } from "@theralys/ai";
 import { MetaAdLibraryError, createAdLibraryProvider, isMetaTokenError, type AdLibraryProvider, type AdLibrarySearchResult, type MockLocality } from "@theralys/providers/meta";
+import { fetchRegionCommunes, nearbyCitiesFrom } from "@theralys/providers/meta/geo";
 import { landingPagesFrom, onlineMotifPages, phoneFromSections } from "./google-ads";
 import { loadGoogleBrief } from "./google-brief";
 import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
+import { enrichAdsMedia, libraryForAnalysis, mediaLookupsRemaining, mediaProviderFor, recordMediaUsage, type MetaMediaStore } from "./meta-library";
 
 /** Analyse `running` plus ancienne : le processus est mort, la ligne passe en erreur. */
 export const META_ADS_ANALYSIS_STALE_MINUTES = 15;
@@ -164,10 +175,17 @@ export type MetaAdsContext = {
   photosById: Record<string, string>;
   /** Brief du site transmis au planificateur (même brief que les posts sociaux) */
   brief: SocialSiteBrief;
+  /** Communes du département et de la région (zones des villes ciblées) ; null si le référentiel n'a pas répondu ou n'a pas été demandé */
+  localIndex: MetaLocalIndex | null;
+  /** Annonces supprimées de la veille par le praticien : elles ne reviennent pas */
+  dismissedAdIds: string[];
+  /** Exemples gardés par le praticien : transmis en tête de l'échantillon de la synthèse */
+  favorites: MetaMarketAd[];
 };
 
 /** Partie du contexte nécessaire à l'exécution (testable sans base) ; `photosById` renseigne `photoUrl` des créas quand il est fourni. */
-export type MetaAdsContextData = Pick<MetaAdsContext, "seed" | "landingPages" | "diagnosticInput" | "brief"> & Partial<Pick<MetaAdsContext, "photosById">>;
+export type MetaAdsContextData = Pick<MetaAdsContext, "seed" | "landingPages" | "diagnosticInput" | "brief"> &
+  Partial<Pick<MetaAdsContext, "photosById" | "localIndex" | "dismissedAdIds" | "favorites">>;
 
 // ─── Logique pure (testée sans base) ─────────────────────────────────────────
 
@@ -344,19 +362,21 @@ export function usageRefundWindow(createdAt: Date, toleranceMs = META_USAGE_REFU
 }
 
 /**
- * Plan des recherches : chaque terme (≤ META_LIBRARY_TERMS_MAX) reçoit au plus
- * `pagesPerTerm` pages tant que le budget d'appels (`META_LIBRARY_MAX_CALLS`)
- * le permet ; les termes suivants sont abandonnés une fois le budget réservé.
+ * Plan des recherches : chaque terme (≤ META_LIBRARY_TERMS_MAX) reçoit une
+ * page tant que le budget d'appels (`META_LIBRARY_MAX_CALLS`) le permet, puis
+ * le budget restant ajoute des pages aux premiers termes (jusqu'à
+ * `pagesPerTerm` chacun) : tous les termes — locaux compris — sont
+ * interrogés avant d'approfondir les plus généraux.
  */
 export function marketQueryPlan(terms: string[], budget = META_LIBRARY_MAX_CALLS, pagesPerTerm = META_MARKET_PAGES_PER_TERM): { term: string; maxPages: number }[] {
-  const plan: { term: string; maxPages: number }[] = [];
-  let reserved = 0;
-  for (const term of terms.slice(0, META_LIBRARY_TERMS_MAX)) {
-    const remaining = budget - reserved;
-    if (remaining <= 0) break;
-    const maxPages = Math.min(pagesPerTerm, remaining);
-    plan.push({ term, maxPages });
-    reserved += maxPages;
+  const plan = terms.slice(0, Math.min(META_LIBRARY_TERMS_MAX, Math.max(0, Math.floor(budget)))).map((term) => ({ term, maxPages: 1 }));
+  let remaining = Math.floor(budget) - plan.length;
+  for (let extra = 1; extra < pagesPerTerm && remaining > 0; extra++) {
+    for (const entry of plan) {
+      if (remaining <= 0) break;
+      entry.maxPages++;
+      remaining--;
+    }
   }
   return plan;
 }
@@ -411,20 +431,22 @@ export async function collectMarketAds(
   let truncated = false;
   let error: unknown = null;
   const queries = seed.searchTerms.slice(0, META_LIBRARY_TERMS_MAX);
-  for (const [index, term] of queries.entries()) {
+  const plan = marketQueryPlan(queries, budget - progress.calls, pagesPerTerm);
+  if (plan.length < queries.length) truncated = true;
+  for (const [index, { term, maxPages }] of plan.entries()) {
     const remaining = budget - progress.calls;
     if (remaining <= 0) {
-      truncated = index < queries.length;
+      truncated = true;
       break;
     }
     let result: AdLibrarySearchResult;
     try {
-      result = await provider.searchAds({ term, country: seed.country, activeStatus: "ALL", limit: META_LIBRARY_PAGE_LIMIT, maxPages: Math.min(pagesPerTerm, remaining) });
+      result = await provider.searchAds({ term, country: seed.country, activeStatus: "ALL", limit: META_LIBRARY_PAGE_LIMIT, maxPages: Math.min(maxPages, remaining) });
     } catch (err) {
       error ??= err;
       truncated = true;
       if (isMetaMarketBlocking(err)) {
-        failedTerms.push(...queries.slice(index));
+        failedTerms.push(...plan.slice(index).map((entry) => entry.term));
         break;
       }
       failedTerms.push(term);
@@ -443,14 +465,35 @@ export async function collectMarketAds(
   return { records, matchedTerms, terms, calls: progress.calls, truncated, error, failedTerms };
 }
 
-/** Veille enregistrée : annonces classées par zone (`selectMarketAds`), comptes et signaux forts par zone, sans synthèse. */
+export type BuildMarketOptions = {
+  /** Annonces supprimées par le praticien */
+  excludedIds?: ReadonlySet<string>;
+  /** Communes du département et de la région */
+  localIndex?: MetaLocalIndex | null;
+  /** Annonces conservées au plus (défaut META_MARKET_MAX_ADS) */
+  max?: number;
+};
+
+/**
+ * Veille enregistrée : filtre de pertinence (métier de la graine : commerce,
+ * formation et hors sujet écartés d'office), annonces supprimées retirées,
+ * annonces classées par zone (`selectMarketAds`), comptes et signaux forts
+ * par zone, sans synthèse.
+ */
 export function buildMetaMarket(
   collection: Pick<MarketCollection, "records" | "matchedTerms" | "terms" | "calls" | "truncated">,
-  seed: Pick<MetaAdsSeed, "city" | "department" | "region" | "country">,
+  seed: Pick<MetaAdsSeed, "city" | "department" | "region" | "country"> & Partial<Pick<MetaAdsSeed, "profession" | "postalCode">>,
   source: "meta" | "mock",
   now: Date,
+  opts: BuildMarketOptions = {},
 ): MetaAdsMarket {
-  const { ads, scopeUsed, counts, strongCounts } = selectMarketAds(collection.records, seed, now, { matchedTerms: collection.matchedTerms });
+  const { ads, scopeUsed, counts, strongCounts, filtered, dismissed } = selectMarketAds(collection.records, seed, now, {
+    matchedTerms: collection.matchedTerms,
+    ...(seed.profession ? { profession: seed.profession } : {}),
+    ...(opts.excludedIds ? { excludedIds: opts.excludedIds } : {}),
+    ...(opts.localIndex ? { localIndex: opts.localIndex } : {}),
+    ...(opts.max ? { max: opts.max } : {}),
+  });
   return {
     version: 1,
     source,
@@ -464,16 +507,49 @@ export function buildMetaMarket(
     calls: collection.calls,
     truncated: collection.truncated,
     insights: null,
+    ...(filtered ? { filtered } : {}),
+    ...(dismissed > 0 ? { dismissed } : {}),
   };
 }
 
-/** Veille transmise à l'IA : les META_MARKET_SAMPLE_FOR_AI annonces les mieux notées. */
-export function marketSampleForAi(market: MetaAdsMarket, max = META_MARKET_SAMPLE_FOR_AI): MetaAdsMarket {
-  const ads = [...market.ads].sort((a, b) => b.score - a.score || a.pageName.localeCompare(b.pageName, "fr")).slice(0, max);
+/**
+ * Second filtre, une fois les visuels obtenus : les annonces dont la page
+ * Facebook est classée boutique, marque, école, média ou assurance sont
+ * écartées (comptées dans `filtered.commerce`), puis la veille est ramenée à
+ * `max` annonces.
+ */
+export function dropCommercialPages(market: MetaAdsMarket, mediaByAdId: Readonly<Record<string, MetaAdMedia | undefined>>, max = META_MARKET_MAX_ADS): MetaAdsMarket {
+  const kept = market.ads.filter((ad) => !isCommercialPageCategory(mediaByAdId[ad.id]?.pageCategories ?? []));
+  const dropped = market.ads.length - kept.length;
+  const filtered = market.filtered || dropped > 0 ? { formation: 0, commerce: 0, autre: 0, ...market.filtered } : undefined;
+  if (filtered) filtered.commerce += dropped;
+  return { ...market, ads: kept.slice(0, max), ...(filtered ? { filtered } : {}) };
+}
+
+/**
+ * Veille transmise à l'IA (≤ META_MARKET_SAMPLE_FOR_AI annonces) : les
+ * exemples gardés par le praticien d'abord (ce qu'il a jugé inspirant), puis
+ * les annonces de la zone retenue les mieux notées (la moitié de
+ * l'échantillon au plus), puis les mieux notées des zones plus larges, et le
+ * reste de la zone retenue s'il reste de la place.
+ */
+export function marketSampleForAi(market: MetaAdsMarket, max = META_MARKET_SAMPLE_FOR_AI, favorites: readonly MetaMarketAd[] = []): MetaAdsMarket {
+  const byScore = (a: MetaMarketAd, b: MetaMarketAd) => b.score - a.score || a.pageName.localeCompare(b.pageName, "fr");
+  const limit = META_MARKET_SCOPES.indexOf(market.scopeUsed);
+  const near = market.ads.filter((ad) => META_MARKET_SCOPES.indexOf(ad.scope) <= limit).sort(byScore);
+  const wider = market.ads.filter((ad) => META_MARKET_SCOPES.indexOf(ad.scope) > limit).sort(byScore);
+  const half = Math.ceil(max / 2);
+  const seen = new Set<string>();
+  const ads: MetaMarketAd[] = [];
+  for (const ad of [...favorites, ...near.slice(0, half), ...wider, ...near.slice(half)]) {
+    if (ads.length >= max) break;
+    if (seen.has(ad.id)) continue;
+    seen.add(ad.id);
+    ads.push(ad);
+  }
   return { ...market, ads };
 }
 
-/** URL Blob des rendus d'une analyse (lecture seule : les chemins sont déterministes et écrasés en place, rien n'est à supprimer). */
 export function renderUrlsOf(assets: SocialPostAssets | null | undefined): string[] {
   return Object.values(assets?.renders ?? {})
     .map((r) => r.url)
@@ -602,7 +678,17 @@ export type MetaAnalysisResult = {
  */
 export async function executeMetaAnalysis(
   ctx: MetaAdsContextData,
-  deps: { provider: AdLibraryProvider | null; planner: MetaAdsPlanner; instructions?: string; now: Date; label?: string; progress?: { calls: number }; heartbeat?: () => Promise<void> },
+  deps: {
+    provider: AdLibraryProvider | null;
+    planner: MetaAdsPlanner;
+    instructions?: string;
+    now: Date;
+    label?: string;
+    progress?: { calls: number };
+    heartbeat?: () => Promise<void>;
+    /** Visuels des annonces retenues (cache, fournisseur, copies) : échec toléré, la veille s'affiche alors sans visuels */
+    enrichMedia?: (ads: MetaMarketAd[]) => Promise<Record<string, MetaAdMedia>>;
+  },
 ): Promise<MetaAnalysisResult> {
   const { provider, planner, now } = deps;
   const label = deps.label ?? "analyse";
@@ -618,11 +704,27 @@ export async function executeMetaAnalysis(
         marketError = metaErrorMessage(collection.error, "market");
         console.error(`[meta-ads] ${label} : veille partielle (termes en échec : ${collection.failedTerms.join(", ")}) après ${progress.calls} appel(s) :`, collection.error);
       }
-      market = buildMetaMarket(collection, ctx.seed, provider.mode, now);
+      const marketOptions: BuildMarketOptions = {
+        ...(ctx.dismissedAdIds && ctx.dismissedAdIds.length > 0 ? { excludedIds: new Set(ctx.dismissedAdIds) } : {}),
+        ...(ctx.localIndex ? { localIndex: ctx.localIndex } : {}),
+      };
+      if (deps.enrichMedia) {
+        // Quelques annonces de réserve : celles qu'une catégorie de page commerciale écarte sont remplacées
+        market = buildMetaMarket(collection, ctx.seed, provider.mode, now, { ...marketOptions, max: META_MARKET_MAX_ADS + META_MARKET_MEDIA_SPARE });
+        let mediaByAdId: Record<string, MetaAdMedia> = {};
+        try {
+          mediaByAdId = await deps.enrichMedia(market.ads);
+        } catch (err) {
+          console.error(`[meta-ads] ${label} : visuels non obtenus :`, errorMessage(err));
+        }
+        market = dropCommercialPages(market, mediaByAdId);
+      } else {
+        market = buildMetaMarket(collection, ctx.seed, provider.mode, now, marketOptions);
+      }
       let insights: MetaMarketInsights | null = null;
       if (market.ads.length > 0) {
         try {
-          insights = await planner.analyzeMarket(ctx.brief, marketSampleForAi(market));
+          insights = await planner.analyzeMarket(ctx.brief, marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, ctx.favorites ?? []));
         } catch (err) {
           console.error(`[meta-ads] ${label} : synthèse de la veille non générée :`, err);
         }
@@ -691,7 +793,37 @@ export async function getMetaAdsUsage(db: DbExecutor, siteId: string, now = new 
  * photos et brief (`loadGoogleBrief`), fiche reliée + dernier audit. Lève si
  * le site n'existe pas.
  */
-export async function loadMetaAdsContext(db: Database, siteId: string, env: NodeJS.ProcessEnv = process.env): Promise<MetaAdsContext> {
+/**
+ * Communes de la région du praticien (référentiel public) : grandes villes
+ * voisines pour les recherches locales et index des communes pour situer les
+ * villes ciblées. Échec toléré (réseau, délai) : la veille s'en passe.
+ */
+export async function loadLocalGeography(
+  seed: Pick<MetaAdsSeed, "city" | "department" | "region">,
+  fetchImpl?: typeof fetch,
+): Promise<{ nearbyCities: string[]; localIndex: MetaLocalIndex | null }> {
+  const regionCode = seed.region ? FR_REGION_CODES[seed.region] : undefined;
+  if (!seed.department || !regionCode) return { nearbyCities: [], localIndex: null };
+  try {
+    const communes = await fetchRegionCommunes(regionCode, fetchImpl ? { fetchImpl } : {});
+    return { nearbyCities: nearbyCitiesFrom(communes, seed.department.code, seed.city), localIndex: buildMetaLocalIndex(communes, seed) };
+  } catch (err) {
+    console.warn(`[meta-ads] communes de la région ${seed.region} indisponibles (veille sans index local) :`, errorMessage(err));
+    return { nearbyCities: [], localIndex: null };
+  }
+}
+
+/**
+ * Contexte du site. `opts.geography` (analyse sur la vraie bibliothèque)
+ * ajoute les villes voisines à la graine et l'index des communes ;
+ * `opts.library` lit les annonces supprimées et les exemples gardés.
+ */
+export async function loadMetaAdsContext(
+  db: Database,
+  siteId: string,
+  env: NodeJS.ProcessEnv = process.env,
+  opts: { geography?: boolean; library?: boolean; fetchImpl?: typeof fetch } = {},
+): Promise<MetaAdsContext> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) throw new Error(`Site introuvable : ${siteId}`);
   const [prospect, sitePages, audit, scan, briefResult] = await Promise.all([
@@ -718,7 +850,15 @@ export async function loadMetaAdsContext(db: Database, siteId: string, env: Node
   const city = prospect?.city.trim() ?? "";
   const address = prospect?.googleAddress?.trim() || addressFromSections(home?.sections);
   const competitorNames = (scan?.competitors ?? []).map((c) => c.title.trim()).filter(Boolean).slice(0, 6);
-  const seed = buildMetaSeed({ profession, city, address, specialties: motifs.map((m) => m.title), competitorNames });
+  const seedInput = { profession, city, address, specialties: motifs.map((m) => m.title), competitorNames };
+  let seed = buildMetaSeed(seedInput);
+  let localIndex: MetaLocalIndex | null = null;
+  if (opts.geography) {
+    const geography = await loadLocalGeography(seed, opts.fetchImpl);
+    localIndex = geography.localIndex;
+    if (geography.nearbyCities.length > 0) seed = buildMetaSeed({ ...seedInput, nearbyCities: geography.nearbyCities });
+  }
+  const library = opts.library ? await libraryForAnalysis(db, siteId) : { dismissedIds: [], favorites: [] };
   const tracking = site.theme.tracking;
   const social = site.theme.social;
   return {
@@ -741,6 +881,9 @@ export async function loadMetaAdsContext(db: Database, siteId: string, env: Node
     },
     photosById: briefResult.photosById,
     brief: briefResult.brief,
+    localIndex,
+    dismissedAdIds: library.dismissedIds,
+    favorites: library.favorites,
   };
 }
 
@@ -763,13 +906,16 @@ type MetaStart = MetaStartDecision | { kind: "started"; analysisId: string; usag
 export async function runMetaAdsAnalysis(
   db: Database,
   siteId: string,
-  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv } = {},
+  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; mediaStore?: MetaMediaStore | null } = {},
 ): Promise<MetaAnalysisOutcome> {
   const now = opts.now ?? new Date();
   const env = opts.env ?? process.env;
   let ctx: MetaAdsContext;
   try {
-    ctx = await loadMetaAdsContext(db, siteId, env);
+    // Le référentiel des communes ne sert que la vraie bibliothèque (la veille simulée porte ses propres zones)
+    const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { type: true } });
+    const realMarket = site ? marketProviderFor(env, site.type)?.mode === "meta" : false;
+    ctx = await loadMetaAdsContext(db, siteId, env, { geography: realMarket, library: true });
   } catch (err) {
     console.error(`[meta-ads] contexte du site ${siteId} indisponible :`, err);
     return { status: "error", analysisId: null, message: metaErrorMessage(err) };
@@ -840,8 +986,21 @@ export async function runMetaAdsAnalysis(
     await db.update(metaAdsAnalyses).set({ updatedAt: new Date() }).where(stillRunning);
   };
 
+  // Visuels des annonces retenues : cache, fournisseur dans la limite du quota mensuel, usage inscrit
+  const mediaProvider = mediaProviderFor(env, provider?.mode ?? "none");
+  const enrichMedia = mediaProvider
+    ? async (ads: MetaMarketAd[]): Promise<Record<string, MetaAdMedia>> => {
+        const budget = await mediaLookupsRemaining(db, siteId, now);
+        const enriched = await enrichAdsMedia(db, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now, budget });
+        await recordMediaUsage(db, siteId, enriched.lookups, mediaProvider.mode, now);
+        await heartbeat().catch(() => undefined);
+        console.info(`[meta-ads] ${label} : visuels de ${Object.keys(enriched.mediaByAdId).length}/${ads.length} annonce(s), ${enriched.lookups} recherche(s) (${mediaProvider.mode})${enriched.blocked ? ", fournisseur interrompu" : ""}`);
+        return enriched.mediaByAdId;
+      }
+    : undefined;
+
   try {
-    const result = await executeMetaAnalysis(ctx, { provider, planner, ...(instructions ? { instructions } : {}), now, label, progress, heartbeat });
+    const result = await executeMetaAnalysis(ctx, { provider, planner, ...(instructions ? { instructions } : {}), now, label, progress, heartbeat, ...(enrichMedia ? { enrichMedia } : {}) });
     const error = metaAnalysisError(result);
     // Transaction finale : appels réels inscrits et ligne close ensemble, seulement si elle est encore `running`
     const closed = await db.transaction(async (tx) => {

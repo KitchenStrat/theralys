@@ -4,12 +4,34 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, metaAdsAnalyses, sites } from "@theralys/db";
-import { getMetaAdsUsage, regenerateMetaAds as regenerateMetaAdsJob, runMetaAdsAnalysis } from "@theralys/jobs";
-import { META_ADS_ANALYSES_PER_MONTH, META_ADS_INSTRUCTIONS_MAX, META_ADS_REGENERATIONS_PER_MONTH, cleanSocialInstructions, type SiteTracking } from "@theralys/shared";
+import {
+  currentMarketAds,
+  dismissMetaAds,
+  enrichAdsMedia,
+  getMetaAdsUsage,
+  keepMetaAds,
+  mediaLookupsRemaining,
+  mediaProviderFor,
+  recordMediaUsage,
+  regenerateMetaAds as regenerateMetaAdsJob,
+  restoreMetaAds,
+  runMetaAdsAnalysis,
+  type LibraryOutcome,
+} from "@theralys/jobs";
+import {
+  META_ADS_ANALYSES_PER_MONTH,
+  META_ADS_INSTRUCTIONS_MAX,
+  META_ADS_REGENERATIONS_PER_MONTH,
+  META_LIBRARY_BULK_MAX,
+  META_LIBRARY_KEPT_MAX,
+  cleanSocialInstructions,
+  type SiteTracking,
+} from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getSite } from "@/lib/data";
 import { metaAccess } from "@/lib/meta-ads/access";
 import { marketFailureSentence } from "@/lib/meta-ads/market-status";
+import { createMetaMediaStore } from "@/lib/meta-ads/media-store";
 import { validateMetaTracking } from "@/lib/meta-ads/tracking";
 import { instructionsRefusal } from "@/lib/social/compliance";
 import { isMissingSchemaError } from "@/lib/social/data";
@@ -56,7 +78,7 @@ export async function launchMetaAnalysis(): Promise<{ error?: string; message?: 
   const started = Date.now();
   const now = new Date();
   try {
-    const outcome = await runMetaAdsAnalysis(getDb(), site.id, { now });
+    const outcome = await runMetaAdsAnalysis(getDb(), site.id, { now, mediaStore: createMetaMediaStore() });
     revalidatePath(PATH);
     if (outcome.status === "done") {
       console.info("[meta-ads] analyse lancée depuis le studio", { siteId: site.id, analysisId: outcome.analysisId, marketAvailable: outcome.marketAvailable, ms: Date.now() - started });
@@ -194,4 +216,131 @@ export async function saveMetaTracking(input: unknown): Promise<{ error?: string
       ? "Pixel enregistré : votre site envoie les événements Schedule (clic RDV) et Contact (téléphone, e-mail) à Meta après consentement (bandeau cookies actif)."
       : "Pixel enregistré : votre site envoie les événements à Meta dès l'arrivée du visiteur, car votre bandeau cookies est désactivé — réactivez-le dans l'éditeur (Paramètres → Tracking) pour rester conforme.",
   };
+}
+
+// ─── Bibliothèque personnelle : garder, supprimer, restaurer ─────────────────
+
+const adIdsSchema = z.object({ adIds: z.array(z.string().regex(/^\d{5,25}$/)).min(1).max(META_LIBRARY_BULK_MAX) });
+
+const LIBRARY_UNAVAILABLE = "Votre bibliothèque est en cours d'activation — réessayez dans quelques minutes.";
+const UNKNOWN_AD = "Cette annonce ne fait plus partie de votre veille — rechargez la page.";
+const LIBRARY_FULL = `Votre bibliothèque est pleine (${META_LIBRARY_KEPT_MAX} exemples) — retirez-en avant d'en garder d'autres.`;
+
+/** Refus du service (annonce inconnue, bibliothèque pleine, tables absentes) → message pour le praticien ; null si l'action a abouti. */
+function libraryRefusal(outcome: LibraryOutcome): string | null {
+  if (outcome.status === "done") return null;
+  switch (outcome.reason) {
+    case "unknown_ad":
+      return UNKNOWN_AD;
+    case "full":
+      return LIBRARY_FULL;
+    case "unavailable":
+      return LIBRARY_UNAVAILABLE;
+    case "empty":
+      return "Aucune annonce sélectionnée.";
+  }
+}
+
+type LibraryResult = { error?: string; message?: string };
+
+async function libraryAction(input: unknown, label: string, run: (siteId: string, adIds: string[]) => Promise<LibraryOutcome>, done: (count: number) => string): Promise<LibraryResult> {
+  const session = await requireClient();
+  const parsed = adIdsSchema.safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide." };
+  const site = await getSite(session.siteId);
+  if (!metaAccess(site)) return { error: NOT_INCLUDED };
+  const started = Date.now();
+  try {
+    const outcome = await run(site.id, parsed.data.adIds);
+    const refusal = libraryRefusal(outcome);
+    if (refusal) return { error: refusal };
+    revalidatePath(PATH);
+    const count = outcome.status === "done" ? outcome.count : 0;
+    console.info(`[meta-ads] bibliothèque : ${label}`, { siteId: site.id, count, ms: Date.now() - started });
+    return { message: done(count) };
+  } catch (err) {
+    console.error(`[meta-ads] bibliothèque : ${label} en échec`, { siteId: site.id, ms: Date.now() - started, err });
+    return { error: "L'action a échoué — réessayez dans un instant." };
+  }
+}
+
+/**
+ * « Garder comme exemple » : l'annonce, son analyse et ses visuels sont
+ * conservés indéfiniment dans la bibliothèque du site (vidéos copiées).
+ */
+export async function keepMarketAds(input: unknown): Promise<LibraryResult> {
+  return libraryAction(
+    input,
+    "exemple(s) gardé(s)",
+    (siteId, adIds) => {
+      const now = new Date();
+      // Le fournisseur ne sert qu'à rafraîchir des liens expirés : il suit la veille courante du site
+      return currentProviderMode(siteId).then((mode) =>
+        keepMetaAds(getDb(), siteId, adIds, { provider: mediaProviderFor(process.env, mode), store: createMetaMediaStore(), now }),
+      );
+    },
+    (count) => (count > 1 ? `${count} annonces gardées dans votre bibliothèque.` : count === 1 ? "Annonce gardée dans votre bibliothèque." : "Déjà dans votre bibliothèque."),
+  );
+}
+
+/** « Supprimer » : l'annonce quitte la veille et ne reviendra pas aux analyses suivantes. */
+export async function dismissMarketAds(input: unknown): Promise<LibraryResult> {
+  return libraryAction(
+    input,
+    "annonce(s) supprimée(s)",
+    (siteId, adIds) => dismissMetaAds(getDb(), siteId, adIds, { store: createMetaMediaStore(), now: new Date() }),
+    (count) => (count > 1 ? `${count} annonces supprimées de votre veille.` : "Annonce supprimée de votre veille."),
+  );
+}
+
+/** Retire un exemple de la bibliothèque, ou annule une suppression : l'annonce retrouve sa place dans la veille. */
+export async function restoreMarketAds(input: unknown): Promise<LibraryResult> {
+  return libraryAction(
+    input,
+    "annonce(s) restaurée(s)",
+    (siteId, adIds) => restoreMetaAds(getDb(), siteId, adIds, { store: createMetaMediaStore() }),
+    (count) => (count > 1 ? `${count} annonces retirées de votre bibliothèque.` : "Annonce retirée de votre bibliothèque."),
+  );
+}
+
+/** Mode du fournisseur de la dernière veille aboutie du site (`meta` | `mock` | `none`). */
+async function currentProviderMode(siteId: string): Promise<string> {
+  const row = await getDb().query.metaAdsAnalyses.findFirst({
+    where: (table, { and: both, eq: equals }) => both(equals(table.siteId, siteId), equals(table.status, "done")),
+    orderBy: (table, { desc: latest }) => [latest(table.createdAt)],
+    columns: { provider: true },
+  });
+  return row?.provider ?? "none";
+}
+
+/**
+ * Cherche les visuels des annonces de la veille courante qui n'en ont pas
+ * encore (veille antérieure aux visuels, recherche interrompue), dans la
+ * limite du quota mensuel.
+ */
+export async function loadMarketVisuals(): Promise<LibraryResult> {
+  const session = await requireClient();
+  const site = await getSite(session.siteId);
+  if (!metaAccess(site)) return { error: NOT_INCLUDED };
+  const now = new Date();
+  const db = getDb();
+  try {
+    const provider = mediaProviderFor(process.env, await currentProviderMode(site.id));
+    if (!provider) return { error: "Les visuels des annonces ne sont pas encore activés." };
+    const ads = await currentMarketAds(db, site.id);
+    if (ads.size === 0) return { error: NO_ANALYSIS };
+    const budget = await mediaLookupsRemaining(db, site.id, now);
+    if (budget <= 0) return { error: "Le quota mensuel de visuels est atteint — ils reviendront le mois prochain." };
+    const enriched = await enrichAdsMedia(db, [...ads.keys()], { provider, store: createMetaMediaStore(), now, budget });
+    if (enriched.unavailable) return { error: LIBRARY_UNAVAILABLE };
+    await recordMediaUsage(db, site.id, enriched.lookups, provider.mode, now);
+    revalidatePath(PATH);
+    const found = Object.keys(enriched.mediaByAdId).length;
+    console.info("[meta-ads] visuels chargés depuis le studio", { siteId: site.id, found, lookups: enriched.lookups, blocked: enriched.blocked });
+    if (enriched.blocked && found === 0) return { error: "Les visuels sont momentanément indisponibles — réessayez plus tard." };
+    return { message: found > 1 ? `Visuels affichés pour ${found} annonces.` : found === 1 ? "Visuel affiché pour 1 annonce." : "Aucun visuel disponible pour ces annonces." };
+  } catch (err) {
+    console.error("[meta-ads] chargement des visuels en échec", { siteId: site.id, err });
+    return { error: "Les visuels n'ont pas pu être chargés — réessayez dans un instant." };
+  }
 }

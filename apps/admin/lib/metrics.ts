@@ -55,7 +55,7 @@ export const UNIT_COSTS_EUR = {
   demoGeneration: 0.8,
 } as const;
 
-/** Taux USD → EUR appliqué aux fournisseurs facturés en dollars (DataForSEO). */
+/** Taux USD → EUR appliqué aux fournisseurs facturés en dollars (DataForSEO, ScrapeCreators). */
 export const USD_TO_EUR = 0.92;
 
 /**
@@ -73,14 +73,18 @@ export function providerCostsEur(costUsd: number): number {
  * sont des registres de quota ou d'échéancier, pas des requêtes fournisseur.
  */
 export const DATAFORSEO_BILLED_KINDS = ["business_info", "reviews", "scan", "ads_keywords"] as const;
+/** Visuels des annonces Meta Ads (ScrapeCreators) : une recherche facturée par annonce. */
+export const SCRAPECREATORS_BILLED_KINDS = ["meta_media"] as const;
+/** Tous les kinds qui correspondent à un appel fournisseur facturé en dollars. */
+export const PROVIDER_BILLED_KINDS = [...DATAFORSEO_BILLED_KINDS, ...SCRAPECREATORS_BILLED_KINDS] as const;
 
 export type ProviderUsageRow = { kind: string; costUsd: number; requests: number };
 
 export type ProviderUsage = { requests: number; costUsd: number };
 
-/** Requêtes et coût DataForSEO du mois, en ne comptant que les kinds facturés. */
+/** Requêtes et coût des fournisseurs facturés (DataForSEO, ScrapeCreators) du mois, en ne comptant que les kinds facturés. */
 export function summarizeProviderUsage(rows: ProviderUsageRow[]): ProviderUsage {
-  const billed = new Set<string>(DATAFORSEO_BILLED_KINDS);
+  const billed = new Set<string>(PROVIDER_BILLED_KINDS);
   let requests = 0;
   let costUsd = 0;
   for (const row of rows) {

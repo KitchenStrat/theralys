@@ -11,7 +11,9 @@
     "./google": "./src/google/index.ts",
     "./dataforseo": "./src/dataforseo/index.ts",
     "./dataforseo/ads": "./src/dataforseo/ads.ts",
-    "./meta": "./src/meta/index.ts"
+    "./meta": "./src/meta/index.ts",
+    "./meta/media": "./src/meta/media.ts",
+    "./meta/geo": "./src/meta/geo.ts"
   },
   "scripts": {
     "lint": "eslint src",

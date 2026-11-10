@@ -15,6 +15,7 @@
  */
 
 import { adsProfessionFamily, normalizeAdsText } from "./google-ads";
+import { filterRelevantAds, isCountryLevelLocation, type MetaRelevanceSummary } from "./meta-relevance";
 import type { SocialAccentRole, SocialTemplate } from "./social";
 
 // ─── Quotas et paramètres ────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ export const META_LIBRARY_PAGE_LIMIT = 100;
 /** Appels HTTP au plus par analyse (termes × pages). */
 export const META_LIBRARY_MAX_CALLS = 12;
 /** Termes de recherche envoyés au plus par analyse. */
-export const META_LIBRARY_TERMS_MAX = 6;
+export const META_LIBRARY_TERMS_MAX = 8;
 /** Longueur maximale d'un terme `search_terms` (au-delà, Graph répond une erreur 100 déterministe). */
 export const META_LIBRARY_TERM_MAX = 100;
 /** Suffixe ajouté à l'URL de destination des annonces : le site y lit la provenance « Meta Ads » (`SOCIAL_SOURCE_PARAMS.meta`). */
@@ -43,6 +44,8 @@ export const META_ADS_LANDING_SUFFIX = "?src=meta";
 export const META_MARKET_MIN_LOCAL = 8;
 /** Annonces conservées dans la veille. */
 export const META_MARKET_MAX_ADS = 60;
+/** Annonces conservées au plus par page Facebook : un annonceur qui décline dix fois la même annonce ne remplit pas la veille. */
+export const META_MARKET_MAX_PER_PAGE = 3;
 /** Annonces transmises à l'IA pour la synthèse (les mieux notées). */
 export const META_MARKET_SAMPLE_FOR_AI = 30;
 /** Durée de diffusion signant une annonce qui « marche » (jours). */
@@ -168,6 +171,49 @@ const R = {
   pdl: "Pays de la Loire",
   pac: "Provence-Alpes-Côte d'Azur",
 } as const;
+
+/** Codes INSEE des régions (API « Découpage administratif », communes d'une région). */
+export const FR_REGION_CODES: Readonly<Record<string, string>> = {
+  [R.ara]: "84",
+  [R.bfc]: "27",
+  [R.bre]: "53",
+  [R.cvl]: "24",
+  [R.cor]: "94",
+  [R.ges]: "44",
+  [R.hdf]: "32",
+  [R.idf]: "11",
+  [R.nor]: "28",
+  [R.naq]: "75",
+  [R.occ]: "76",
+  [R.pdl]: "52",
+  [R.pac]: "93",
+  Guadeloupe: "01",
+  Martinique: "02",
+  Guyane: "03",
+  "La Réunion": "04",
+  Mayotte: "06",
+};
+
+/** Anciennes régions, que la bibliothèque Meta emploie encore (« Rhône-Alpes », « Midi-Pyrénées ») → région actuelle. */
+export const FR_FORMER_REGIONS: Readonly<Record<string, string>> = {
+  Alsace: R.ges,
+  Lorraine: R.ges,
+  "Champagne-Ardenne": R.ges,
+  Aquitaine: R.naq,
+  Limousin: R.naq,
+  "Poitou-Charentes": R.naq,
+  Auvergne: R.ara,
+  "Rhône-Alpes": R.ara,
+  Bourgogne: R.bfc,
+  "Franche-Comté": R.bfc,
+  "Languedoc-Roussillon": R.occ,
+  "Midi-Pyrénées": R.occ,
+  "Nord-Pas-de-Calais": R.hdf,
+  Picardie: R.hdf,
+  "Basse-Normandie": R.nor,
+  "Haute-Normandie": R.nor,
+  Centre: R.cvl,
+};
 
 export const FR_DEPARTMENTS: readonly FrDepartment[] = [
   { code: "01", name: "Ain", region: R.ara },
@@ -308,6 +354,8 @@ export type MetaAdsSeedInput = {
   specialties: string[];
   /** Noms des concurrents relevés sur Google Maps (carte de visibilité) */
   competitorNames: string[];
+  /** Plus grandes villes du département (hors celle du praticien) : recherches locales supplémentaires */
+  nearbyCities?: string[];
 };
 
 export type MetaAdsSeed = {
@@ -319,6 +367,8 @@ export type MetaAdsSeed = {
   region: string | null;
   specialties: string[];
   competitorNames: string[];
+  /** Plus grandes villes du département, hors celle du praticien (absent des graines antérieures) */
+  nearbyCities?: string[];
   /** Termes envoyés à la bibliothèque (≤ META_LIBRARY_TERMS_MAX) */
   searchTerms: string[];
   country: string;
@@ -345,30 +395,80 @@ function boundedTerm(term: string): string | null {
   return out.length >= 3 ? out : null;
 }
 
+/** Dédoublonnage sans tenir compte des accents ni de la casse : la bibliothèque les ignore (« osteopathe » = « ostéopathe »). */
+function uniqueByKey(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = normalizeAdsText(value);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+/** Mots d'une spécialité qui ne la désignent pas (« accompagnement du nourrisson » → « nourrisson »). */
+const SPECIALTY_GENERIC = new Set([
+  "accompagnement", "accompagner", "gestion", "gerer", "prise", "charge", "troubles", "trouble", "seance", "seances", "suivi", "soin", "soins", "bien",
+  "etre", "aide", "soutien", "preparation", "probleme", "problemes", "douleurs", "douleur", "maux", "soi", "vie", "et", "ou", "de", "du", "des", "la", "le",
+  "les", "en", "au", "aux", "pour", "par", "sur", "un", "une", "son", "sa", "ses", "votre", "vos", "chez", "avec", "sans",
+]);
+
+/** Mot le plus parlant d'une spécialité : son dernier mot significatif (« arrêt du tabac » → « tabac ») ; null si aucun. */
+export function specialtyKeyword(specialty: string): string | null {
+  const tokens = cleanTerm(specialty)
+    .split(" ")
+    .filter((token) => {
+      const key = normalizeAdsText(token);
+      return key.length >= 3 && !SPECIALTY_GENERIC.has(key);
+    });
+  return tokens.at(-1) ?? null;
+}
+
 /**
- * Termes de recherche : le métier et ses synonymes d'abord (la bibliothèque
- * cherche dans les textes des annonces, sans ville), puis les spécialités les
- * plus courtes, puis les noms des concurrents (annonces citant leur enseigne).
- * Chaque terme tient en META_LIBRARY_TERM_MAX caractères (tronqué au mot) ; un
- * nom de concurrent impossible à tronquer proprement est ignoré.
+ * Termes de recherche, par priorité. La bibliothèque cherche tous les mots du
+ * terme dans le texte des annonces, sans filtre géographique : toute
+ * recherche porte donc le métier, seul puis accompagné de la ville du
+ * praticien, des grandes villes de son département et de ses spécialités
+ * (« ostéopathe Reims », « ostéopathe nourrisson »). Une spécialité cherchée
+ * seule ramène surtout des marques (lait infantile, équipement sportif).
+ * Termes dédoublonnés sans accent, bornés à META_LIBRARY_TERM_MAX caractères ;
+ * un nom de concurrent impossible à tronquer proprement est ignoré.
  */
-export function buildMetaSearchTerms(seed: Pick<MetaAdsSeed, "profession" | "specialties" | "competitorNames">, max = META_LIBRARY_TERMS_MAX): string[] {
+export function buildMetaSearchTerms(
+  seed: Pick<MetaAdsSeed, "profession" | "specialties" | "competitorNames"> & Partial<Pick<MetaAdsSeed, "city" | "nearbyCities">>,
+  max = META_LIBRARY_TERMS_MAX,
+): string[] {
   const family = adsProfessionFamily(seed.profession);
   const bounded = (t: string) => boundedTerm(t) ?? t.slice(0, META_LIBRARY_TERM_MAX).trim();
-  const terms = unique([cleanTerm(seed.profession), ...family.synonyms.map(cleanTerm)].filter((t) => t.length >= 3).map(bounded)).slice(0, 3);
-  const specialties = seed.specialties
-    .map(cleanTerm)
-    .filter((s) => s.length >= 4 && s.split(" ").length <= 4)
-    .map(bounded)
-    .sort((a, b) => a.length - b.length)
-    .slice(0, 2);
+  const profession = cleanTerm(seed.profession);
+  const synonyms = family.synonyms.map(cleanTerm);
+  // Intitulé long (« praticienne en massage bien-être ») : tous ses mots seraient exigés, on part des noms courts de la famille
+  const candidates = profession.split(" ").length <= 2 ? [profession, ...synonyms] : [...synonyms, profession];
+  const base = uniqueByKey(candidates.filter((t) => t.length >= 3).map(bounded)).slice(0, 2);
+  const head = base[0];
+  if (!head) return [];
+  const city = cleanTerm(seed.city ?? "");
+  const cityKey = normalizeAdsText(city);
+  const local = city ? base.map((term) => bounded(`${term} ${city}`)) : [];
+  const nearby = uniqueByKey((seed.nearbyCities ?? []).map(cleanTerm))
+    .filter((c) => normalizeAdsText(c) !== cityKey)
+    .slice(0, 2)
+    .map((c) => bounded(`${head} ${c}`));
+  const specialties = uniqueByKey(seed.specialties.map(specialtyKeyword).filter((k): k is string => k !== null))
+    // Une spécialité qui redit le métier (« séance d'hypnose ») n'ajoute rien
+    .filter((k) => !family.roots.some((root) => root !== "" && normalizeAdsText(k).startsWith(root)))
+    .slice(0, 2)
+    .map((k) => bounded(`${head} ${k}`));
   const competitors = seed.competitorNames
     .map(cleanTerm)
     .filter((c) => c.length >= 4)
     .map(boundedTerm)
     .filter((c): c is string => c !== null)
-    .slice(0, 2);
-  return unique([...terms, ...specialties, ...competitors]).slice(0, max);
+    .slice(0, 1);
+  const ordered = [base[0], local[0], base[1], local[1], nearby[0], specialties[0], nearby[1], specialties[1], competitors[0]];
+  return uniqueByKey(ordered.filter((t): t is string => Boolean(t))).slice(0, max);
 }
 
 export function buildMetaSeed(input: MetaAdsSeedInput): MetaAdsSeed {
@@ -378,7 +478,19 @@ export function buildMetaSeed(input: MetaAdsSeedInput): MetaAdsSeed {
   const city = input.city.replace(/\s+/g, " ").trim();
   const specialties = unique(input.specialties.map((s) => s.replace(/\s+/g, " ").trim()).filter((s) => s.length >= 3)).slice(0, 6);
   const competitorNames = unique(input.competitorNames.map((c) => c.replace(/\s+/g, " ").trim()).filter(Boolean)).slice(0, 6);
-  const base = { profession, professionFamily: adsProfessionFamily(profession).key, city, postalCode, department, region: department?.region ?? null, specialties, competitorNames, country: META_AD_LIBRARY_COUNTRY };
+  const nearbyCities = unique((input.nearbyCities ?? []).map((c) => c.replace(/\s+/g, " ").trim()).filter(Boolean)).slice(0, 4);
+  const base = {
+    profession,
+    professionFamily: adsProfessionFamily(profession).key,
+    city,
+    postalCode,
+    department,
+    region: department?.region ?? null,
+    specialties,
+    competitorNames,
+    ...(nearbyCities.length > 0 ? { nearbyCities } : {}),
+    country: META_AD_LIBRARY_COUNTRY,
+  };
   return { ...base, searchTerms: buildMetaSearchTerms(base) };
 }
 
@@ -430,6 +542,9 @@ export type MetaMarketAd = MetaAdRecord & {
   score: number;
   /** Termes de recherche qui ont remonté l'annonce */
   matchedTerms: string[];
+  /** Rang par note parmi les annonces pertinentes repérées (1 = la mieux notée) ; absent des veilles antérieures */
+  rank?: number;
+  rankTotal?: number;
 };
 
 /** Synthèse de l'IA sur les annonces de la veille (identifiants d'annonces en référence). */
@@ -462,12 +577,25 @@ export type MetaAdsMarket = {
    * `counts`. Absent des veilles enregistrées avant son introduction.
    */
   strongCounts?: Record<MetaMarketScope, number>;
-  /** Annonces conservées (zone retenue et plus étroites, ≤ META_MARKET_MAX_ADS) */
+  /**
+   * Annonces conservées (≤ META_MARKET_MAX_ADS, au plus META_MARKET_MAX_PER_PAGE
+   * par page) : celles de la zone retenue et des plus étroites d'abord, puis,
+   * s'il reste de la place, les mieux notées des zones plus larges. Les veilles
+   * antérieures ne contiennent que la zone retenue.
+   */
   ads: MetaMarketAd[];
   /** Appels HTTP effectués */
   calls: number;
   truncated: boolean;
   insights: MetaMarketInsights | null;
+  /**
+   * Annonces écartées d'office par le filtre de pertinence (`metaAdRelevance`) :
+   * commerce, formation et services aux praticiens, hors sujet. Absent des
+   * veilles enregistrées avant le filtre (elles sont filtrées à l'affichage).
+   */
+  filtered?: MetaRelevanceSummary;
+  /** Annonces écartées parce que le praticien les a supprimées de sa veille */
+  dismissed?: number;
 };
 
 export function metaLibraryUrl(adId: string): string {
@@ -510,11 +638,13 @@ export function adScore(runningDays: number | null, reach: number | null, active
 
 /**
  * Clé de comparaison d'un nom de lieu : normalisé (minuscules, sans accent ni
- * trait d'union), sans code postal devant (« 31000 Toulouse ») ni numéro
- * d'arrondissement ou de département derrière (« Paris 15e », « Toulouse 31 »).
+ * trait d'union), sans code postal devant (« 31000 Toulouse »), sans numéro
+ * d'arrondissement ou de département derrière (« Paris 15e », « Toulouse 31 »)
+ * ni mention d'arrondissement devant (« 5e arrondissement de Paris »).
  */
 function locationKey(text: string): string {
   return normalizeAdsText(text)
+    .replace(/^\d{1,2}(?:e|er|eme)? arrondissement de /, "")
     .replace(/^\d{2,5}\s+/, "")
     .replace(/\s+\d{1,5}(?:e|er|eme)?$/, "");
 }
@@ -531,26 +661,83 @@ function locationSegments(name: string): string[] {
 }
 
 const DEPARTMENT_BY_KEY: ReadonlyMap<string, FrDepartment> = new Map(FR_DEPARTMENTS.map((d) => [locationKey(d.name), d]));
+/** Régions actuelles et anciennes (clé normalisée → région actuelle). */
+const REGION_BY_KEY: ReadonlyMap<string, string> = new Map([
+  ...Object.values(R).map((name): [string, string] => [locationKey(name), name]),
+  ...Object.entries(FR_FORMER_REGIONS).map(([former, current]): [string, string] => [locationKey(former), current]),
+]);
 
-function locationMatches(locations: MetaAdLocation[], name: string | null | undefined): boolean {
-  const needle = locationKey(name ?? "");
-  if (needle === "") return false;
-  return locations.some((l) => !l.excluded && locationSegments(l.name).includes(needle));
+/**
+ * Communes du département et de la région du praticien (clés normalisées).
+ * La bibliothèque nomme les villes ciblées sans leur département
+ * (« Épernay, France ») : cet index dit qu'Épernay est dans la Marne. Il
+ * n'est pas enregistré avec l'analyse (plusieurs milliers de noms).
+ */
+export type MetaLocalIndex = { department: ReadonlySet<string>; region: ReadonlySet<string> };
+
+export function buildMetaLocalIndex(communes: readonly { name: string; departmentCode: string }[], seed: Pick<MetaAdsSeed, "department">): MetaLocalIndex {
+  const department = new Set<string>();
+  const region = new Set<string>();
+  for (const commune of communes) {
+    const key = locationKey(commune.name);
+    if (key === "") continue;
+    region.add(key);
+    if (seed.department && commune.departmentCode === seed.department.code) department.add(key);
+  }
+  return { department, region };
+}
+
+type ScopeSeed = Pick<MetaAdsSeed, "city" | "department" | "region"> & Partial<Pick<MetaAdsSeed, "postalCode">>;
+
+const SCOPE_RANK: Record<MetaMarketScope, number> = { ville: 0, departement: 1, region: 2, france: 3 };
+
+/** Zone d'une seule zone ciblée (non exclue) par rapport au praticien. */
+function scopeOfLocation(location: MetaAdLocation, seed: ScopeSeed, index?: MetaLocalIndex): MetaMarketScope {
+  const segments = locationSegments(location.name);
+  const first = segments[0] ?? "";
+  if (first === "") return "france";
+  // Code postal (« 51100, France ») : le département se lit dans ses premiers chiffres
+  if (/^\d{5}$/.test(first)) {
+    if (seed.postalCode && first === seed.postalCode) return "ville";
+    const department = departmentFromPostalCode(first);
+    if (!department) return "france";
+    if (seed.department && department.code === seed.department.code) return "departement";
+    return seed.region !== null && department.region === seed.region ? "region" : "france";
+  }
+  // Région nommée dans la zone, actuelle ou ancienne (« Genas, Rhône-Alpes, France ») : elle départage les homonymes
+  const named = segments.map((segment) => REGION_BY_KEY.get(segment)).filter((r): r is string => r !== undefined);
+  const elsewhere = seed.region !== null && named.length > 0 && !named.includes(seed.region);
+  const cityKey = locationKey(seed.city);
+  const departmentKey = locationKey(seed.department?.name ?? "");
+  if (cityKey !== "" && segments.includes(cityKey) && !elsewhere) return "ville";
+  if (departmentKey !== "" && segments.includes(departmentKey)) return "departement";
+  if (elsewhere) return "france";
+  // Ville ciblée sans département : reconnue par l'index des communes (jamais pour une zone régionale ou nationale)
+  const cityLevel = !isCountryLevelLocation(location) && !REGION_BY_KEY.has(first) && !DEPARTMENT_BY_KEY.has(first);
+  if (index && cityLevel && index.department.has(first)) return "departement";
+  if (seed.region !== null && named.includes(seed.region)) return "region";
+  if (seed.region !== null && segments.some((segment) => DEPARTMENT_BY_KEY.get(segment)?.region === seed.region)) return "region";
+  if (index && cityLevel && index.region.has(first)) return "region";
+  return "france";
 }
 
 /**
  * Zone la plus étroite dans laquelle l'annonce est diffusée, d'après ses zones
- * ciblées (les zones exclues sont ignorées). Une annonce ciblant un autre
- * département de la même région relève de la région. « france » regroupe les
- * annonces nationales et toutes celles qui ciblent une autre zone (autre
- * ville, autre région) : d'où le libellé « Autres zones et France ».
+ * ciblées (les zones exclues sont ignorées) : ville du praticien, commune ou
+ * code postal de son département, puis de sa région (noms actuels et anciens,
+ * autres départements, communes de l'index). « france » regroupe les annonces
+ * nationales et toutes celles qui ciblent une autre zone : d'où le libellé
+ * « Autres zones et France ».
  */
-export function scopeOfAd(ad: Pick<MetaAdRecord, "targetLocations">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): MetaMarketScope {
-  if (locationMatches(ad.targetLocations, seed.city)) return "ville";
-  if (locationMatches(ad.targetLocations, seed.department?.name)) return "departement";
-  if (locationMatches(ad.targetLocations, seed.region)) return "region";
-  if (seed.region && ad.targetLocations.some((l) => !l.excluded && locationSegments(l.name).some((s) => DEPARTMENT_BY_KEY.get(s)?.region === seed.region))) return "region";
-  return "france";
+export function scopeOfAd(ad: Pick<MetaAdRecord, "targetLocations">, seed: ScopeSeed, index?: MetaLocalIndex): MetaMarketScope {
+  let best: MetaMarketScope = "france";
+  for (const location of ad.targetLocations) {
+    if (location.excluded) continue;
+    const scope = scopeOfLocation(location, seed, index);
+    if (SCOPE_RANK[scope] < SCOPE_RANK[best]) best = scope;
+    if (best === "ville") break;
+  }
+  return best;
 }
 
 export type SelectMarketAdsOptions = {
@@ -558,45 +745,86 @@ export type SelectMarketAdsOptions = {
   max?: number;
   /** Termes qui ont remonté chaque annonce (id → termes) */
   matchedTerms?: Record<string, string[]>;
+  /** Métier du praticien : active le filtre de pertinence (commerce, formation et hors sujet écartés d'office) */
+  profession?: string;
+  /** Annonces supprimées par le praticien : elles ne reviennent pas */
+  excludedIds?: ReadonlySet<string>;
+  /** Communes du département et de la région (zones des villes ciblées) */
+  localIndex?: MetaLocalIndex;
+  /** Annonces conservées au plus par page (défaut META_MARKET_MAX_PER_PAGE) */
+  maxPerPage?: number;
+};
+
+export type MarketSelection = {
+  ads: MetaMarketAd[];
+  scopeUsed: MetaMarketScope;
+  counts: Record<MetaMarketScope, number>;
+  strongCounts: Record<MetaMarketScope, number>;
+  /** Annonces écartées par le filtre de pertinence (null si le filtre n'a pas tourné) */
+  filtered: MetaRelevanceSummary | null;
+  /** Annonces écartées parce que supprimées par le praticien */
+  dismissed: number;
 };
 
 /**
- * Veille : zone retenue = la plus étroite qui rassemble au moins `minLocal`
- * annonces (ville, puis département, région, France), annonces notées (portée,
- * durée, diffusion en cours) et dédoublonnées par identifiant. `counts` et
- * `strongCounts` portent sur toutes les annonces repérées ; `ads` ne garde
- * que la zone retenue et les plus étroites (≤ `max`).
+ * Veille : annonces dédoublonnées par identifiant, filtre de pertinence
+ * (`opts.profession`), retrait des annonces supprimées, puis zone retenue =
+ * la plus étroite qui rassemble au moins `minLocal` annonces (ville, puis
+ * département, région, France), annonces notées (portée, durée, diffusion en
+ * cours) et classées. `counts` et `strongCounts` portent sur toutes les
+ * annonces pertinentes repérées ; `ads` (≤ `max`, au plus `maxPerPage` par
+ * page) prend la zone retenue et les plus étroites d'abord, puis complète
+ * avec les mieux notées des zones plus larges : une veille locale maigre
+ * reste une galerie fournie. `rank` situe chaque annonce parmi toutes les
+ * annonces pertinentes repérées.
  */
 export function selectMarketAds(
   records: MetaAdRecord[],
-  seed: Pick<MetaAdsSeed, "city" | "department" | "region">,
+  seed: ScopeSeed,
   now = new Date(),
   opts: SelectMarketAdsOptions = {},
-): { ads: MetaMarketAd[]; scopeUsed: MetaMarketScope; counts: Record<MetaMarketScope, number>; strongCounts: Record<MetaMarketScope, number> } {
+): MarketSelection {
   const minLocal = opts.minLocal ?? META_MARKET_MIN_LOCAL;
   const max = opts.max ?? META_MARKET_MAX_ADS;
-  const byId = new Map<string, MetaMarketAd>();
-  for (const record of records) {
-    if (!record.id || byId.has(record.id)) continue;
+  const maxPerPage = opts.maxPerPage ?? META_MARKET_MAX_PER_PAGE;
+  const unique = new Map<string, MetaAdRecord>();
+  for (const record of records) if (record.id && !unique.has(record.id)) unique.set(record.id, record);
+  let pool = [...unique.values()];
+  let filtered: MetaRelevanceSummary | null = null;
+  if (opts.profession) {
+    const relevant = filterRelevantAds(pool, { profession: opts.profession });
+    pool = relevant.kept;
+    filtered = relevant.filtered;
+  }
+  const beforeDismissal = pool.length;
+  if (opts.excludedIds && opts.excludedIds.size > 0) pool = pool.filter((record) => !opts.excludedIds!.has(record.id));
+  const dismissed = beforeDismissal - pool.length;
+
+  const all = pool.map((record): MetaMarketAd => {
     const runningDays = adRunningDays(record, now);
     const active = adIsActive(record, now);
-    byId.set(record.id, {
+    return {
       ...record,
-      scope: scopeOfAd(record, seed),
+      scope: scopeOfAd(record, seed, opts.localIndex),
       active,
       runningDays,
       signal: adSignal(runningDays, record.euTotalReach),
       score: adScore(runningDays, record.euTotalReach, active),
       matchedTerms: opts.matchedTerms?.[record.id] ?? [],
-    });
-  }
-  const all = [...byId.values()];
+    };
+  });
   const counts: Record<MetaMarketScope, number> = { ville: 0, departement: 0, region: 0, france: 0 };
   const strongCounts: Record<MetaMarketScope, number> = { ville: 0, departement: 0, region: 0, france: 0 };
   for (const ad of all) {
     counts[ad.scope]++;
     if (ad.signal === "fort") strongCounts[ad.scope]++;
   }
+  // Rang par note parmi toutes les annonces pertinentes repérées
+  const byScore = [...all].sort((a, b) => b.score - a.score || a.pageName.localeCompare(b.pageName, "fr") || a.id.localeCompare(b.id));
+  byScore.forEach((ad, i) => {
+    ad.rank = i + 1;
+    ad.rankTotal = byScore.length;
+  });
 
   let scopeUsed: MetaMarketScope = "france";
   let cumulative = 0;
@@ -608,11 +836,21 @@ export function selectMarketAds(
     }
   }
   const rank = (scope: MetaMarketScope) => META_MARKET_SCOPES.indexOf(scope);
-  const ads = all
-    .filter((ad) => rank(ad.scope) <= rank(scopeUsed))
-    .sort((a, b) => rank(a.scope) - rank(b.scope) || b.score - a.score || a.pageName.localeCompare(b.pageName, "fr"))
-    .slice(0, max);
-  return { ads, scopeUsed, counts, strongCounts };
+  const byName = (a: MetaMarketAd, b: MetaMarketAd) => a.pageName.localeCompare(b.pageName, "fr") || a.id.localeCompare(b.id);
+  // Zone retenue (et plus étroites) d'abord, la plus proche en tête ; puis les mieux notées des zones plus larges
+  const near = all.filter((ad) => rank(ad.scope) <= rank(scopeUsed)).sort((a, b) => rank(a.scope) - rank(b.scope) || b.score - a.score || byName(a, b));
+  const wider = all.filter((ad) => rank(ad.scope) > rank(scopeUsed)).sort((a, b) => b.score - a.score || byName(a, b));
+  const perPage = new Map<string, number>();
+  const ads: MetaMarketAd[] = [];
+  for (const ad of [...near, ...wider]) {
+    if (ads.length >= max) break;
+    const page = ad.pageId ?? `nom:${normalizeAdsText(ad.pageName)}`;
+    const taken = perPage.get(page) ?? 0;
+    if (taken >= maxPerPage) continue;
+    perPage.set(page, taken + 1);
+    ads.push(ad);
+  }
+  return { ads, scopeUsed, counts, strongCounts, filtered, dismissed };
 }
 
 /** Annonces repérées en tout (toutes zones). */
@@ -629,13 +867,22 @@ export function marketNearbyCount(market: Pick<MetaAdsMarket, "scopeUsed" | "cou
   return market.scopeUsed === "departement" ? market.counts.ville : market.counts.ville + market.counts.departement;
 }
 
+/** Annonces conservées dans la zone retenue (et les plus étroites), hors complément des zones plus larges. */
+export function marketNearCount(market: Pick<MetaAdsMarket, "scopeUsed" | "ads">): number {
+  const limit = META_MARKET_SCOPES.indexOf(market.scopeUsed);
+  return market.ads.filter((ad) => META_MARKET_SCOPES.indexOf(ad.scope) <= limit).length;
+}
+
 /**
- * Phrase de contexte de la veille : annonces conservées (`ads`) sur annonces
- * repérées (`counts`, toutes zones), zone retenue, élargissement et compte
- * des annonces près de chez vous qui l'ont motivé (`marketNearbyCount`).
+ * Phrase de contexte de la veille : annonces conservées dans la zone retenue,
+ * complément des zones plus larges, annonces repérées (`counts`, toutes
+ * zones), élargissement et compte des annonces près de chez vous qui l'ont
+ * motivé (`marketNearbyCount`).
  */
 export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "ads">, seed: Pick<MetaAdsSeed, "city" | "department" | "region">): string {
   const kept = market.ads.length;
+  const near = marketNearCount(market);
+  const extra = kept - near;
   const total = Math.max(kept, marketTotalCount(market.counts));
   // Formulation sans article devant le nom (« en Haute-Garonne » mais « dans le Tarn », « dans les Hauts-de-France », « à La Réunion »).
   const where =
@@ -647,7 +894,13 @@ export function marketScopeNote(market: Pick<MetaAdsMarket, "scopeUsed" | "count
           ? `dans votre région${seed.region ? ` (${seed.region})` : ""}`
           : "en France et dans d'autres zones";
   const plural = (n: number, noun: string) => `${n} ${noun}${n > 1 ? "s" : ""}`;
-  const head = total > kept ? `${plural(kept, "annonce")} conservée${kept > 1 ? "s" : ""} sur ${plural(total, "repérée")}, ${where}.` : `${plural(kept, "annonce")} ${where}.`;
+  const complement = extra > 0 ? `, complétée${near > 1 ? "s" : ""} par ${extra > 1 ? `les ${extra} mieux notées` : "la mieux notée"} ailleurs en France` : "";
+  const head =
+    total > kept
+      ? `${plural(kept, "annonce")} conservée${kept > 1 ? "s" : ""} sur ${plural(total, "repérée")} : ${near} ${where}${complement}.`
+      : extra > 0
+        ? `${plural(near, "annonce")} ${where}${complement}.`
+        : `${plural(kept, "annonce")} ${where}.`;
   const widened = market.scopeUsed !== "ville" ? ` Peu d'annonces près de chez vous (${marketNearbyCount(market)}) : la veille a été élargie.` : "";
   return `${head}${widened}`;
 }

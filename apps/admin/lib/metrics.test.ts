@@ -23,9 +23,20 @@ describe("summarizeProviderUsage", () => {
       { kind: "post_regen", costUsd: 0, requests: 5 },
       { kind: "social_regen", costUsd: 0, requests: 7 },
       { kind: "sync_attempt", costUsd: 0, requests: 3 },
+      { kind: "meta_analysis", costUsd: 0, requests: 12 },
     ]);
     expect(usage.requests).toBe(53);
     expect(usage.costUsd).toBeCloseTo(0.289, 6);
+  });
+
+  it("compte aussi les visuels Meta Ads (ScrapeCreators, kind meta_media)", () => {
+    const usage = summarizeProviderUsage([
+      { kind: "scan", costUsd: 0.1, requests: 49 },
+      { kind: "meta_media", costUsd: 0.132, requests: 66 },
+      { kind: "meta_regen", costUsd: 0, requests: 1 },
+    ]);
+    expect(usage.requests).toBe(115);
+    expect(usage.costUsd).toBeCloseTo(0.232, 6);
   });
 
   it("tolère les sommes SQL renvoyées en texte et un mois vide", () => {

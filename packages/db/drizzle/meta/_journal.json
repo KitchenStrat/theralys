@@ -50,6 +50,13 @@
       "when": 1793220000000,
       "tag": "0006_meta_ads",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794320000000,
+      "tag": "0007_meta_library",
+      "breakpoints": true
     }
   ]
 }

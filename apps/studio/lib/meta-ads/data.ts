@@ -8,8 +8,19 @@
 
 import { and, desc, eq, gte } from "drizzle-orm";
 import { analyticsEvents, getDb, metaAdsAnalyses, type Site } from "@theralys/db";
-import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage } from "@theralys/jobs";
-import type { MetaAdsAnalysisStatus, MetaAdsCreativeSet, MetaAdsDiagnostic, MetaAdsMarket, MetaAdsPlan, MetaAdsSeed, MetaAdsVideoPlan } from "@theralys/shared";
+import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage, loadMetaLibrary, loadMetaMedia, mediaLookupsRemaining, mediaProviderFor } from "@theralys/jobs";
+import {
+  filterRelevantAds,
+  type MetaAdMedia,
+  type MetaAdsAnalysisStatus,
+  type MetaAdsCreativeSet,
+  type MetaAdsDiagnostic,
+  type MetaAdsMarket,
+  type MetaAdsPlan,
+  type MetaAdsSeed,
+  type MetaAdsVideoPlan,
+  type MetaLibraryEntry,
+} from "@theralys/shared";
 import { isMissingSchemaError } from "../social/data";
 import { summarizeAdsResults, type AdsResults as PaidResults } from "@theralys/analytics";
 import { metaTrackingForm, type MetaTrackingForm } from "./tracking";
@@ -46,6 +57,24 @@ export type MetaAdsAnalysisView = {
 
 export type MetaAdsUsageView = Awaited<ReturnType<typeof getMetaAdsUsage>>;
 
+/** Bibliothèque personnelle du site : exemples gardés et annonces supprimées de la veille. */
+export type MetaLibraryView = {
+  /** false : tables de la migration 0007 absentes — garder et supprimer sont indisponibles */
+  available: boolean;
+  kept: MetaLibraryEntry[];
+  dismissedIds: string[];
+};
+
+/** État des visuels de la veille courante. */
+export type MetaVisualsView = {
+  /** Un fournisseur de visuels est configuré pour cette veille */
+  provider: boolean;
+  /** Annonces de la veille dont les visuels n'ont pas encore été cherchés */
+  missing: number;
+  /** Recherches de visuels encore possibles ce mois-ci */
+  remaining: number;
+};
+
 export type MetaAdsData = {
   /** Dernière analyse lancée (en cours, en erreur ou aboutie) */
   latest: MetaAdsAnalysisView | null;
@@ -57,7 +86,23 @@ export type MetaAdsData = {
   cookieBanner: boolean;
   results: PaidResults;
   resultsDays: number;
+  library: MetaLibraryView;
+  /** Visuels des annonces de la veille courante, par identifiant d'annonce */
+  mediaByAdId: Record<string, MetaAdMedia>;
+  visuals: MetaVisualsView;
 };
+
+/**
+ * Veille enregistrée avant le filtre de pertinence (`filtered` absent) : le
+ * filtre est appliqué à l'affichage, pour que le contenu commercial et les
+ * formations disparaissent sans attendre une nouvelle analyse.
+ */
+export function withRelevanceFilter(market: MetaAdsMarket | null, seed: Pick<MetaAdsSeed, "profession">): MetaAdsMarket | null {
+  if (!market || market.filtered) return market;
+  const { kept, filtered } = filterRelevantAds(market.ads, { profession: seed.profession });
+  const keptIds = new Set(kept.map((ad) => ad.id));
+  return { ...market, ads: market.ads.filter((ad) => keptIds.has(ad.id)), filtered };
+}
 
 /** Statut affiché : une analyse `running` trop ancienne devient une erreur (processus interrompu). */
 export function displayMetaStatus(status: MetaAdsAnalysisStatus, updatedAt: Date | string, now: Date): { status: MetaAdsAnalysisStatus; error: string | null } {
@@ -75,7 +120,7 @@ function toView(row: AnalysisRow, now: Date): MetaAdsAnalysisView {
     id: row.id,
     status: shown.status,
     seed: row.seed,
-    market: row.market ?? null,
+    market: withRelevanceFilter(row.market ?? null, row.seed),
     diagnostic: row.diagnostic ?? null,
     creatives: row.creatives ?? null,
     videoPlan: row.videoPlan ?? null,
@@ -126,7 +171,17 @@ export async function getMetaResults(siteId: string, now: Date): Promise<PaidRes
 
 /** Toutes les données de la section, en parallèle. */
 export async function getMetaAdsData(site: Site, now = new Date()): Promise<MetaAdsData> {
-  const [analyses, usage, results] = await Promise.all([getAnalyses(site.id, now), getMetaAdsUsage(getDb(), site.id, now), getMetaResults(site.id, now)]);
+  const db = getDb();
+  const [analyses, usage, results, library, remaining] = await Promise.all([
+    getAnalyses(site.id, now),
+    getMetaAdsUsage(db, site.id, now),
+    getMetaResults(site.id, now),
+    loadMetaLibrary(db, site.id),
+    mediaLookupsRemaining(db, site.id, now),
+  ]);
+  const ads = analyses.current?.market?.ads ?? [];
+  const mediaByAdId = await loadMetaMedia(db, ads.map((ad) => ad.id));
+  const provider = analyses.current ? mediaProviderFor(process.env, analyses.current.provider) !== null : false;
   return {
     latest: analyses.latest,
     current: analyses.current,
@@ -135,5 +190,8 @@ export async function getMetaAdsData(site: Site, now = new Date()): Promise<Meta
     cookieBanner: site.theme.tracking?.cookieBanner !== false,
     results,
     resultsDays: META_RESULTS_DAYS,
+    library,
+    mediaByAdId,
+    visuals: { provider, missing: library.available ? ads.filter((ad) => mediaByAdId[ad.id] === undefined).length : 0, remaining },
   };
 }

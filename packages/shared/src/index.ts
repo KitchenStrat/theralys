@@ -13,4 +13,6 @@ export * from "./social-brief";
 export * from "./google-profile";
 export * from "./google-ads";
 export * from "./meta-ads";
+export * from "./meta-relevance";
+export * from "./meta-library";
 export * from "./social-captions";

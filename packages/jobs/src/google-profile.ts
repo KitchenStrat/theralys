@@ -111,8 +111,10 @@ const ERROR_MESSAGE_MAX = 300;
  * `meta_analysis` : analyse Meta Ads (quota, `requests` = appels à la
  * bibliothèque publicitaire, coût 0) ; `meta_regen` : régénération des
  * créas, du plan vidéo et du plan de campagne (compteur, coût 0).
+ * `meta_media` : recherches de visuels d'annonces chez le fournisseur
+ * (`requests` = recherches, coût réel ; plafond mensuel par site).
  */
-export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan" | "meta_analysis" | "meta_regen";
+export type GoogleUsageKind = "business_info" | "reviews" | "scan" | "sync_attempt" | "ads_keywords" | "ads_plan" | "meta_analysis" | "meta_regen" | "meta_media";
 
 export type GoogleBudget = {
   month: string;
