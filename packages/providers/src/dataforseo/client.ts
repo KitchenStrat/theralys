@@ -9,6 +9,8 @@
 
 // ─── Résultats ───────────────────────────────────────────────────────────────
 
+import { recordApiUsage, usageErrorText } from "@theralys/shared/usage-runtime";
+
 export type ProviderMode = "dataforseo" | "mock";
 
 export type ProviderResult<T> = {
@@ -145,6 +147,24 @@ export class DataForSeoClient {
    * une grille dont trop de points échouent interrompt ses requêtes en vol.
    */
   protected async request<R>(
+    endpoint: string,
+    init: { method: "GET" | "POST"; body?: unknown },
+    signal?: AbortSignal,
+  ): Promise<{ tasks: DfsTask<R>[]; cost: number }> {
+    // Registre des appels API : coût réel renvoyé par DataForSEO ; un appel annulé par l'appelant n'est pas inscrit
+    const started = Date.now();
+    const operation = endpoint.replace(/^\/v\d+\//, "").replace(/\/+$/, "").slice(0, 80);
+    try {
+      const result = await this.send<R>(endpoint, init, signal);
+      await recordApiUsage({ provider: "dataforseo", operation, units: 1, costUsd: result.cost, costSource: "provider", durationMs: Date.now() - started });
+      return result;
+    } catch (err) {
+      if (!signal?.aborted) await recordApiUsage({ provider: "dataforseo", operation, status: "error", durationMs: Date.now() - started, error: usageErrorText(err) });
+      throw err;
+    }
+  }
+
+  private async send<R>(
     endpoint: string,
     init: { method: "GET" | "POST"; body?: unknown },
     signal?: AbortSignal,

@@ -44,6 +44,7 @@ import { ownedSocialPost } from "@/lib/social/post-access";
 import { getSocialRegenerationUsage, recordSocialRegeneration } from "@/lib/social/regen";
 import { recentGoogleTopics } from "@/lib/google/posts";
 import { getSocialSettings } from "@/lib/social/settings";
+import { attributeApiUsage } from "@theralys/shared/usage-runtime";
 
 const PATH = "/reseaux-sociaux";
 
@@ -144,7 +145,7 @@ export async function planSocialMonth(
       loadSocialBrief(site.id, { includeArticleIds: articleIds, settings }),
       recentTopicsAcrossChannels(site.id, now),
     ]);
-    const generator = createSocialGenerator();
+    const generator = attributeApiUsage(createSocialGenerator(), { feature: "social", siteId: site.id });
     const posts = await generator.planMonth(brief, {
       month,
       slots: initial.freeSlots,
@@ -252,7 +253,7 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
 
   const started = Date.now();
   const db = getDb();
-  const generator = createSocialGenerator();
+  const generator = attributeApiUsage(createSocialGenerator(), { feature: "social", siteId: site.id });
   try {
     // Pré-vérification (message immédiat) ; la garantie est donnée sous verrou à l'insertion
     const usage = await getSocialRequestUsage(site.id, now);
@@ -588,7 +589,7 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
   const now = new Date();
   const started = Date.now();
   const db = getDb();
-  const generator = createSocialGenerator();
+  const generator = attributeApiUsage(createSocialGenerator(), { feature: "social", siteId: site.id });
   try {
     // 1. Transaction courte : verrou consultatif du contenu (régénération déjà lancée ailleurs ?) et quota (message immédiat)
     const initial = await db.transaction(async (tx) => {

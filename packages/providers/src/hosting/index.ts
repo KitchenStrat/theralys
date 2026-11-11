@@ -4,6 +4,8 @@
  * Le rattachement d'un domaine au projet `apps/sites` passe par l'API Domains.
  */
 
+import { trackApiCall } from "@theralys/shared/usage-runtime";
+
 export type DomainAttachment = {
   domain: string;
   attached: boolean;
@@ -31,6 +33,11 @@ export class VercelHostingProvider implements HostingProvider {
   }
 
   async attachDomain(domain: string): Promise<DomainAttachment> {
+    // Registre des appels API : compris dans l'abonnement Vercel, compté pour l'activité
+    return trackApiCall({ provider: "vercel", operation: "domain_attach", units: 1, costSource: "free" }, () => this.attachDomainOnce(domain));
+  }
+
+  private async attachDomainOnce(domain: string): Promise<DomainAttachment> {
     await this.addProjectDomain({ name: domain });
     // www.<domaine> : rattaché avec redirection permanente vers le domaine nu
     // (le CNAME créé chez OVH pointe déjà vers Vercel — sans ce rattachement,

@@ -4,6 +4,8 @@
  * affiche le lien à transmettre manuellement.
  */
 
+import { trackApiCall } from "@theralys/shared/usage-runtime";
+
 export type MailMessage = {
   to: string;
   subject: string;
@@ -47,6 +49,15 @@ export class ResendMailProvider implements MailProvider {
   ) {}
 
   async send(message: MailMessage): Promise<MailResult> {
+    // Registre des appels API : e-mails compris dans l'abonnement, comptés pour l'activité (jamais le destinataire)
+    return trackApiCall(
+      { provider: "resend", operation: "email", costSource: "free" },
+      () => this.sendOnce(message),
+      (result) => (result.sent ? { units: 1 } : { status: "error", error: result.error ?? "E-mail refusé" }),
+    );
+  }
+
+  private async sendOnce(message: MailMessage): Promise<MailResult> {
     const response = await this.fetchImpl("https://api.resend.com/emails", {
       method: "POST",
       headers: {

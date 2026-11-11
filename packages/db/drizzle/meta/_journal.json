@@ -57,6 +57,13 @@
       "when": 1794320000000,
       "tag": "0007_meta_library",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794420000000,
+      "tag": "0008_api_usage",
+      "breakpoints": true
     }
   ]
 }

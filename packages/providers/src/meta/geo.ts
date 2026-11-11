@@ -9,6 +9,7 @@
  */
 
 import { distanceKm, normalizeAdsText } from "@theralys/shared";
+import { trackApiCall } from "@theralys/shared/usage-runtime";
 
 export const GEO_API_BASE = "https://geo.api.gouv.fr";
 export const GEO_TIMEOUT_MS = 8_000;
@@ -66,13 +67,20 @@ export async function fetchRegionCommunes(regionCode: string, opts: { fetchImpl?
       clearTimeout(timer);
     }
   };
-  // Une relance : les coupures de connexion ponctuelles ne doivent pas priver la veille de son index local
-  try {
-    return await attempt();
-  } catch {
-    await new Promise((resolve) => setTimeout(resolve, opts.retryDelayMs ?? GEO_RETRY_DELAY_MS));
-    return attempt();
-  }
+  // Registre des appels API : service public gratuit, compté pour l'activité
+  return trackApiCall(
+    { provider: "geo_api", operation: "communes", costSource: "free" },
+    async () => {
+      // Une relance : les coupures de connexion ponctuelles ne doivent pas priver la veille de son index local
+      try {
+        return await attempt();
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, opts.retryDelayMs ?? GEO_RETRY_DELAY_MS));
+        return attempt();
+      }
+    },
+    (communes) => ({ units: communes.length }),
+  );
 }
 
 /** Population à partir de laquelle une ville voisine vaut une recherche. */

@@ -10,6 +10,9 @@
  * une illustration SVG déterministe accordée au thème du site.
  */
 
+import { falCostUsd } from "@theralys/shared";
+import { trackApiCall } from "@theralys/shared/usage-runtime";
+
 export type ImageRequest = {
   /** Sujet de l'illustration (en anglais pour FLUX), ex. le titre de l'article */
   subject: string;
@@ -80,26 +83,33 @@ export class FalImageProvider implements ImageProvider {
     const sizing = model.includes("ultra")
       ? { aspect_ratio: closestAspectRatio(width, height), raw: true }
       : { image_size: { width, height } };
-    const response = await fetch(`https://fal.run/${model}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${this.apiKey}`,
-        "Content-Type": "application/json",
+    // Registre des appels API : une image, facturée au barème du modèle (mégapixels ou forfait)
+    return trackApiCall(
+      { provider: "fal", operation: "image", model, meta: { quality, width, height } },
+      async () => {
+        const response = await fetch(`https://fal.run/${model}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Key ${this.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt,
+            ...sizing,
+            num_images: 1,
+            enable_safety_checker: true,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`fal.ai ${response.status}: ${(await response.text()).slice(0, 300)}`);
+        }
+        const data = (await response.json()) as { images?: { url?: string }[] };
+        const url = data.images?.[0]?.url;
+        if (!url) throw new Error("fal.ai : réponse sans image");
+        return { url, aiGenerated: true, provider: "fal" } as const;
       },
-      body: JSON.stringify({
-        prompt,
-        ...sizing,
-        num_images: 1,
-        enable_safety_checker: true,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(`fal.ai ${response.status}: ${(await response.text()).slice(0, 300)}`);
-    }
-    const data = (await response.json()) as { images?: { url?: string }[] };
-    const url = data.images?.[0]?.url;
-    if (!url) throw new Error("fal.ai : réponse sans image");
-    return { url, aiGenerated: true, provider: "fal" };
+      () => ({ units: 1, costUsd: falCostUsd(model, width, height), costSource: "tariff" }),
+    );
   }
 }
 

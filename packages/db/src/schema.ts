@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -619,6 +620,54 @@ export const googleUsage = pgTable(
   },
   (t) => [index("google_usage_site_month_idx").on(t.siteId, t.month)],
 );
+
+// ─── Registre des appels API (pilotage des coûts) ───────────────────────────
+
+/**
+ * Registre de tous les appels aux API externes (Anthropic, fal.ai, Google
+ * Places, DataForSEO, Meta, ScrapeCreators, Resend, OVH…) : une ligne par
+ * appel, avec le fournisseur, l'opération, la fonctionnalité et le site
+ * concernés, le volume (tokens, images, crédits), le coût en dollars et sa
+ * provenance (`provider` : coût réel renvoyé par le fournisseur · `tariff` :
+ * calculé au barème · `free`). Écrit par `recordApiUsage`
+ * (`@theralys/shared/usage-runtime`) ; lu par l'admin. `google_usage` reste
+ * le registre des quotas par site.
+ */
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    provider: text("provider").notNull(),
+    operation: text("operation").notNull(),
+    /** Fonctionnalité de la plateforme (`ApiFeatureId`) ; null : non attribué */
+    feature: text("feature"),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+    model: text("model"),
+    /** ok | error */
+    status: text("status").notNull().default("ok"),
+    requests: integer("requests").notNull().default(1),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    /** Volume dans l'unité du fournisseur (images, crédits, e-mails…) */
+    units: doublePrecision("units").notNull().default(0),
+    costUsd: doublePrecision("cost_usd").notNull().default(0),
+    /** provider | tariff | free */
+    costSource: text("cost_source").notNull().default("tariff"),
+    durationMs: integer("duration_ms").notNull().default(0),
+    error: text("error"),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
+  },
+  (t) => [
+    index("api_usage_created_idx").on(t.createdAt),
+    index("api_usage_provider_created_idx").on(t.provider, t.createdAt),
+    index("api_usage_site_created_idx").on(t.siteId, t.createdAt),
+  ],
+);
+
+export type ApiUsageRow = typeof apiUsage.$inferSelect;
 
 // ─── Google Ads (studio) ─────────────────────────────────────────────────────
 

@@ -68,6 +68,7 @@ import {
   syncGoogleProfiles,
 } from "./google-profile";
 import { sendMonthReminders, sendWeeklyContentDigests } from "./notifications";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 const HORIZON_WEEKS = 6;
 /** L'IA rédige chaque article 7 jours avant sa date de publication. */
@@ -194,26 +195,32 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
           })
         : null;
 
-      const article = await generator.generateArticle(
-        {
-          topic: entry.topic,
-          motifSlug: entry.motifSlug,
-          motifTitle: motifPage?.title ?? null,
-          profession: prospect?.profession ?? "praticien bien-être",
-          city: prospect?.city ?? "votre ville",
-          firstName: prospect?.firstName ?? "votre praticien",
-        },
-        voice,
+      // Registre des appels API : rédaction et image rattachées au blog de ce site
+      const usage = { feature: "blog", siteId: site.id } as const;
+      const article = await withApiUsage(usage, () =>
+        generator.generateArticle(
+          {
+            topic: entry.topic,
+            motifSlug: entry.motifSlug,
+            motifTitle: motifPage?.title ?? null,
+            profession: prospect?.profession ?? "praticien bien-être",
+            city: prospect?.city ?? "votre ville",
+            firstName: prospect?.firstName ?? "votre praticien",
+          },
+          voice,
+        ),
       );
 
       // Photo de banque d'images adaptée au sujet ; repli IA si indisponible
-      const image = await findStockOrGenerate(stock, imageProvider, {
-        query: article.imageQuery ?? stockQueryFor(entry.topic, prospect?.profession ?? undefined),
-        subject: article.title,
-        seed: article.slug || article.title,
-        width: 1024,
-        height: 576,
-      });
+      const image = await withApiUsage(usage, () =>
+        findStockOrGenerate(stock, imageProvider, {
+          query: article.imageQuery ?? stockQueryFor(entry.topic, prospect?.profession ?? undefined),
+          subject: article.title,
+          seed: article.slug || article.title,
+          width: 1024,
+          height: 576,
+        }),
+      );
 
       const publishAt = new Date(`${entry.scheduledFor}T00:00:00Z`);
       publishAt.setUTCHours(PUBLISH_HOUR_UTC);
@@ -329,7 +336,7 @@ export async function syncGoogleReviews(now = new Date()): Promise<TickReport> {
 
     if (places.mode === "google") {
       try {
-        const details = await places.fetchDetails(placeId);
+        const details = await withApiUsage({ feature: "google_profile", siteId: site.id }, () => places.fetchDetails(placeId));
         processed += await upsertPlacesReviews(db, site.id, details.reviews, now);
         if (details.rating !== null) {
           await db

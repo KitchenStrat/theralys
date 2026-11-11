@@ -57,6 +57,7 @@ import { loadSocialBrief } from "@/lib/social/brief";
 import { forbiddenWord, instructionsRefusal } from "@/lib/social/compliance";
 import { isMissingSchemaError, recentSocialTopics, type DbTransaction } from "@/lib/social/data";
 import { connectGooglePlace } from "../actions";
+import { attributeApiUsage } from "@theralys/shared/usage-runtime";
 
 const PATH = "/fiche-google";
 const NOT_INCLUDED = "La section Fiche Google n'est pas incluse dans votre formule.";
@@ -498,7 +499,7 @@ export async function planGoogleMonth(input: unknown): Promise<{ error?: string;
       recentTopicsAcrossChannels(site.id, now),
       activeKeywordTexts(site.id),
     ]);
-    const generator = createGooglePostGenerator();
+    const generator = attributeApiUsage(createGooglePostGenerator(), { feature: "google_profile", siteId: site.id });
     const links = { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl };
     const posts = await generator.planMonth(brief, { month, slots: initial.freeSlots, recentTopics, photosById, refsById, keywords }, links);
 
@@ -589,7 +590,7 @@ export async function requestGooglePost(input: unknown): Promise<{ error?: strin
 
   const started = Date.now();
   const db = getDb();
-  const generator = createGooglePostGenerator();
+  const generator = attributeApiUsage(createGooglePostGenerator(), { feature: "google_profile", siteId: site.id });
   try {
     const usage = await getGoogleRequestUsage(site.id, now);
     if (usage.remaining === 0) return { error: QUOTA_REACHED };
@@ -710,7 +711,7 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
   const now = new Date();
   const started = Date.now();
   const db = getDb();
-  const generator = createGooglePostGenerator();
+  const generator = attributeApiUsage(createGooglePostGenerator(), { feature: "google_profile", siteId: site.id });
   try {
     // 1. Transaction courte : verrou consultatif du post (régénération déjà lancée ailleurs ?) et quota (message immédiat)
     const initial = await db.transaction(async (tx) => {

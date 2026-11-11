@@ -16,3 +16,4 @@ export * from "./meta-ads";
 export * from "./meta-relevance";
 export * from "./meta-library";
 export * from "./social-captions";
+export * from "./api-usage";

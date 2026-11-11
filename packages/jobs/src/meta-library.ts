@@ -54,6 +54,7 @@ import {
 import { googleUsage, metaAdMedia, metaAdsAnalyses, metaAdsLibrary, type Database, type MetaAdMediaRow, type Site } from "@theralys/db";
 import { MockAdMediaProvider, createAdMediaProvider, isAdMediaBlocking, isAdMediaPossiblyBilled, type AdMediaLookup, type AdMediaProvider } from "@theralys/providers/meta/media";
 import type { DbExecutor } from "./google-profile";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /** Recherches de visuels menées de front. */
 export const META_MEDIA_CONCURRENCY = 6;
@@ -504,7 +505,12 @@ export type SiteMediaEnrichment = MediaEnrichment & {
  * par site), recherche, puis solde de la réservation avec les recherches
  * comptées — même si le lot échoue en route.
  */
-export async function enrichSiteAdsMedia(
+export function enrichSiteAdsMedia(...args: Parameters<typeof enrichSiteAdsMediaAttributed>): ReturnType<typeof enrichSiteAdsMediaAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1] }, () => enrichSiteAdsMediaAttributed(...args));
+}
+
+async function enrichSiteAdsMediaAttributed(
   db: Database,
   siteId: string,
   adIds: readonly string[],
@@ -684,7 +690,12 @@ async function durableMedia(db: Database, siteId: string, adId: string, media: M
  * l'état). Refus groupé si la bibliothèque dépasserait META_LIBRARY_KEPT_MAX
  * exemples.
  */
-export async function keepMetaAds(db: Database, siteId: string, adIds: readonly string[], deps: KeepDeps): Promise<LibraryOutcome> {
+export function keepMetaAds(...args: Parameters<typeof keepMetaAdsAttributed>): ReturnType<typeof keepMetaAdsAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1] }, () => keepMetaAdsAttributed(...args));
+}
+
+async function keepMetaAdsAttributed(db: Database, siteId: string, adIds: readonly string[], deps: KeepDeps): Promise<LibraryOutcome> {
   const { ids, refusal } = cleanIds(adIds);
   if (refusal) return refusal;
   try {
@@ -821,7 +832,12 @@ export type VideoSource = { url: string; durable: boolean } | null;
  * recherche à chaque lecture). null si l'annonce n'appartient ni à la veille
  * ni à la bibliothèque du site, ou si aucune vidéo n'est disponible.
  */
-export async function metaAdVideoSource(
+export function metaAdVideoSource(...args: Parameters<typeof metaAdVideoSourceAttributed>): ReturnType<typeof metaAdVideoSourceAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1].id }, () => metaAdVideoSourceAttributed(...args));
+}
+
+async function metaAdVideoSourceAttributed(
   db: Database,
   site: Pick<Site, "id">,
   adId: string,

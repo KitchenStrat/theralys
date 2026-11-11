@@ -1,5 +1,6 @@
 import { SignJWT } from "jose";
 import { createMailProvider } from "@theralys/providers/mail";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 export type InvitationResult = {
   /** Lien de création du mot de passe (7 jours) — à transmettre si non envoyé */
@@ -34,7 +35,7 @@ export async function createClientInvitation(client: {
   const mail = createMailProvider();
   const firstName = client.name.split(" ")[0] ?? client.name;
   // Un échec transitoire du fournisseur (429, 5xx, délai) ne bloque pas l'invitation : le lien reste affiché à l'admin
-  const result = await mail.send({
+  const result = await withApiUsage({ feature: "notifications" }, () => mail.send({
     to: client.email,
     subject: "Créez votre accès à votre espace praticien Harmony",
     text: [
@@ -68,7 +69,7 @@ export async function createClientInvitation(client: {
         <p>À très vite,<br/>L'équipe Harmony</p>
       </div>
     `,
-  }).catch((err: unknown) => {
+  })).catch((err: unknown) => {
     console.warn("[invitations] envoi de l'e-mail impossible :", err instanceof Error ? err.message : err);
     return { sent: false, error: err instanceof Error ? err.message : String(err) };
   });

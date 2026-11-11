@@ -23,6 +23,7 @@
  * indisponible. Le mock déterministe (`hash31`) sert les démos et les tests.
  */
 
+import { trackApiCall } from "@theralys/shared/usage-runtime";
 import {
   META_AD_LIBRARY_COUNTRY,
   META_GRAPH_VERSION_DEFAULT,
@@ -369,7 +370,13 @@ export class MetaAdLibraryProvider implements AdLibraryProvider {
       limit: pageLimitFor(input.limit),
     });
     while (next && calls < maxPages) {
-      const page = await this.fetchPage(next);
+      const url: string = next;
+      // Registre des appels API : API gratuite, comptée pour l'activité (une page = une requête, relance comprise)
+      const page = await trackApiCall(
+        { provider: "meta_ad_library", operation: "ads_archive", costSource: "free" },
+        () => this.fetchPage(url),
+        (result) => ({ units: result.ads.length }),
+      );
       calls++;
       ads.push(...page.ads);
       next = page.next;

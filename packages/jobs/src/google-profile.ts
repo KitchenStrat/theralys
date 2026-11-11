@@ -85,6 +85,7 @@ import { DataForSeoError, createLocalSearchProvider, type GoogleReviewItem } fro
 import { createGooglePlacesProvider, type GooglePlacesProvider } from "@theralys/providers/google";
 import { loadGoogleBrief, siteUrl } from "./google-brief";
 import type { TickOptions, TickReport } from "./ticks";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /** Plafond mensuel d'une démo (audit + avis + quelques relevés), USD. */
 export const GOOGLE_DEMO_BUDGET_USD = 1;
@@ -475,7 +476,12 @@ export type SyncProfileOutcome =
  * `snapshot.fetchedAt` du dernier audit facturé — mais pas le budget.
  * Toute tentative sans appel abouti laisse une ligne `sync_attempt`.
  */
-export async function syncGoogleProfile(
+export function syncGoogleProfile(...args: Parameters<typeof syncGoogleProfileAttributed>): ReturnType<typeof syncGoogleProfileAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_profile", siteId: args[0] }, () => syncGoogleProfileAttributed(...args));
+}
+
+async function syncGoogleProfileAttributed(
   siteId: string,
   opts: { now?: Date; force?: boolean } = {},
 ): Promise<SyncProfileOutcome> {
@@ -666,7 +672,12 @@ type ScanStart =
  * qui peut dater de plusieurs minutes : `opts.now` est accepté pour la
  * compatibilité des appelants mais n'est plus lu.
  */
-export async function runGoogleScan(
+export function runGoogleScan(...args: Parameters<typeof runGoogleScanAttributed>): ReturnType<typeof runGoogleScanAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_profile", siteId: args[0] }, () => runGoogleScanAttributed(...args));
+}
+
+async function runGoogleScanAttributed(
   siteId: string,
   keywordId: string,
   trigger: "manual" | "scheduled",
@@ -784,7 +795,12 @@ export async function runGoogleScan(
  * analysés avec réponse ; une erreur IA est journalisée et le compte des
  * lots déjà écrits est rendu (jamais de throw vers le tick).
  */
-export async function analyzeGoogleReviews(siteId: string, opts: { limit?: number; now?: Date } = {}): Promise<number> {
+export function analyzeGoogleReviews(...args: Parameters<typeof analyzeGoogleReviewsAttributed>): ReturnType<typeof analyzeGoogleReviewsAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_profile", siteId: args[0] }, () => analyzeGoogleReviewsAttributed(...args));
+}
+
+async function analyzeGoogleReviewsAttributed(siteId: string, opts: { limit?: number; now?: Date } = {}): Promise<number> {
   const now = opts.now ?? new Date();
   const max = GOOGLE_REVIEWS_BATCH * GOOGLE_REVIEWS_MAX_BATCHES;
   const limit = Math.max(1, Math.min(opts.limit ?? max, max));
@@ -918,7 +934,12 @@ export type ReplyGenerationOutcome =
  * écartée par les garde-fous est une erreur lisible, l'analyse précédente
  * est conservée (l'appel IA a eu lieu : il est décompté).
  */
-export async function generateGoogleReviewReply(
+export function generateGoogleReviewReply(...args: Parameters<typeof generateGoogleReviewReplyAttributed>): ReturnType<typeof generateGoogleReviewReplyAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_profile", siteId: args[0] }, () => generateGoogleReviewReplyAttributed(...args));
+}
+
+async function generateGoogleReviewReplyAttributed(
   siteId: string,
   reviewId: string,
   tone: GoogleReplyTone,
@@ -1099,7 +1120,7 @@ export async function collectGoogleReviewTasks(now = new Date(), opts: TickOptio
         await fail(task.id, "Avis factices interdits sur un site client");
         continue;
       }
-      const result = await provider.fetchReviewsTask(task.taskId);
+      const result = await withApiUsage({ feature: "google_profile", siteId: site.id }, () => provider.fetchReviewsTask(task.taskId));
       if (result.costUsd > 0) await recordGoogleUsage(db, site.id, "reviews", result.costUsd, 1, now);
       if (result.data.status === "pending") {
         await retryLater(task, null);

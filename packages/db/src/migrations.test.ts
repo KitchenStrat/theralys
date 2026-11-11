@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0006_meta_ads puis 0007_meta_library, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0007_meta_library puis 0008_api_usage, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -61,6 +61,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0005_google_ads",
       "0006_meta_ads",
       "0007_meta_library",
+      "0008_api_usage",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -210,5 +211,32 @@ describe("0004_social_followup : provenance des visites et journal des notificat
         s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "notification_log_site_kind_period_idx" ON "notification_log"'),
       ),
     ).toBe(true);
+  });
+});
+
+describe("0008_api_usage : registre des appels API et reprise de l'historique", () => {
+  const statements = statementsOf("0008_api_usage");
+
+  it("table, clé étrangère gardée (site supprimé → null), trois index, puis la reprise", () => {
+    expect(statements).toHaveLength(6);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "api_usage"'));
+    expect(table).toBeDefined();
+    for (const column of ['"provider" text NOT NULL', '"operation" text NOT NULL', '"feature" text', '"site_id" uuid', '"cost_usd" double precision DEFAULT 0 NOT NULL', `"cost_source" text DEFAULT 'tariff' NOT NULL`, '"meta" jsonb']) {
+      expect(table, column).toContain(column);
+    }
+    expect(statements.some((s) => /ADD CONSTRAINT "api_usage_site_id_sites_id_fk".+ON DELETE set null/s.test(s))).toBe(true);
+    expect(statements.filter((s) => s.startsWith('CREATE INDEX IF NOT EXISTS "api_usage_'))).toHaveLength(3);
+  });
+
+  it("la reprise copie les seuls appels facturés de google_usage, une seule fois (garde sur meta.backfill)", () => {
+    const backfill = statements.at(-1)!;
+    expect(backfill.startsWith('INSERT INTO "api_usage"')).toBe(true);
+    expect(backfill).toContain(`WHERE gu."kind" IN ('business_info', 'reviews', 'scan', 'ads_keywords', 'meta_media')`);
+    expect(backfill).toContain(`AND NOT EXISTS (SELECT 1 FROM "api_usage" WHERE "meta" ? 'backfill')`);
+    expect(backfill).toContain(`jsonb_build_object('backfill', gu."id")`);
+    // Quotas et échéanciers (réponses IA, régénérations, analyses…) ne sont pas des appels facturés
+    for (const kind of ["reply_ai", "post_regen", "meta_analysis", "meta_regen", "meta_media_pending", "ads_plan", "sync_attempt"]) {
+      expect(backfill, kind).not.toContain(`'${kind}'`);
+    }
   });
 });

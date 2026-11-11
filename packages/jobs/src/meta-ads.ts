@@ -106,6 +106,7 @@ import { landingPagesFrom, onlineMotifPages, phoneFromSections } from "./google-
 import { loadGoogleBrief } from "./google-brief";
 import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
 import { enrichSiteAdsMedia, libraryForAnalysis, mediaProviderFor, type MetaMediaStore } from "./meta-library";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /** Analyse `running` plus ancienne : le processus est mort, la ligne passe en erreur. */
 export const META_ADS_ANALYSIS_STALE_MINUTES = 15;
@@ -942,7 +943,12 @@ type MetaStart = MetaStartDecision | { kind: "started"; analysisId: string; usag
  * d'écrit, résultat `error` « interrompue »). Toute erreur inattendue → ligne
  * `error`.
  */
-export async function runMetaAdsAnalysis(
+export function runMetaAdsAnalysis(...args: Parameters<typeof runMetaAdsAnalysisAttributed>): ReturnType<typeof runMetaAdsAnalysisAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1] }, () => runMetaAdsAnalysisAttributed(...args));
+}
+
+async function runMetaAdsAnalysisAttributed(
   db: Database,
   siteId: string,
   opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; mediaStore?: MetaMediaStore | null } = {},
@@ -1123,7 +1129,12 @@ async function latestDoneMetaAnalysis(tx: DbExecutor, siteId: string): Promise<M
  * non consommé) ; `assets` remis à vide, `removedRenderUrls` toujours vide
  * (chemins Blob déterministes, écrasés en place au prochain rendu).
  */
-export async function regenerateMetaAds(
+export function regenerateMetaAds(...args: Parameters<typeof regenerateMetaAdsAttributed>): ReturnType<typeof regenerateMetaAdsAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1] }, () => regenerateMetaAdsAttributed(...args));
+}
+
+async function regenerateMetaAdsAttributed(
   db: Database,
   siteId: string,
   opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv },

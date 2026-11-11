@@ -25,6 +25,7 @@ import {
 } from "@theralys/db";
 import { createGooglePlacesProvider } from "@theralys/providers/google";
 import { readingTimeMinutes, slugify } from "@theralys/shared";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /**
  * Pipeline de génération d'une démo (job asynchrone) :
@@ -32,7 +33,12 @@ import { readingTimeMinutes, slugify } from "@theralys/shared";
  * Chaque étape met à jour generation_progress (les 4 pastilles de la liste),
  * puis le statut passe de « En préparation » à « Prête à vérifier ».
  */
-export async function runGenerationJob(siteId: string): Promise<void> {
+export function runGenerationJob(siteId: string): Promise<void> {
+  // Registre des appels API : rédaction, images, photos et fiche Google rattachées à la génération de ce site
+  return withApiUsage({ feature: "site_generation", siteId }, () => runGenerationJobAttributed(siteId));
+}
+
+async function runGenerationJobAttributed(siteId: string): Promise<void> {
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) throw new Error(`Site introuvable : ${siteId}`);

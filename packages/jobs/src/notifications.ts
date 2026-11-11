@@ -44,6 +44,7 @@ import {
 } from "@theralys/db";
 import { captionFor, isoWeekday, type GooglePostContent, type SocialPostContent } from "@theralys/shared";
 import { createMailProvider, type MailProvider } from "@theralys/providers/mail";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 import type { TickOptions, TickReport } from "./ticks";
 
 /** Fuseau des praticiens : jour civil des envois et bornes des périodes. */
@@ -680,13 +681,15 @@ export async function sendWeeklyContentDigests(now = new Date(), opts: Notificat
     );
     if (!logId) continue;
     try {
-      await deliver(
-        db,
-        mail,
-        logId,
-        site.recipients,
-        (recipient) => renderWeeklyDigest({ firstName: firstNameOf(recipient.name), week, items, studioUrl: base }),
-        now,
+      await withApiUsage({ feature: "notifications", siteId: site.siteId }, () =>
+        deliver(
+          db,
+          mail,
+          logId,
+          site.recipients,
+          (recipient) => renderWeeklyDigest({ firstName: firstNameOf(recipient.name), week, items, studioUrl: base }),
+          now,
+        ),
       );
       processed += 1;
     } catch (err) {
@@ -749,13 +752,15 @@ export async function sendMonthReminders(now = new Date(), opts: NotificationOpt
     const social = decision.channels.includes("social") ? socialMonthUrl(base, month.key) : null;
     const google = decision.channels.includes("google") ? googleMonthUrl(base, month.key) : null;
     try {
-      await deliver(
-        db,
-        mail,
-        logId,
-        site.recipients,
-        (recipient) => renderMonthReminder({ firstName: firstNameOf(recipient.name), month, social, google }),
-        now,
+      await withApiUsage({ feature: "notifications", siteId: site.siteId }, () =>
+        deliver(
+          db,
+          mail,
+          logId,
+          site.recipients,
+          (recipient) => renderMonthReminder({ firstName: firstNameOf(recipient.name), month, social, google }),
+          now,
+        ),
       );
       processed += 1;
     } catch (err) {

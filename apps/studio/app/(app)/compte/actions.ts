@@ -12,6 +12,7 @@ import {
 } from "@theralys/providers/registrar";
 import { createHostingProvider } from "@theralys/providers/hosting";
 import { requireClient } from "@/lib/auth";
+import { attributeApiUsage } from "@theralys/shared/usage-runtime";
 
 const domainSchema = z
   .string()
@@ -26,7 +27,7 @@ export async function searchDomain(
   await requireClient();
   const parsed = domainSchema.safeParse(raw);
   if (!parsed.success) return { error: "Nom de domaine invalide (ex. mon-cabinet.fr)" };
-  return createRegistrar().checkAvailability(parsed.data);
+  return attributeApiUsage(createRegistrar(), { feature: "domains" }).checkAvailability(parsed.data);
 }
 
 /**
@@ -47,7 +48,8 @@ export async function purchaseDomain(raw: string): Promise<{ error?: string; dom
   const taken = await db.query.domains.findFirst({ where: eq(domains.name, domainName) });
   if (taken) return { error: "Ce domaine est déjà géré par Harmony" };
 
-  const registrar = createRegistrar();
+  // Registre des appels API : vérification, commande et rattachement du domaine de ce site
+  const registrar = attributeApiUsage(createRegistrar(), { feature: "domains", siteId: site.id });
   const availability = await registrar.checkAvailability(domainName);
   if (!availability.available) return { error: "Ce domaine n'est plus disponible" };
 
@@ -64,7 +66,7 @@ export async function purchaseDomain(raw: string): Promise<{ error?: string; dom
       .where(eq(domains.id, row!.id));
 
     await registrar.configureDns(domainName, VERCEL_DNS_RECORDS);
-    await createHostingProvider().attachDomain(domainName);
+    await attributeApiUsage(createHostingProvider(), { feature: "domains", siteId: site.id }).attachDomain(domainName);
 
     await db.update(domains).set({ status: "configured" }).where(eq(domains.id, row!.id));
     await db

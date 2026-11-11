@@ -8,6 +8,9 @@
  * Limite API : Google renvoie au maximum 5 avis (les plus pertinents).
  */
 
+import { GOOGLE_PLACES_OPERATIONS, type GooglePlacesOperation } from "@theralys/shared";
+import { trackApiCall } from "@theralys/shared/usage-runtime";
+
 export type GooglePlaceResult = {
   placeId: string;
   name: string;
@@ -52,12 +55,22 @@ export interface GooglePlacesProvider {
 
 const PLACES_BASE = "https://places.googleapis.com/v1";
 
+/** Coût au barème d'un appel Places abouti (la franchise mensuelle gratuite est déduite à l'affichage, par mois et par type d'appel). */
+function placesCost(operation: GooglePlacesOperation): { units: number; costUsd: number; costSource: "tariff" } {
+  return { units: 1, costUsd: GOOGLE_PLACES_OPERATIONS[operation].unitUsd, costSource: "tariff" };
+}
+
 export class RealGooglePlacesProvider implements GooglePlacesProvider {
   readonly mode = "google" as const;
   constructor(private readonly apiKey: string) {}
 
   async search(query: string): Promise<GooglePlaceResult[]> {
     if (query.trim().length < 3) return [];
+    // Registre des appels API : Text Search Enterprise (note et nombre d'avis demandés), prix au barème
+    return trackApiCall({ provider: "google_places", operation: "text_search" }, () => this.searchOnce(query), () => placesCost("text_search"));
+  }
+
+  private async searchOnce(query: string): Promise<GooglePlaceResult[]> {
     const response = await fetch(`${PLACES_BASE}/places:searchText`, {
       method: "POST",
       headers: {
@@ -93,6 +106,11 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
   }
 
   async fetchDetails(placeId: string): Promise<GooglePlaceDetails> {
+    // Registre des appels API : Place Details Enterprise + Atmosphere (avis demandés) ; les photos sont comptées à part
+    return trackApiCall({ provider: "google_places", operation: "place_details" }, () => this.fetchDetailsOnce(placeId), () => placesCost("place_details"));
+  }
+
+  private async fetchDetailsOnce(placeId: string): Promise<GooglePlaceDetails> {
     const response = await fetch(
       `${PLACES_BASE}/places/${encodeURIComponent(placeId)}?languageCode=fr`,
       {
@@ -158,13 +176,20 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
   private async resolvePhotoUrl(photoName: string | undefined): Promise<string | null> {
     if (!photoName) return null;
     try {
-      const response = await fetch(
-        `${PLACES_BASE}/${photoName}/media?maxWidthPx=400&skipHttpRedirect=true`,
-        { headers: { "X-Goog-Api-Key": this.apiKey } },
+      // Registre des appels API : une photo = un appel Place Photos
+      return await trackApiCall(
+        { provider: "google_places", operation: "place_photo" },
+        async () => {
+          const response = await fetch(
+            `${PLACES_BASE}/${photoName}/media?maxWidthPx=400&skipHttpRedirect=true`,
+            { headers: { "X-Goog-Api-Key": this.apiKey } },
+          );
+          if (!response.ok) throw new Error(`Places photo ${response.status}`);
+          const data = (await response.json()) as { photoUri?: string };
+          return data.photoUri ?? null;
+        },
+        () => placesCost("place_photo"),
       );
-      if (!response.ok) return null;
-      const data = (await response.json()) as { photoUri?: string };
-      return data.photoUri ?? null;
     } catch {
       return null;
     }

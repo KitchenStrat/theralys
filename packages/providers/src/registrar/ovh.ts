@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { eurToUsd } from "@theralys/shared";
+import { trackApiCall } from "@theralys/shared/usage-runtime";
 import type { DnsRecord, DomainAvailability, DomainOrder, RegistrarProvider } from "./types";
 
 const OVH_ENDPOINT = "https://eu.api.ovh.com/1.0";
@@ -58,6 +60,11 @@ export class OvhRegistrar implements RegistrarProvider {
   }
 
   async checkAvailability(domain: string): Promise<DomainAvailability> {
+    // Registre des appels API : vérification gratuite
+    return trackApiCall({ provider: "ovh", operation: "domain_check", units: 1, costSource: "free" }, () => this.checkAvailabilityOnce(domain));
+  }
+
+  private async checkAvailabilityOnce(domain: string): Promise<DomainAvailability> {
     // L'API d'ordre expose la disponibilité via la création d'un panier
     const cart = await this.call<{ cartId: string }>("POST", "/order/cart", {
       ovhSubsidiary: "FR",
@@ -79,25 +86,40 @@ export class OvhRegistrar implements RegistrarProvider {
   }
 
   async orderDomain(domain: string, _ownerEmail: string): Promise<DomainOrder> {
-    const cart = await this.call<{ cartId: string }>("POST", "/order/cart", {
-      ovhSubsidiary: "FR",
-    });
-    await this.call("POST", `/order/cart/${cart.cartId}/domain`, { domain, duration: "P1Y" });
-    await this.call("POST", `/order/cart/${cart.cartId}/assign`);
-    const checkout = await this.call<{ orderId: number }>(
-      "POST",
-      `/order/cart/${cart.cartId}/checkout`,
-      { autoPayWithPreferredPaymentMethod: true },
+    // Registre des appels API : la commande porte le prix réel du domaine (hors taxes, en euros)
+    let priceEur: number | null = null;
+    return trackApiCall(
+      { provider: "ovh", operation: "domain_order" },
+      async () => {
+        const cart = await this.call<{ cartId: string }>("POST", "/order/cart", {
+          ovhSubsidiary: "FR",
+        });
+        await this.call("POST", `/order/cart/${cart.cartId}/domain`, { domain, duration: "P1Y" });
+        await this.call("POST", `/order/cart/${cart.cartId}/assign`);
+        const checkout = await this.call<{ orderId: number; prices?: { withoutTax?: { value?: number }; withTax?: { value?: number } } }>(
+          "POST",
+          `/order/cart/${cart.cartId}/checkout`,
+          { autoPayWithPreferredPaymentMethod: true },
+        );
+        const price = checkout.prices?.withoutTax?.value ?? checkout.prices?.withTax?.value;
+        priceEur = typeof price === "number" && Number.isFinite(price) && price > 0 ? price : null;
+        return {
+          domain,
+          orderId: String(checkout.orderId),
+          status: "registered",
+          expiresAt: new Date(Date.now() + 365 * 86_400_000),
+        } satisfies DomainOrder;
+      },
+      () => (priceEur !== null ? { units: 1, costUsd: eurToUsd(priceEur), costSource: "provider", meta: { priceEur } } : { units: 1, costSource: "provider", meta: { priceEur: null } }),
     );
-    return {
-      domain,
-      orderId: String(checkout.orderId),
-      status: "registered",
-      expiresAt: new Date(Date.now() + 365 * 86_400_000),
-    };
   }
 
   async configureDns(domain: string, records: DnsRecord[]): Promise<void> {
+    // Registre des appels API : opération gratuite
+    return trackApiCall({ provider: "ovh", operation: "dns_configure", units: 1, costSource: "free" }, () => this.configureDnsOnce(domain, records));
+  }
+
+  private async configureDnsOnce(domain: string, records: DnsRecord[]): Promise<void> {
     for (const record of records) {
       const existing = await this.call<number[]>(
         "GET",

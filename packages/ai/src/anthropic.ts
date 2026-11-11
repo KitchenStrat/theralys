@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
 import { emphasisFeedback, findEmphasisGaps, needsEmphasisRetry } from "./emphasis";
+import { recordApiUsage, usageErrorText } from "@theralys/shared/usage-runtime";
 import { ETHICAL_PROMPT_RULES, checkEthicalComplianceDeep } from "./guardrails";
+import { anthropicUsageOf } from "./usage";
 
 const DEFAULT_MODEL = "claude-opus-5";
 /** Modèle de repli quand un classificateur de sécurité décline la requête. */
@@ -52,6 +54,7 @@ export async function completeStructured<T>(
   for (let attempt = 0; attempt < 2; attempt++) {
     // Streaming obligatoire pour une sortie longue : sans lui, le SDK refuse
     // un appel dont la durée estimée dépasse 10 min (max_tokens élevé).
+    const started = Date.now();
     const response = await client.beta.messages
       .stream({
         model,
@@ -66,7 +69,22 @@ export async function completeStructured<T>(
         system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
         messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
       })
-      .finalMessage();
+      .finalMessage()
+      .catch(async (err: unknown) => {
+        // Appel en échec (réseau, quota, 4xx/5xx) : inscrit au registre, sans coût
+        await recordApiUsage({ provider: "anthropic", operation: "messages", model, status: "error", durationMs: Date.now() - started, error: usageErrorText(err), meta: { effort, attempt: attempt + 1 } });
+        throw err;
+      });
+
+    // Chaque tentative est un appel facturé (relance pour JSON invalide ou formulation interdite comprise)
+    const measured = anthropicUsageOf(response, model);
+    await recordApiUsage({
+      provider: "anthropic",
+      operation: "messages",
+      ...measured,
+      durationMs: Date.now() - started,
+      meta: { ...(measured.meta ?? {}), effort, attempt: attempt + 1, stopReason: response.stop_reason },
+    });
 
     // Toute la chaîne (modèle + repli) a décliné : inutile de retenter le même prompt
     if (response.stop_reason === "refusal") {

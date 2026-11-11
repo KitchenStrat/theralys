@@ -9,6 +9,7 @@
  * le relais (démos locales, tests).
  */
 
+import { trackApiCall } from "@theralys/shared/usage-runtime";
 import { MockImageProvider, type ImageProvider } from "./images";
 
 export type StockImage = {
@@ -39,16 +40,19 @@ export class PexelsStockProvider implements StockImageProvider {
     seed?: string;
   }): Promise<StockImage | null> {
     const orientation = request.width >= request.height ? "landscape" : "portrait";
-    const response = await fetch(
-      `https://api.pexels.com/v1/search?query=${encodeURIComponent(request.query)}&per_page=10&orientation=${orientation}`,
-      { headers: { Authorization: this.apiKey } },
-    );
-    if (!response.ok) {
-      throw new Error(`Pexels ${response.status}: ${(await response.text()).slice(0, 200)}`);
-    }
-    const data = (await response.json()) as {
-      photos?: { src?: { original?: string } }[];
-    };
+    // Registre des appels API : recherche gratuite, comptée pour l'activité
+    const data = await trackApiCall({ provider: "pexels", operation: "search", units: 1, costSource: "free" }, async () => {
+      const response = await fetch(
+        `https://api.pexels.com/v1/search?query=${encodeURIComponent(request.query)}&per_page=10&orientation=${orientation}`,
+        { headers: { Authorization: this.apiKey } },
+      );
+      if (!response.ok) {
+        throw new Error(`Pexels ${response.status}: ${(await response.text()).slice(0, 200)}`);
+      }
+      return (await response.json()) as {
+        photos?: { src?: { original?: string } }[];
+      };
+    });
     const photos = (data.photos ?? []).filter((p) => p.src?.original);
     if (photos.length === 0) return null;
     const pick = photos[hashCode(request.seed ?? request.query) % photos.length]!;

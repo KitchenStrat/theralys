@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./crypto": "./src/crypto.ts"
+    "./crypto": "./src/crypto.ts",
+    "./usage-runtime": "./src/usage-runtime.ts"
   },
   "scripts": {
     "lint": "eslint src",

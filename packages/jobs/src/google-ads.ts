@@ -78,6 +78,7 @@ import { DataForSeoError } from "@theralys/providers/dataforseo";
 import { adsBidForRequest, createAdsDataProvider, type AdsDataProvider } from "@theralys/providers/dataforseo/ads";
 import { loadGoogleBrief } from "./google-brief";
 import { googleBudget, hasRealGoogleProvider, type DbExecutor } from "./google-profile";
+import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /** Analyse `running` plus ancienne : le processus est mort, la ligne passe en erreur. */
 export const GOOGLE_ADS_ANALYSIS_STALE_MINUTES = 15;
@@ -485,7 +486,12 @@ type AdsStart = AdsStartDecision | { kind: "started"; analysisId: string; usageI
  * ligne `done` avec le coût réel. Toute erreur → ligne `error`, coût réel
  * conservé dans `google_usage`.
  */
-export async function runGoogleAdsAnalysis(
+export function runGoogleAdsAnalysis(...args: Parameters<typeof runGoogleAdsAnalysisAttributed>): ReturnType<typeof runGoogleAdsAnalysisAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_ads", siteId: args[1] }, () => runGoogleAdsAnalysisAttributed(...args));
+}
+
+async function runGoogleAdsAnalysisAttributed(
   db: Database,
   siteId: string,
   opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv } = {},
@@ -674,7 +680,12 @@ export async function runGoogleAdsAnalysis(
  * recompté dans la transaction qui inscrit `google_usage` kind `ads_plan`
  * (coût 0) et enregistre le plan.
  */
-export async function regenerateGoogleAdsPlan(
+export function regenerateGoogleAdsPlan(...args: Parameters<typeof regenerateGoogleAdsPlanAttributed>): ReturnType<typeof regenerateGoogleAdsPlanAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "google_ads", siteId: args[1] }, () => regenerateGoogleAdsPlanAttributed(...args));
+}
+
+async function regenerateGoogleAdsPlanAttributed(
   db: Database,
   siteId: string,
   opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv },

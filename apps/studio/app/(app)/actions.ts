@@ -58,6 +58,7 @@ import { isGenerationStale } from "@/lib/editor/page-groups";
 import { siteUrl } from "@/lib/data";
 import { firstSocialError, normalizeSocialLinks } from "@/lib/editor/social-links";
 import { conversionLabelsFor } from "@/lib/google-ads/tracking";
+import { attributeApiUsage } from "@theralys/shared/usage-runtime";
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
@@ -81,11 +82,11 @@ export async function completeOnboardingTask(key: string): Promise<void> {
 
 /** Recherche de fiche Google depuis l'éditeur (client ou accès agence). */
 export async function searchGoogle(query: unknown): Promise<GooglePlaceResult[]> {
-  await requireClient();
+  const session = await requireClient();
   const parsed = z.string().trim().min(3).max(120).safeParse(query);
   if (!parsed.success) return [];
   try {
-    return await createGooglePlacesProvider().search(parsed.data);
+    return await attributeApiUsage(createGooglePlacesProvider(), { feature: "site_editor", siteId: session.siteId }).search(parsed.data);
   } catch {
     return [];
   }
@@ -131,7 +132,7 @@ export async function connectGooglePlace(input: unknown): Promise<{ error?: stri
     .where(eq(prospects.id, site.prospectId));
 
   // Vrais avis tout de suite (API réelle uniquement — best-effort)
-  const places = createGooglePlacesProvider();
+  const places = attributeApiUsage(createGooglePlacesProvider(), { feature: "site_editor", siteId: site.id });
   if (places.mode === "google") {
     try {
       const details = await places.fetchDetails(parsed.data.placeId);
@@ -337,13 +338,15 @@ async function generateMotifContent(
   prospect: Prospect,
   motif: { slug: string; title: string; excerpt?: string },
 ): Promise<GeneratedMotifContent> {
-  const generated = await createSiteGenerator().generateMotifPage(motifGenerationInput(site, prospect), {
+  // Registre des appels API : rédaction et photo rattachées à l'éditeur de ce site
+  const usage = { feature: "site_editor", siteId: site.id } as const;
+  const generated = await attributeApiUsage(createSiteGenerator(), usage).generateMotifPage(motifGenerationInput(site, prospect), {
     slug: motif.slug,
     title: motif.title,
     excerpt: motif.excerpt || motif.title,
   });
   // Photo adaptée au sujet (banque d'images, repli IA)
-  const image = await findStockOrGenerate(createStockImageProvider(), createImageProvider(), {
+  const image = await findStockOrGenerate(attributeApiUsage(createStockImageProvider(), usage), attributeApiUsage(createImageProvider(), usage), {
     query: generated.imageQuery ?? stockQueryFor(motif.title, prospect.profession),
     subject: `wellness treatment scene evoking « ${motif.title} », soothing hands-on care details, cozy practice room`,
     seed: `${motif.slug}-${Date.now()}`,
@@ -485,7 +488,8 @@ export async function regenerateArticleImage(articleId: string): Promise<{ image
 
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
   // La graine change à chaque clic → une photo différente à chaque régénération
-  const image = await findStockOrGenerate(createStockImageProvider(), createImageProvider(), {
+  const blogUsage = { feature: "blog", siteId: session.siteId } as const;
+  const image = await findStockOrGenerate(attributeApiUsage(createStockImageProvider(), blogUsage), attributeApiUsage(createImageProvider(), blogUsage), {
     query: stockQueryFor(article.title),
     subject: `${article.title} (variante ${Date.now() % 7})`,
     seed: `${article.id}-${Date.now()}`,

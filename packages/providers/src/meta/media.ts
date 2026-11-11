@@ -16,6 +16,8 @@
  */
 
 import { META_MEDIA_ITEMS_MAX, isMetaCdnUrl, metaCdnExpiry, normalizeAdsText, type MetaAdMediaFormat } from "@theralys/shared";
+import { SCRAPECREATORS_CREDIT_USD } from "@theralys/shared";
+import { trackApiCall } from "@theralys/shared/usage-runtime";
 import { boundedText } from "./index";
 
 export const SCRAPECREATORS_BASE = "https://api.scrapecreators.com";
@@ -217,6 +219,17 @@ export class ScrapeCreatorsMediaProvider implements AdMediaProvider {
 
   async lookup(adId: string): Promise<AdMediaLookup | null> {
     if (!isAdId(adId)) return null;
+    // Registre des appels API : un crédit par recherche répondue ; un échec n'est compté que s'il a pu être facturé
+    const credit = { units: 1, costUsd: SCRAPECREATORS_CREDIT_USD, costSource: "tariff" as const };
+    return trackApiCall(
+      { provider: "scrapecreators", operation: "ad_library_ad" },
+      () => this.lookupWithRetry(adId),
+      (result) => ({ ...credit, meta: { found: result !== null, creditsRemaining: this.creditsRemaining } }),
+      (err) => (isAdMediaPossiblyBilled(err) ? credit : {}),
+    );
+  }
+
+  private async lookupWithRetry(adId: string): Promise<AdMediaLookup | null> {
     let last: AdMediaError | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0 && this.retryDelayMs > 0) await sleep(this.retryDelayMs);
