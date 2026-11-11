@@ -157,7 +157,7 @@ export const API_FEATURE_LABELS: Record<ApiFeatureId, string> = {
 
 /** Libellé d'une fonctionnalité enregistrée ; « Non attribué » quand l'appel n'en portait pas (ou une valeur inconnue). */
 export function apiFeatureLabel(feature: string | null | undefined): string {
-  return feature && feature in API_FEATURE_LABELS ? API_FEATURE_LABELS[feature as ApiFeatureId] : "Non attribué";
+  return isApiFeatureId(feature) ? API_FEATURE_LABELS[feature] : "Non attribué";
 }
 
 export function isApiFeatureId(value: unknown): value is ApiFeatureId {
@@ -208,43 +208,65 @@ export function eurToUsd(eur: number): number {
 /**
  * Prix Anthropic en dollars par million de tokens (entrée, sortie) — barème
  * public de l'API au 3 novembre 2026. La réflexion du modèle est facturée en
- * tokens de sortie.
+ * tokens de sortie. `cacheRead` : prix de lecture du cache quand il n'est pas
+ * 0,1 × le prix d'entrée ; `longPrompt` : palier appliqué quand le prompt
+ * dépasse `above` tokens.
  */
-export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, { input: number; output: number }> = {
-  "claude-fable-5-2": { input: 8, output: 40 },
-  "claude-fable-5-1": { input: 10, output: 50 },
+export type AnthropicModelPrice = {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  longPrompt?: { above: number; input: number; output: number };
+};
+
+export const ANTHROPIC_PRICES_USD_PER_MTOK: Record<string, AnthropicModelPrice> = {
+  "claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2 },
+  "claude-fable-5-1": { input: 10, output: 50, cacheRead: 0.25 },
   "claude-fable-5": { input: 10, output: 50 },
-  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-opus-5-5": { input: 4, output: 20, cacheRead: 0.2 },
   "claude-opus-5": { input: 5, output: 25 },
   "claude-opus-4-8": { input: 5, output: 25 },
   "claude-opus-4-7": { input: 5, output: 25 },
   "claude-opus-4-6": { input: 5, output: 25 },
-  "claude-sonnet-5-5": { input: 2, output: 10 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1 },
   "claude-sonnet-5": { input: 2, output: 10 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, longPrompt: { above: 100_000, input: 0.5, output: 2.5 } },
   "claude-haiku-4-5": { input: 1, output: 5 },
 };
 /** Modèle dont le prix sert de repli quand le modèle servi n'est pas au barème. */
 export const ANTHROPIC_FALLBACK_PRICE_MODEL = "claude-opus-5";
-/** Écriture en cache : 1,25 × le prix d'entrée · lecture du cache : 0,1 ×. */
+/** Écriture en cache : 1,25 × le prix d'entrée · lecture du cache : 0,1 × (sauf `cacheRead` du modèle). */
 export const ANTHROPIC_CACHE_WRITE_FACTOR = 1.25;
 export const ANTHROPIC_CACHE_READ_FACTOR = 0.1;
 
+/** Suffixe d'un identifiant daté (« -20260401 ») ou d'un alias (« -latest ») : même modèle, même prix. */
+const ANTHROPIC_SNAPSHOT_SUFFIX = /^-(\d{8}|latest)$/;
+
 /**
- * Prix d'un modèle Anthropic : identifiant exact, sinon le plus long
- * identifiant du barème dont il est le préfixe étendu (« claude-opus-5-5-… »),
- * sinon le prix de repli (`known: false`).
+ * Ligne du barème d'un modèle : identifiant exact ou daté (`known`), sinon
+ * la ligne de la même famille — le plus long identifiant dont il prolonge le
+ * nom, une version « claude-opus-5-6 » sortie après le barème — ou le prix de
+ * repli, signalés `known: false` pour que l'admin montre un prix à vérifier.
  */
-export function anthropicPrice(model: string | null | undefined): { input: number; output: number; known: boolean } {
+function anthropicPriceEntry(model: string | null | undefined): { price: AnthropicModelPrice; known: boolean } {
   const id = (model ?? "").trim().toLowerCase();
-  const exact = ANTHROPIC_PRICES_USD_PER_MTOK[id];
-  if (exact) return { ...exact, known: true };
-  const prefix = Object.keys(ANTHROPIC_PRICES_USD_PER_MTOK)
+  if (Object.hasOwn(ANTHROPIC_PRICES_USD_PER_MTOK, id)) return { price: ANTHROPIC_PRICES_USD_PER_MTOK[id]!, known: true };
+  const family = Object.keys(ANTHROPIC_PRICES_USD_PER_MTOK)
     .filter((key) => id.startsWith(`${key}-`))
     .sort((a, b) => b.length - a.length)[0];
-  if (prefix) return { ...ANTHROPIC_PRICES_USD_PER_MTOK[prefix]!, known: true };
-  return { ...ANTHROPIC_PRICES_USD_PER_MTOK[ANTHROPIC_FALLBACK_PRICE_MODEL]!, known: false };
+  if (family) return { price: ANTHROPIC_PRICES_USD_PER_MTOK[family]!, known: ANTHROPIC_SNAPSHOT_SUFFIX.test(id.slice(family.length)) };
+  return { price: ANTHROPIC_PRICES_USD_PER_MTOK[ANTHROPIC_FALLBACK_PRICE_MODEL]!, known: false };
+}
+
+/**
+ * Prix de base d'un modèle Anthropic (entrée, sortie, par million de
+ * tokens). `known: false` : le modèle n'est pas au barème, le prix est celui
+ * de sa famille ou, à défaut, le prix de repli.
+ */
+export function anthropicPrice(model: string | null | undefined): { input: number; output: number; known: boolean } {
+  const { price, known } = anthropicPriceEntry(model);
+  return { input: price.input, output: price.output, known };
 }
 
 export type AnthropicTokenUsage = { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
@@ -253,9 +275,17 @@ const count = (value: number | null | undefined): number => (typeof value === "n
 
 /** Coût d'un appel Anthropic au barème, d'après les tokens réellement consommés. */
 export function anthropicCostUsd(model: string | null | undefined, usage: AnthropicTokenUsage): number {
-  const price = anthropicPrice(model);
-  const input = count(usage.inputTokens) + count(usage.cacheWriteTokens) * ANTHROPIC_CACHE_WRITE_FACTOR + count(usage.cacheReadTokens) * ANTHROPIC_CACHE_READ_FACTOR;
-  return roundUsd((input * price.input + count(usage.outputTokens) * price.output) / 1_000_000);
+  const { price } = anthropicPriceEntry(model);
+  const input = count(usage.inputTokens);
+  const cacheWrite = count(usage.cacheWriteTokens);
+  const cacheRead = count(usage.cacheReadTokens);
+  // Le palier se décide sur le prompt entier : entrée hors cache, écriture et lecture du cache
+  const long = price.longPrompt && input + cacheWrite + cacheRead > price.longPrompt.above ? price.longPrompt : null;
+  const inputPrice = long ? long.input : price.input;
+  const outputPrice = long ? long.output : price.output;
+  const cacheReadPrice = !long && price.cacheRead !== undefined ? price.cacheRead : inputPrice * ANTHROPIC_CACHE_READ_FACTOR;
+  const total = input * inputPrice + cacheWrite * inputPrice * ANTHROPIC_CACHE_WRITE_FACTOR + cacheRead * cacheReadPrice + count(usage.outputTokens) * outputPrice;
+  return roundUsd(total / 1_000_000);
 }
 
 /** Prix fal.ai : au mégapixel pour FLUX.1 schnell, à l'image pour FLUX 1.1 pro ultra. */
@@ -268,7 +298,7 @@ export const FAL_FALLBACK_PRICE_MODEL = "fal-ai/flux/schnell";
 
 /** Coût d'une image fal.ai au barème (mégapixels arrondis au supérieur, comme la facturation). */
 export function falCostUsd(model: string, width: number, height: number): number {
-  const price = FAL_PRICES_USD[model] ?? FAL_PRICES_USD[FAL_FALLBACK_PRICE_MODEL]!;
+  const price = (Object.hasOwn(FAL_PRICES_USD, model) ? FAL_PRICES_USD[model] : undefined) ?? FAL_PRICES_USD[FAL_FALLBACK_PRICE_MODEL]!;
   if (price.perImage !== undefined) return roundUsd(price.perImage);
   const megapixels = Math.max(1, Math.ceil((count(width) * count(height)) / 1_000_000));
   return roundUsd(megapixels * (price.perMegapixel ?? 0));
@@ -290,7 +320,7 @@ export const GOOGLE_PLACES_OPERATIONS = {
 export type GooglePlacesOperation = keyof typeof GOOGLE_PLACES_OPERATIONS;
 
 export function isGooglePlacesOperation(value: string): value is GooglePlacesOperation {
-  return value in GOOGLE_PLACES_OPERATIONS;
+  return Object.hasOwn(GOOGLE_PLACES_OPERATIONS, value);
 }
 
 /**

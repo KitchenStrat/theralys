@@ -1,52 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogHealth, computeMrr, estimateAiCosts, providerCostsEur, summarizeProviderUsage } from "./metrics";
-
-describe("providerCostsEur", () => {
-  it("convertit les dollars DataForSEO en euros au centime, jamais négatif", () => {
-    expect(providerCostsEur(0)).toBe(0);
-    expect(providerCostsEur(5)).toBe(4.6);
-    expect(providerCostsEur(0.098)).toBe(0.09);
-    expect(providerCostsEur(-1)).toBe(0);
-  });
-});
-
-describe("summarizeProviderUsage", () => {
-  it("ne compte que les appels DataForSEO (fiche, avis, relevés, mots-clés Google Ads), pas les registres de quota", () => {
-    const usage = summarizeProviderUsage([
-      { kind: "business_info", costUsd: 0.005, requests: 1 },
-      { kind: "reviews", costUsd: 0.004, requests: 1 },
-      { kind: "scan", costUsd: 0.1, requests: 49 },
-      { kind: "ads_keywords", costUsd: 0.18, requests: 2 },
-      { kind: "ads_plan", costUsd: 0, requests: 1 },
-      // Registres de quota (IA, régénérations) et d'échéancier : ni requête ni coût fournisseur
-      { kind: "reply_ai", costUsd: 0, requests: 12 },
-      { kind: "post_regen", costUsd: 0, requests: 5 },
-      { kind: "social_regen", costUsd: 0, requests: 7 },
-      { kind: "sync_attempt", costUsd: 0, requests: 3 },
-      { kind: "meta_analysis", costUsd: 0, requests: 12 },
-    ]);
-    expect(usage.requests).toBe(53);
-    expect(usage.costUsd).toBeCloseTo(0.289, 6);
-  });
-
-  it("compte aussi les visuels Meta Ads (ScrapeCreators, kind meta_media)", () => {
-    const usage = summarizeProviderUsage([
-      { kind: "scan", costUsd: 0.1, requests: 49 },
-      { kind: "meta_media", costUsd: 0.132, requests: 66 },
-      { kind: "meta_regen", costUsd: 0, requests: 1 },
-    ]);
-    expect(usage.requests).toBe(115);
-    expect(usage.costUsd).toBeCloseTo(0.232, 6);
-  });
-
-  it("tolère les sommes SQL renvoyées en texte et un mois vide", () => {
-    expect(summarizeProviderUsage([{ kind: "scan", costUsd: "0.2" as unknown as number, requests: "49" as unknown as number }])).toEqual({
-      requests: 49,
-      costUsd: 0.2,
-    });
-    expect(summarizeProviderUsage([])).toEqual({ requests: 0, costUsd: 0 });
-  });
-});
+import { blogHealth, computeMrr, subscriptionMrr } from "./metrics";
 
 describe("computeMrr", () => {
   it("additionne actifs et impayés au bon tarif, ignore essais et annulés", () => {
@@ -69,25 +22,14 @@ describe("computeMrr", () => {
   });
 });
 
-describe("estimateAiCosts", () => {
-  it("multiplie par les coûts unitaires et arrondit au centime", () => {
-    const estimate = estimateAiCosts({
-      articlesGenerated: 100,
-      imagesGenerated: 100,
-      demosGenerated: 10,
-    });
-    expect(estimate.totalEur).toBe(8 + 0.25 + 8);
-    expect(estimate.details).toHaveLength(3);
-  });
-
-  it("un client Scale sur un an reste marginal (~17 €)", () => {
-    const estimate = estimateAiCosts({
-      articlesGenerated: 208,
-      imagesGenerated: 208,
-      demosGenerated: 0,
-    });
-    expect(estimate.totalEur).toBeGreaterThan(15);
-    expect(estimate.totalEur).toBeLessThan(20);
+describe("subscriptionMrr", () => {
+  it("applique à un abonnement la règle du MRR : tarif de la période souscrite, zéro hors actif et impayé", () => {
+    expect(subscriptionMrr({ plan: "scale", billingPeriod: "annual", status: "active" })).toBe(55);
+    expect(subscriptionMrr({ plan: "scale", billingPeriod: "monthly", status: "past_due" })).toBe(79);
+    expect(subscriptionMrr({ plan: "boost", billingPeriod: "monthly", status: "active" })).toBe(79);
+    expect(subscriptionMrr({ plan: "starter", billingPeriod: "annual", status: "active" })).toBe(48);
+    expect(subscriptionMrr({ plan: "scale", billingPeriod: "monthly", status: "trialing" })).toBe(0);
+    expect(subscriptionMrr({ plan: "scale", billingPeriod: "annual", status: "canceled" })).toBe(0);
   });
 });
 

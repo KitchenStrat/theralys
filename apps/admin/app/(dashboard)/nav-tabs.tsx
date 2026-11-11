@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 
 const TABS = [
   { href: "/", label: "Vue d'ensemble" },
+  { href: "/couts", label: "API & coûts" },
   { href: "/demos", label: "Démos" },
   { href: "/clients", label: "Clients" },
   { href: "/leads", label: "Leads" },
@@ -14,7 +15,10 @@ const TABS = [
 export function NavTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex items-center gap-1" aria-label="Navigation admin">
+    <nav
+      className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      aria-label="Navigation admin"
+    >
       {TABS.map((tab) => {
         const active = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
         return (
@@ -22,7 +26,7 @@ export function NavTabs() {
             key={tab.href}
             href={tab.href}
             className={clsx(
-              "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors sm:px-4",
               active
                 ? "bg-primary-500 text-white shadow-[0_6px_16px_-6px_rgb(14_151_221/0.55)]"
                 : "text-ink-500 hover:bg-primary-50 hover:text-primary-700",

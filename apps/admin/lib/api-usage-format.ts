@@ -12,8 +12,8 @@ import { USD_TO_EUR_RATE } from "@theralys/shared";
 /** Fuseau d'affichage des dates et des heures (les périodes, elles, sont découpées en temps universel). */
 export const DISPLAY_TIME_ZONE = "Europe/Paris";
 
-const NBSP = " ";
-const MINUS = "−";
+const NBSP = "\u00a0";
+const MINUS = "\u2212";
 
 const finite = (value: number | null | undefined): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
@@ -44,6 +44,13 @@ export function formatEur(eur: number | null | undefined): string {
     minimumFractionDigits: Math.min(2, decimals),
     maximumFractionDigits: decimals,
   });
+  return `${value < 0 ? MINUS : ""}${text}${NBSP}€`;
+}
+
+/** Prix d'un abonnement : sans décimales quand il est rond (« 79 € »), au centime sinon (« 65,83 € »). */
+export function formatPrice(eur: number | null | undefined): string {
+  const value = finite(eur);
+  const text = Math.abs(value).toLocaleString("fr-FR", Number.isInteger(value) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${value < 0 ? MINUS : ""}${text}${NBSP}€`;
 }
 
@@ -116,11 +123,11 @@ export function formatPercent(ratio: number | null | undefined): string {
 export function formatDelta(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
   const pct = value * 100;
-  if (Math.abs(pct) < 0.5) return "stable";
   const abs = Math.abs(pct);
-  const text = abs >= 1000 ? `× ${(abs / 100 + 1).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}` : `${abs.toLocaleString("fr-FR", { maximumFractionDigits: abs >= 10 ? 0 : 1 })}${NBSP}%`;
-  if (abs >= 1000) return text;
-  return `${pct > 0 ? "+" : MINUS}${text}`;
+  if (abs < 0.5) return "stable";
+  // Au-delà de +1 000 %, un multiple se lit mieux qu'un pourcentage
+  if (pct >= 1000) return `×${NBSP}${(value + 1).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}`;
+  return `${pct > 0 ? "+" : MINUS}${abs.toLocaleString("fr-FR", { maximumFractionDigits: abs >= 10 ? 0 : 1 })}${NBSP}%`;
 }
 
 /** Durée d'un appel : « 850 ms », « 2,4 s », « 1 min 12 s ». */
@@ -134,6 +141,38 @@ export function formatDuration(ms: number | null | undefined): string {
   return rest > 0 ? `${minutes}${NBSP}min ${rest}${NBSP}s` : `${minutes}${NBSP}min`;
 }
 
+/**
+ * Montant d'une graduation d'axe : autant de décimales que le pas en demande,
+ * les mêmes sur tout l'axe (« 0 € », « 25 € », « 2,50 € », « 0,005 € »).
+ */
+export function formatAxisEur(value: number, step: number): string {
+  const safeStep = Math.abs(finite(step));
+  let decimals = 0;
+  // Pas entier : pas de décimales ; sinon au moins les centimes, davantage si le pas est plus fin
+  if (safeStep > 0 && !Number.isInteger(safeStep)) {
+    decimals = 2;
+    while (decimals < 6 && Math.abs(safeStep * 10 ** decimals - Math.round(safeStep * 10 ** decimals)) > 1e-9) decimals++;
+  }
+  const amount = finite(value);
+  if (amount === 0) return `0${NBSP}€`;
+  return `${amount.toLocaleString("fr-FR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${NBSP}€`;
+}
+
+/**
+ * Ancienneté courte d'un événement : « à l'instant », « il y a 3 min »,
+ * « il y a 2 h », « il y a 5 j » ; au-delà d'un mois, la date (« 3 oct. 2026 »).
+ */
+export function formatRelative(date: Date, now: Date = new Date()): string {
+  const minutes = Math.round((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes}${NBSP}min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `il y a ${hours}${NBSP}h`;
+  const days = Math.round(hours / 24);
+  if (days < 31) return `il y a ${days}${NBSP}j`;
+  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: DISPLAY_TIME_ZONE }).format(date);
+}
+
 /** Heure d'affichage : « 14:32 ». */
 export function formatTime(date: Date): string {
   return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(date);
@@ -142,6 +181,18 @@ export function formatTime(date: Date): string {
 /** Date et heure d'une ligne du journal : « 11/11/2026 14:32:05 ». */
 export function formatDateTime(date: Date): string {
   const day = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: DISPLAY_TIME_ZONE }).format(date);
+  const time = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(date);
+  return `${day} ${time}`;
+}
+
+/** Date et heure sans les secondes : « 11 novembre 2026 à 14:32 ». */
+export function formatLongDateTime(date: Date): string {
+  return `${formatLongDate(date)} à ${formatTime(date)}`;
+}
+
+/** Horodatage compact du journal, sans l'année : « 11/11 14:32:05 ». */
+export function formatDayTime(date: Date): string {
+  const day = new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(date);
   const time = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: DISPLAY_TIME_ZONE }).format(date);
   return `${day} ${time}`;
 }

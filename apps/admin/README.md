@@ -5,7 +5,10 @@ clients et des publications.
 
 ## Structure
 
-- `app/(dashboard)/` — écrans internes derrière l'authentification.
+- `app/(dashboard)/` — écrans internes derrière l'authentification. La vue
+  d'ensemble (`page.tsx`) et « API & coûts » (`couts/`) pilotent l'activité
+  et les coûts réels de toutes les API, lus dans le registre `api_usage`
+  (`lib/api-usage.ts`, migration 0008).
 - `app/api/` — dont `api/jobs/tick`, déclenché chaque jour à 6h UTC par le
   cron Vercel (`vercel.json`).
 

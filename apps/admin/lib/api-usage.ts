@@ -109,6 +109,26 @@ export function usageHref(
   return `${path}${search ? `?${search}` : ""}${options.hash ? `#${options.hash}` : ""}`;
 }
 
+const USAGE_PARAM_KEYS = ["periode", "fournisseur", "fonctionnalite", "site", "statut", "page"];
+
+/**
+ * Adresse canonique d'une vue : uniquement les paramètres validés, dans un
+ * ordre fixe. `isCanonical` est faux quand l'adresse reçue en diffère
+ * (paramètre vide envoyé par le formulaire, valeur invalide, paramètre
+ * inconnu) : la page redirige alors vers `href`.
+ */
+export function canonicalUsageHref(path: string, params: UsageSearchParams, period: ApiUsagePeriodId): { href: string; isCanonical: boolean } {
+  const href = usageHref(path, { period, filters: parseUsageFilters(params), page: parseUsagePage(params.page) });
+  const received = new URLSearchParams();
+  for (const key of USAGE_PARAM_KEYS) {
+    const value = params[key];
+    if (value !== undefined) received.set(key, Array.isArray(value) ? (value[0] ?? "") : value);
+  }
+  const hasUnknownParam = Object.keys(params).some((key) => !USAGE_PARAM_KEYS.includes(key));
+  const query = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
+  return { href, isCanonical: !hasUnknownParam && received.toString() === query };
+}
+
 // ─── Lignes agrégées (sorties du SQL) ────────────────────────────────────────
 
 /** Regroupement de la période par dimension métier — `month` : mois civil en temps universel (« 2026-11 »). */
@@ -264,6 +284,7 @@ export function computePlacesBilling(rows: readonly PlacesMonthRow[]): PlacesBil
   // Plusieurs lignes peuvent décrire le même mois et le même type : on les cumule d'abord
   const merged = new Map<string, { month: string; operation: GooglePlacesOperation; before: number; within: number; listUsd: number }>();
   for (const row of rows) {
+    // Type d'appel hors barème : pas de franchise connue, le prix catalogue est gardé
     if (!isGooglePlacesOperation(row.operation)) continue;
     const key = placesKey(row.month, row.operation);
     const entry = merged.get(key) ?? { month: row.month, operation: row.operation, before: 0, within: 0, listUsd: 0 };
@@ -1021,7 +1042,8 @@ export function journalPaging(total: number, requestedPage: number, pageSize = U
 // ─── Rapport complet ─────────────────────────────────────────────────────────
 
 /** La table `api_usage` n'existe pas encore : l'interface affiche un bandeau. */
-export type ApiUsageUnavailable = { available: false; period: ApiUsagePeriod };
+/** `missing` : table `api_usage` absente (migration 0008 non appliquée) · `error` : registre momentanément illisible. */
+export type ApiUsageUnavailable = { available: false; period: ApiUsagePeriod; reason: "missing" | "error" };
 
 export type ApiUsageReport = {
   available: true;
@@ -1251,7 +1273,8 @@ async function fetchPlacesMonthRows(db: Database, from: Date, to: Date): Promise
     .groupBy(UTC_MONTH, apiUsage.operation);
 }
 
-async function fetchProviderErrors(db: Database, from: Date, to: Date): Promise<ProviderErrorRow[]> {
+/** Dernière erreur de chaque fournisseur dans la sélection. */
+async function fetchProviderErrors(db: Database, from: Date, to: Date, filters: UsageFilters): Promise<ProviderErrorRow[]> {
   return db
     .selectDistinctOn([apiUsage.provider], {
       provider: apiUsage.provider,
@@ -1260,7 +1283,7 @@ async function fetchProviderErrors(db: Database, from: Date, to: Date): Promise<
       createdAt: apiUsage.createdAt,
     })
     .from(apiUsage)
-    .where(and(inPeriod(from, to), eq(apiUsage.status, "error")))
+    .where(usageWhere(from, to, { ...filters, status: "error" }))
     .orderBy(apiUsage.provider, desc(apiUsage.createdAt));
 }
 
@@ -1403,7 +1426,7 @@ export async function loadApiUsageReport(options: LoadApiUsageOptions): Promise<
         fetchPlacesMonthRows(db, period.previousFrom, period.previousTo),
         fetchUsageSeries(db, monthFrom, now, NO_USAGE_FILTERS, "day"),
         fetchPlacesMonthRows(db, monthFrom, now),
-        fetchProviderErrors(db, period.from, period.to),
+        fetchProviderErrors(db, period.from, period.to, filters),
         fetchJournal(db, usageWhere(period.from, period.to, { ...filters, status: "error" }), options.recentErrorCount ?? 10, 0),
         fetchFirstDates(db),
         fetchScrapeCreatorsCredits(db),
@@ -1411,6 +1434,8 @@ export async function loadApiUsageReport(options: LoadApiUsageOptions): Promise<
       ]);
 
     const siteIds = [...new Set(cube.map((row) => row.siteId).filter((id): id is string => id !== null))];
+    // Le site filtré est chargé même sans appel sur la période, pour garder son nom dans le filtre
+    if (filters.siteId && filters.siteId !== USAGE_NONE && !siteIds.includes(filters.siteId)) siteIds.push(filters.siteId);
     // Le total du journal vient du regroupement déjà chargé : la page demandée est bornée avant la requête
     const journalTotal = sumUsage(cube.filter((row) => matchesUsageFilters(row, filters))).calls;
     const paging = options.journalPage === undefined ? null : journalPaging(journalTotal, options.journalPage);
@@ -1443,7 +1468,7 @@ export async function loadApiUsageReport(options: LoadApiUsageOptions): Promise<
       firstRowAt: firstDates.firstRowAt,
     });
   } catch (err) {
-    if (isMissingTableError(err)) return { available: false, period };
+    if (isMissingTableError(err)) return { available: false, period, reason: "missing" };
     throw err;
   }
 }

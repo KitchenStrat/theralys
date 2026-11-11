@@ -110,6 +110,19 @@ export type DataForSeoClientOptions = {
 };
 
 /**
+ * Opération inscrite au registre pour un endpoint : sans barre initiale ni
+ * version, et sans l'identifiant de tâche en fin de chemin (toutes les
+ * lectures de tâche comptent pour une même opération).
+ */
+export function usageOperation(endpoint: string): string {
+  return endpoint
+    .replace(/^\/+(?:v\d+\/+)?/, "")
+    .replace(/\/+$/, "")
+    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "")
+    .slice(0, 80);
+}
+
+/**
  * Client HTTP DataForSEO : auth Basic (identifiants jamais journalisés),
  * délai de 60 s par requête, une nouvelle tentative sur erreur 5xx ou réseau
  * pour les endpoints « live » et les GET seulement (`isRetryableRequest`),
@@ -153,7 +166,7 @@ export class DataForSeoClient {
   ): Promise<{ tasks: DfsTask<R>[]; cost: number }> {
     // Registre des appels API : coût réel renvoyé par DataForSEO ; un appel annulé par l'appelant n'est pas inscrit
     const started = Date.now();
-    const operation = endpoint.replace(/^\/v\d+\//, "").replace(/\/+$/, "").slice(0, 80);
+    const operation = usageOperation(endpoint);
     try {
       const result = await this.send<R>(endpoint, init, signal);
       await recordApiUsage({ provider: "dataforseo", operation, units: 1, costUsd: result.cost, costSource: "provider", durationMs: Date.now() - started });

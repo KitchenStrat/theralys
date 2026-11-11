@@ -2,6 +2,8 @@ import { normalizePlan, PLANS, type OfferedPlanId, type PlanId } from "@theralys
 
 /**
  * Métriques de la vue d'ensemble — fonctions pures, testées unitairement.
+ * Les coûts des API (réels, lus dans le registre `api_usage`) sont dans
+ * `./api-usage`.
  */
 
 // ─── MRR ──────────────────────────────────────────────────────────────────────
@@ -20,6 +22,16 @@ export type MrrSummary = {
   pastDueCount: number;
 };
 
+/**
+ * Revenu mensuel d'un abonnement (€/mois) : tarif de la période souscrite pour
+ * un abonnement actif ou impayé, zéro pour un essai ou un abonnement annulé.
+ */
+export function subscriptionMrr(subscription: SubscriptionLike): number {
+  if (subscription.status !== "active" && subscription.status !== "past_due") return 0;
+  const def = PLANS[subscription.plan];
+  return subscription.billingPeriod === "annual" ? def.annualMonthlyPrice : def.monthlyPrice;
+}
+
 export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
   // Offre à 2 formules : les anciens abonnements « Boost » comptent avec Scale
   const byPlan: Record<OfferedPlanId, number> = { starter: 0, scale: 0 };
@@ -29,105 +41,13 @@ export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
 
   for (const subscription of subscriptions) {
     if (subscription.status !== "active" && subscription.status !== "past_due") continue;
-    const def = PLANS[subscription.plan];
-    const monthly =
-      subscription.billingPeriod === "annual" ? def.annualMonthlyPrice : def.monthlyPrice;
+    const monthly = subscriptionMrr(subscription);
     total += monthly;
     byPlan[normalizePlan(subscription.plan)] += monthly;
     payingCount++;
     if (subscription.status === "past_due") pastDueCount++;
   }
   return { total, byPlan, payingCount, pastDueCount };
-}
-
-// ─── Coûts API (estimation) ───────────────────────────────────────────────────
-
-/**
- * Coûts unitaires estimés en euros :
- * - article : claude-opus-5 (~1 k tokens in / ~2,5 k out réflexion comprise
- *   par article, à 5 $ / 25 $ le million)
- * - image : fal.ai FLUX.1 schnell facturé au mégapixel (1024×768 ≈ 0,79 MP)
- * - démo : ~10 appels Claude (accueil, 6 motifs, avis, articles)
- */
-export const UNIT_COSTS_EUR = {
-  article: 0.08,
-  image: 0.0025,
-  demoGeneration: 0.8,
-} as const;
-
-/** Taux USD → EUR appliqué aux fournisseurs facturés en dollars (DataForSEO, ScrapeCreators). */
-export const USD_TO_EUR = 0.92;
-
-/**
- * Coûts fournisseur réels du mois (DataForSEO : `SUM(google_usage.cost_usd)`),
- * convertis en euros et arrondis au centime.
- */
-export function providerCostsEur(costUsd: number): number {
-  return Math.round(Math.max(0, costUsd) * USD_TO_EUR * 100) / 100;
-}
-
-/**
- * Kinds de `google_usage` qui correspondent à un appel DataForSEO facturé
- * (fiche, avis, relevés, idées de mots-clés Google Ads).
- * Les autres lignes (`reply_ai`, `post_regen`, `social_regen`, `ads_plan`, `sync_attempt`…)
- * sont des registres de quota ou d'échéancier, pas des requêtes fournisseur.
- */
-export const DATAFORSEO_BILLED_KINDS = ["business_info", "reviews", "scan", "ads_keywords"] as const;
-/** Visuels des annonces Meta Ads (ScrapeCreators) : une recherche facturée par annonce. */
-export const SCRAPECREATORS_BILLED_KINDS = ["meta_media"] as const;
-/** Tous les kinds qui correspondent à un appel fournisseur facturé en dollars. */
-export const PROVIDER_BILLED_KINDS = [...DATAFORSEO_BILLED_KINDS, ...SCRAPECREATORS_BILLED_KINDS] as const;
-
-export type ProviderUsageRow = { kind: string; costUsd: number; requests: number };
-
-export type ProviderUsage = { requests: number; costUsd: number };
-
-/** Requêtes et coût des fournisseurs facturés (DataForSEO, ScrapeCreators) du mois, en ne comptant que les kinds facturés. */
-export function summarizeProviderUsage(rows: ProviderUsageRow[]): ProviderUsage {
-  const billed = new Set<string>(PROVIDER_BILLED_KINDS);
-  let requests = 0;
-  let costUsd = 0;
-  for (const row of rows) {
-    if (!billed.has(row.kind)) continue;
-    requests += Number(row.requests) || 0;
-    costUsd += Number(row.costUsd) || 0;
-  }
-  return { requests, costUsd };
-}
-
-export type AiUsage = {
-  articlesGenerated: number;
-  imagesGenerated: number;
-  demosGenerated: number;
-};
-
-export type AiCostEstimate = {
-  totalEur: number;
-  details: { label: string; count: number; costEur: number }[];
-};
-
-export function estimateAiCosts(usage: AiUsage): AiCostEstimate {
-  const details = [
-    {
-      label: "Articles rédigés",
-      count: usage.articlesGenerated,
-      costEur: usage.articlesGenerated * UNIT_COSTS_EUR.article,
-    },
-    {
-      label: "Images générées",
-      count: usage.imagesGenerated,
-      costEur: usage.imagesGenerated * UNIT_COSTS_EUR.image,
-    },
-    {
-      label: "Démos générées",
-      count: usage.demosGenerated,
-      costEur: usage.demosGenerated * UNIT_COSTS_EUR.demoGeneration,
-    },
-  ];
-  return {
-    totalEur: Math.round(details.reduce((sum, d) => sum + d.costEur, 0) * 100) / 100,
-    details,
-  };
 }
 
 // ─── Santé du blog ────────────────────────────────────────────────────────────

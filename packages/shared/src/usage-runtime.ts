@@ -109,10 +109,18 @@ function resolveSink(): ApiUsageSink | null {
 const whole = (value: number | undefined): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
 const positive = (value: number | undefined): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
 
-/** Message d'erreur enregistrable : une ligne, borné. */
+/** Adresse e-mail dans un message d'erreur (un fournisseur recopie parfois le destinataire dans sa réponse). */
+const EMAIL_IN_TEXT = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+
+/** Texte d'erreur sur une ligne, sans adresse e-mail, borné. */
+function cleanErrorText(text: string): string {
+  return text.replace(/\s+/g, " ").replace(EMAIL_IN_TEXT, "[adresse masquée]").trim().slice(0, API_USAGE_ERROR_MAX);
+}
+
+/** Message d'erreur enregistrable : une ligne, sans adresse e-mail, borné. */
 export function usageErrorText(err: unknown): string {
   const text = err instanceof Error ? err.message : typeof err === "string" ? err : "Erreur inconnue";
-  return text.replace(/\s+/g, " ").trim().slice(0, API_USAGE_ERROR_MAX) || "Erreur inconnue";
+  return cleanErrorText(text) || "Erreur inconnue";
 }
 
 /** Événement complété par le contexte courant et les valeurs par défaut. */
@@ -135,7 +143,7 @@ export function resolveApiUsageEvent(event: ApiUsageEvent, now = new Date()): Re
     costUsd,
     costSource: event.costSource ?? (costUsd > 0 ? "tariff" : "free"),
     durationMs: whole(event.durationMs),
-    error: event.error ? event.error.replace(/\s+/g, " ").trim().slice(0, API_USAGE_ERROR_MAX) : null,
+    error: event.error ? cleanErrorText(event.error) || null : null,
     meta: event.meta ?? null,
     createdAt: now,
   };
@@ -151,12 +159,13 @@ export async function recordApiUsage(event: ApiUsageEvent): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const resolved = resolveApiUsageEvent(event);
-    await Promise.race([
-      sink(resolved),
-      new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, API_USAGE_SINK_TIMEOUT_MS);
+    const written = await Promise.race([
+      Promise.resolve(sink(resolved)).then(() => true),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), API_USAGE_SINK_TIMEOUT_MS);
       }),
     ]);
+    if (!written) console.warn("[api-usage] appel non enregistré : la base n'a pas répondu à temps", { provider: resolved.provider, operation: resolved.operation });
   } catch (err) {
     console.warn("[api-usage] appel non enregistré :", err instanceof Error ? err.message : err);
   } finally {

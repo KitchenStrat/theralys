@@ -133,9 +133,27 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
 
 - **Vue d'ensemble** (accueil de l&apos;admin) : MRR (actifs + impayés, au tarif de
   la période souscrite, réparti par formule), nombre de sites clients/démos,
-  **jobs IA en erreur** (générations échouées avec lien de relance + articles du
-  calendrier en retard de rédaction), **coûts API du mois** estimés (barème
-  documenté : article ≈ 0,03 €, image ≈ 0,0025 €, démo ≈ 0,30 €).
+  **coût réel des API** sur la période choisie (ce mois-ci, mois dernier, 30 jours,
+  7 jours, aujourd&apos;hui) avec marge brute et coût par site client, évolution
+  quotidienne, ventilation par fournisseur, par fonctionnalité et par site,
+  **santé** (générations échouées avec lien de relance, articles en retard,
+  dernières erreurs des API) et **soldes et échéances** (crédits ScrapeCreators,
+  jeton Meta, franchise gratuite Google Places).
+- **API & coûts** (`/couts`) : le détail — filtres par fournisseur, fonctionnalité,
+  site et statut, fiche de chaque fournisseur (tarif, volume, erreurs), coût par
+  modèle Claude et coût moyen d&apos;un appel par fonctionnalité, coût et marge par
+  site, journal paginé de tous les appels.
+- **Registre des appels API** (`api_usage`, migration 0008) : chaque appel à une API
+  externe (Anthropic, fal.ai, Pexels, Google Places, DataForSEO, bibliothèque
+  publicitaire Meta, ScrapeCreators, API Découpage administratif, Resend, OVH,
+  Vercel) y inscrit une ligne — fournisseur, opération, fonctionnalité, site,
+  modèle, tokens ou volume, durée, statut et coût en dollars : coût réel quand le
+  fournisseur le renvoie (DataForSEO, prix du domaine OVH), au barème public sinon
+  (`packages/shared/src/api-usage.ts`). L&apos;inscription ne fait jamais échouer
+  l&apos;appel mesuré, n&apos;enregistre ni destinataire ni secret, et les modes de
+  démonstration (mock) n&apos;inscrivent rien. Google Places est inscrit au prix
+  catalogue : la franchise mensuelle gratuite est déduite à l&apos;affichage. Les
+  abonnements fixes (Vercel, Neon, Stripe, Resend) ne sont pas suivis.
 - **Onglet Clients enrichi** : statut d&apos;abonnement, domaine, **santé du blog**
   (à jour / en retard selon la cadence de la formule, dernier article publié,
   premier article planifié) et **impersonation** : « Studio » ouvre le back

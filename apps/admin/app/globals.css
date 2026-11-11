@@ -4,3 +4,20 @@
 /* Les composants du design system vivent dans packages/ui — thème bleu ciel,
    fond à halos et animations compris (voir packages/ui/src/styles.css). */
 @source "../../../packages/ui/src";
+
+/*
+ * Graphiques du pilotage des API : une couleur par fournisseur payant, dans un
+ * ordre fixe (la couleur suit le fournisseur, jamais son rang). Série 1 : bleu
+ * de la marque ; les suivantes viennent d'une palette catégorielle dont les
+ * voisines restent distinctes en vision daltonienne (protanopie,
+ * deutéranopie) sur fond blanc. « other » : gris des regroupements (« Autres »).
+ */
+@theme {
+  --color-viz-1: #0e97dd;
+  --color-viz-2: #eb6834;
+  --color-viz-3: #1baf7a;
+  --color-viz-4: #eda100;
+  --color-viz-5: #e87ba4;
+  --color-viz-6: #008300;
+  --color-viz-other: #647f91;
+}

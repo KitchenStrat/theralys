@@ -28,7 +28,9 @@ export function getDb(): Database {
 
 // Registre des appels API : le puits s'ouvre au premier appel inscrit, même dans une requête qui n'a pas encore
 // touché la base (une recherche Google Places juste après la vérification de la session, par exemple)
-setApiUsageSinkFactory(() => apiUsageSink(getDb()));
+// Sous test, le registre ne s'ouvre jamais de lui-même : un test unitaire qui exerce un vrai client fournisseur
+// n'écrit pas dans la base que DATABASE_URL désigne (getDb(), appelé exprès, pose toujours le puits)
+if (process.env.NODE_ENV !== "test") setApiUsageSinkFactory(() => apiUsageSink(getDb()));
 
 /** Table `api_usage` absente (migration 0008 non appliquée) : signalé une fois, puis silencieux. */
 let apiUsageTableMissingLogged = false;
