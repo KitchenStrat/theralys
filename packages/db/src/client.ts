@@ -1,6 +1,6 @@
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { hasApiUsageSink, setApiUsageSink, type ResolvedApiUsageEvent } from "@theralys/shared/usage-runtime";
+import { hasApiUsageSink, setApiUsageSink, setApiUsageSinkFactory, type ResolvedApiUsageEvent } from "@theralys/shared/usage-runtime";
 import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
@@ -25,6 +25,10 @@ export function getDb(): Database {
   if (!hasApiUsageSink()) setApiUsageSink(apiUsageSink(db));
   return db;
 }
+
+// Registre des appels API : le puits s'ouvre au premier appel inscrit, même dans une requête qui n'a pas encore
+// touché la base (une recherche Google Places juste après la vérification de la session, par exemple)
+setApiUsageSinkFactory(() => apiUsageSink(getDb()));
 
 /** Table `api_usage` absente (migration 0008 non appliquée) : signalé une fois, puis silencieux. */
 let apiUsageTableMissingLogged = false;

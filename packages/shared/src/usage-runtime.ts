@@ -7,9 +7,10 @@
  *   les contextes imbriqués se complètent).
  * - `recordApiUsage(event)` / `trackApiCall(base, call)` : les clients des
  *   fournisseurs inscrivent chaque appel, avec son coût et sa durée.
- * - `setApiUsageSink(sink)` : la base enregistre le puits qui écrit dans
- *   `api_usage` (`getDb`). Sans puits (tests, scripts hors base), rien n'est
- *   écrit.
+ * - `setApiUsageSink(sink)` / `setApiUsageSinkFactory(factory)` : la base
+ *   fournit le puits qui écrit dans `api_usage` — ouvert au premier appel
+ *   inscrit, même si aucune requête n'a encore touché la base. Sans puits
+ *   (tests, scripts hors base), rien n'est écrit.
  *
  * L'enregistrement ne fait jamais échouer l'appel qu'il mesure : une erreur
  * du puits est journalisée, un puits lent est abandonné après
@@ -37,7 +38,7 @@ export type ApiUsageSink = (event: ResolvedApiUsageEvent) => Promise<void>;
 export const API_USAGE_SINK_TIMEOUT_MS = 3_000;
 
 // Les bundles d'une même application peuvent charger ce module plusieurs fois : l'état vit sur globalThis.
-type UsageGlobals = { storage?: AsyncLocalStorage<ApiUsageContext>; sink?: ApiUsageSink | null };
+type UsageGlobals = { storage?: AsyncLocalStorage<ApiUsageContext>; sink?: ApiUsageSink | null; factory?: (() => ApiUsageSink) | null };
 const GLOBAL_KEY = Symbol.for("theralys.apiUsage");
 const globals = ((globalThis as unknown as Record<symbol, UsageGlobals>)[GLOBAL_KEY] ??= {});
 const storage = (globals.storage ??= new AsyncLocalStorage<ApiUsageContext>());
@@ -85,6 +86,26 @@ export function hasApiUsageSink(): boolean {
   return Boolean(globals.sink);
 }
 
+/**
+ * Enregistre la fabrique du puits : appelée une seule fois, au premier appel
+ * à inscrire, tant qu'aucun puits n'est en place. Une fabrique qui lève
+ * (base non configurée) est réessayée à l'appel suivant.
+ */
+export function setApiUsageSinkFactory(factory: (() => ApiUsageSink) | null): void {
+  globals.factory = factory;
+}
+
+function resolveSink(): ApiUsageSink | null {
+  if (globals.sink) return globals.sink;
+  if (!globals.factory) return null;
+  try {
+    globals.sink = globals.factory();
+    return globals.sink;
+  } catch {
+    return null;
+  }
+}
+
 const whole = (value: number | undefined): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : 0);
 const positive = (value: number | undefined): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
 
@@ -125,7 +146,7 @@ export function resolveApiUsageEvent(event: ApiUsageEvent, now = new Date()): Re
  * plus de API_USAGE_SINK_TIMEOUT_MS.
  */
 export async function recordApiUsage(event: ApiUsageEvent): Promise<void> {
-  const sink = globals.sink;
+  const sink = resolveSink();
   if (!sink) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
