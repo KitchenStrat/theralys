@@ -279,9 +279,15 @@ const pathOf = (url: URL): string => url.pathname.replace(/\/+$/, "");
  * corrections du praticien restent.
  */
 function isSameAddress(a: string, b: string): boolean {
+  // Les deux adresses sont comparées sous leur forme normalisée : une adresse enregistrée avant un changement de la
+  // règle (« …/accueil », barre finale) désigne toujours le même site que sa forme d'aujourd'hui
+  const normalized = (value: string): string => {
+    const check = normalizeExternalSiteUrl(value);
+    return check.ok ? check.url : value;
+  };
   try {
-    const left = new URL(a);
-    const right = new URL(b);
+    const left = new URL(normalized(a));
+    const right = new URL(normalized(b));
     return bareHost(left.hostname) === bareHost(right.hostname) && pathOf(left) === pathOf(right);
   } catch {
     return false;

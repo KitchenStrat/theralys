@@ -1061,7 +1061,7 @@ export function codeCreative(ctx: TextContext, angle: MetaAdsAngle): RawCreative
 function defaultCreativeNotes(ctx: TextContext, angles: readonly MetaAdsAngle[]): string[] {
   const test = angles.slice(0, 3).map((a) => angleLabel(a).toLowerCase());
   return [
-    ...(ctx.photos.length < 3 ? [`Ajoutez des photos de vous et du cabinet dans ${ctx.externalSite ? "le studio" : "l'éditeur"} : sur Meta, le visuel fait l'essentiel du résultat.`] : []),
+    ...(ctx.photos.length < 3 ? [`Ajoutez des photos de vous et du cabinet ${ctx.externalSite ? "au site inclus dans votre formule (rubrique « Mon site »)" : "dans l'éditeur"} : sur Meta, le visuel fait l'essentiel du résultat.`] : []),
     `Testez d'abord trois créas (${test.join(", ")}) pendant 14 jours à budget égal, puis coupez celle au coût par contact le plus élevé.`,
     "Déclinez chaque créa en trois formats (carré, portrait 4:5, story 9:16) : les kits du studio les fournissent prêts à importer.",
     "Changez une seule chose à la fois (accroche, photo ou titre) pour savoir ce qui a joué.",

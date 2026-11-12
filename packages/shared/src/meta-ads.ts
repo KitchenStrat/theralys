@@ -1242,6 +1242,7 @@ const META_HEADLINES: Record<MetaAdsVerdict, string> = {
   go_with_prerequisites: "Meta Ads est pertinent, après quelques réglages",
   wait: "Avant de lancer Meta Ads, installez le Pixel et réglez les points bloquants",
 };
+const META_WAIT_HEADLINE_EXTERNAL = "Avant de lancer Meta Ads, réglez les points bloquants";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -1281,7 +1282,8 @@ export function diagnoseMetaAds(input: MetaAdsDiagnosticInput, now = new Date())
     generatedAt: now.toISOString(),
     verdict,
     score,
-    headline: META_HEADLINES[verdict],
+    // Site du client : le Pixel n'y bloque jamais ; un verdict « attendre » ne peut venir que des moyens de contact
+    headline: verdict === "wait" && input.externalSite ? META_WAIT_HEADLINE_EXTERNAL : META_HEADLINES[verdict],
     summary: `${affinity.reason} ${budgetSentence}`,
     affinity,
     checks,

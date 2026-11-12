@@ -1686,11 +1686,11 @@ describe("metaReadinessChecks — site du client (externalSite)", () => {
       status: "todo",
       detail: "Aucune page de spécialité n'a été trouvée sur votre site : vos annonces mèneront à votre page d'accueil.",
     });
-    // Photos : elles s'ajoutent dans le studio, l'éditeur du site hébergé n'étant plus le lieu de travail du praticien
+    // Photos : les visuels puisent dans celles du site inclus dans la formule — le texte dit où les ajouter, sans nom de marque
     expect(checkOf({ ...externalInput, photosCount: 2 }, "photos")).toMatchObject({
       status: "todo",
       critical: false,
-      detail: "Ajoutez au moins 3 photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.",
+      detail: "Ajoutez au moins 3 photos de vous et du cabinet au site inclus dans votre formule (rubrique « Mon site ») : vos annonces y puisent leurs visuels, et sur Meta le visuel fait l'essentiel du résultat.",
     });
     const worst: MetaAdsDiagnosticInput = { ...externalInput, hasPixel: false, cookieBanner: false, facebookUrl: null, hasPhone: false, motifPages: 0, photosCount: 0 };
     for (const id of ["pixel", "cookie_banner", "facebook_page", "phone", "photos", "landing_pages"]) {
@@ -1725,6 +1725,11 @@ describe("diagnoseMetaAds", () => {
     expect(noPixel).toMatchObject({ verdict: "go_with_prerequisites", score: 92, externalSite: true });
     expect(noPixel.prerequisites[0]).toBe("Pixel Meta installé sur le site");
     expect("externalSite" in diagnoseMetaAds(readyInput, now)).toBe(false);
+    // Verdict « attendre » sur un site du client : il ne peut venir que des moyens de contact — l'intitulé ne parle pas du Pixel
+    const noContact = diagnoseMetaAds({ ...external, hasPixel: false, hasBookingUrl: false, hasPhone: false }, now);
+    expect(noContact.verdict).toBe("wait");
+    expect(noContact.headline).toBe("Avant de lancer Meta Ads, réglez les points bloquants");
+    expect(diagnoseMetaAds({ ...readyInput, hasPixel: false }, now).headline).toContain("installez le Pixel");
     // Site hébergé : bandeau désactivé = point à régler (−8), inchangé
     expect(diagnoseMetaAds({ ...readyInput, cookieBanner: false }, now)).toMatchObject({ verdict: "go_with_prerequisites", score: 92, prerequisites: ["Bandeau cookies actif"] });
   });

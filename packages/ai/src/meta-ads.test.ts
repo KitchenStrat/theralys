@@ -1131,10 +1131,10 @@ describe("site du client (référence des outils)", () => {
     expect(finalizeMetaPlan({ ...mockMetaPlan(brief(), hosted), objective: { type: "conversions_site", pixelEvent: "Schedule", rationale: modelText } }, hosted, "anthropic", NOW).objective.rationale).toBe(modelText);
   });
 
-  it("note sur les photos : elles s'ajoutent dans le studio (dans l'éditeur pour un site hébergé)", () => {
+  it("note sur les photos : elles s'ajoutent au site inclus dans la formule (dans l'éditeur pour un site hébergé)", () => {
     const noPhotos = { photos: [] };
     const external = mockMetaCreatives(externalBrief(noPhotos), input({}, { external: true }));
-    expect(external.notes).toContain("Ajoutez des photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.");
+    expect(external.notes).toContain("Ajoutez des photos de vous et du cabinet au site inclus dans votre formule (rubrique « Mon site ») : sur Meta, le visuel fait l'essentiel du résultat.");
     const hosted = mockMetaCreatives(brief(noPhotos), input());
     expect(hosted.notes).toContain("Ajoutez des photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat.");
   });

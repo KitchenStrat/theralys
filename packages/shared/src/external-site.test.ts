@@ -753,8 +753,10 @@ describe("sharedHostSitePath, isUnderSitePath", () => {
     const NONE = [
       SITE,
       `${SITE}/view/mon-cabinet`,
-      "https://claire.wixsite.com/sophrologie",
+      // Compte Wix donné sans le dossier du site
+      "https://claire.wixsite.com",
       // Hôte qui ne fait que ressembler
+      "https://wixsite.com.autre.fr/sophrologie",
       "https://sites.google.com.autre.fr/view/mon-cabinet",
       "https://notsites.google.com/view/mon-cabinet",
       // Dossier incomplet
@@ -3006,3 +3008,45 @@ describe("isPageOfSite — page du site, quelle que soit la longueur de son adre
     expect(externalLandingPages(profile, SITE)).toEqual([{ path: "/", title: "Accueil", kind: "home" }]);
   });
 });
+
+describe("normalizeExternalSiteUrl — page d'accueil, barres en trop et dossier du site", () => {
+  const urlOf = (input: string): string | null => {
+    const check = normalizeExternalSiteUrl(input);
+    return check.ok ? check.url : null;
+  };
+
+  it("barres en trop autour du segment retiré : le résultat n'en garde aucune, et il est stable", () => {
+    for (const input of ["https://www.mon-cabinet.fr/home//index.php", "www.mon-cabinet.fr//accueil", "www.mon-cabinet.fr/accueil/index.html", "www.mon-cabinet.fr/accueil///"]) {
+      expect([input, urlOf(input)]).toEqual([input, SITE]);
+    }
+    expect(urlOf("www.mon-cabinet.fr/fr//accueil")).toBe(`${SITE}/fr`);
+    for (const input of ["https://www.mon-cabinet.fr/home//index.php", "www.mon-cabinet.fr/fr//accueil", "dupont.wixsite.com/accueil/home"]) {
+      const once = urlOf(input)!;
+      expect(urlOf(once)).toBe(once);
+      expect(once.endsWith("/")).toBe(false);
+    }
+  });
+
+  it("site gratuit Wix : le premier segment est le site lui-même, il n'est jamais retiré — même nommé « accueil »", () => {
+    expect(urlOf("dupont.wixsite.com/mon-cabinet")).toBe("https://dupont.wixsite.com/mon-cabinet");
+    expect(urlOf("dupont.wixsite.com/mon-cabinet/accueil")).toBe("https://dupont.wixsite.com/mon-cabinet");
+    expect(urlOf("dupont.wixsite.com/accueil")).toBe("https://dupont.wixsite.com/accueil");
+    expect(urlOf("dupont.wixsite.com/accueil/home")).toBe("https://dupont.wixsite.com/accueil");
+    expect(sharedHostSitePath("https://dupont.wixsite.com/mon-cabinet/tarifs")).toBe("/mon-cabinet");
+    // Sans dossier, l'adresse reste acceptée (seul Google Sites exige le sien) et aucun dossier n'est exigé des visites
+    expect(urlOf("dupont.wixsite.com")).toBe("https://dupont.wixsite.com");
+    expect(sharedHostSitePath("https://dupont.wixsite.com")).toBe("");
+    expect(isPageOfSite("https://dupont.wixsite.com/mon-cabinet", "https://dupont.wixsite.com/autre-site/tarifs")).toBe(false);
+    // Un site qui a son propre hôte n'a pas de dossier
+    expect(sharedHostSitePath(`${SITE}/fr`)).toBe("");
+  });
+});
+
+describe("cleanPhone — caractères invisibles d'un copier-coller", () => {
+  it("marque de sens d'écriture, espace sans chasse : retirés avant l'examen, le numéro est gardé", () => {
+    expect(cleanPhone(`${char(0x200e)}+33 1 23 45 67 89`)).toBe("+33 1 23 45 67 89");
+    expect(cleanPhone(`01 23 45 67 89${char(0x200b)}`)).toBe("01 23 45 67 89");
+    expect(cleanPhone(`Tél.${char(0x200b)} : 01 23 45 67 89`)).toBe("01 23 45 67 89");
+  });
+});
+

@@ -1854,6 +1854,19 @@ describe("loadExternalReference", () => {
     expect(await reference(memoryDb({ external: [externalRow({ measureSeenAt: null })] }))).toMatchObject({ measureSeenAt: null });
   });
 
+  it("adresse enregistrée sous une forme que la règle ne produit plus (page d'accueil, barre finale) : toujours le même site, la référence est rendue", async () => {
+    for (const stored of [`${SITE_URL}/accueil`, `${SITE_URL}/index.html`, `${SITE_URL}/`]) {
+      const handle = memoryDb({ external: [externalRow({ url: stored })] });
+      const found = await reference(handle, { url: stored, active: true });
+      expect([stored, found?.setting.url, found?.profile.headline]).toEqual([stored, SITE_URL, PROFILE.headline]);
+    }
+    // Ligne normalisée, réglage ancien — et l'inverse
+    expect(await reference(memoryDb({ external: [externalRow()] }), { url: `${SITE_URL}/accueil`, active: true })).not.toBeNull();
+    expect(await reference(memoryDb({ external: [externalRow({ url: `${SITE_URL}/accueil` })] }), ACTIVE)).not.toBeNull();
+    // Un autre site reste un autre site
+    expect(await reference(memoryDb({ external: [externalRow({ url: "https://www.autre-cabinet.fr/accueil" })] }), ACTIVE)).toBeNull();
+  });
+
   it("sans réglage actif : `null` sans aucune requête", async () => {
     const handle = memoryDb({ external: [externalRow()] });
     expect(await reference(handle, null)).toBeNull();

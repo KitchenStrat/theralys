@@ -1033,7 +1033,8 @@ export const EXTERNAL_SITE_CHECK_DETAILS = {
   cookieBannerUnknown: "Aucun bandeau cookies n'a été repéré sur votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
   cookieBannerUnread: "Nous n'avons pas pu lire le code de votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
   facebookPageTodo: "Une page Facebook est indispensable pour diffuser des annonces : indiquez son lien dans « Mon site ».",
-  photosTodo: "Ajoutez au moins 3 photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.",
+  // Les visuels des annonces puisent dans les photos du site inclus dans la formule, qui reste en ligne : c'est là qu'elles s'ajoutent (texte sans nom de marque)
+  photosTodo: "Ajoutez au moins 3 photos de vous et du cabinet au site inclus dans votre formule (rubrique « Mon site ») : vos annonces y puisent leurs visuels, et sur Meta le visuel fait l'essentiel du résultat.",
 } as const;
 
 /**

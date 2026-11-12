@@ -121,6 +121,8 @@ const SOCIAL_HOSTS = [
  * (cf. `sharedHostSitePath`).
  */
 const SOCIAL_HOST_EXCEPTIONS = ["sites.google.com"];
+/** Hébergeurs où le premier segment du chemin est le site lui-même (« <compte>.wixsite.com/<nom du site> »). */
+const FOLDER_SITE_SUFFIXES = [".wixsite.com"];
 
 /**
  * Dossier d'un site hébergé sur un hôte partagé (« /view/cabinet-dupont ») ;
@@ -135,10 +137,18 @@ export function sharedHostSitePath(siteUrl: string): string {
   } catch {
     return "";
   }
-  if (!SOCIAL_HOST_EXCEPTIONS.includes(parsed.hostname.toLowerCase())) return "";
+  const host = parsed.hostname.toLowerCase();
   const segments = parsed.pathname.split("/").filter((segment) => segment !== "");
-  // « /view/<nom> », « /site/<nom> », « /<domaine>/<nom> » ; « /a/<domaine>/<nom> » pour les anciens sites d'organisation
-  const depth = segments[0] === "a" ? 3 : 2;
+  let depth: number;
+  if (SOCIAL_HOST_EXCEPTIONS.includes(host)) {
+    // « /view/<nom> », « /site/<nom> », « /<domaine>/<nom> » ; « /a/<domaine>/<nom> » pour les anciens sites d'organisation
+    depth = segments[0] === "a" ? 3 : 2;
+  } else if (FOLDER_SITE_SUFFIXES.some((suffix) => host.endsWith(suffix))) {
+    // « <compte>.wixsite.com/<nom du site> » : un compte y range plusieurs sites, chacun dans son dossier
+    depth = 1;
+  } else {
+    return "";
+  }
   return segments.length < depth ? "" : `/${segments.slice(0, depth).join("/")}`;
 }
 
@@ -245,8 +255,10 @@ export function normalizeExternalSiteUrl(input: string | null | undefined, opts:
   for (;;) {
     const lastSlash = path.lastIndexOf("/");
     if (!HOME_PAGE_SEGMENT.test(path.slice(lastSlash + 1))) break;
-    const parent = path.slice(0, lastSlash);
-    if (SOCIAL_HOST_EXCEPTIONS.includes(host) && sharedHostSitePath(`https://${host}${parent}`) === "") break;
+    // Barres en trop devant le segment retiré (« /home//index.php ») : elles partent avec lui
+    const parent = path.slice(0, lastSlash).replace(/\/+$/, "");
+    // Le dossier d'un site rangé sous un chemin n'est jamais retiré, même s'il s'appelle « accueil » ou « home »
+    if (sharedHostSitePath(`https://${host}${path}`) !== "" && sharedHostSitePath(`https://${host}${parent}`) === "") break;
     path = parent;
   }
   const url = `https://${host}${path}`;
@@ -695,8 +707,10 @@ export function cleanPhone(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   if (value.length > 120) return undefined;
   // Un libellé en tête (« Tél. : », « Portable : ») n'est pas le numéro ; tout autre texte mêlé aux chiffres (horaires
-  // voisins, précision entre parenthèses) rend la valeur illisible : mieux vaut aucun numéro qu'un numéro faux
+  // voisins, précision entre parenthèses) rend la valeur illisible : mieux vaut aucun numéro qu'un numéro faux.
+  // Les caractères invisibles (marque de sens d'écriture, espace sans chasse d'un copier-coller) partent d'abord.
   const phone = value
+    .replace(INVISIBLE_CHARS, "")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^[\p{L}.' ]{1,30}:\s?/u, "");
