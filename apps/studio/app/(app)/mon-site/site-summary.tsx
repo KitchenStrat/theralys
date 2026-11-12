@@ -86,7 +86,7 @@ export function SiteSummary({
               </Pill>
             </div>
             <p className="mt-1.5 text-base">
-              <a href={url} target="_blank" rel="noopener noreferrer" className={`break-all ${TEXT_LINK}`} data-testid="site-url">
+              <a href={url} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`} data-testid="site-url">
                 {siteAddressLabel(url)}
                 <span aria-hidden> ↗</span>
                 <span className="sr-only"> (nouvel onglet)</span>
@@ -173,11 +173,11 @@ export function SiteSummary({
               <ul className="mt-3 space-y-2.5">
                 {pages.map((page, index) => (
                   <li key={`${index}-${page.url}`} className="text-sm">
-                    <a href={page.url} target="_blank" rel="noopener noreferrer" className={`break-words ${TEXT_LINK}`}>
+                    <a href={page.url} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`}>
                       {page.title || siteAddressLabel(page.url)}
                       <span className="sr-only"> (nouvel onglet)</span>
                     </a>
-                    <span className="block break-all text-xs text-ink-700">
+                    <span className="block wrap-anywhere text-xs text-ink-700">
                       {PAGE_KIND_LABELS[page.kind]} · {siteAddressLabel(page.url)}
                     </span>
                   </li>

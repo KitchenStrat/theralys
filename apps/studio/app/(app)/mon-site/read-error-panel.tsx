@@ -57,7 +57,7 @@ export function ReadErrorPanel({
           </span>
           {title}
         </h2>
-        <p className="mt-1 break-all text-base font-medium text-ink-900" data-testid="site-url">
+        <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="site-url">
           {siteAddressLabel(url)}
         </p>
         <p className="mt-2 max-w-2xl text-base text-ink-700">{hint}</p>

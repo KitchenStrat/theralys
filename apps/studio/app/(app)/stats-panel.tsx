@@ -50,7 +50,7 @@ export function StatsPanel({ firstName, period, stats, sources, socialAccess, aw
             Les visites de votre site ne sont pas encore mesurées
           </h2>
           <p className="mt-1.5 max-w-xl text-base text-ink-700">
-            Vos outils s&apos;appuient maintenant sur <span className="break-all font-medium text-ink-900">{awaitingMeasure.address}</span>. Pour suivre ici ses visiteurs, leur
+            Vos outils s&apos;appuient maintenant sur <span className="wrap-anywhere font-medium text-ink-900">{awaitingMeasure.address}</span>. Pour suivre ici ses visiteurs, leur
             provenance et les clics sur vos liens de rendez-vous, installez le code de mesure sur votre site : quelques minutes suffisent.
           </p>
           <Link

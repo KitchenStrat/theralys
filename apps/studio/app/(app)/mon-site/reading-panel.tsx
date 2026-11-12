@@ -86,7 +86,7 @@ export function ReadingPanel({ address, hasPrevious }: { address: string; /** Un
         <h2 id="reading-title" className="flex items-center gap-2.5 text-xl font-semibold">
           <Spinner /> Nous lisons votre site
         </h2>
-        <p className="mt-1 break-all text-base font-medium text-ink-900">{address}</p>
+        <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900">{address}</p>
 
         <ol className="mt-5 space-y-3" aria-label="Étapes de la lecture">
           {STEPS.map((label, index) => {

@@ -131,7 +131,7 @@ export function MeasureCard({
             Vos visiteurs doivent être informés de cette mesure et pouvoir la refuser. Copiez ce paragraphe dans la page « Politique de confidentialité » (ou « Mentions légales ») de
             votre site : il donne l&apos;adresse à ouvrir pour refuser la mesure.
           </p>
-          <blockquote className="mt-2 max-w-3xl whitespace-pre-line break-words rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-sm text-ink-900" data-testid="privacy-paragraph">
+          <blockquote className="mt-2 max-w-3xl whitespace-pre-line wrap-anywhere rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-sm text-ink-900" data-testid="privacy-paragraph">
             {privacyText}
           </blockquote>
           <div className="mt-2">

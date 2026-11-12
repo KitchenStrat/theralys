@@ -92,7 +92,7 @@ export default async function HomePage({ searchParams }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="text-xl font-semibold">Votre site</h2>
-                <p className="mt-1 break-all text-base font-medium text-ink-900" data-testid="site-card-url">
+                <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="site-card-url">
                   {siteAddressLabel(ownSite.url)}
                 </p>
                 <p className="mt-1 max-w-md text-base text-ink-500">
@@ -197,7 +197,7 @@ export default async function HomePage({ searchParams }: Props) {
 
         <p className="px-2 text-[13px] text-ink-500">
           Votre site :{" "}
-          <Link href={referenceUrl} target="_blank" className="break-all underline">
+          <Link href={referenceUrl} target="_blank" className="wrap-anywhere underline">
             {referenceUrl}
           </Link>
         </p>

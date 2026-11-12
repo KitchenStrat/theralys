@@ -28,7 +28,7 @@ export function HostedSiteCard({ url, role }: { url: string; role: HostedSiteRol
             <h2 id="hosted-site-title" className="text-xl font-semibold">
               Votre site Harmony
             </h2>
-            <p className="mt-1 break-all text-base font-medium text-ink-900" data-testid="hosted-site-url">
+            <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="hosted-site-url">
               {siteAddressLabel(url)}
             </p>
             <p className="mt-2 text-base text-ink-700">{ROLE_TEXT[role]}</p>

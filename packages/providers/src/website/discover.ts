@@ -224,8 +224,8 @@ function areaResolver(): (element: DomElement) => LinkArea {
  * Liens de la page vers d'autres pages du site (dans le périmètre), ramenés
  * sur l'origine du site, sans ancre, dans l'ordre du document. Les liens
  * marqués `nofollow` ou masqués en ligne ne sont pas suivis (ce sont souvent
- * des pièges à robots ou des pages de service). À appeler sur le document
- * intact, avant `extractPage`.
+ * des pièges à robots ou des pages de service). Seuls les premiers milliers
+ * de liens d'une page sont examinés.
  */
 export function collectLinks($: CheerioAPI, pageUrl: string, scope: SiteScope): PageLink[] {
   const links: PageLink[] = [];

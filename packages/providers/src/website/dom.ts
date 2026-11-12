@@ -29,10 +29,14 @@ import { assertParsable, MARKUP_LIMITS, MarkupTooComplexError } from "./markup-g
 
 /** Nœud du document analysé (les types de l'analyseur ne sont pas exportés par cheerio : ils sont déduits). */
 export type DomNode = ReturnType<ReturnType<CheerioAPI["root"]>["contents"]>[number];
+/** Élément (balise), avec ses attributs et ses enfants. */
 export type DomElement = Extract<DomNode, { attribs: Record<string, string> }>;
+/** Texte, commentaire ou déclaration : tout nœud qui porte une donnée ; `isTextNode` distingue le texte. */
 export type DomText = Extract<DomNode, { data: string }>;
 
+/** Le nœud est-il un élément ? (seuls les éléments ont des attributs) */
 export const isElement = (node: DomNode): node is DomElement => "attribs" in node;
+/** Le nœud est-il du texte de la page ? (ni commentaire, ni déclaration) */
 export const isTextNode = (node: DomNode): node is DomText => (node.type as string) === "text";
 
 /** Éléments dont le contenu est du texte brut : l'analyseur n'y décode pas les entités. */

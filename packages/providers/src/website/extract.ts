@@ -21,8 +21,6 @@ import { EXTERNAL_SITE_LIMITS } from "@theralys/shared";
 import { type DomElement, type DomNode, closestElement, eachText, isElement, isTextNode, isWithin, loadMarkup, textOf } from "./dom";
 import { cleanLine, cleanLineMax, joinBlocks } from "./text";
 
-export { type DomElement, type DomNode, isElement } from "./dom";
-
 /**
  * Analyse le HTML d'une page (analyseur tolérant, sans exécution). Lève
  * `MarkupTooComplexError` pour un document trop imbriqué ou trop touffu

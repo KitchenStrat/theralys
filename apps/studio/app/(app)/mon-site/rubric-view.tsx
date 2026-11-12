@@ -21,7 +21,7 @@ function Sub({ label, children }: { label: string; children: ReactNode }) {
 
 function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={`break-all ${TEXT_LINK}`}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`}>
       {children}
       <span className="sr-only"> (nouvel onglet)</span>
     </a>
@@ -139,7 +139,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
           {email ? (
             <div>
               <dt className="font-medium text-ink-900">Adresse e-mail</dt>
-              <dd className="break-all">{email}</dd>
+              <dd className="wrap-anywhere">{email}</dd>
             </div>
           ) : null}
           {hours.length > 0 ? (

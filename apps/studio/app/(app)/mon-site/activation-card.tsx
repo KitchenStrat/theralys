@@ -110,7 +110,7 @@ export function ActivationCard({
               Vos outils s&apos;appuient sur ce site
             </h2>
             <p className="mt-1 max-w-2xl text-base text-ink-700">
-              Vos contenus, vos liens et vos statistiques reposent sur <span className="break-all font-medium text-ink-900">{address}</span>. Votre site Harmony reste en ligne.
+              Vos contenus, vos liens et vos statistiques reposent sur <span className="wrap-anywhere font-medium text-ink-900">{address}</span>. Votre site Harmony reste en ligne.
             </p>
             {!usable ? (
               <div className="mt-4 rounded-2xl bg-warning-100 px-4 py-3 text-sm text-ink-900" data-testid="activation-gaps">
@@ -145,7 +145,7 @@ export function ActivationCard({
             {usable ? (
               <>
                 <p className="mt-1 max-w-2xl text-base text-ink-700">
-                  Vos contenus, vos liens et vos statistiques s&apos;appuieront sur <span className="break-all font-medium text-ink-900">{address}</span>. Votre site Harmony restera
+                  Vos contenus, vos liens et vos statistiques s&apos;appuieront sur <span className="wrap-anywhere font-medium text-ink-900">{address}</span>. Votre site Harmony restera
                   accessible, mais il sera masqué des moteurs de recherche pour ne pas lui faire concurrence.
                 </p>
                 <div className="mt-5">{keepVisibleField}</div>
@@ -202,7 +202,7 @@ export function ActivationCard({
       >
         <div className="space-y-3 text-base text-ink-700" data-testid="disconnect-dialog">
           <p>
-            Le profil lu sur <span className="break-all font-medium text-ink-900">{address}</span> et toutes vos corrections seront supprimés.
+            Le profil lu sur <span className="wrap-anywhere font-medium text-ink-900">{address}</span> et toutes vos corrections seront supprimés.
           </p>
           <p>Vos outils s&apos;appuieront de nouveau sur votre site Harmony. Rien ne change sur votre propre site.</p>
           <p className="text-sm">Vous pourrez le reconnecter plus tard : il sera relu, et les lectures déjà faites ce mois-ci restent comptées.</p>

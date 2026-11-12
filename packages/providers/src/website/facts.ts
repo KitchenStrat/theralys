@@ -562,7 +562,7 @@ function themeColor($: CheerioAPI): string | undefined {
 
 // ─── Page, puis site ─────────────────────────────────────────────────────────
 
-/** Faits d'une page. À appeler sur le document intact, avant `extractPage`. */
+/** Faits d'une page : ce que son code déclare, en nombre borné (une page piégée ne fait pas travailler plus qu'une vraie). */
 export function collectPageFacts($: CheerioAPI, html: string, pageUrl: string): PageFacts {
   const structured = readJsonLd($, pageUrl);
   const links = readLinks($, pageUrl);
