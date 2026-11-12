@@ -7,7 +7,7 @@
  */
 
 import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
-import { getDb, googlePosts, googleUsage, sites, type GooglePost } from "@theralys/db";
+import { getDb, googlePosts, googleUsage, sites, type GooglePost, type Site } from "@theralys/db";
 import {
   GOOGLE_POST_DAY,
   GOOGLE_POST_REGENERATIONS_PER_MONTH,
@@ -22,11 +22,22 @@ import {
   type SocialSourceRef,
   type SocialTemplate,
 } from "@theralys/shared";
+import { publicSiteUrl, siteUrl } from "@/lib/data";
 import type { DbExecutor } from "@/lib/social/data";
 import { resolveSocialTheme } from "@/lib/social/render/theme";
+import { deliveredGoogleContent, type GooglePostAddresses } from "./render";
 
 /** Horizon des demandes et des préparations de mois (jours), comme le social. */
 export const GOOGLE_HORIZON_DAYS = 120;
+
+/**
+ * Adresses d'un site pour le bouton d'action de ses posts : celle du site
+ * hébergé et celle de référence (cf. `deliveredGoogleContent`). À donner aussi
+ * au fichier texte d'un post, pour qu'il dise la même adresse que la modale.
+ */
+export function googlePostAddresses(site: Site): GooglePostAddresses {
+  return { hostedUrl: siteUrl(site), referenceUrl: publicSiteUrl(site) };
+}
 
 export type GoogleCalendarItem = {
   id: string;
