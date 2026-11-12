@@ -2,6 +2,17 @@
 
 import { CalendarDays, LayoutGrid, RotateCcw, Save, Settings, Sparkles, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  Badge as SharedBadge,
+  Button as SharedButton,
+  Card as SharedCard,
+  FieldHint,
+  Input,
+  Label,
+  Modal,
+  Segmented,
+  Select,
+} from "@theralys/ui";
 import { Badge, Button, InlineSuccess, SECTIONS, SECTION_ORDER, TabPanel, Tabs } from "@/components/ds";
 
 /** Remonte son contenu à chaque clic : les animations d'entrée rejouent. */
@@ -141,6 +152,106 @@ export function RegistryCheck() {
           <li key={gap}>{gap}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+const SHARED_TONES = [
+  ["neutral", "Brouillon"],
+  ["primary", "Planifié"],
+  ["info", "En cours"],
+  ["success", "Publié"],
+  ["warning", "À relire"],
+  ["danger", "À reprendre"],
+] as const;
+
+/**
+ * Les composants PARTAGÉS (packages/ui), non modifiés, rendus sous la coquille :
+ * les jetons hérités y prennent leurs valeurs AA (bloc 5 de globals.css). Sert de
+ * témoin au plan de bascule — et la fenêtre vérifie qu'aucun ancêtre ne la retient.
+ */
+export function SharedComponentsDemo() {
+  const [open, setOpen] = useState(false);
+  const [format, setFormat] = useState<"carre" | "portrait" | "paysage">("carre");
+  const close = () => setOpen(false);
+  return (
+    <div className="grid gap-5 md:grid-cols-2">
+      <SharedCard className="p-6">
+        <p className="text-sm font-semibold text-ink-900">Boutons, badges et textes</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <SharedButton>Enregistrer</SharedButton>
+          <SharedButton variant="secondary">Annuler</SharedButton>
+          <SharedButton variant="ghost">Plus tard</SharedButton>
+          <SharedButton variant="danger">Supprimer</SharedButton>
+          <SharedButton disabled>Indisponible</SharedButton>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {SHARED_TONES.map(([tone, label]) => (
+            <SharedBadge key={tone} tone={tone}>
+              {label}
+            </SharedBadge>
+          ))}
+        </div>
+        <p className="mt-4 text-sm text-ink-500">
+          Texte secondaire en <code>text-ink-500</code> : 360 emplois dans le studio, 4,2:1 aujourd'hui.
+        </p>
+        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <a href="#herites" className="font-medium text-primary-600 hover:underline">
+            Un lien
+          </a>
+          <span className="text-success-500">Modifications enregistrées</span>
+          <span className="text-danger-500">Adresse e-mail invalide</span>
+          <span className="text-warning-500">Quota presque atteint</span>
+          <span className="text-info-500">Mise à jour en cours</span>
+        </p>
+      </SharedCard>
+      <SharedCard className="p-6">
+        <p className="text-sm font-semibold text-ink-900">Champs et fenêtre</p>
+        <div className="mt-3">
+          <Label htmlFor="demo-partage-nom">Nom du cabinet</Label>
+          <Input id="demo-partage-nom" placeholder="Cabinet d'ostéopathie" />
+          <FieldHint>Affiché en haut de votre site.</FieldHint>
+        </div>
+        <div className="mt-3">
+          <Label htmlFor="demo-partage-ton">Ton des textes</Label>
+          <Select id="demo-partage-ton" defaultValue="chaleureux">
+            <option value="chaleureux">Chaleureux</option>
+            <option value="sobre">Sobre</option>
+          </Select>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Segmented
+            aria-label="Format du visuel"
+            options={[
+              { value: "carre", label: "Carré" },
+              { value: "portrait", label: "Portrait" },
+              { value: "paysage", label: "Paysage" },
+            ]}
+            value={format}
+            onChange={setFormat}
+          />
+          <SharedButton variant="secondary" onClick={() => setOpen(true)}>
+            Ouvrir une fenêtre
+          </SharedButton>
+        </div>
+      </SharedCard>
+      <Modal
+        open={open}
+        onClose={close}
+        title="Fenêtre partagée"
+        footer={
+          <>
+            <SharedButton variant="secondary" onClick={close}>
+              Fermer
+            </SharedButton>
+            <SharedButton onClick={close}>Valider</SharedButton>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-500">
+          La fenêtre couvre tout l'écran, barres de navigation comprises : dans la coquille, aucun ancêtre ne la retient.
+        </p>
+      </Modal>
     </div>
   );
 }

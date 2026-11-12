@@ -44,6 +44,7 @@ import {
   pageUrlKey,
   phoneAppears,
   readFacts,
+  readPages,
   siteCorpus,
   titleGrounded,
   webAddressAppears,
@@ -223,7 +224,7 @@ function bookingAppears(url: string, corpus: SiteCorpus): boolean {
  * « p1 »…) ; recalculées à l'identique si elles ne sont pas fournies.
  */
 export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInput, promptPages?: readonly ExternalProfilePromptPage[]): ExternalSiteProfile {
-  const pages = Array.isArray(input.pages) ? input.pages : [];
+  const pages = readPages(input.pages);
   const clean = (value: unknown): ExternalSiteProfile => cleanExternalProfile(value, input.url);
   /** Entrées d'une liste, nettoyées une à une */
   const each = <T>(value: unknown, cleanOne: (entry: unknown) => T[]): T[] => list(value).slice(0, ENTRIES_MAX).flatMap(cleanOne);
@@ -237,7 +238,7 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
   const texts = pageTexts(pages);
   const read = siteCorpus(texts);
   const readOrFound = siteCorpus([...texts, ...factTexts(found)]);
-  const readPages = new Set(pages.map((page) => pageUrlKey(page.url)).filter((key): key is string => key !== null));
+  const pagesRead = new Set(pages.map((page) => pageUrlKey(page.url)).filter((key): key is string => key !== null));
 
   // 1. Spécialités
   const titles = new Set<string>();
@@ -251,7 +252,7 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
       {
         ...rest,
         excerpt: fair(specialty.excerpt) ? specialty.excerpt : "",
-        ...(url !== undefined && pageKey !== null && readPages.has(pageKey) ? { url } : {}),
+        ...(url !== undefined && pageKey !== null && pagesRead.has(pageKey) ? { url } : {}),
         ...(summary !== undefined && fair(summary) ? { summary } : {}),
         headings: specialty.headings.filter(fair),
         faq: specialty.faq.filter((item) => fair(item.question) && fair(item.answer)),

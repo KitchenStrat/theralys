@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, metaAdsAnalyses, sites } from "@theralys/db";
 import {
+  adsReferenceOf,
   dismissMetaAds,
   getMetaAdsUsage,
   keepMetaAds,
@@ -41,6 +42,8 @@ const REGEN_BUSY = "Une régénération est déjà en cours — patientez un ins
 const NO_ANALYSIS = "Lancez d'abord une analyse depuis l'onglet Diagnostic.";
 const ANALYSIS_FAILED = "L'analyse a échoué — réessayez dans un instant.";
 const ANALYSIS_COUNTED = "Cette analyse est décomptée de votre quota mensuel.";
+const OWN_SITE_TRACKING =
+  "Vos annonces mènent désormais à votre propre site : ce réglage n'agit que sur votre site Harmony. Suivez le pas-à-pas de cet onglet pour installer le Pixel sur votre site.";
 
 /** Message du service (déjà en français) terminé par une ponctuation, sinon le repli. */
 function sentence(message: string, fallback: string): string {
@@ -176,6 +179,11 @@ export async function regenerateMetaAds(input: unknown): Promise<{ error?: strin
  * autres réglages de suivi (bandeau, GA, GTM, Google Ads et ses libellés)
  * sont conservés. Vide = Pixel retiré. `metaPixelId` renvoie la valeur
  * enregistrée (normalisée) pour resynchroniser le formulaire.
+ *
+ * Refusé quand les outils s'appuient sur le site du client : le formulaire
+ * n'y est plus proposé (rien ne s'installe sur ce site depuis le studio), et
+ * un envoi venu d'un écran resté ouvert annoncerait à tort que « votre site »
+ * envoie les événements. L'écran est relu pour montrer le pas-à-pas.
  */
 export async function saveMetaTracking(input: unknown): Promise<{ error?: string; message?: string; metaPixelId?: string | null }> {
   const session = await requireClient();
@@ -186,6 +194,10 @@ export async function saveMetaTracking(input: unknown): Promise<{ error?: string
   const { metaPixelId } = checked.value;
 
   const db = getDb();
+  if (await adsReferenceOf(db, site)) {
+    revalidatePath(PATH);
+    return { error: OWN_SITE_TRACKING };
+  }
   const updated = await db.transaction(async (tx): Promise<{ cookieBanner: boolean } | null> => {
     const [row] = await tx.select({ theme: sites.theme }).from(sites).where(eq(sites.id, site.id)).for("update");
     if (!row) return null;

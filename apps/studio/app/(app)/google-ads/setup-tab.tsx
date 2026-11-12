@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
 import { GOOGLE_ADS_CONVERSION_KINDS, type GoogleAdsKeywordSet, type GoogleAdsPlan } from "@theralys/shared";
+import { landingDisplay, landingHref, type AnalysisSite } from "@/lib/google-ads/analysis-site";
 import { formatAdsKeywordList, formatAdsLines, formatAdsNegativeList } from "@/lib/google-ads/clipboard";
+import { ADS_RESULTS_ACCOUNT, googleAdsFindings, tagInstallAdvice, type ExternalSiteTracking } from "@/lib/google-ads/external-tracking";
 import type { AdsResults } from "@theralys/analytics";
 import { validateAdsTracking, type AdsTrackingForm } from "@/lib/google-ads/tracking";
 import { saveAdsTracking } from "./actions";
 import { CopyButton } from "./copy-button";
+import { ExternalResultsCard, ExternalTrackingCard } from "./external-site-cards";
 import type { AdsTab } from "./tabs";
-import { ADS_TUTORIAL, GOOGLE_ADS_URL, TAG_ASSISTANT_URL, type TutorialCopy, type TutorialStep } from "./tutorial";
+import { GOOGLE_ADS_URL, TAG_ASSISTANT_URL, adsTutorial, type TutorialCopy, type TutorialStep } from "./tutorial";
 
 export function SetupTab({
   plan,
@@ -21,6 +24,8 @@ export function SetupTab({
   results,
   resultsDays,
   siteDomain,
+  analysisSite,
+  externalTracking,
   onSelectTab,
 }: {
   plan: GoogleAdsPlan | null;
@@ -30,9 +35,20 @@ export function SetupTab({
   cookieBanner: boolean;
   results: AdsResults;
   resultsDays: number;
+  /** Adresse du site Harmony, sans protocole : c'est sur lui qu'agit le formulaire de suivi */
   siteDomain: string;
+  /** Site pour lequel l'analyse a été préparée : adresses d'atterrissage et liens annexes du plan */
+  analysisSite: AnalysisSite;
+  /**
+   * Les outils s'appuient sur le site du client : le studio ne peut rien y
+   * installer. Le formulaire et le bloc Résultats, qui n'agissent que sur le
+   * site Harmony, laissent la place au relevé de sa dernière lecture et à un
+   * pas-à-pas. `null` : site Harmony.
+   */
+  externalTracking: ExternalSiteTracking | null;
   onSelectTab: (tab: AdsTab) => void;
 }) {
+  const external = externalTracking !== null;
   return (
     <div className="space-y-6">
       <Card className="p-6">
@@ -48,15 +64,36 @@ export function SetupTab({
           </a>
         </p>
         <div className="mt-4 divide-y divide-cream-200 border-t border-cream-200">
-          {ADS_TUTORIAL.map((step, index) => (
-            <TutorialStepView key={step.id} step={step} index={index} plan={plan} keywords={keywords} siteDomain={siteDomain} onSelectTab={onSelectTab} />
+          {adsTutorial(external).map((step, index) => (
+            <TutorialStepView key={step.id} step={step} index={index} plan={plan} keywords={keywords} analysisSite={analysisSite} externalSite={external} onSelectTab={onSelectTab} />
           ))}
         </div>
       </Card>
 
-      <TrackingForm initial={tracking} cookieBanner={cookieBanner} siteDomain={siteDomain} />
+      {externalTracking ? (
+        <>
+          <ExternalTrackingCard
+            title="Suivi des conversions sur votre site"
+            intro={
+              <>
+                Vos annonces mènent à votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>). Harmony n&apos;héberge pas ce
+                site et ne peut rien y installer : la balise Google Ads et le comptage des clics s&apos;y règlent directement, par vous ou par la personne
+                qui s&apos;en occupe (étape 9 du tuto ci-dessus).
+              </>
+            }
+            findings={googleAdsFindings(externalTracking)}
+            adviceTitle="Où installer la balise Google"
+            advice={tagInstallAdvice(externalTracking.cms, "google")}
+          />
+          <ExternalResultsCard account={ADS_RESULTS_ACCOUNT} accountLink={{ href: GOOGLE_ADS_URL, label: "Ouvrir Google Ads" }} measureSnippet={externalTracking.measureSnippet} />
+        </>
+      ) : (
+        <>
+          <TrackingForm initial={tracking} cookieBanner={cookieBanner} siteDomain={siteDomain} />
 
-      <ResultsCard results={results} days={resultsDays} tracked={tracking.googleAdsId !== ""} />
+          <ResultsCard results={results} days={resultsDays} tracked={tracking.googleAdsId !== ""} />
+        </>
+      )}
     </div>
   );
 }
@@ -66,14 +103,16 @@ function TutorialStepView({
   index,
   plan,
   keywords,
-  siteDomain,
+  analysisSite,
+  externalSite,
   onSelectTab,
 }: {
   step: TutorialStep;
   index: number;
   plan: GoogleAdsPlan | null;
   keywords: GoogleAdsKeywordSet | null;
-  siteDomain: string;
+  analysisSite: AnalysisSite;
+  externalSite: boolean;
   onSelectTab: (tab: AdsTab) => void;
 }) {
   return (
@@ -96,7 +135,7 @@ function TutorialStepView({
             <li key={item}>{item}</li>
           ))}
         </ol>
-        {step.copy ? <CopyBlock copy={step.copy} plan={plan} keywords={keywords} siteDomain={siteDomain} onSelectTab={onSelectTab} /> : null}
+        {step.copy ? <CopyBlock copy={step.copy} plan={plan} keywords={keywords} analysisSite={analysisSite} externalSite={externalSite} onSelectTab={onSelectTab} /> : null}
         {step.note ? <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">{step.note}</p> : null}
       </div>
     </details>
@@ -108,19 +147,22 @@ function CopyBlock({
   copy,
   plan,
   keywords,
-  siteDomain,
+  analysisSite,
+  externalSite,
   onSelectTab,
 }: {
   copy: TutorialCopy;
   plan: GoogleAdsPlan | null;
   keywords: GoogleAdsKeywordSet | null;
-  siteDomain: string;
+  analysisSite: AnalysisSite;
+  /** Les outils s'appuient sur le site du client : pas de formulaire de suivi, un pas-à-pas à sa place */
+  externalSite: boolean;
   onSelectTab: (tab: AdsTab) => void;
 }) {
   if (copy === "tracking") {
     return (
       <p className="mt-3 text-sm text-ink-700">
-        Le formulaire « Suivi des conversions » se trouve sous ce tuto. Vérification :{" "}
+        {externalSite ? "Le bloc « Suivi des conversions sur votre site » se trouve sous ce tuto." : "Le formulaire « Suivi des conversions » se trouve sous ce tuto."} Vérification :{" "}
         <a href={TAG_ASSISTANT_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:underline">
           Tag Assistant ↗<span className="sr-only"> (nouvel onglet)</span>
         </a>
@@ -157,13 +199,17 @@ function CopyBlock({
     }
     return (
       <ul className="mt-3 space-y-2" aria-label="Mots-clés par groupe">
-        {plan.adGroups.map((g, i) => (
-          <li key={`${i}-${g.name}`} className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-ink-900">{g.name}</span>
-            <span className="text-xs text-ink-500">→ {siteDomain}{g.landingPath}</span>
-            <CopyButton text={formatAdsKeywordList(g.keywords)} label={`Copier (${g.keywords.length})`} variant="ghost" />
-          </li>
-        ))}
+        {plan.adGroups.map((g, i) => {
+          // Chemin enregistré ramené à la page actuelle du site de l'analyse ; rien quand son adresse n'est plus connue
+          const address = landingDisplay(analysisSite, g.landingPath);
+          return (
+            <li key={`${i}-${g.name}`} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-ink-900">{g.name}</span>
+              {address ? <span className="text-xs text-ink-500">→ {address}</span> : null}
+              <CopyButton text={formatAdsKeywordList(g.keywords)} label={`Copier (${g.keywords.length})`} variant="ghost" />
+            </li>
+          );
+        })}
       </ul>
     );
   }
@@ -187,7 +233,11 @@ function CopyBlock({
   }
   // extensions
   if (!plan) return null;
-  const sitelinks = plan.extensions.sitelinks.map((s) => `${s.title} — https://${siteDomain}${s.path}`);
+  // Un lien annexe sans adresse connue (analyse d'un site qui n'est plus la référence) n'est pas proposé à la copie
+  const sitelinks = plan.extensions.sitelinks.flatMap((s) => {
+    const href = landingHref(analysisSite, s.path);
+    return href ? [`${s.title} — ${href}`] : [];
+  });
   return (
     <div className={wrap}>
       <CopyButton text={formatAdsLines(plan.extensions.callouts)} label={`Copier les accroches (${plan.extensions.callouts.length})`} />

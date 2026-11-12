@@ -10,7 +10,6 @@ import {
   GOOGLE_ADS_CORE_MAX,
   usdToEur,
   type GoogleAdsBudgetEstimate,
-  type GoogleAdsCheckId,
   type GoogleAdsDemand,
   type GoogleAdsDiagnostic,
   type GoogleAdsForecast,
@@ -20,7 +19,9 @@ import {
 } from "@theralys/shared";
 import type { GoogleBudget } from "@theralys/jobs";
 import { formatDayFr } from "@/lib/calendar";
+import { adsCheckLink } from "@/lib/google-ads/checks";
 import type { GoogleAdsAnalysisView, GoogleAdsUsage } from "@/lib/google-ads/data";
+import { MON_SITE_HREF } from "@/lib/google-ads/external-tracking";
 import { launchAdsAnalysis } from "./actions";
 import type { AdsSiteInfo } from "./ads-client";
 import type { AdsTab } from "./tabs";
@@ -52,27 +53,6 @@ const STATUS_ORDER: Record<GoogleAdsReadinessStatus, number> = { todo: 0, unknow
 /** À faire d'abord (bloquants en tête), puis inconnus, puis OK — ordre d'origine conservé à égalité. */
 export function sortChecks(checks: GoogleAdsReadinessCheck[]): GoogleAdsReadinessCheck[] {
   return [...checks].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || Number(b.critical) - Number(a.critical));
-}
-
-type CheckLink = { kind: "fiche" } | { kind: "editor" } | { kind: "tab" };
-
-/** Où régler le point : section Fiche Google, réglages du site (éditeur) ou onglet Paramétrage & suivi. */
-function checkLink(id: GoogleAdsCheckId): CheckLink {
-  switch (id) {
-    case "profile_linked":
-    case "profile_claimed":
-    case "reviews":
-    case "hours":
-    case "photos":
-      return { kind: "fiche" };
-    case "tracking_tag":
-    case "tracking_conversions":
-      return { kind: "tab" };
-    case "booking":
-    case "phone":
-    case "landing_pages":
-      return { kind: "editor" };
-  }
 }
 
 export function DiagnosticTab({
@@ -210,7 +190,7 @@ export function DiagnosticTab({
             <DemandCard demand={diagnostic.demand} onSelectTab={onSelectTab} />
             <BudgetCard budget={diagnostic.budget} forecast={current?.forecast ?? null} />
           </div>
-          <ChecksCard checks={diagnostic.checks} onSelectTab={onSelectTab} />
+          <ChecksCard checks={diagnostic.checks} externalSite={diagnostic.externalSite === true} onSelectTab={onSelectTab} />
         </div>
       )}
     </div>
@@ -370,7 +350,16 @@ function ForecastNote({ forecast }: { forecast: GoogleAdsForecast }) {
   );
 }
 
-function ChecksCard({ checks, onSelectTab }: { checks: GoogleAdsReadinessCheck[]; onSelectTab: (tab: AdsTab) => void }) {
+function ChecksCard({
+  checks,
+  externalSite,
+  onSelectTab,
+}: {
+  checks: GoogleAdsReadinessCheck[];
+  /** Bilan établi pour le site du client : ses points se règlent sur ce site et dans « Mon site », pas dans l'éditeur */
+  externalSite: boolean;
+  onSelectTab: (tab: AdsTab) => void;
+}) {
   const sorted = sortChecks(checks);
   const todo = checks.filter((c) => c.status === "todo");
   return (
@@ -383,16 +372,16 @@ function ChecksCard({ checks, onSelectTab }: { checks: GoogleAdsReadinessCheck[]
       </p>
       <ul className="mt-3 divide-y divide-cream-200" aria-label="Points de préparation">
         {sorted.map((check) => (
-          <CheckRow key={check.id} check={check} onSelectTab={onSelectTab} />
+          <CheckRow key={check.id} check={check} externalSite={externalSite} onSelectTab={onSelectTab} />
         ))}
       </ul>
     </Card>
   );
 }
 
-function CheckRow({ check, onSelectTab }: { check: GoogleAdsReadinessCheck; onSelectTab: (tab: AdsTab) => void }) {
+function CheckRow({ check, externalSite, onSelectTab }: { check: GoogleAdsReadinessCheck; externalSite: boolean; onSelectTab: (tab: AdsTab) => void }) {
   const status = STATUS[check.status];
-  const link = check.status === "ok" ? null : checkLink(check.id);
+  const link = check.status === "ok" ? null : adsCheckLink(check.id, externalSite);
   const linkClass = "text-xs font-medium text-primary-600 hover:underline";
   return (
     <li className="flex items-start gap-3 py-3">
@@ -408,17 +397,22 @@ function CheckRow({ check, onSelectTab }: { check: GoogleAdsReadinessCheck; onSe
           {check.critical && check.status !== "ok" ? <Badge tone="danger">Bloquant</Badge> : null}
         </div>
         <p className="text-sm text-ink-700">{check.detail}</p>
-        {link?.kind === "fiche" ? (
+        {link === "fiche" ? (
           <Link href="/fiche-google" className={linkClass}>
             Ouvrir Fiche Google →
           </Link>
         ) : null}
-        {link?.kind === "editor" ? (
+        {link === "editor" ? (
           <Link href="/editor" className={linkClass}>
             Modifier mon site →
           </Link>
         ) : null}
-        {link?.kind === "tab" ? (
+        {link === "site" ? (
+          <Link href={MON_SITE_HREF} className={linkClass}>
+            Ouvrir Mon site →
+          </Link>
+        ) : null}
+        {link === "tab" ? (
           <button type="button" onClick={() => onSelectTab("parametrage")} className={linkClass}>
             Ouvrir Paramétrage &amp; suivi →
           </button>

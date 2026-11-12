@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { Badge, Button, Card, Spinner } from "@theralys/ui";
 import { GOOGLE_ADS_RSA, intentLabel, type GoogleAdsAd, type GoogleAdsAdGroup, type GoogleAdsPlan } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
+import { LANDING_UNAVAILABLE, landingDisplay, landingPathOf, type AnalysisSite } from "@/lib/google-ads/analysis-site";
 import { formatAdsKeywordList, formatAdsLines, formatAdsNegativeList } from "@/lib/google-ads/clipboard";
 import { regenerateAdsPlan } from "./actions";
 import { CopyButton } from "./copy-button";
@@ -22,7 +23,7 @@ export function PlanTab({
   planError,
   instructions,
   regenRemaining,
-  siteDomain,
+  analysisSite,
   onSelectTab,
 }: {
   plan: GoogleAdsPlan | null;
@@ -32,7 +33,8 @@ export function PlanTab({
   planError: string | null;
   instructions: string | null;
   regenRemaining: number;
-  siteDomain: string;
+  /** Site pour lequel l'analyse a été préparée : son adresse accompagne les chemins du plan, jamais celle de l'autre site */
+  analysisSite: AnalysisSite;
   onSelectTab: (tab: AdsTab) => void;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -92,7 +94,7 @@ export function PlanTab({
       </Card>
 
       {plan.adGroups.map((group, index) => (
-        <AdGroupCard key={`${group.name}-${index}`} group={group} index={index} siteDomain={siteDomain} />
+        <AdGroupCard key={`${group.name}-${index}`} group={group} index={index} analysisSite={analysisSite} />
       ))}
 
       <Card className="p-6">
@@ -122,11 +124,15 @@ export function PlanTab({
               <p className="mt-1 text-sm text-ink-500">Aucun : ajoutez des pages de spécialités à votre site.</p>
             ) : (
               <ul className="mt-1 space-y-1 text-sm text-ink-700">
-                {plan.extensions.sitelinks.map((s, i) => (
-                  <li key={`${i}-${s.title}-${s.path}`}>
-                    <span className="font-medium text-ink-900">{s.title}</span> <span className="text-ink-500">→ {siteDomain}{s.path}</span>
-                  </li>
-                ))}
+                {plan.extensions.sitelinks.map((s, i) => {
+                  // Chemin enregistré ramené à la page actuelle du site de l'analyse ; sans adresse connue, le titre seul
+                  const address = landingDisplay(analysisSite, s.path);
+                  return (
+                    <li key={`${i}-${s.title}-${s.path}`}>
+                      <span className="font-medium text-ink-900">{s.title}</span> {address ? <span className="text-ink-500">→ {address}</span> : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -266,8 +272,10 @@ function Field({ label, value, hint }: { label: string; value: string; hint?: st
   );
 }
 
-function AdGroupCard({ group, index, siteDomain }: { group: GoogleAdsAdGroup; index: number; siteDomain: string }) {
+function AdGroupCard({ group, index, analysisSite }: { group: GoogleAdsAdGroup; index: number; analysisSite: AnalysisSite }) {
   const keywordsText = formatAdsKeywordList(group.keywords);
+  // Les plans enregistrés avant la correction portent « /<slug> » : la page est montrée sous son adresse actuelle
+  const landingPath = landingPathOf(analysisSite, group.landingPath);
   return (
     <Card className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -278,7 +286,7 @@ function AdGroupCard({ group, index, siteDomain }: { group: GoogleAdsAdGroup; in
           </h2>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-500">
             <Badge tone="info">{intentLabel(group.intent)}</Badge>
-            Page d&apos;atterrissage : <span className="font-medium text-ink-700">{siteDomain}{group.landingPath}</span>
+            Page d&apos;atterrissage : <span className="font-medium text-ink-700">{landingDisplay(analysisSite, group.landingPath) ?? LANDING_UNAVAILABLE}</span>
           </p>
         </div>
         <CopyButton text={keywordsText} label={`Copier les mots-clés (${group.keywords.length})`} />
@@ -295,14 +303,27 @@ function AdGroupCard({ group, index, siteDomain }: { group: GoogleAdsAdGroup; in
       </ul>
 
       {group.ads.map((ad, i) => (
-        <AdView key={i} ad={ad} index={i} count={group.ads.length} siteDomain={siteDomain} landingPath={group.landingPath} />
+        <AdView key={i} ad={ad} index={i} count={group.ads.length} siteDomain={analysisSite.domain} landingPath={landingPath} />
       ))}
     </Card>
   );
 }
 
-function AdView({ ad, index, count, siteDomain, landingPath }: { ad: GoogleAdsAd; index: number; count: number; siteDomain: string; landingPath: string }) {
-  const display = [siteDomain, ad.path1, ad.path2].filter(Boolean).join(" › ");
+function AdView({
+  ad,
+  index,
+  count,
+  siteDomain,
+  landingPath,
+}: {
+  ad: GoogleAdsAd;
+  index: number;
+  count: number;
+  /** Adresse du site de l'analyse ; `null` quand elle n'est plus connue (l'aperçu dit alors « votre site ») */
+  siteDomain: string | null;
+  landingPath: string;
+}) {
+  const display = [siteDomain ?? "votre site", ad.path1, ad.path2].filter(Boolean).join(" › ");
   return (
     <div className="mt-5 border-t border-cream-200 pt-4">
       <h3 className="text-sm font-semibold text-ink-900">
@@ -312,7 +333,7 @@ function AdView({ ad, index, count, siteDomain, landingPath }: { ad: GoogleAdsAd
       <div className="mt-3 max-w-2xl rounded-2xl border border-cream-200 bg-white p-4" aria-label="Aperçu de l'annonce">
         <p className="text-xs text-ink-700">
           <span className="font-bold">Annonce</span> · {display}
-          <span className="sr-only"> (page {landingPath})</span>
+          {siteDomain ? <span className="sr-only"> (page {landingPath})</span> : null}
         </p>
         <p className="mt-1 text-lg leading-snug text-info-500">{ad.headlines.slice(0, 3).join(" | ")}</p>
         <p className="mt-1 text-sm text-ink-700">{ad.descriptions.slice(0, 2).join(" ")}</p>

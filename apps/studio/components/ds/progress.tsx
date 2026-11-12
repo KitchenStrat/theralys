@@ -51,7 +51,7 @@ export function ProgressBar({
           ) : (
             <span />
           )}
-          {shownValue ? <span className="shrink-0 text-ds-ink-600 ds-tnum">{shownValue}</span> : null}
+          {shownValue ? <span className="shrink-0 text-ds-ink-600">{shownValue}</span> : null}
         </div>
       ) : null}
       <div

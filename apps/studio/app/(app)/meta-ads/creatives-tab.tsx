@@ -17,7 +17,8 @@ import {
   type MetaAdsVideoPlan,
 } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
-import { ctaLabel, landingUrl, metaCreativeTxt } from "@/lib/meta-ads/clipboard";
+import { LANDING_UNAVAILABLE } from "@/lib/google-ads/analysis-site";
+import { ctaLabel, metaCreativeTxt, metaLandingUrl, type MetaLanding } from "@/lib/meta-ads/clipboard";
 import { metaCreativeDownloadUrl, metaCreativePreviewUrl } from "@/lib/meta-ads/urls";
 import { regenerateMetaAds } from "./actions";
 import { CopyButton } from "./copy-button";
@@ -43,7 +44,8 @@ export function CreativesTab({
   generationError,
   instructions,
   regenRemaining,
-  siteDomain,
+  landing,
+  externalSite,
   onSelectTab,
 }: {
   analysisId: string | null;
@@ -57,7 +59,10 @@ export function CreativesTab({
   generationError: string | null;
   instructions: string | null;
   regenRemaining: number;
-  siteDomain: string;
+  /** Site de l'analyse et suffixe de son plan : de quoi composer l'adresse d'atterrissage de chaque créa */
+  landing: MetaLanding;
+  /** Analyse préparée pour le site du client : « votre site » désigne alors le sien, pas celui dont viennent les couleurs des visuels */
+  externalSite: boolean;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -91,8 +96,8 @@ export function CreativesTab({
           <div className="min-w-[16rem] flex-1">
             <h2 className="text-xl font-semibold">Vos annonces</h2>
             <p className="mt-1 text-sm text-ink-700">
-              {creatives.creatives.length} créas statiques, un angle différent chacune, rendues dans les trois formats Meta avec vos photos et les
-              couleurs de votre site. Téléchargez le visuel ou le kit complet, copiez les textes dans le Gestionnaire de publicités.
+              {creatives.creatives.length} créas statiques, un angle différent chacune, rendues dans les trois formats Meta avec vos photos et{" "}
+              {externalSite ? "vos couleurs" : "les couleurs de votre site"}. Téléchargez le visuel ou le kit complet, copiez les textes dans le Gestionnaire de publicités.
             </p>
             <p className="mt-2 text-xs text-ink-500">
               Préparées le {formatDayFr(creatives.generatedAt, "day")}
@@ -122,7 +127,7 @@ export function CreativesTab({
 
       {creatives.creatives.map((creative, index) => (
         // Clé versionnée : après une régénération, la carte (et son aperçu) se remonte au lieu de garder l'ancien visuel
-        <CreativeCard key={`${creative.id}-${creatives.generatedAt}`} analysisId={analysisId} creative={creative} version={creatives.generatedAt} index={index} siteDomain={siteDomain} />
+        <CreativeCard key={`${creative.id}-${creatives.generatedAt}`} analysisId={analysisId} creative={creative} version={creatives.generatedAt} index={index} landing={landing} />
       ))}
 
       {creatives.notes.length > 0 ? (
@@ -212,17 +217,19 @@ function CreativeCard({
   creative,
   version,
   index,
-  siteDomain,
+  landing,
 }: {
   analysisId: string;
   creative: MetaAdCreative;
   /** Date de génération du jeu de créas : versionne l'URL d'aperçu */
   version: string;
   index: number;
-  siteDomain: string;
+  landing: MetaLanding;
 }) {
   const [size, setSize] = useState<MetaAdsFormat>("square");
-  const allTexts = metaCreativeTxt(creative, siteDomain);
+  const allTexts = metaCreativeTxt(creative, landing);
+  // Adresse de la page sur le site de l'analyse ; `null` quand ce site n'est plus la référence (rien n'est alors composé)
+  const pageUrl = metaLandingUrl(landing, creative.landingPath);
   return (
     <Card className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -233,7 +240,7 @@ function CreativeCard({
           </h2>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-500">
             <Badge tone="info">{angleLabel(creative.angle)}</Badge>
-            Page d&apos;atterrissage : <span className="font-medium text-ink-700">{landingUrl(siteDomain, creative.landingPath).replace(/^https?:\/\//, "")}</span>
+            Page d&apos;atterrissage : <span className="font-medium text-ink-700">{pageUrl ? pageUrl.replace(/^https?:\/\//, "") : LANDING_UNAVAILABLE}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -289,7 +296,7 @@ function CreativeCard({
           </dl>
           <div className="flex flex-wrap items-center gap-2 border-t border-cream-200 pt-3">
             <CopyButton text={allTexts} label="Copier tous les textes" />
-            <CopyButton text={landingUrl(siteDomain, creative.landingPath)} label="Copier l'URL de la page" variant="ghost" />
+            {pageUrl ? <CopyButton text={pageUrl} label="Copier l'URL de la page" variant="ghost" /> : null}
           </div>
         </div>
       </div>

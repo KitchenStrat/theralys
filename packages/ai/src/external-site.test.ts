@@ -560,6 +560,8 @@ describe("prompts", () => {
     expect(system).toContain("jamais une adresse, jamais une référence devinée");
     expect(system).toContain("Les coordonnées du bloc <faits> priment");
     expect(system).toContain("Écris en français");
+    expect(system).toContain("Texte brut partout : ni markdown, ni gras, ni emoji, ni balise.");
+    expect(system).toContain("toutes les rubriques restent vides");
   });
 
   it("prompt utilisateur : pages, faits et fiche du praticien dans leurs blocs, en JSON, puis la forme de la réponse", () => {
@@ -1112,6 +1114,9 @@ describe("finalizeExternalProfile", () => {
       expect(profile.specialties).toHaveLength(3);
     }
     expect(finalizeExternalProfile(answer(), input({ pages: null as never })).specialties).toEqual([]);
+    expect(finalizeExternalProfile(answer(), input({ pages: [null, "page", 3, STRESS] as never })).specialties.map((s) => s.title)).toEqual(["Gestion du stress"]);
+    expect(() => mockExternalProfile(input({ pages: [null, "page", { kind: "home" }] as never }))).not.toThrow();
+    expect(externalProfileUserPrompt(input({ pages: [null, { kind: "home", text: 12, headings: "x" }] as never }))).toContain('"pages":[');
     expect(finalizeExternalProfile(answer(), input({ url: "pas une adresse" })).specialties.map((s) => s.url)).toEqual([undefined, undefined, undefined]);
   });
 });
@@ -1299,6 +1304,17 @@ describe("mockExternalProfile", () => {
       { title: "Étape 2", description: "Vous vous installez ensuite dans le fauteuil." },
       { title: "Étape 3", description: "Je termine par quelques conseils." },
     ]);
+    // Un libellé est court : une proposition suivie d'un deux-points reste une phrase
+    const clauses = page("home", "/", "Réflexologue à Albi", ["Réflexologue à Albi", "Le déroulé d'une séance"], [
+      "Réflexologue à Albi",
+      "Le déroulé d'une séance",
+      "- Je vous reçois au cabinet le matin : vous vous installez tranquillement.",
+      "- Bilan de fin de séance : quelques conseils pour la semaine.",
+    ]);
+    expect(profileOf([clauses]).process).toEqual([
+      { title: "Étape 1", description: "Je vous reçois au cabinet le matin : vous vous installez tranquillement." },
+      { title: "Bilan de fin de séance", description: "Quelques conseils pour la semaine." },
+    ]);
     // Horaires annoncés sur une ligne, sans deux-points ; une plage d'ouverture n'est pas la durée d'une séance
     const open = page("contact", "/contact", "Contact", ["Contact"], [
       "Contact",
@@ -1316,6 +1332,9 @@ describe("mockExternalProfile", () => {
       { title: "Durée d'une séance", text: "Chaque séance dure 45 minutes." },
       { title: "Tarifs", text: "La séance d'une heure : 55 €" },
     ]);
+    // « Séances de 45 minutes » dit une durée, « séances de relaxation de 9h à 19h » un créneau
+    const slots = page("services", "/seances", "Séances", ["Séances"], ["Séances", "Séances de relaxation de 9h à 19h, toute l'année.", "Séances individuelles de 45 minutes environ."]);
+    expect(profileOf([slots]).practical).toEqual([{ title: "Durée d'une séance", text: "Séances individuelles de 45 minutes environ." }]);
   });
 
   it("infos pratiques et déroulement : ni intertitre, ni délai d'annulation, ni phrase prise pour un libellé, ni phrase coupée", () => {

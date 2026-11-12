@@ -17,7 +17,7 @@
 
 import { EXTERNAL_PROFILE_LIMITS, type ExternalPageKind, type ExternalSitePage } from "@theralys/shared";
 import type { ExternalProfileInput } from "./external-site";
-import { foldText, readFacts, sanitizeSiteText } from "./external-site-text";
+import { foldText, readFacts, readPages, sanitizeSiteText } from "./external-site-text";
 import { checkEthicalCompliance } from "./guardrails";
 
 /** Brouillon de profil : la forme d'une réponse du modèle, avant les garde-fous. */
@@ -254,6 +254,8 @@ function credentialsOf(bodies: readonly string[]): string[] {
 const PRICE_RE = /\d+(?:[.,]\d{1,2})?\s?(?:€|euros?\b)/i;
 const DURATION_RE = /\b\d+\s?(?:min(?:utes?)?\b|h(?:eures?)?(?:\s?\d{2})?\b)|\bune heure\b|\bune demi-heure\b/i;
 const DAY_RE = /\b(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/i;
+// Phrase (pliée) qui donne la durée d'une séance : un verbe de durée, ou « séance de/d'une » suivi de la durée
+const SESSION_LENGTH_RE = /\bdure(?:nt)?\b|\bduree\b|\bcomptez\b|\bprevoir\b|\bprevoyez\b|\bseances? (?:individuelles? |de groupe )?de? (?:environ )?(?:\d+ ?(?:min|h\b|heure)|une heure|une demi)/;
 
 /** Infos pratiques : la durée d'une séance, les tarifs, le remboursement et les moyens de paiement, recopiés des lignes qui les donnent. */
 function practicalOf(outlines: readonly Outline[]): ExternalProfileDraft["practical"] {
@@ -274,14 +276,8 @@ function practicalOf(outlines: readonly Outline[]): ExternalProfileDraft["practi
     used.add(text);
   }
   // Une durée de séance est dite (« dure une heure », « séances de 45 minutes ») : un délai d'annulation ou une plage d'ouverture n'en est pas une
-  const duration = take(
-    (text, folded) =>
-      DURATION_RE.test(text) &&
-      /\bdure(?:nt)?\b|\bduree\b|\bcomptez\b|\bprevoir\b|\bprevoyez\b|\bseances? (?:individuelles? )?d(?:e|une?) /.test(folded) &&
-      !/annul|avance|retard|ouvert|horaire/.test(folded) &&
-      !DAY_RE.test(text),
-  );
-  const refund = take((_text, folded) => /mutuelle|rembours|prise en charge/.test(folded));
+  const duration = take((text, folded) => DURATION_RE.test(text) && SESSION_LENGTH_RE.test(folded) && !DAY_RE.test(text));
+  const refund = take((_text, folded) => /mutuelle|rembours|pris(?:e|es)? en charge|prennent en charge/.test(folded));
   const payment = take((_text, folded) => /cheque|espece|carte bancaire|\bcb\b|virement|paiement|reglement/.test(folded));
   return [
     duration !== undefined ? { title: "Durée d'une séance", text: duration } : null,
@@ -293,8 +289,10 @@ function practicalOf(outlines: readonly Outline[]): ExternalProfileDraft["practi
 
 /**
  * Déroulement d'une séance : la rubrique qui l'annonce. Ses lignes sont les
- * étapes (« Titre : description », sinon « Étape n ») ; si elle n'a pas de
- * texte, ce sont les rubriques qui la suivent (étapes écrites en intertitres).
+ * étapes (« Libellé : description », sinon « Étape n » ; un seul paragraphe
+ * donne une étape par phrase) ; si elle n'a pas de texte, ce sont les
+ * rubriques qui la suivent (étapes écrites en intertitres). Une description
+ * qui ne tiendrait pas dans la limite du contrat est passée, jamais coupée.
  */
 function processOf(outlines: readonly Outline[]): ExternalProfileDraft["process"] {
   for (const { sections } of outlines) {
@@ -375,7 +373,7 @@ function contactOf(outlines: readonly Outline[]): ExternalProfileDraft["contact"
  * questions et coordonnées recopiés des pages qui les portent.
  */
 export function mockExternalProfile(input: ExternalProfileInput): ExternalProfileDraft {
-  const outlines = (Array.isArray(input.pages) ? input.pages : []).map(outlineOf);
+  const outlines = readPages(input.pages).map(outlineOf);
   const facts = readFacts(input.facts);
   /** Pages de ces types, dans l'ordre des types demandés puis dans l'ordre de lecture */
   const ofKind = (...kinds: ExternalPageKind[]): Outline[] => kinds.flatMap((kind) => outlines.filter((outline) => outline.page.kind === kind));

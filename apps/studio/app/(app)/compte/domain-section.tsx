@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
@@ -12,12 +13,20 @@ export function DomainSection({
   domainStatus,
   externalRequest,
   fallbackUrl,
+  ownSiteAddress = null,
 }: {
   currentDomain: string | null;
   domainStatus: "pending" | "registered" | "configured" | "error" | null;
   /** Domaine que le client possède déjà, en attente de rattachement par l'équipe. */
   externalRequest: string | null;
+  /** Adresse du site hébergé (toujours elle : ce bloc gère le domaine du site Harmony) */
   fallbackUrl: string;
+  /**
+   * Adresse, sans protocole, du site du client quand il est la référence des
+   * outils. Le bloc précise alors qu'il ne concerne que le site Harmony : le
+   * domaine du site du client se gère chez lui, son adresse dans « Mon site ».
+   */
+  ownSiteAddress?: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -27,10 +36,26 @@ export function DomainSection({
   const [ownError, setOwnError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
 
+  // Site du client en référence : « mon domaine » et « votre site » désigneraient le mauvais site
+  const heading = ownSiteAddress ? "Domaine de mon site Harmony" : "Mon domaine";
+  const yourSite = ownSiteAddress ? "Votre site Harmony" : "Votre site";
+  const toYourSite = ownSiteAddress ? "à votre site Harmony" : "à votre site";
+  const ownSiteNotice = ownSiteAddress ? (
+    <p role="note" className="mt-3 rounded-2xl bg-primary-50 px-4 py-3 text-sm text-ink-700">
+      Vos outils s&apos;appuient sur votre propre site, <strong className="font-semibold text-ink-900">{ownSiteAddress}</strong> :
+      son adresse se gère dans{" "}
+      <Link href="/mon-site" className="font-medium text-primary-600 hover:underline">
+        Mon site
+      </Link>
+      . Le domaine ci-dessous est celui de votre site Harmony.
+    </p>
+  ) : null;
+
   if (currentDomain) {
     return (
       <Card className="p-6">
-        <h2 className="font-semibold">Mon domaine</h2>
+        <h2 className="font-semibold">{heading}</h2>
+        {ownSiteNotice}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <span className="text-lg font-bold">{currentDomain}</span>
           {domainStatus === "configured" ? (
@@ -42,7 +67,7 @@ export function DomainSection({
           )}
         </div>
         <p className="mt-2 text-sm text-ink-500">
-          Votre site est servi sur{" "}
+          {yourSite} est servi sur{" "}
           <a href={`https://${currentDomain}`} className="underline" target="_blank" rel="noopener noreferrer">
             https://{currentDomain}
           </a>
@@ -85,9 +110,10 @@ export function DomainSection({
 
   return (
     <Card className="p-6">
-      <h2 className="font-semibold">Mon domaine</h2>
+      <h2 className="font-semibold">{heading}</h2>
+      {ownSiteNotice}
       <p className="mt-2 text-sm text-ink-500">
-        Votre site est actuellement accessible sur{" "}
+        {yourSite} est actuellement accessible sur{" "}
         <a href={fallbackUrl} className="underline" target="_blank" rel="noopener noreferrer">
           {fallbackUrl}
         </a>
@@ -140,7 +166,7 @@ export function DomainSection({
               <strong>{externalRequest}</strong> — demande enregistrée ✓
             </p>
             <p className="mt-1 text-ink-700">
-              Notre équipe s&apos;occupe du rattachement à votre site (transfert ou
+              Notre équipe s&apos;occupe du rattachement {toYourSite} (transfert ou
               configuration DNS, puis certificat) et revient vers vous rapidement. Rien à
               faire de votre côté.
             </p>
@@ -148,8 +174,8 @@ export function DomainSection({
         ) : (
           <>
             <p className="mt-2 text-sm text-ink-500">
-              Vous possédez déjà un nom de domaine (chez OVH, Ionos, Gandi…) ? Indiquez-le
-              ci-dessous : notre équipe s&apos;occupe de le rattacher à votre site.
+              {ownSiteAddress ? "Vous possédez un autre nom de domaine" : "Vous possédez déjà un nom de domaine"} (chez OVH,
+              Ionos, Gandi…) ? Indiquez-le ci-dessous : notre équipe s&apos;occupe de le rattacher {toYourSite}.
             </p>
             <form onSubmit={onRequestAttachment} className="mt-3">
               <Label htmlFor="own-domain">Votre domaine actuel</Label>

@@ -2,8 +2,10 @@
  * Lecture des données de la section « Google Ads » : dernière analyse lancée
  * (statut, erreur) et dernière analyse aboutie (diagnostic, mots-clés, plan),
  * quotas du mois, budget fournisseur, suivi des conversions du site et
- * résultats des annonces sur 30 jours. Projections sérialisables (dates ISO)
- * pour le composant client.
+ * résultats des annonces sur 30 jours ; site auquel se rapporte l'analyse
+ * affichée et, quand les outils s'appuient sur le site du client, relevé de
+ * sa dernière lecture. Projections sérialisables (dates ISO) pour le
+ * composant client.
  */
 
 import { and, desc, eq, gte } from "drizzle-orm";
@@ -19,6 +21,9 @@ import {
 } from "@theralys/shared";
 import { isMissingSchemaError } from "../social/data";
 import { summarizeAdsResults, type AdsResults } from "@theralys/analytics";
+import { analysisSiteOf, type AnalysisSite } from "./analysis-site";
+import type { ExternalSiteTracking } from "./external-tracking";
+import { loadAdsSiteContext } from "./site-context";
 import { adsTrackingForm, type AdsTrackingForm } from "./tracking";
 
 /** Fenêtre du bloc « Résultats » (jours). */
@@ -65,6 +70,19 @@ export type GoogleAdsData = {
   cookieBanner: boolean;
   results: AdsResults;
   resultsDays: number;
+  /**
+   * Site pour lequel l'analyse affichée a été préparée (`diagnostic.externalSite`) :
+   * son adresse et ses pages d'atterrissage servent à tout ce qui est montré
+   * ou copié depuis le plan.
+   */
+  analysisSite: AnalysisSite;
+  /**
+   * Relevé de la dernière lecture du site du client quand les outils
+   * s'appuient sur lui aujourd'hui : le formulaire de suivi et le bloc
+   * Résultats, qui n'agissent que sur le site Harmony, laissent alors la
+   * place à un pas-à-pas. `null` : site Harmony.
+   */
+  externalTracking: ExternalSiteTracking | null;
 };
 
 /** Statut affiché : une analyse `running` trop ancienne devient une erreur (processus interrompu). */
@@ -138,11 +156,12 @@ export async function getAdsResults(siteId: string, now: Date): Promise<AdsResul
 /** Toutes les données de la section, en parallèle. */
 export async function getGoogleAdsData(site: Site, now = new Date()): Promise<GoogleAdsData> {
   const db = getDb();
-  const [analyses, usage, budget, results] = await Promise.all([
+  const [analyses, usage, budget, results, siteContext] = await Promise.all([
     getAnalyses(site.id, now),
     getGoogleAdsUsage(db, site.id, now),
     googleBudget(db, { id: site.id, type: site.type }, now),
     getAdsResults(site.id, now),
+    loadAdsSiteContext(site),
   ]);
   return {
     latest: analyses.latest,
@@ -154,5 +173,7 @@ export async function getGoogleAdsData(site: Site, now = new Date()): Promise<Go
     cookieBanner: site.theme.tracking?.cookieBanner !== false,
     results,
     resultsDays: ADS_RESULTS_DAYS,
+    analysisSite: analysisSiteOf(analyses.current?.diagnostic ?? null, siteContext.sources),
+    externalTracking: siteContext.externalTracking,
   };
 }

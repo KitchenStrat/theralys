@@ -9,6 +9,13 @@
  * de publicités, « Jeu de données » (ex-Pixel) dans le Gestionnaire
  * d'événements, campagne « Ventes » ou « Prospects », « emplacement de
  * conversion : site web », audience Advantage+, placements Advantage+.
+ *
+ * `META_TUTORIAL` est écrit pour le site Harmony, qui charge le Pixel, envoie
+ * les événements et lit le suffixe `?src=meta` lui-même. Quand les annonces
+ * mènent au site du client, les étapes qui le supposent ont une variante
+ * (`metaTutorial`) : rien ne peut y être installé depuis le studio, le Pixel
+ * et le bandeau cookies se règlent sur ce site, les adresses se collent
+ * telles quelles et seul le compte Meta montre ce qui est reçu.
  */
 
 export type TutorialCopy = "pixel" | "campaign" | "creatives" | "videos";
@@ -155,3 +162,111 @@ export const META_TUTORIAL: TutorialStep[] = [
     ],
   },
 ];
+
+/**
+ * Étapes réécrites pour le site du client (mêmes identifiants, même place
+ * dans le tuto : « l'étape 2 » reste le Pixel, « l'étape 3 » sa vérification).
+ * Elles disent ce que le praticien installe sur son propre site et ce qu'il
+ * contrôle dans son compte Meta, sans rien promettre que le studio ne peut
+ * vérifier : pas de formulaire, pas de suffixe d'adresse, pas de bloc
+ * « Résultats », pas d'éditeur.
+ */
+const EXTERNAL_SITE_STEPS: Partial<Record<string, TutorialStep>> = {
+  pixel: {
+    id: "pixel",
+    title: "Créer le Pixel (Jeu de données) et l'installer sur votre site",
+    summary: "Le Pixel dit à Meta ce qu'une annonce rapporte. Sur votre propre site, c'est vous (ou la personne qui s'en occupe) qui l'installez : Harmony n'héberge pas ce site et ne peut pas le faire à votre place.",
+    items: [
+      "Gestionnaire d'événements (Toutes les ressources → Gestionnaire d'événements) → Connecter des données → Web → nommez le jeu de données « Site [nom du cabinet] » → Créer.",
+      "Choisissez « Pixel Meta uniquement » (pas d'API Conversions pour l'instant). Notez l'identifiant du Pixel, le nombre de 15 à 16 chiffres en général affiché en haut : c'est lui que demandent la plupart des outils de création de site. « Installer le code manuellement » affiche aussi le code complet, pour les autres.",
+      "Installez le Pixel sur toutes les pages de votre site, une seule fois : avec le réglage Meta ou Facebook de l'outil qui a servi à créer votre site, ou en transmettant le code à la personne qui s'en occupe. Le bloc « Pixel Meta sur votre site », sous ce tuto, dit où regarder pour votre outil.",
+      "Bandeau cookies : le Pixel ne doit se charger qu'après l'accord du visiteur. Vérifiez que votre site affiche un bandeau cookies et que le Pixel attend ce choix.",
+      "Relancez enfin la lecture de votre site depuis « Mon site » : le relevé affiché sous ce tuto se met à jour, et la prochaine génération de vos annonces en tiendra compte.",
+    ],
+    copy: "pixel",
+    note: "Harmony ne peut ni installer le Pixel sur votre site, ni voir ce qu'il envoie à Meta. Les conditions de Meta vous demandent d'avoir l'accord du visiteur avant de charger le Pixel, et de ne lui transmettre aucune information de santé.",
+  },
+  evenements: {
+    id: "evenements",
+    title: "Vérifier ce que le Pixel reçoit de votre site",
+    summary: "Sur votre propre site, le Pixel compte les pages vues ; un clic sur votre lien de rendez-vous ou votre numéro n'est compté que si un événement a été ajouté pour lui.",
+    items: [
+      "Installez l'extension Meta Pixel Helper dans Chrome (lien ci-dessous), ouvrez votre site, acceptez le bandeau cookies : l'icône de l'extension doit afficher « PageView ».",
+      "Cliquez sur votre lien de rendez-vous, puis sur votre numéro de téléphone : si un événement apparaît (« Schedule », « Contact » ou un autre nom), notez-le, vous le choisirez à l'étape 4.",
+      "Aucun événement au clic ? Il faut en ajouter un sur votre site : demandez-le à la personne qui s'en occupe, ou utilisez l'outil de configuration des événements de Meta s'il vous est proposé dans les paramètres de votre jeu de données. Donnez-lui un nom neutre (« Schedule », « Contact »), jamais un motif de consultation.",
+      "Dans le Gestionnaire d'événements → votre jeu de données → Tester les événements, saisissez l'adresse de votre site et refaites les clics : vous voyez en direct ce que Meta reçoit.",
+    ],
+    note: "Harmony ne voit pas ce que votre site envoie à Meta : seul le Gestionnaire d'événements le montre. Rien n'apparaît ? Vérifiez que le Pixel est bien installé sur votre site et que vous avez accepté le bandeau cookies.",
+  },
+  campagne: {
+    id: "campagne",
+    title: "Créer la campagne « Ventes » ou « Prospects »",
+    summary: "L'objectif dépend de ce que votre site envoie à Meta : les conversions si le Pixel compte vos prises de rendez-vous, le trafic sinon.",
+    items: [
+      "Gestionnaire de publicités → + Créer → objectif « Ventes » (ou « Prospects », les deux permettent d'optimiser sur un événement du site) → « Configuration manuelle de la campagne de ventes » si Meta vous propose une configuration simplifiée.",
+      "Nommez la campagne comme dans le plan (bouton Copier ci-dessous). Catégorie de publicité spéciale : aucune. Budget Advantage+ au niveau de la campagne : le budget quotidien du plan.",
+      "Au niveau de l'ensemble : emplacement de conversion « Site web », jeu de données = votre Pixel, événement de conversion = celui que votre site envoie au clic sur votre lien de rendez-vous (vérifié à l'étape 3).",
+      "Sans Pixel, ou si aucun événement n'est envoyé au clic, choisissez l'objectif « Trafic » et optimisez sur les vues de page de destination : vos annonces sont diffusées, mais Meta ne sait pas lesquelles amènent des prises de rendez-vous.",
+    ],
+    copy: "campaign",
+  },
+  audience: {
+    id: "audience",
+    title: "Audience Advantage+, ville et rayon",
+    summary: "Laissez Meta trouver les bons profils dans votre zone : une audience large, sans centres d'intérêt, convertit mieux qu'un ciblage étroit.",
+    items: [
+      "Zone : supprimez « France », tapez le nom de votre ville, puis réglez le rayon à 15 km (curseur ou « Modifier » à côté du repère). Option « Personnes vivant ou se trouvant récemment dans cette zone ».",
+      "Âge : 25 à 65 ans (ou la tranche du plan). Genre : tous. Langue : français.",
+      "Audience Advantage+ : laissez activée et ne saisissez aucun centre d'intérêt ; Meta élargit tout seul à partir de ceux qui réagissent.",
+      "Pour le second ensemble (reciblage), une fois le Pixel installé sur votre site : Audiences → Créer une audience personnalisée → Site web → votre Pixel → « Tous les visiteurs du site web », 30 derniers jours ; si votre site envoie un événement de prise de rendez-vous, excluez les personnes qui l'ont déclenché.",
+    ],
+  },
+  annonces: {
+    id: "annonces",
+    title: "Importer les visuels et coller les textes",
+    summary: "Une annonce par créa : les trois formats importés ensemble, puis le texte principal, le titre, la description, le bouton et l'URL.",
+    items: [
+      "Au niveau de la publicité : Identité = votre page Facebook (et votre compte Instagram). Format « Image ou vidéo unique ».",
+      "Ajouter un contenu multimédia → Importer : sélectionnez les trois fichiers du kit (carré, portrait, story). Meta demande ensuite « Recadrer par placement » : associez le carré au fil Facebook, le portrait au fil Instagram, la story aux stories et Reels.",
+      "Collez le texte principal, le titre et la description (boutons Copier ci-dessous, ou le fichier textes.txt du kit). Bouton d'appel à l'action : celui indiqué pour la créa (Réserver, En savoir plus…).",
+      "URL du site web : l'adresse de la page d'atterrissage de la créa sur votre site (bouton URL ci-dessous), telle quelle, sans rien y ajouter. Suivi : laissez le Pixel sélectionné s'il est installé sur votre site.",
+      "Créez une publicité par créa dans le même ensemble (Dupliquer, puis remplacer visuels et textes) : 3 à 5 publicités en test.",
+    ],
+    copy: "creatives",
+  },
+  videos: {
+    id: "videos",
+    title: "Ajouter les vidéos",
+    summary: "Dès qu'une vidéo du plan est tournée et montée, ajoutez-la comme une publicité de plus : c'est souvent elle qui gagne.",
+    items: [
+      "Dans l'ensemble « Large », Dupliquer une publicité existante → remplacer le visuel par la vidéo (format vertical 1080 × 1920, moins de 60 Mo, sous-titres incrustés).",
+      "Miniature : choisissez une image nette de vous (pas un plan flou) ; Meta la propose automatiquement.",
+      "Collez le texte à coller de la vidéo (bouton Copier ci-dessous), gardez le même bouton et la même page d'atterrissage que les créas.",
+      "Laissez les trois vidéos en concurrence 14 jours avant de couper la moins performante.",
+    ],
+    copy: "videos",
+  },
+  resultats: {
+    id: "resultats",
+    title: "Test de 14 jours et lecture des résultats",
+    summary: "La phase d'apprentissage : surveiller sans tout changer, puis décider sur le coût par résultat.",
+    items: [
+      "J+1 : les publicités sont « Actives » (sinon lisez le motif de refus). Si le Pixel est installé sur votre site, il reçoit des PageView depuis les annonces.",
+      "J+3 : fréquence et coût pour 1 000 impressions (CPM) dans le Gestionnaire de publicités ; un CPM entre 6 et 12 € est normal pour un cabinet local.",
+      "J+7 : ne modifiez ni budget ni audience (chaque changement relance l'apprentissage). Répondez aux commentaires sous les annonces.",
+      "J+14 : colonnes « Résultats » et « Coût par résultat » : gardez les deux créas au coût le plus bas, coupez les autres, ajoutez une vidéo.",
+      "Chaque semaine : suivez vos annonces dans le Gestionnaire de publicités de Meta — c'est lui qui montre ce qu'elles rapportent. Les visites de l'ensemble de votre site se lisent sur l'accueil du studio, une fois le code de mesure installé depuis « Mon site ».",
+    ],
+  },
+};
+
+/**
+ * Tuto à afficher selon le site où mènent les annonces. Site Harmony : les
+ * étapes d'origine, inchangées. Site du client (`externalSite`) : les mêmes
+ * étapes dans le même ordre, celles qui supposent le site Harmony remplacées
+ * par leur variante.
+ */
+export function metaTutorial(externalSite: boolean): TutorialStep[] {
+  if (!externalSite) return META_TUTORIAL;
+  return META_TUTORIAL.map((step) => EXTERNAL_SITE_STEPS[step.id] ?? step);
+}

@@ -6,8 +6,8 @@
  * Miroir de `lib/social/data.ts` pour la table `google_posts`.
  */
 
-import { and, asc, desc, eq, gte, lt, sql } from "drizzle-orm";
-import { getDb, googlePosts, googleUsage, sites, type GooglePost, type Site } from "@theralys/db";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { blogArticles, getDb, googlePosts, googleUsage, sites, type GooglePost, type Site } from "@theralys/db";
 import {
   GOOGLE_POST_DAY,
   GOOGLE_POST_REGENERATIONS_PER_MONTH,
@@ -16,6 +16,7 @@ import {
   monthRange,
   socialSlotsForMonth,
   usageMonthKey,
+  type GooglePostContent,
   type GooglePostCta,
   type SocialPillar,
   type SocialSlot,
@@ -25,18 +26,51 @@ import {
 import { publicSiteUrl, siteUrl } from "@/lib/data";
 import type { DbExecutor } from "@/lib/social/data";
 import { resolveSocialTheme } from "@/lib/social/render/theme";
-import { deliveredGoogleContent, type GooglePostAddresses } from "./render";
+import { deliveredGoogleContent, isArticleOnline, studioArticleId, type GooglePostDelivery } from "./post-cta";
 
 /** Horizon des demandes et des préparations de mois (jours), comme le social. */
 export const GOOGLE_HORIZON_DAYS = 120;
 
 /**
- * Adresses d'un site pour le bouton d'action de ses posts : celle du site
- * hébergé et celle de référence (cf. `deliveredGoogleContent`). À donner aussi
- * au fichier texte d'un post, pour qu'il dise la même adresse que la modale.
+ * Ce dont dépend le bouton d'action des posts d'un site au moment de les
+ * remettre au praticien (`deliveredGoogleCta`) : les deux adresses du site,
+ * son lien de rendez-vous et — seulement si l'un des `posts` cite encore un
+ * article par son chemin dans le studio (posts préparés avant la correction
+ * du générateur) — les articles en ligne concernés. Sans tel post, aucune
+ * lecture en base.
  */
-export function googlePostAddresses(site: Site): GooglePostAddresses {
-  return { hostedUrl: siteUrl(site), referenceUrl: publicSiteUrl(site) };
+export async function loadGooglePostDelivery(
+  site: Site,
+  posts: readonly { content: { cta: { url: string | null } } }[],
+  now: Date = new Date(),
+): Promise<GooglePostDelivery> {
+  const articleIds = [...new Set(posts.map((post) => studioArticleId(post.content.cta.url)).filter((id): id is string => id !== null))];
+  const articles =
+    articleIds.length === 0
+      ? []
+      : await getDb().query.blogArticles.findMany({
+          where: and(eq(blogArticles.siteId, site.id), inArray(blogArticles.id, articleIds)),
+          columns: { id: true, slug: true, status: true, publishAt: true },
+        });
+  return {
+    hostedUrl: siteUrl(site),
+    referenceUrl: publicSiteUrl(site),
+    bookingUrl: site.bookingUrl,
+    onlineArticles: new Map(articles.filter((article) => isArticleOnline(article, now)).map((article) => [article.id, article.slug])),
+  };
+}
+
+/**
+ * Contenu d'un post tel qu'il est remis au praticien, lectures comprises : à
+ * donner à `googlePostTxt` pour que le fichier texte d'un post dise la même
+ * adresse que sa modale.
+ */
+export async function loadDeliveredGoogleContent(
+  site: Site,
+  post: Pick<GooglePost, "status" | "content">,
+  now: Date = new Date(),
+): Promise<GooglePostContent> {
+  return deliveredGoogleContent(post, await loadGooglePostDelivery(site, [post], now));
 }
 
 export type GoogleCalendarItem = {
@@ -85,9 +119,9 @@ export type GoogleRequestUsage = { used: number; remaining: number; resetsOn: st
 
 type CalendarRow = Omit<GooglePost, "assets">;
 
-function toCalendarItem(post: CalendarRow, accentColor: string, addresses: GooglePostAddresses): GoogleCalendarItem {
-  // Bouton d'action montré au praticien : il suit l'adresse de référence tant que le post n'est pas publié
-  const content = deliveredGoogleContent(post, addresses);
+function toCalendarItem(post: CalendarRow, accentColor: string, delivery: GooglePostDelivery): GoogleCalendarItem {
+  // Bouton d'action montré au praticien : jamais une adresse relative, et l'adresse de référence tant que le post n'est pas publié
+  const content = deliveredGoogleContent(post, delivery);
   return {
     id: post.id,
     date: post.scheduledFor,
@@ -146,7 +180,7 @@ export async function getGoogleMonth(siteId: string, year: number, month: number
   const db = getDb();
   const { startIso, endIso } = monthRange(year, month);
   const [site, posts] = await Promise.all([
-    // Ligne entière : le thème (couleur d'accent) et de quoi calculer les deux adresses du site (bouton d'action)
+    // Ligne entière : le thème (couleur d'accent) et de quoi remettre le bouton d'action (adresses du site, lien de rendez-vous)
     db.query.sites.findFirst({ where: eq(sites.id, siteId) }),
     db.query.googlePosts.findMany({
       where: and(eq(googlePosts.siteId, siteId), gte(googlePosts.scheduledFor, startIso), lt(googlePosts.scheduledFor, endIso)),
@@ -156,10 +190,11 @@ export async function getGoogleMonth(siteId: string, year: number, month: number
   ]);
   const state = computeGoogleMonthState({ year, month, now, posts });
   if (!site) return { items: [], state };
-  const addresses = googlePostAddresses(site);
-  const items = posts
-    .filter((post) => post.status !== "archived")
-    .map((post) => toCalendarItem(post, resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent, addresses));
+  const visible = posts.filter((post) => post.status !== "archived");
+  const delivery = await loadGooglePostDelivery(site, visible, now);
+  const items = visible.map((post) =>
+    toCalendarItem(post, resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent, delivery),
+  );
   return { items, state };
 }
 

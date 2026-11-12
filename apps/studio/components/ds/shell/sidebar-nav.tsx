@@ -169,7 +169,15 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
         <ul className="space-y-1 border-t border-ds-ink-200 pt-3">
           {allowed.has("compte") ? item("compte", userName) : null}
           <li>
-            <a href={siteHref} target="_blank" rel="noopener noreferrer" className={ROW} data-ds-section="accueil">
+            {/* `data-testid` : le même que le lien de la mise en page actuelle (un seul par page ; les liens du mobile n'en portent pas) */}
+            <a
+              href={siteHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="view-site-link"
+              className={ROW}
+              data-ds-section="accueil"
+            >
               <span className="grid size-9 shrink-0 place-items-center rounded-[0.625rem] bg-ds-brand-50 text-ds-brand-700">
                 <ExternalLink size={18} aria-hidden />
               </span>

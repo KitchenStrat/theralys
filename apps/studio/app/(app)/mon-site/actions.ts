@@ -12,6 +12,7 @@ import {
   saveExternalOverrides,
   setExternalSiteActive,
   submitExternalSiteText,
+  type ExternalSiteRefusal,
   type ExternalSiteResult,
   type ExternalSiteView,
 } from "@theralys/jobs";
@@ -33,7 +34,8 @@ import { RUBRIC_IDS, applyRubricCorrection, restoreRubric } from "@/lib/external
 
 const PATH = "/mon-site";
 
-export type MonSiteResult = { error?: string };
+/** `error` : message à montrer. `reason` : motif du refus, pour le montrer sur le champ qu'il concerne (adresse, confirmation, texte). */
+export type MonSiteResult = { error?: string; reason?: ExternalSiteRefusal };
 
 const INVALID = "Cette demande n'a pas pu être comprise. Rechargez la page, puis réessayez.";
 const FAILED = "Cette action n'a pas abouti. Réessayez dans quelques instants.";
@@ -41,7 +43,7 @@ const NOT_ACTIVATED = "Cette section est en cours d'activation. Réessayez dans 
 const NOT_CONNECTED = "Aucun site n'est connecté pour le moment. Indiquez d'abord l'adresse de votre site.";
 
 /** Motifs de refus qui tiennent à l'état du site (et non à la saisie) : l'écran affiché n'est plus à jour, il est relu. */
-const STALE_SCREEN = new Set<Extract<ExternalSiteResult, { ok: false }>["reason"]>(["busy", "quota", "not_ready", "unavailable"]);
+const STALE_SCREEN = new Set<ExternalSiteRefusal>(["busy", "quota", "not_ready", "unavailable"]);
 
 /** L'adresse du site de référence s'affiche dans la barre latérale (layout du studio), sur l'accueil et sur cet écran. */
 function revalidateSiteAddress(): void {
@@ -78,14 +80,14 @@ async function run(label: string, work: (context: Context) => Promise<ExternalSi
       return {};
     }
     if (STALE_SCREEN.has(result.reason)) revalidateSiteAddress();
-    return { error: result.message };
+    return { error: result.message, reason: result.reason };
   } catch (err) {
     console.error(`[mon-site] ${label} : échec`, { siteId: session.siteId, code: errorLabel(err) });
     return { error: FAILED };
   }
 }
 
-const refused = (reason: Extract<ExternalSiteResult, { ok: false }>["reason"], message: string): ExternalSiteResult => ({ ok: false, reason, message });
+const refused = (reason: ExternalSiteRefusal, message: string): ExternalSiteResult => ({ ok: false, reason, message });
 
 /** Site connecté de la session, ou le refus à rendre (section pas encore activée, aucun site connecté). */
 async function connectedSite({ db, site }: Context): Promise<{ view: ExternalSiteView } | { refusal: ExternalSiteResult }> {

@@ -13,7 +13,11 @@ export type PageHeaderProps = {
   action?: ReactNode;
   /** Action d'appoint (bouton `secondary` ou `quiet`) */
   secondary?: ReactNode;
-  /** Rangée d'appoint sous le titre : navigation de mois, filtres */
+  /**
+   * Rangée d'appoint sous le titre : navigation de mois, filtres. Sur le bandeau
+   * doux, tout texte est `ink-600` ou plus foncé (ou `brand-800`, l'encre de
+   * section) : c'est ce qui reste lisible jusque dans le décor.
+   */
   children?: ReactNode;
   /**
    * `soft` (défaut) : bandeau en teinte douce, texte foncé, pastille en dégradé.

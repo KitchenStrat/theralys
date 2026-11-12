@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { clsx } from "clsx";
+import { analysisSiteNotice } from "@/lib/google-ads/analysis-site";
 import type { GoogleAdsData } from "@/lib/google-ads/data";
+import { AnalysisSiteNotice } from "./analysis-site-notice";
 import { DiagnosticTab } from "./diagnostic-tab";
 import { KeywordsTab } from "./keywords-tab";
 import { PlanTab } from "./plan-tab";
@@ -11,7 +13,7 @@ import { ADS_TABS, adsTabHref, type AdsTab } from "./tabs";
 
 export type AdsSiteInfo = {
   name: string;
-  /** siteUrl(site) sans protocole (aperçu des annonces) */
+  /** siteUrl(site) sans protocole : adresse du site Harmony, sur lequel agit le formulaire de suivi */
   domain: string;
   profession: string;
   city: string;
@@ -29,6 +31,11 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
 
   const current = data.current;
   const analysisReady = Boolean(current?.diagnostic);
+  // Analyse préparée pour un autre site que celui sur lequel les outils s'appuient aujourd'hui : dit sur toute la section
+  const siteNotice = analysisSiteNotice(data.analysisSite, {
+    subject: "le diagnostic, le plan d'action et les pages d'atterrissage",
+    currentAddress: data.externalTracking?.address,
+  });
 
   return (
     <div>
@@ -36,11 +43,23 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
         <div>
           <h1 className="text-4xl font-bold">Google Ads</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Google Ads est-il pertinent pour vous ? Diagnostic, mots-clés à cibler, plan d&apos;action et
-            suivi des rendez-vous venus de vos annonces — Harmony prépare, vous paramétrez votre compte.
+            {data.externalTracking ? (
+              // Site du client : le studio n'y rattache aucune visite à une annonce, il ne promet donc pas ce suivi
+              <>
+                Google Ads est-il pertinent pour vous ? Diagnostic, mots-clés à cibler, plan d&apos;action et
+                pas-à-pas pour mesurer vos résultats sur votre site — Harmony prépare, vous paramétrez votre compte.
+              </>
+            ) : (
+              <>
+                Google Ads est-il pertinent pour vous ? Diagnostic, mots-clés à cibler, plan d&apos;action et
+                suivi des rendez-vous venus de vos annonces — Harmony prépare, vous paramétrez votre compte.
+              </>
+            )}
           </p>
         </div>
       </div>
+
+      {siteNotice ? <AnalysisSiteNotice notice={siteNotice} onRelaunch={tab === "diagnostic" ? undefined : () => select("diagnostic")} /> : null}
 
       <nav aria-label="Sections Google Ads" className="mt-8 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ul className="flex gap-1 border-b border-cream-200">
@@ -98,7 +117,7 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
             planError={current?.error ?? null}
             instructions={current?.instructions ?? null}
             regenRemaining={data.usage.planRegenRemaining}
-            siteDomain={site.domain}
+            analysisSite={data.analysisSite}
             onSelectTab={select}
           />
         ) : null}
@@ -111,6 +130,8 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
             results={data.results}
             resultsDays={data.resultsDays}
             siteDomain={site.domain}
+            analysisSite={data.analysisSite}
+            externalTracking={data.externalTracking}
             onSelectTab={select}
           />
         ) : null}

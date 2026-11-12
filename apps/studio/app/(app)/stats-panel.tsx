@@ -23,6 +23,12 @@ type Props = {
   sources: { total: number; unit: "visitors" | "views"; rows: SourceRow[] };
   /** Le site a accès à la section Réseaux sociaux (lien de bio tracé disponible) */
   socialAccess: boolean;
+  /**
+   * Le site du praticien est la référence des outils et son code de mesure
+   * n'a encore envoyé aucune visite : à la place de courbes vides, l'état
+   * vide dit pourquoi et mène à l'installation. `address` : son adresse.
+   */
+  awaitingMeasure?: { address: string } | null;
 };
 
 const PERIODS = [
@@ -31,9 +37,33 @@ const PERIODS = [
   { key: "6m", label: "6m", caption: "sur 6 mois" },
 ] as const;
 
-export function StatsPanel({ firstName, period, stats, sources, socialAccess }: Props) {
+export function StatsPanel({ firstName, period, stats, sources, socialAccess, awaitingMeasure = null }: Props) {
   const [metric, setMetric] = useState<"visitors" | "rdvClicks">("visitors");
   const caption = PERIODS.find((p) => p.key === period)!.caption;
+
+  if (awaitingMeasure) {
+    return (
+      <div>
+        <h1 className="text-3xl font-bold">Bonjour {firstName}</h1>
+        <section className="mt-6 rounded-2xl bg-cream-100 px-5 py-6" aria-labelledby="awaiting-measure-title" data-testid="stats-awaiting-measure">
+          <h2 id="awaiting-measure-title" className="text-lg font-semibold text-ink-900">
+            Les visites de votre site ne sont pas encore mesurées
+          </h2>
+          <p className="mt-1.5 max-w-xl text-base text-ink-700">
+            Vos outils s&apos;appuient maintenant sur <span className="break-all font-medium text-ink-900">{awaitingMeasure.address}</span>. Pour suivre ici ses visiteurs, leur
+            provenance et les clics sur vos liens de rendez-vous, installez le code de mesure sur votre site : quelques minutes suffisent.
+          </p>
+          <Link
+            href="/mon-site#statistiques"
+            data-testid="install-measure-link"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-6 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
+          >
+            Installer le code de mesure
+          </Link>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -5,7 +5,8 @@
  * temps forts seconde par seconde, texte à coller). Fonctions pures.
  */
 
-import { META_ADS_CTAS, type MetaAdCreative, type MetaAdsCta, type MetaVideoBrief } from "@theralys/shared";
+import { META_ADS_CTAS, META_ADS_LANDING_SUFFIX, type MetaAdCreative, type MetaAdsCta, type MetaAdsPlan, type MetaVideoBrief } from "@theralys/shared";
+import { landingPathOf, type AnalysisSite } from "../google-ads/analysis-site";
 
 /** Libellé du bouton d'action (« Réserver », « En savoir plus »…). */
 export function ctaLabel(cta: MetaAdsCta): string {
@@ -27,34 +28,91 @@ export function formatMetaLines(lines: string[]): string {
 }
 
 /**
- * Suffixe de provenance des annonces Meta (`?src=meta`) : le site le
- * reconnaît (`SOCIAL_SOURCE_PARAMS.meta` → source `meta_ads`) et rattache
- * visites, clics RDV et appels aux annonces. Les URL copiées et affichées le
- * portent toujours : sans lui, une visite venue d'une annonce n'est pas
- * mesurée.
+ * Suffixe à ajouter aux adresses d'atterrissage des annonces d'une analyse.
+ * C'est le plan qui le dit (`campaign.landingSuffix`) : le site Harmony lit
+ * `?src=meta` (`SOCIAL_SOURCE_PARAMS.meta` → source `meta_ads`) et rattache
+ * visites, clics RDV et appels aux annonces ; pour le site du client le plan
+ * n'en porte pas, la mesure installée sur ce site ne lisant aucun paramètre
+ * d'adresse — l'adresse reste alors telle quelle.
+ *
+ * Quand le plan ne dit rien (plan absent, ou enregistré avant ce champ), le
+ * site de l'analyse décide : le suffixe habituel pour le site Harmony, où il
+ * a toujours été ajouté, aucun pour le site du client (`externalSite`).
  */
-export const META_LANDING_SUFFIX = "src=meta";
+export function metaLandingSuffix(plan: Pick<MetaAdsPlan, "campaign"> | null | undefined, externalSite: boolean): string {
+  const said = plan?.campaign.landingSuffix;
+  if (typeof said === "string") return said;
+  return externalSite ? "" : META_ADS_LANDING_SUFFIX;
+}
 
-/** URL publique de la page d'atterrissage avec le suffixe de provenance (« https://domaine/<slug>?src=meta »). */
-export function landingUrl(siteDomain: string, landingPath: string): string {
+/**
+ * URL publique d'une page d'atterrissage (« https://domaine/chemin »), suivie
+ * du suffixe de provenance quand il y en a un (« ?src=meta », accolé par
+ * « & » si la page porte déjà des paramètres). Suffixe vide : adresse nue.
+ */
+export function landingUrl(siteDomain: string, landingPath: string, suffix: string): string {
   const domain = siteDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const path = landingPath.startsWith("/") ? landingPath : `/${landingPath}`;
   const url = `https://${domain}${path}`;
-  return `${url}${url.includes("?") ? "&" : "?"}${META_LANDING_SUFFIX}`;
+  const params = suffix.trim().replace(/^[?&]+/, "");
+  return params === "" ? url : `${url}${url.includes("?") ? "&" : "?"}${params}`;
+}
+
+/** Ce qu'il faut pour composer les adresses d'atterrissage d'une analyse : son site et le suffixe que dit son plan. */
+export type MetaLanding = {
+  /** Site pour lequel l'analyse a été préparée (adresse et pages d'atterrissage actuelles) */
+  site: Pick<AnalysisSite, "domain" | "pages">;
+  /** Suffixe de provenance (`metaLandingSuffix`), vide pour une adresse nue */
+  suffix: string;
+};
+
+/**
+ * Adresse à coller dans une annonce pour un chemin enregistré : le chemin
+ * est ramené à la page actuelle du site de l'analyse (les créas d'avant la
+ * correction portent « /<slug> », servi sous « /motifs/<slug> »), puis
+ * accolé à l'adresse de ce même site. `null` quand cette adresse n'est plus
+ * connue : aucune adresse n'est alors composée avec le domaine d'un autre site.
+ */
+export function metaLandingUrl(landing: MetaLanding, storedPath: string): string | null {
+  if (landing.site.domain === null) return null;
+  return landingUrl(landing.site.domain, landingPathOf(landing.site, storedPath), landing.suffix);
+}
+
+/** Une page d'atterrissage et les créas qui y mènent. */
+export type MetaLandingPage = { url: string; creativeNames: string[] };
+
+/**
+ * Pages d'atterrissage d'un jeu de créas, dans l'ordre des créas,
+ * dédoublonnées sur l'adresse réellement composée : deux créas enregistrées
+ * avec « /sommeil » et « /motifs/sommeil » mènent à la même page. Vide quand
+ * l'adresse du site de l'analyse n'est plus connue.
+ */
+export function metaLandingPages(landing: MetaLanding, creatives: readonly Pick<MetaAdCreative, "name" | "landingPath">[]): MetaLandingPage[] {
+  const pages = new Map<string, MetaLandingPage>();
+  for (const creative of creatives) {
+    const url = metaLandingUrl(landing, creative.landingPath);
+    if (url === null) continue;
+    const page = pages.get(url) ?? { url, creativeNames: [] };
+    page.creativeNames.push(creative.name);
+    pages.set(url, page);
+  }
+  return [...pages.values()];
 }
 
 /**
  * Fichier texte d'une créa (kit et bouton « Copier tous les textes ») :
  * texte principal, titre, description, bouton, page d'atterrissage, texte
- * alternatif — dans l'ordre des champs du Gestionnaire de publicités.
+ * alternatif — dans l'ordre des champs du Gestionnaire de publicités. La page
+ * d'atterrissage est omise quand son adresse ne peut pas être composée.
  */
-export function metaCreativeTxt(creative: MetaAdCreative, siteDomain: string): string {
+export function metaCreativeTxt(creative: MetaAdCreative, landing: MetaLanding): string {
+  const url = metaLandingUrl(landing, creative.landingPath);
   const parts = [
     `=== Texte principal ===\n${creative.primaryText.trim()}`,
     `=== Titre ===\n${creative.headline.trim()}`,
     ...(creative.description.trim() !== "" ? [`=== Description ===\n${creative.description.trim()}`] : []),
     `=== Bouton ===\n${ctaLabel(creative.cta)}`,
-    `=== Page d'atterrissage ===\n${landingUrl(siteDomain, creative.landingPath)}`,
+    ...(url !== null ? [`=== Page d'atterrissage ===\n${url}`] : []),
     ...(creative.altText.trim() !== "" ? [`=== Texte alternatif ===\n${creative.altText.trim()}`] : []),
   ];
   return `${parts.join("\n\n")}\n`;

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Badge, Card } from "@theralys/ui";
 import { domains, getDb, PLANS, subscriptions, type PlanId } from "@theralys/db";
-import { formatDateFr } from "@theralys/shared";
+import { activeExternalSite, formatDateFr } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { DomainSection } from "./domain-section";
@@ -34,6 +34,8 @@ export default async function AccountPage() {
 
   const plan = PLANS[site.plan as PlanId];
   const badge = subscription ? STATUS_BADGES[subscription.status] : null;
+  // Site du client en référence : le bloc « domaine » ne concerne plus que le site Harmony, et le dit
+  const ownSite = activeExternalSite(site.theme);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -107,6 +109,7 @@ export default async function AccountPage() {
         domainStatus={attachedDomain?.status ?? null}
         externalRequest={externalRequest?.name ?? null}
         fallbackUrl={siteUrl(site)}
+        ownSiteAddress={ownSite ? ownSite.url.replace(/^https?:\/\//, "") : null}
       />
     </div>
   );

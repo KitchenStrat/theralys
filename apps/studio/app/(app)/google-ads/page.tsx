@@ -1,4 +1,5 @@
 import { hasGoogleAds } from "@theralys/db";
+import { activeExternalSite } from "@theralys/shared";
 import { Card } from "@theralys/ui";
 import { requireClient } from "@/lib/auth";
 import { getProspect, getSite, siteUrl } from "@/lib/data";
@@ -24,7 +25,11 @@ export default async function GoogleAdsPage({ searchParams }: Props) {
       <Fallback title="La section Google Ads n'est pas incluse dans votre formule">
         Passez à la formule <strong>Scale</strong> pour savoir si Google Ads est pertinent pour votre
         cabinet, obtenir les mots-clés à cibler avec leurs volumes et coûts réels, un plan d&apos;action
-        complet (campagne, annonces, budget) et le suivi des rendez-vous et appels venus de vos annonces.
+        complet (campagne, annonces, budget) et{" "}
+        {/* Site du client en référence : le studio n'y rattache aucune visite à une annonce, il ne promet pas ce suivi */}
+        {activeExternalSite(site.theme)
+          ? "le pas-à-pas pour mesurer les résultats de vos annonces sur votre site."
+          : "le suivi des rendez-vous et appels venus de vos annonces."}
       </Fallback>
     );
   }

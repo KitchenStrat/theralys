@@ -2,8 +2,10 @@
  * Lecture des données de la section « Meta Ads » : dernière analyse lancée
  * (statut, erreur) et dernière analyse aboutie (veille, diagnostic, créas,
  * plan vidéo, plan), quotas du mois, Pixel courant du site, bandeau cookies
- * et résultats des annonces Meta sur 30 jours. Projections sérialisables
- * (dates ISO) pour le composant client.
+ * et résultats des annonces Meta sur 30 jours ; site auquel se rapporte
+ * l'analyse affichée et, quand les outils s'appuient sur le site du client,
+ * relevé de sa dernière lecture. Projections sérialisables (dates ISO) pour
+ * le composant client.
  */
 
 import { and, desc, eq, gte } from "drizzle-orm";
@@ -23,6 +25,9 @@ import {
 } from "@theralys/shared";
 import { isMissingSchemaError } from "../social/data";
 import { summarizeAdsResults, type AdsResults as PaidResults } from "@theralys/analytics";
+import { analysisSiteOf, type AnalysisSite } from "../google-ads/analysis-site";
+import type { ExternalSiteTracking } from "../google-ads/external-tracking";
+import { loadAdsSiteContext } from "../google-ads/site-context";
 import { metaTrackingForm, type MetaTrackingForm } from "./tracking";
 
 /** Fenêtre du bloc « Résultats » (jours). */
@@ -92,6 +97,19 @@ export type MetaAdsData = {
   /** Visuels des annonces de la veille courante, par identifiant d'annonce */
   mediaByAdId: Record<string, MetaAdMedia>;
   visuals: MetaVisualsView;
+  /**
+   * Site pour lequel l'analyse affichée a été préparée (`diagnostic.externalSite`) :
+   * son adresse et ses pages d'atterrissage servent à tout ce qui est montré,
+   * copié ou exporté depuis les créas.
+   */
+  analysisSite: AnalysisSite;
+  /**
+   * Relevé de la dernière lecture du site du client quand les outils
+   * s'appuient sur lui aujourd'hui : le formulaire du Pixel et le bloc
+   * Résultats, qui n'agissent que sur le site Harmony, laissent alors la
+   * place à un pas-à-pas. `null` : site Harmony.
+   */
+  externalTracking: ExternalSiteTracking | null;
 };
 
 /**
@@ -174,12 +192,13 @@ export async function getMetaResults(siteId: string, now: Date): Promise<PaidRes
 /** Toutes les données de la section, en parallèle. */
 export async function getMetaAdsData(site: Site, now = new Date()): Promise<MetaAdsData> {
   const db = getDb();
-  const [analyses, usage, results, library, remaining] = await Promise.all([
+  const [analyses, usage, results, library, remaining, siteContext] = await Promise.all([
     getAnalyses(site.id, now),
     getMetaAdsUsage(db, site.id, now),
     getMetaResults(site.id, now),
     loadMetaLibrary(db, site.id),
     mediaLookupsRemaining(db, site.id, now),
+    loadAdsSiteContext(site),
   ]);
   // Annonces affichées : celles de la veille courante que le praticien n'a pas supprimées
   const dismissed = new Set(library.dismissedIds);
@@ -200,5 +219,7 @@ export async function getMetaAdsData(site: Site, now = new Date()): Promise<Meta
     library,
     mediaByAdId: plan.cached,
     visuals: { provider, missing: pendingIds.length, remaining, pendingIds },
+    analysisSite: analysisSiteOf(analyses.current?.diagnostic ?? null, siteContext.sources),
+    externalTracking: siteContext.externalTracking,
   };
 }

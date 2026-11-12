@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { domains, getDb, sites, subscriptions } from "@theralys/db";
+import { DEFAULT_STUDIO_BASE_URL } from "@theralys/jobs";
 import { createBillingProvider } from "@theralys/providers/billing";
 import {
   createRegistrar,
@@ -13,6 +15,7 @@ import {
 import { createHostingProvider } from "@theralys/providers/hosting";
 import { requireClient } from "@/lib/auth";
 import { attributeApiUsage } from "@theralys/shared/usage-runtime";
+import { studioOrigin } from "./studio-origin";
 
 const domainSchema = z
   .string()
@@ -116,7 +119,12 @@ export async function requestExternalDomain(
   return { domain: domainName };
 }
 
-/** Portail de facturation Stripe (null en mode mock). */
+/**
+ * Portail de facturation Stripe (null en mode mock). Le praticien en revient
+ * sur la page « Mon compte » du studio : à l'adresse publique du studio
+ * (`STUDIO_BASE_URL`), sinon à l'origine de la requête en cours — jamais à une
+ * adresse locale écrite en dur, qui ne mène nulle part en production.
+ */
 export async function openBillingPortal(): Promise<{ url: string | null }> {
   const session = await requireClient();
   const db = getDb();
@@ -124,9 +132,17 @@ export async function openBillingPortal(): Promise<{ url: string | null }> {
     where: eq(subscriptions.siteId, session.siteId),
   });
   if (!subscription?.stripeCustomerId) return { url: null };
-  const url = await createBillingProvider().createPortalUrl(
-    subscription.stripeCustomerId,
-    "http://localhost:3002/compte",
+  const requestHeaders = await headers();
+  const base = studioOrigin(
+    process.env.STUDIO_BASE_URL,
+    {
+      origin: requestHeaders.get("origin"),
+      host: requestHeaders.get("host"),
+      forwardedHost: requestHeaders.get("x-forwarded-host"),
+      forwardedProto: requestHeaders.get("x-forwarded-proto"),
+    },
+    DEFAULT_STUDIO_BASE_URL,
   );
+  const url = await createBillingProvider().createPortalUrl(subscription.stripeCustomerId, `${base}/compte`);
   return { url };
 }

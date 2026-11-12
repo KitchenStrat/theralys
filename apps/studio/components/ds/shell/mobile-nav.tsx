@@ -13,7 +13,6 @@ import {
   SECTION_ORDER,
   sectionForPath,
   sectionHref,
-  type SectionKey,
 } from "../sections";
 import type { ShellNavProps } from "./sidebar-nav";
 

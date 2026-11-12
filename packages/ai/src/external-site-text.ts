@@ -117,6 +117,11 @@ export function readFacts(facts: unknown): FoundFacts {
   };
 }
 
+/** Pages du lecteur, relues avec la même prudence que les faits : une liste absente donne une liste vide, une entrée qui n'est pas une page est passée. */
+export function readPages(pages: unknown): ExternalSitePage[] {
+  return list(pages).filter((page): page is ExternalSitePage => page !== null && typeof page === "object" && !Array.isArray(page));
+}
+
 /** Textes d'une page tels que le modèle les reçoit : titre, description, intertitres, texte. */
 export function pageTexts(pages: readonly ExternalSitePage[]): string[] {
   return pages.flatMap((page) =>

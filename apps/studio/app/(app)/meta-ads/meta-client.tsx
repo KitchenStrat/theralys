@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { clsx } from "clsx";
+import { analysisSiteNotice } from "@/lib/google-ads/analysis-site";
+import { metaLandingSuffix, type MetaLanding } from "@/lib/meta-ads/clipboard";
 import type { MetaAdsData } from "@/lib/meta-ads/data";
+import { AnalysisSiteNotice } from "../google-ads/analysis-site-notice";
 import { CreativesTab } from "./creatives-tab";
 import { DiagnosticTab } from "./diagnostic-tab";
 import { MarketTab } from "./market-tab";
@@ -14,7 +17,7 @@ import { useAnalysisLaunch } from "./use-analysis-launch";
 export type MetaSiteInfo = {
   name: string;
   type: "demo" | "client";
-  /** siteUrl(site) sans protocole (pages d'atterrissage, kit) */
+  /** siteUrl(site) sans protocole : adresse du site Harmony, sur lequel agit le formulaire du Pixel */
   domain: string;
   profession: string;
   city: string;
@@ -34,8 +37,17 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
 
   const current = data.current;
   const analysisReady = Boolean(current?.diagnostic);
-  const hasPixel = data.tracking.metaPixelId !== "";
+  // Pixel en place aujourd'hui : repéré sur le site du client quand les outils s'appuient sur lui, sinon renseigné pour le site Harmony
+  const hasPixel = data.externalTracking ? data.externalTracking.metaPixel : data.tracking.metaPixelId !== "";
   const generationMissing = Boolean(current && (!current.creatives || !current.videoPlan || !current.plan));
+  const analysisExternal = data.analysisSite.mode === "external";
+  // Adresses d'atterrissage : le site de l'analyse, et le suffixe que dit son plan (aucun pour le site du client)
+  const landing: MetaLanding = { site: data.analysisSite, suffix: metaLandingSuffix(current?.plan, analysisExternal) };
+  // Analyse préparée pour un autre site que celui sur lequel les outils s'appuient aujourd'hui : dit sur toute la section
+  const siteNotice = analysisSiteNotice(data.analysisSite, {
+    subject: "le diagnostic, les annonces et les pages d'atterrissage",
+    currentAddress: data.externalTracking?.address,
+  });
 
   return (
     <div>
@@ -43,12 +55,25 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
         <div>
           <h1 className="text-4xl font-bold">Meta Ads</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Facebook et Instagram sont-ils pertinents pour vous ? Diagnostic, veille des annonces autour de vous, annonces prêtes à
-            publier, plan vidéo, plan de campagne et suivi des rendez-vous venus de vos annonces — Harmony prépare, vous diffusez
-            depuis votre compte Meta.
+            {data.externalTracking ? (
+              // Site du client : le studio n'y rattache aucune visite à une annonce, il ne promet donc pas ce suivi
+              <>
+                Facebook et Instagram sont-ils pertinents pour vous ? Diagnostic, veille des annonces autour de vous, annonces prêtes à
+                publier, plan vidéo, plan de campagne et pas-à-pas pour mesurer vos résultats sur votre site — Harmony prépare, vous
+                diffusez depuis votre compte Meta.
+              </>
+            ) : (
+              <>
+                Facebook et Instagram sont-ils pertinents pour vous ? Diagnostic, veille des annonces autour de vous, annonces prêtes à
+                publier, plan vidéo, plan de campagne et suivi des rendez-vous venus de vos annonces — Harmony prépare, vous diffusez
+                depuis votre compte Meta.
+              </>
+            )}
           </p>
         </div>
       </div>
+
+      {siteNotice ? <AnalysisSiteNotice notice={siteNotice} onRelaunch={tab === "diagnostic" ? undefined : () => select("diagnostic")} /> : null}
 
       <nav aria-label="Sections Meta Ads" className="mt-8 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ul className="flex gap-1 border-b border-cream-200">
@@ -114,7 +139,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             generationError={generationMissing && current ? current.error : null}
             instructions={current?.instructions ?? null}
             regenRemaining={data.usage.regenRemaining}
-            siteDomain={site.domain}
+            landing={landing}
+            externalSite={analysisExternal}
             onSelectTab={select}
           />
         ) : null}
@@ -126,7 +152,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             analysisReady={analysisReady}
             hasPixel={hasPixel}
             regenRemaining={data.usage.regenRemaining}
-            siteDomain={site.domain}
+            landing={landing}
+            externalSite={data.externalTracking !== null}
             onSelectTab={select}
           />
         ) : null}
@@ -140,6 +167,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             results={data.results}
             resultsDays={data.resultsDays}
             siteDomain={site.domain}
+            landing={landing}
+            externalTracking={data.externalTracking}
             onSelectTab={select}
           />
         ) : null}

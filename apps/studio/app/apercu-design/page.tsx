@@ -44,7 +44,7 @@ import {
   StatusPill,
   StepProgress,
 } from "@/components/ds";
-import { Replay, RegistryCheck, SaveDemo, SegmentedDemo, TabsDemo } from "./_components/demos";
+import { Replay, RegistryCheck, SaveDemo, SegmentedDemo, SharedComponentsDemo, TabsDemo } from "./_components/demos";
 import { GenerationDemo } from "./_components/generation-demo";
 import { PreviewNav } from "./_components/preview-nav";
 import { assertPreviewAllowed } from "./_lib/guard";
@@ -470,6 +470,14 @@ export default function DesignPreviewPage() {
           <PageHeader as="h3" ambient={false} section="fiche-google" action={<Button>Actualiser ma fiche</Button>} secondary={<Button variant="secondary">Voir ma fiche</Button>} />
           <PageHeader as="h3" ambient={false} section="meta-ads" tone="vivid" action={<Button variant="inverse">Lancer le diagnostic</Button>} />
           <PageHeader as="h3" ambient={false} section="academie" tone="vivid" action={<Button variant="inverse">Reprendre ma fiche</Button>} />
+        </Block>
+
+        <Block
+          id="herites"
+          title="Composants partagés, sous la coquille"
+          lead="Les composants de packages/ui tels quels, sans une ligne changée : sous la coquille, leurs jetons prennent des valeurs lisibles (bouton principal 3,2 → 4,8:1, texte secondaire 4,2 → 7,5:1, badges 1,8-3,9 → 5,3:1 et plus). Le back-office, lui, ne bouge pas. C'est l'état des pages le jour où la coquille est montée, avant leur reprise une à une."
+        >
+          <SharedComponentsDemo />
         </Block>
       </Stagger>
     </>

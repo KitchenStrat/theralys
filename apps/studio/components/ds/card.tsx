@@ -25,17 +25,26 @@ const SURFACE: Record<CardVariant, string> = {
 export type CardProps = HTMLAttributes<HTMLElement> & {
   as?: "div" | "section" | "article" | "li" | "aside";
   variant?: CardVariant;
+  /**
+   * Marge intérieure. Par défaut `md` — sauf si `className` porte déjà une marge
+   * (`p-6`, `px-4 py-3`…) : elle prime, comme avec la `Card` partagée, qui n'en
+   * posait aucune. Deux marges concurrentes ne se départagent pas en Tailwind.
+   */
   padding?: CardPadding;
   /** Identité de section à poser sur la carte et son contenu */
   section?: SectionKey;
 };
 
+// `p-*`, `px-*`, `py-*`, avec ou sans variante (`sm:p-8`) ; un seul côté (`pt-0`) ne compte pas
+const OWN_PADDING = /(?:^|[\s:])p[xy]?-/;
+
 /** Carte statique. Elle ne bouge pas au survol : seul `InteractiveCard` se soulève. */
-export function Card({ as: Tag = "div", variant = "plain", padding = "md", section, className, ...props }: CardProps) {
+export function Card({ as: Tag = "div", variant = "plain", padding, section, className, ...props }: CardProps) {
+  const resolved = padding ?? (className && OWN_PADDING.test(className) ? "none" : "md");
   return (
     <Tag
       data-ds-section={section}
-      className={clsx("rounded-ds-card", SURFACE[variant], PADDING[padding], className)}
+      className={clsx("rounded-ds-card", SURFACE[variant], PADDING[resolved], className)}
       {...props}
     />
   );

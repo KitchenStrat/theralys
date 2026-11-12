@@ -553,7 +553,25 @@ export async function publishArticleNow(articleId: string): Promise<void> {
   revalidatePath("/publications");
 }
 
-/** Lien « Voir sur le site » — avec preview token si l'article n'est pas publié. */
+/**
+ * Titre et texte (markdown) d'un article, pour « Copier l'article » depuis le
+ * calendrier : quand le site du client est la référence, le praticien reprend
+ * ses articles sur son propre site. Le calendrier ne porte pas le texte des
+ * articles ; il n'est lu qu'à la demande. La mise en forme pour le
+ * presse-papiers se fait côté navigateur (`articleCopy`).
+ */
+export async function getArticleCopySource(articleId: unknown): Promise<{ title: string; content: string }> {
+  const session = await requireClient();
+  const article = await ownedArticle(session.siteId, z.string().uuid().parse(articleId));
+  return { title: article.title, content: article.content };
+}
+
+/**
+ * Lien « Voir sur le site » — avec preview token si l'article n'est pas
+ * publié. Toujours l'adresse du site hébergé (`siteUrl`), même quand le site
+ * du client est la référence des outils : c'est sur le blog hébergé que
+ * l'article existe, et le jeton d'aperçu n'est reconnu que par lui.
+ */
 export async function getArticleViewUrl(articleId: string): Promise<{ url: string }> {
   const session = await requireClient();
   const article = await ownedArticle(session.siteId, articleId);

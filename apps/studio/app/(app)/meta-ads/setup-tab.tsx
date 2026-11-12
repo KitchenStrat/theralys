@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
 import type { MetaAdsCreativeSet, MetaAdsPlan, MetaAdsVideoPlan } from "@theralys/shared";
-import { ctaLabel, landingUrl } from "@/lib/meta-ads/clipboard";
+import { tagInstallAdvice, type ExternalSiteTracking } from "@/lib/google-ads/external-tracking";
+import { ctaLabel, metaLandingUrl, type MetaLanding } from "@/lib/meta-ads/clipboard";
+import { META_RESULTS_ACCOUNT, metaPixelFindings } from "@/lib/meta-ads/external-tracking";
 import type { AdsResults as PaidResults } from "@theralys/analytics";
 import { META_PIXEL_ID_SHAPE, validateMetaTracking, type MetaTrackingForm } from "@/lib/meta-ads/tracking";
+import { ExternalResultsCard, ExternalTrackingCard } from "../google-ads/external-site-cards";
 import { saveMetaTracking } from "./actions";
 import { CopyButton } from "./copy-button";
 import type { MetaTab } from "./tabs";
-import { META_ADS_MANAGER_URL, META_BUSINESS_URL, META_EVENTS_MANAGER_URL, META_PIXEL_HELPER_URL, META_TUTORIAL, type TutorialCopy, type TutorialStep } from "./tutorial";
+import { META_ADS_MANAGER_URL, META_BUSINESS_URL, META_EVENTS_MANAGER_URL, META_PIXEL_HELPER_URL, metaTutorial, type TutorialCopy, type TutorialStep } from "./tutorial";
 
 export function SetupTab({
   creatives,
@@ -22,6 +25,8 @@ export function SetupTab({
   results,
   resultsDays,
   siteDomain,
+  landing,
+  externalTracking,
   onSelectTab,
 }: {
   creatives: MetaAdsCreativeSet | null;
@@ -32,10 +37,21 @@ export function SetupTab({
   cookieBanner: boolean;
   results: PaidResults;
   resultsDays: number;
+  /** Adresse du site Harmony, sans protocole : c'est sur lui qu'agit le formulaire du Pixel */
   siteDomain: string;
+  /** Site de l'analyse et suffixe de son plan : adresses d'atterrissage des créas */
+  landing: MetaLanding;
+  /**
+   * Les outils s'appuient sur le site du client : le studio ne peut rien y
+   * installer. Le formulaire du Pixel et le bloc Résultats, qui n'agissent
+   * que sur le site Harmony, laissent la place au relevé de sa dernière
+   * lecture et à un pas-à-pas. `null` : site Harmony.
+   */
+  externalTracking: ExternalSiteTracking | null;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   const analysisReady = Boolean(creatives || videoPlan || plan);
+  const external = externalTracking !== null;
   return (
     <div className="space-y-6">
       <Card className="p-6">
@@ -51,15 +67,40 @@ export function SetupTab({
           <ExternalLink href={META_EVENTS_MANAGER_URL}>Ouvrir le Gestionnaire d&apos;événements</ExternalLink>
         </p>
         <div className="mt-4 divide-y divide-cream-200 border-t border-cream-200">
-          {META_TUTORIAL.map((step, index) => (
-            <TutorialStepView key={step.id} step={step} index={index} creatives={creatives} videoPlan={videoPlan} plan={plan} siteDomain={siteDomain} onSelectTab={onSelectTab} />
+          {metaTutorial(external).map((step, index) => (
+            <TutorialStepView key={step.id} step={step} index={index} creatives={creatives} videoPlan={videoPlan} plan={plan} landing={landing} externalSite={external} onSelectTab={onSelectTab} />
           ))}
         </div>
       </Card>
 
-      <PixelForm initial={tracking} cookieBanner={cookieBanner} siteDomain={siteDomain} />
+      {externalTracking ? (
+        <>
+          <ExternalTrackingCard
+            title="Pixel Meta sur votre site"
+            intro={
+              <>
+                Vos annonces mènent à votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>). Harmony n&apos;héberge pas ce
+                site et ne peut rien y installer : le Pixel s&apos;y pose directement, par vous ou par la personne qui s&apos;en occupe (étape 2 du tuto
+                ci-dessus).
+              </>
+            }
+            findings={metaPixelFindings(externalTracking)}
+            adviceTitle="Où installer le Pixel"
+            advice={tagInstallAdvice(externalTracking.cms, "meta")}
+          />
+          <ExternalResultsCard
+            account={META_RESULTS_ACCOUNT}
+            accountLink={{ href: META_ADS_MANAGER_URL, label: "Ouvrir le Gestionnaire de publicités" }}
+            measureSnippet={externalTracking.measureSnippet}
+          />
+        </>
+      ) : (
+        <>
+          <PixelForm initial={tracking} cookieBanner={cookieBanner} siteDomain={siteDomain} />
 
-      <ResultsCard results={results} days={resultsDays} tracked={tracking.metaPixelId !== ""} />
+          <ResultsCard results={results} days={resultsDays} tracked={tracking.metaPixelId !== ""} />
+        </>
+      )}
     </div>
   );
 }
@@ -78,7 +119,8 @@ function TutorialStepView({
   creatives,
   videoPlan,
   plan,
-  siteDomain,
+  landing,
+  externalSite,
   onSelectTab,
 }: {
   step: TutorialStep;
@@ -86,7 +128,8 @@ function TutorialStepView({
   creatives: MetaAdsCreativeSet | null;
   videoPlan: MetaAdsVideoPlan | null;
   plan: MetaAdsPlan | null;
-  siteDomain: string;
+  landing: MetaLanding;
+  externalSite: boolean;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   return (
@@ -114,7 +157,7 @@ function TutorialStepView({
             Vérification : <ExternalLink href={META_PIXEL_HELPER_URL}>Meta Pixel Helper (extension Chrome)</ExternalLink>
           </p>
         ) : null}
-        {step.copy ? <CopyBlock copy={step.copy} creatives={creatives} videoPlan={videoPlan} plan={plan} siteDomain={siteDomain} onSelectTab={onSelectTab} /> : null}
+        {step.copy ? <CopyBlock copy={step.copy} creatives={creatives} videoPlan={videoPlan} plan={plan} landing={landing} externalSite={externalSite} onSelectTab={onSelectTab} /> : null}
         {step.note ? <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">{step.note}</p> : null}
       </div>
     </details>
@@ -127,18 +170,21 @@ function CopyBlock({
   creatives,
   videoPlan,
   plan,
-  siteDomain,
+  landing,
+  externalSite,
   onSelectTab,
 }: {
   copy: TutorialCopy;
   creatives: MetaAdsCreativeSet | null;
   videoPlan: MetaAdsVideoPlan | null;
   plan: MetaAdsPlan | null;
-  siteDomain: string;
+  landing: MetaLanding;
+  /** Les outils s'appuient sur le site du client : pas de formulaire du Pixel, un pas-à-pas à sa place */
+  externalSite: boolean;
   onSelectTab: (tab: MetaTab) => void;
 }) {
   if (copy === "pixel") {
-    return <p className="mt-3 text-sm text-ink-700">Le formulaire « Pixel Meta » se trouve sous ce tuto.</p>;
+    return <p className="mt-3 text-sm text-ink-700">{externalSite ? "Le bloc « Pixel Meta sur votre site » se trouve sous ce tuto." : "Le formulaire « Pixel Meta » se trouve sous ce tuto."}</p>;
   }
   const missing = (copy === "campaign" && !plan) || (copy === "creatives" && !creatives) || (copy === "videos" && !videoPlan);
   if (missing) {
@@ -164,18 +210,23 @@ function CopyBlock({
   if (copy === "creatives" && creatives) {
     return (
       <ul className="mt-3 space-y-2" aria-label="Textes par créa">
-        {creatives.creatives.map((c) => (
-          <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium text-ink-900">{c.name}</span>
-            <span className="text-xs text-ink-500">
-              {ctaLabel(c.cta)} → {landingUrl(siteDomain, c.landingPath).replace(/^https?:\/\//, "")}
-            </span>
-            <CopyButton text={c.primaryText} label="Texte principal" variant="ghost" />
-            <CopyButton text={c.headline} label="Titre" variant="ghost" />
-            <CopyButton text={c.description} label="Description" variant="ghost" />
-            <CopyButton text={landingUrl(siteDomain, c.landingPath)} label="URL" variant="ghost" />
-          </li>
-        ))}
+        {creatives.creatives.map((c) => {
+          // Adresse de la page sur le site de l'analyse ; sans adresse connue, ni affichage ni bouton URL
+          const url = metaLandingUrl(landing, c.landingPath);
+          return (
+            <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-ink-900">{c.name}</span>
+              <span className="text-xs text-ink-500">
+                {ctaLabel(c.cta)}
+                {url ? ` → ${url.replace(/^https?:\/\//, "")}` : ""}
+              </span>
+              <CopyButton text={c.primaryText} label="Texte principal" variant="ghost" />
+              <CopyButton text={c.headline} label="Titre" variant="ghost" />
+              <CopyButton text={c.description} label="Description" variant="ghost" />
+              {url ? <CopyButton text={url} label="URL" variant="ghost" /> : null}
+            </li>
+          );
+        })}
       </ul>
     );
   }

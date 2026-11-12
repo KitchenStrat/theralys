@@ -2,9 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { META_ADS_FORMATS, type MetaAdsFormat } from "@theralys/shared";
 import { getSession } from "@/lib/auth";
-import { getSite, siteUrl } from "@/lib/data";
+import { getSite } from "@/lib/data";
+import { analysisSiteOf } from "@/lib/google-ads/analysis-site";
+import { loadAdsSiteContext } from "@/lib/google-ads/site-context";
 import { creativeOf, metaAccess, ownedMetaAnalysis } from "@/lib/meta-ads/access";
-import { metaCreativeTxt } from "@/lib/meta-ads/clipboard";
+import { metaCreativeTxt, metaLandingSuffix } from "@/lib/meta-ads/clipboard";
 import { metaCreativePhotoUrl } from "@/lib/meta-ads/photos";
 import { metaCreativeFilename, renderableMetaCreative } from "@/lib/meta-ads/render";
 import { SIZE_SUFFIX, buildZip, contentDisposition, type ZipEntry } from "@/lib/social/render/bundle";
@@ -37,7 +39,10 @@ function file(data: Uint8Array, contentType: string, filename: string): NextResp
  * Visuel JPEG d'une créa dans la taille demandée, nommé
  * « meta-c1-reassurance-carre.jpg » ; avec `?kit=1`, le kit complet (ZIP) :
  * les trois JPEG (carré, portrait, story) et `textes.txt` (texte principal,
- * titre, description, bouton, page d'atterrissage, texte alternatif).
+ * titre, description, bouton, page d'atterrissage, texte alternatif). La
+ * page d'atterrissage est celle du site pour lequel l'analyse a été préparée
+ * (`diagnostic.externalSite`), avec le suffixe que dit son plan ; elle est
+ * omise quand l'adresse de ce site n'est plus connue.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ analysisId: string; creativeId: string }> }) {
   const session = await getSession();
@@ -72,8 +77,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ana
       degraded ||= rendered.degraded;
       entries.push({ name: metaCreativeFilename(creative, SIZE_SUFFIX[s], "jpg"), data: rendered.data });
     }
-    const domain = siteUrl(site).replace(/^https?:\/\//, "");
-    entries.push({ name: "textes.txt", data: Buffer.from(metaCreativeTxt(creative, domain), "utf8") });
+    // Même site et même suffixe que l'onglet Annonces : l'adresse du kit est celle que l'écran affiche
+    const analysisSite = analysisSiteOf(analysis.diagnostic, (await loadAdsSiteContext(site)).sources);
+    const landing = { site: analysisSite, suffix: metaLandingSuffix(analysis.plan, analysisSite.mode === "external") };
+    entries.push({ name: "textes.txt", data: Buffer.from(metaCreativeTxt(creative, landing), "utf8") });
     console.info("[meta-ads] download kit", { analysisId: analysis.id, creativeId: creative.id, ms: Date.now() - started, degraded });
     return file(buildZip(entries), "application/zip", metaCreativeFilename(creative, "kit", "zip"));
   } catch (err) {

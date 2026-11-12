@@ -9,6 +9,13 @@
  * Conversions → Récapitulatif ». Les noms des trois actions de conversion
  * sont ceux du formulaire « Suivi des conversions »
  * (`GOOGLE_ADS_CONVERSION_KINDS`).
+ *
+ * `ADS_TUTORIAL` est écrit pour le site Harmony, qui charge la balise et
+ * envoie les conversions lui-même. Quand les annonces mènent au site du
+ * client, les étapes qui le supposent ont une variante (`adsTutorial`) : rien
+ * ne peut y être installé depuis le studio, la balise et le bandeau cookies
+ * se règlent sur ce site et seul le compte Google Ads montre ce qui est
+ * compté.
  */
 
 export type TutorialCopy = "keywords" | "negatives" | "ads" | "extensions" | "tracking";
@@ -162,3 +169,63 @@ export const ADS_TUTORIAL: TutorialStep[] = [
     ],
   },
 ];
+
+/**
+ * Étapes réécrites pour le site du client (mêmes identifiants, même place
+ * dans le tuto : « l'étape 9 » reste la mesure des conversions). Elles disent
+ * ce que le praticien installe sur son propre site et ce qu'il contrôle dans
+ * son compte Google Ads, sans rien promettre que le studio ne peut vérifier :
+ * pas de formulaire, pas de bloc « Résultats », pas d'éditeur.
+ */
+const EXTERNAL_SITE_STEPS: Partial<Record<string, TutorialStep>> = {
+  conversions: {
+    id: "conversions",
+    title: "Mesurer les conversions sur votre site (RDV, appel)",
+    summary: "Deux actions de conversion à créer dans Google Ads, puis une balise à installer sur votre propre site : Harmony n'héberge pas ce site et ne peut pas le faire à votre place.",
+    items: [
+      "Objectifs → Conversions → Récapitulatif → + Nouvelle action de conversion → « Site web » → saisissez l'adresse de votre site → « Ajouter une action de conversion manuellement ».",
+      "Créez 2 actions : « Clic sur le lien de rendez-vous » (catégorie Prise de rendez-vous) et « Clic sur le numéro de téléphone » (Contact). Valeur : aucune ; comptabilisation : une par clic. Elles comptent des clics, pas des rendez-vous pris ni des appels aboutis.",
+      "Installez la balise Google sur toutes les pages de votre site, une seule fois : avec le réglage Google de l'outil qui a servi à créer votre site, ou avec Google Tag Manager si votre site l'utilise. Le bloc « Suivi des conversions sur votre site », sous ce tuto, dit où regarder pour votre outil.",
+      "Pour chaque action, ouvrez « Configuration de la balise » → « Installer la balise vous-même » : Google Ads donne un extrait d'événement, à déclencher au clic (et non au chargement de la page) — sur votre lien de rendez-vous pour la première action, sur votre numéro de téléphone pour la seconde. Si quelqu'un s'occupe de votre site, transmettez-lui ces extraits.",
+      "Bandeau cookies : une balise publicitaire ne doit se charger qu'après l'accord du visiteur. Vérifiez que votre site affiche un bandeau cookies et que la balise Google attend ce choix. Google demande aussi que ce choix lui soit transmis (« mode Consentement ») : c'est un réglage de votre bandeau ou de l'outil de votre site.",
+      "Vérifiez avec Tag Assistant (tagassistant.google.com) : ouvrez votre site, acceptez le bandeau cookies, cliquez sur votre lien de rendez-vous — l'événement « conversion » doit apparaître. Dans Google Ads, l'état de chaque action (Objectifs → Conversions → Récapitulatif) indique ensuite si elle enregistre des conversions.",
+      "Relancez enfin la lecture de votre site depuis « Mon site » : le relevé affiché sous ce tuto se met à jour, et votre prochaine analyse en tiendra compte.",
+    ],
+    copy: "tracking",
+    note: "Harmony ne peut ni installer cette balise sur votre site, ni vérifier que vos conversions sont comptées : seul votre compte Google Ads le montre. Sans balise ou sans bandeau cookies, vos annonces peuvent être diffusées quand même : gardez alors les enchères « Maximiser les clics » de l'étape 8.",
+  },
+  appels: {
+    id: "appels",
+    title: "Suivre les appels",
+    summary: "Les appels passés depuis l'annonce (composant Appel) sont comptés par Google ; les clics sur votre numéro depuis votre site le sont par l'action créée à l'étape 9.",
+    items: [
+      "Composant Appel (ex-extension d'appel) → « Rapport d'appels » activé : Google remplace votre numéro par un numéro de transfert et compte les appels qui dépassent la durée minimale (60 secondes par défaut, modifiable dans l'action de conversion).",
+      "Objectifs → Conversions → Récapitulatif : créez une action « Appels depuis les annonces » (catégorie Appel téléphonique) si Google ne l'a pas créée automatiquement.",
+      "Les clics sur votre numéro depuis votre site sont comptés par l'action « Clic sur le numéro de téléphone » de l'étape 9, une fois la balise installée sur votre site. Contrôlez-le dans Google Ads : Harmony ne peut pas le vérifier.",
+    ],
+  },
+  checklist: {
+    id: "checklist",
+    title: "Check-list des deux premières semaines",
+    summary: "La phase d'apprentissage : surveiller sans tout changer.",
+    items: [
+      "J+1 : les annonces sont « Approuvées » (sinon lisez la raison dans la colonne État et corrigez le texte).",
+      "J+2 : si le suivi de l'étape 9 est en place sur votre site, une conversion de test apparaît dans Objectifs → Conversions → Récapitulatif (sinon revérifiez avec Tag Assistant).",
+      "J+3 et J+7 : rapport « Termes de recherche » → ajoutez les requêtes hors sujet en négatif.",
+      "J+7 : coût par clic réel comparé à l'estimation ; si le budget est épuisé dès le matin, baissez le CPC maximal plutôt que d'augmenter le budget.",
+      "J+14 : premières prises de contact, si le suivi est en place ; ne changez ni budget ni enchères avant J+30.",
+      "Chaque semaine : ouvrez votre compte Google Ads pour suivre les clics, le coût et les conversions de vos annonces — c'est lui qui fait foi. Les visites de l'ensemble de votre site se lisent sur l'accueil du studio, une fois le code de mesure installé depuis « Mon site ».",
+    ],
+  },
+};
+
+/**
+ * Tuto à afficher selon le site où mènent les annonces. Site Harmony : les
+ * étapes d'origine, inchangées. Site du client (`externalSite`) : les mêmes
+ * étapes dans le même ordre, celles qui supposent le site Harmony remplacées
+ * par leur variante.
+ */
+export function adsTutorial(externalSite: boolean): TutorialStep[] {
+  if (!externalSite) return ADS_TUTORIAL;
+  return ADS_TUTORIAL.map((step) => EXTERNAL_SITE_STEPS[step.id] ?? step);
+}

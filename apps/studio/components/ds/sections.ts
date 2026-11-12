@@ -230,7 +230,7 @@ export type SectionAccess = {
   google: boolean;
   googleAds: boolean;
   metaAds: boolean;
-  /** Section « Mon site » (nouvelle) : masquée tant que sa page n'existe pas */
+  /** Section « Mon site » : toujours présente, comme dans la navigation actuelle (`false` pour la masquer) */
   site?: boolean;
 };
 
@@ -238,7 +238,7 @@ export type SectionAccess = {
 export function allowedSections(access: SectionAccess): SectionKey[] {
   const open: Record<SectionKey, boolean> = {
     accueil: true,
-    "mon-site": access.site ?? false,
+    "mon-site": access.site ?? true,
     publications: access.publications,
     "reseaux-sociaux": access.social,
     "fiche-google": access.google,

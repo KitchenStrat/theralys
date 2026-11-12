@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { Badge, Button, FieldHint, Input, Modal, Spinner } from "@theralys/ui";
 import { GOOGLE_POST_CTAS, GOOGLE_POST_IMAGE, GOOGLE_POST_INSTRUCTIONS_MAX } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
+import { isRelativeAddress } from "@/lib/google/post-cta";
 import type { GoogleCalendarItem } from "@/lib/google/posts";
 import { archiveGooglePost, markGooglePostPublished, regenerateGooglePost, rescheduleGooglePost } from "./actions";
 
@@ -100,6 +101,9 @@ function PostModalBody({
   const loading = loadedUrl !== previewUrl && errorUrl !== previewUrl;
   const failed = errorUrl === previewUrl;
   const ctaHref = safeHref(item.cta.url);
+  // Adresse montrée en clair quand elle n'est pas un lien web (numéro `tel:`). Le serveur remet déjà un bouton à jour
+  // (`deliveredGoogleCta`) ; par précaution, une adresse relative — chemin du studio d'un ancien post — n'est jamais affichée
+  const ctaAddress = isRelativeAddress(item.cta.url) ? null : item.cta.url;
 
   const statusBadge = published
     ? { tone: "success" as const, label: `Publié le ${formatDayFr(item.publishedAt ?? item.date)}` }
@@ -190,7 +194,7 @@ function PostModalBody({
                     <span className="sr-only"> (nouvel onglet)</span>
                   </a>
                 ) : (
-                  <span className="truncate">{item.cta.url ?? "—"}</span>
+                  <span className="truncate">{ctaAddress ?? "—"}</span>
                 )}
               </p>
             )}

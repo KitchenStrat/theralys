@@ -13,7 +13,7 @@
 
 import { EXTERNAL_PAGE_KINDS, EXTERNAL_PROFILE_LIMITS, type ExternalPageKind, type ExternalSitePage } from "@theralys/shared";
 import type { ExternalProfileInput } from "./external-site";
-import { clipChars, pageUrlKey, readFacts, sanitizeSiteText } from "./external-site-text";
+import { clipChars, pageUrlKey, readFacts, readPages, sanitizeSiteText } from "./external-site-text";
 
 // ─── Pages transmises au modèle ──────────────────────────────────────────────
 
@@ -116,8 +116,8 @@ function clipText(text: string, max: number): string {
  */
 export function selectExternalProfilePages(pages: readonly ExternalSitePage[]): ExternalProfilePromptPage[] {
   const B = EXTERNAL_PROFILE_PROMPT_BUDGET;
-  const ranked = (Array.isArray(pages) ? pages : [])
-    .map((page: ExternalSitePage, index: number) => {
+  const ranked = readPages(pages)
+    .map((page, index) => {
       const kind = isPageKind(page.kind) ? page.kind : "other";
       return { page, index, kind, plan: KIND_PLANS[kind], text: sanitizeSiteText(page.text, { multiline: true }) };
     })
@@ -213,7 +213,7 @@ LE PROFIL — un objet JSON ; les longueurs sont des maximums, en caractères :
 - "contact" : "address" (≤ ${L.shortText}), "phone", "email", "hours" (≤ ${L.hours} lignes : "label" ≤ 40 pour le ou les jours, "value" ≤ 80 pour les heures) et "note" (≤ ${L.shortText} : une précision utile — « sur rendez-vous uniquement », accès, stationnement…). Les coordonnées du bloc <faits> priment et sont reprises par le code : ne remplis ces champs que pour ce qui manque dans <faits> et qui est écrit en toutes lettres dans une page. Un numéro ou une adresse e-mail introuvables dans les pages sont écartés par le code.
 - "bookingUrl" et "social" ("instagram", "facebook", "linkedin", "tiktok", "youtube") : le lien de prise de rendez-vous en ligne et les pages de réseaux sociaux, seulement s'ils manquent dans <faits> et que leur adresse complète est écrite dans le texte d'une page.
 
-Écris en français, en gardant tels quels les noms propres et les intitulés du site.`;
+Écris en français, en gardant tels quels les noms propres et les intitulés du site. Texte brut partout : ni markdown, ni gras, ni emoji, ni balise.`;
 }
 
 // ─── Prompt utilisateur ──────────────────────────────────────────────────────

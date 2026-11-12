@@ -3,7 +3,8 @@ import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { Spinner } from "./spinner";
 
-export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger" | "inverse";
+/** `ghost` : nom hérité du `Button` partagé, synonyme de `quiet` (l'échange d'import ne casse rien). */
+export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger" | "inverse" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const BASE =
@@ -20,7 +21,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
   // Dégradé de marque profond : blanc ≥ 4,78:1 sur son point le plus clair
   primary: "bg-ds-brand-gradient text-white shadow-ds-brand-glow ds-focus",
   secondary: "bg-white text-ds-brand-800 inset-ring inset-ring-ds-ink-300 shadow-sm ds-focus",
-  quiet: "text-ds-brand-700 ds-focus",
+  // brand-800 : lisible aussi sur un bandeau teinté, décor compris (≥ 4,9:1 mesuré)
+  quiet: "text-ds-brand-800 ds-focus",
+  ghost: "text-ds-brand-800 ds-focus",
   danger: "bg-ds-danger-600 text-white shadow-sm ds-focus",
   // Sur un bandeau en dégradé : bouton blanc, anneau de focus blanc
   inverse: "bg-white text-ds-brand-900 shadow-ds-card ds-focus-inverse",
@@ -31,6 +34,7 @@ const HOVER: Record<ButtonVariant, string> = {
   primary: "bg-ds-brand-950/25",
   secondary: "bg-ds-brand-50",
   quiet: "bg-ds-brand-100",
+  ghost: "bg-ds-brand-100",
   danger: "bg-ds-danger-900/25",
   inverse: "bg-ds-brand-100",
 };
@@ -77,8 +81,10 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 /**
- * Bouton du studio. `type="button"` par défaut (le `Button` partagé soumettait
- * les formulaires par défaut) ; passer `type="submit"` dans un formulaire.
+ * Bouton du studio. Comme le `Button` partagé qu'il remplace, il ne fixe pas
+ * `type` : dans un formulaire, il soumet (comportement HTML par défaut). Hors
+ * formulaire rien ne change ; pour un bouton d'appoint DANS un formulaire
+ * (« Annuler », « Ajouter une ligne »), passer `type="button"`.
  */
 export function Button({
   variant = "primary",
@@ -87,14 +93,12 @@ export function Button({
   iconRight,
   loading = false,
   disabled,
-  type = "button",
   className,
   children,
   ...props
 }: ButtonProps) {
   return (
     <button
-      type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       // Inactif : estompé. En cours : pleine opacité, le travail se voit.

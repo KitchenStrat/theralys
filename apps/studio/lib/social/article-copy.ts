@@ -52,7 +52,9 @@ function parseBlocks(markdown: string): Block[] {
     paragraph = [];
   };
 
-  for (const raw of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+  // Scripts et styles écrits dans le markdown : écartés avec leur contenu (les autres balises le sont ligne à ligne, leur texte gardé)
+  const source = markdown.replace(/\r\n?/g, "\n").replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "");
+  for (const raw of source.split("\n")) {
     const line = raw.replace(/[ \t]+$/, "");
     if (line.trim() === "") {
       flushParagraph();
@@ -139,9 +141,15 @@ type InlineMatch = { index: number; length: number; nodes: Inline[] };
 
 /** Première mise en forme `marker…marker` à partir de `from` dont le contenu ne commence ni ne finit par une espace. */
 function findDelimited(src: string, from: number, marker: string, wordBound: boolean): { index: number; inner: string } | null {
-  let start = src.indexOf(marker, from);
+  // Un marqueur précédé d'une barre oblique inverse (« \* ») est un caractère, pas une mise en forme
+  const nextMarker = (at: number): number => {
+    let index = src.indexOf(marker, at);
+    while (index > 0 && src[index - 1] === "\\") index = src.indexOf(marker, index + 1);
+    return index;
+  };
+  let start = nextMarker(from);
   while (start !== -1) {
-    const end = src.indexOf(marker, start + marker.length + 1);
+    const end = nextMarker(start + marker.length + 1);
     if (end === -1) return null;
     const inner = src.slice(start + marker.length, end);
     const before = start > 0 ? src[start - 1]! : "";
@@ -150,12 +158,14 @@ function findDelimited(src: string, from: number, marker: string, wordBound: boo
       inner !== "" &&
       !/^\s|\s$/.test(inner) &&
       !inner.includes("\n") &&
-      // « * » isolé d'un produit (2 * 3) ou « ** » voisin : pas une mise en forme
+      // « * » isolé d'un produit (2 * 3) ou marqueur plus long (« ** » lu comme deux « * ») : pas une mise en forme
       before !== marker[0] &&
       after !== marker[0] &&
+      !inner.startsWith(marker[0]!) &&
+      !inner.endsWith(marker[0]!) &&
       (!wordBound || (!WORD_CHAR_RE.test(before) && !WORD_CHAR_RE.test(after)));
     if (valid) return { index: start, inner };
-    start = src.indexOf(marker, start + 1);
+    start = nextMarker(start + 1);
   }
   return null;
 }
@@ -170,9 +180,12 @@ function firstFrom(re: RegExp, src: string, from: number): RegExpExecArray | nul
   return re.exec(src);
 }
 
+/** Adresse entre chevrons (`<https://…>`) : un lien en markdown, à lire avant d'écarter les balises. */
+const AUTOLINK_RE = /<(https?:\/\/[^\s<>()[\]]+)>/g;
+
 /** Mise en forme en ligne → arbre : la plus à gauche d'abord, le contenu d'un gras, d'un italique ou d'un lien analysé à son tour. */
 function parseInline(source: string, depth = 0): Inline[] {
-  const src = depth === 0 ? source.replace(/\u0000/g, "").replace(RAW_HTML_RE, "") : source;
+  const src = depth === 0 ? source.replace(AUTOLINK_RE, "[$1]($1)").replace(RAW_HTML_RE, "") : source;
   const nodes: Inline[] = [];
   const pushText = (text: string) => {
     if (text === "") return;
@@ -201,14 +214,18 @@ function parseInline(source: string, depth = 0): Inline[] {
         nodes: isPortableHref(link[2]!) ? [{ kind: "link", href: link[2]!, children }] : children,
       });
     }
-    for (const [marker, kind, wordBound] of [
-      ["**", "strong", false],
-      ["__", "strong", true],
-      ["*", "em", false],
-      ["_", "em", true],
+    for (const [marker, kinds, wordBound] of [
+      ["***", ["strong", "em"], false],
+      ["**", ["strong"], false],
+      ["__", ["strong"], true],
+      ["*", ["em"], false],
+      ["_", ["em"], true],
     ] as const) {
       const found = findDelimited(src, pos, marker, wordBound);
-      if (found) candidates.push({ index: found.index, length: found.inner.length + marker.length * 2, nodes: [{ kind, children: nested(found.inner) }] });
+      if (!found) continue;
+      // « ***texte*** » : gras et italique à la fois, l'italique à l'intérieur
+      const node = [...kinds].reverse().reduce<Inline[]>((children, kind) => [{ kind, children }], nested(found.inner));
+      candidates.push({ index: found.index, length: found.inner.length + marker.length * 2, nodes: node });
     }
     // La plus à gauche ; à position égale, la première de la liste (« ** » avant « * »)
     const next = candidates.reduce<InlineMatch | null>((best, candidate) => (best === null || candidate.index < best.index ? candidate : best), null);

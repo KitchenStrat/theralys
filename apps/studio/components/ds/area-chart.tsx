@@ -3,7 +3,7 @@
 import { clsx } from "clsx";
 import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { areaPath, niceScale, smoothPath, type Point } from "./chart-geometry";
-import { formatNumber } from "./format";
+import { NBSP, formatNumber } from "./format";
 
 export type AreaChartDatum = {
   /** Libellé complet du point (infobulle, tableau) : « jeudi 12 novembre » */
@@ -47,7 +47,7 @@ export function AreaChart({ data, unit, label, height = 220, className }: AreaCh
   const line = smoothPath(points);
   const describe = (i: number) => {
     const d = data[i];
-    return d ? `${d.label} : ${formatNumber(d.value)} ${d.value < 2 ? unit[0] : unit[1]}` : "";
+    return d ? `${d.label} : ${formatNumber(d.value)}${NBSP}${d.value < 2 ? unit[0] : unit[1]}` : "";
   };
 
   const focusIndex = active ?? n - 1;

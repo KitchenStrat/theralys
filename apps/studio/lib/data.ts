@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import {
   analyticsEvents,
   blogArticles,
@@ -19,7 +19,7 @@ import {
   type PeriodStats,
   type SourceSummary,
 } from "@theralys/analytics";
-import { referenceSiteUrl } from "@theralys/shared";
+import { ANALYTICS_ORIGIN_EXTERNAL, referenceSiteUrl } from "@theralys/shared";
 
 export type Period = "7j" | "30j" | "6m";
 
@@ -54,28 +54,56 @@ export type DashboardStats = PeriodStats & {
   sources: SourceSummary;
 };
 
-/** Statistiques du dashboard (tracking maison) sur la période + la précédente. */
-export async function getDashboardStats(siteId: string, period: Period): Promise<DashboardStats> {
+/**
+ * Site dont les visites sont lues (`analytics_events.origin`) : le site
+ * hébergé (`hosted`, origine absente), ou le site du client (`external`,
+ * visites reçues de son code de mesure).
+ */
+export type StatsOrigin = "hosted" | "external";
+
+/**
+ * Statistiques du dashboard (tracking maison) sur la période + la précédente,
+ * pour le site mesuré `origin` : celui du client quand il est la référence
+ * des outils, le site hébergé sinon. Les deux mesures ne sont jamais
+ * additionnées.
+ */
+export async function getDashboardStats(siteId: string, period: Period, origin: StatsOrigin = "hosted"): Promise<DashboardStats> {
   const db = getDb();
   const { from, to } = periodRange(period);
   const prevFrom = new Date(from.getTime() - (to.getTime() - from.getTime()));
-  const where = and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom));
+  const inPeriod = and(eq(analyticsEvents.siteId, siteId), gte(analyticsEvents.occurredAt, prevFrom));
+  const ofOrigin = origin === "external" ? eq(analyticsEvents.origin, ANALYTICS_ORIGIN_EXTERNAL) : isNull(analyticsEvents.origin);
   type EventRow = { type: AnalyticsEventType; visitorId: string | null; occurredAt: Date; source: string | null };
   let rows: EventRow[];
   try {
     rows = await db.query.analyticsEvents.findMany({
-      where,
+      where: and(inPeriod, ofOrigin),
       columns: { type: true, visitorId: true, occurredAt: true, source: true },
     });
   } catch (err) {
-    // Déploiement avant la migration 0004 (colonne `source` absente) : l'accueil reste servi, sans provenance
+    // Déploiement avant la migration 0009 (colonne `origin` absente) : aucune visite n'a encore pu être mesurée
+    // sur le site du client, et toutes celles qui existent sont celles du site hébergé
     if (!isMissingColumnError(err)) throw err;
-    console.warn("[stats] colonne analytics_events.source absente — migration 0004 non appliquée ?");
-    const legacy = await db.query.analyticsEvents.findMany({
-      where,
-      columns: { type: true, visitorId: true, occurredAt: true },
-    });
-    rows = legacy.map((e) => ({ ...e, source: null }));
+    console.warn("[stats] colonne analytics_events.origin absente — migration 0009 non appliquée ?");
+    if (origin === "external") {
+      rows = [];
+    } else {
+      try {
+        rows = await db.query.analyticsEvents.findMany({
+          where: inPeriod,
+          columns: { type: true, visitorId: true, occurredAt: true, source: true },
+        });
+      } catch (legacyErr) {
+        // Déploiement avant la migration 0004 (colonne `source` absente) : l'accueil reste servi, sans provenance
+        if (!isMissingColumnError(legacyErr)) throw legacyErr;
+        console.warn("[stats] colonne analytics_events.source absente — migration 0004 non appliquée ?");
+        const legacy = await db.query.analyticsEvents.findMany({
+          where: inPeriod,
+          columns: { type: true, visitorId: true, occurredAt: true },
+        });
+        rows = legacy.map((e) => ({ ...e, source: null }));
+      }
+    }
   }
   // Les clics sur le numéro (`call_click`, migration 0005) n'entrent ni dans les visiteurs ni dans les clics RDV
   const events = rows.filter((e): e is EventRow & { type: "pageview" | "rdv_click" } => e.type === "pageview" || e.type === "rdv_click");

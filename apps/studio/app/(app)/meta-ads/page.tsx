@@ -1,4 +1,5 @@
 import { hasMetaAds } from "@theralys/db";
+import { activeExternalSite } from "@theralys/shared";
 import { Card } from "@theralys/ui";
 import { requireClient } from "@/lib/auth";
 import { getProspect, getSite, siteUrl } from "@/lib/data";
@@ -24,7 +25,11 @@ export default async function MetaAdsPage({ searchParams }: Props) {
       <Fallback title="La section Meta Ads n'est pas incluse dans votre formule">
         Passez à la formule <strong>Scale</strong> pour savoir si Facebook et Instagram sont pertinents pour votre cabinet,
         suivre les annonces des praticiens autour de vous, obtenir vos annonces prêtes à publier (visuels, textes, plan vidéo),
-        un plan de campagne complet et le suivi des rendez-vous et appels venus de vos annonces.
+        un plan de campagne complet et{" "}
+        {/* Site du client en référence : le studio n'y rattache aucune visite à une annonce, il ne promet pas ce suivi */}
+        {activeExternalSite(site.theme)
+          ? "le pas-à-pas pour mesurer les résultats de vos annonces sur votre site."
+          : "le suivi des rendez-vous et appels venus de vos annonces."}
       </Fallback>
     );
   }

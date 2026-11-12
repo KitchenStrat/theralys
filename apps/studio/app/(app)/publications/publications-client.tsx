@@ -19,6 +19,18 @@ const STATUS_STYLES: Record<CalendarItem["status"], string> = {
   withdrawn: "border-2 border-dashed border-warning-500 bg-white",
 };
 
+/**
+ * Site du client quand il est la référence des outils : les articles
+ * paraissent toujours sur le blog du site Harmony, le praticien les reprend
+ * sur son propre site.
+ */
+export type OwnSiteNotice = {
+  /** Adresse du site du client, sans protocole (« www.mon-cabinet.fr ») */
+  address: string;
+  /** Le site Harmony est masqué des moteurs de recherche (réglage par défaut dans ce mode) */
+  hostedHidden: boolean;
+};
+
 export function PublicationsClient({
   year,
   month,
@@ -26,13 +38,17 @@ export function PublicationsClient({
   settings,
   monthlyQuota,
   defaultThemeLabels,
+  ownSite = null,
 }: {
   year: number;
   month: number;
   items: CalendarItem[];
   settings: BlogSettingsValue | null;
   monthlyQuota: number;
+  /** Thématiques proposées par défaut : les spécialités du site de référence */
   defaultThemeLabels: string[];
+  /** `null` : le site Harmony est la référence, la section ne change pas */
+  ownSite?: OwnSiteNotice | null;
 }) {
   const [selected, setSelected] = useState<CalendarItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -75,6 +91,8 @@ export function PublicationsClient({
         </div>
       </div>
 
+      {ownSite ? <OwnSiteBanner ownSite={ownSite} /> : null}
+
       <div className="mt-6 grid grid-cols-7 gap-2 text-center text-xs font-semibold text-info-500">
         {WEEKDAYS.map((d, i) => (
           <span key={d} className={clsx(i >= 5 && "text-ink-500")}>{d}</span>
@@ -115,7 +133,7 @@ export function PublicationsClient({
         </div>
       </div>
 
-      <ArticleModal item={selected} onClose={() => setSelected(null)} />
+      <ArticleModal item={selected} ownSite={ownSite !== null} onClose={() => setSelected(null)} />
       <BlogSettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -124,6 +142,22 @@ export function PublicationsClient({
         defaultThemeLabels={defaultThemeLabels}
       />
     </div>
+  );
+}
+
+/**
+ * Bandeau de la section quand le site du client est la référence : où
+ * paraissent les articles, et comment les publier sur son propre site.
+ */
+function OwnSiteBanner({ ownSite }: { ownSite: OwnSiteNotice }) {
+  return (
+    <p role="note" className="mt-4 rounded-2xl bg-primary-50 px-4 py-3 text-sm text-ink-700">
+      {ownSite.hostedHidden
+        ? "Vos articles sont toujours rédigés ici et paraissent sur le blog de votre site Harmony, masqué des moteurs de recherche tant que vos outils s'appuient sur votre propre site."
+        : "Vos articles sont toujours rédigés ici et paraissent sur le blog de votre site Harmony."}{" "}
+      Pour les publier {ownSite.hostedHidden ? "" : "aussi "}sur <strong className="font-semibold text-ink-900">{ownSite.address}</strong>,
+      ouvrez un article et choisissez « Copier l&apos;article » : il se colle tel quel dans l&apos;éditeur de votre site.
+    </p>
   );
 }
 

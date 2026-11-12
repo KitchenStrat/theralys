@@ -8,7 +8,7 @@ import { clsx } from "clsx";
 /**
  * Navigation latérale du studio (horizontale et défilable sur mobile, l'onglet
  * actif ramené en vue). L'éditeur de site n'apparaît volontairement pas ici :
- * on y accède depuis la carte « Votre site » de l'Accueil.
+ * on y accède depuis la carte « Votre site » de l'Accueil et depuis « Mon site ».
  */
 export function StudioNav({
   showPublications = true,
@@ -30,7 +30,7 @@ export function StudioNav({
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
 
-  // Mobile : la barre déborde (7 entrées) — centrer l'onglet actif au chargement et à chaque navigation
+  // Mobile : la barre déborde (jusqu'à 9 entrées) — centrer l'onglet actif au chargement et à chaque navigation
   useEffect(() => {
     const nav = navRef.current;
     if (!nav || nav.scrollWidth <= nav.clientWidth) return;
@@ -41,6 +41,8 @@ export function StudioNav({
 
   const items = [
     { href: "/", label: "Accueil", active: pathname === "/" },
+    // Toujours présent : le site de référence des outils (site Harmony, ou site du praticien connecté)
+    { href: "/mon-site", label: "Mon site", active: pathname.startsWith("/mon-site") },
     ...(showPublications
       ? [
           {

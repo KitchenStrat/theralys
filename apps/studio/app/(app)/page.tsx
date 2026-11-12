@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { Card } from "@theralys/ui";
-import { hasBlog, hasSocialMedia } from "@theralys/db";
-import { formatDateFr } from "@theralys/shared";
+import { getDb, hasBlog, hasSocialMedia } from "@theralys/db";
+import { loadExternalSite } from "@theralys/jobs";
+import { activeExternalSite, formatDateFr } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import {
   getDashboardStats,
   getMonthItems,
   getSite,
+  publicSiteUrl,
   siteUrl,
   type CalendarItem,
   type Period,
 } from "@/lib/data";
+import { siteAddressLabel } from "@/lib/external-site/format";
 import { StatsPanel } from "./stats-panel";
 
 export const dynamic = "force-dynamic";
@@ -49,10 +52,17 @@ export default async function HomePage({ searchParams }: Props) {
   const site = await getSite(session.siteId);
   const blog = site.type === "demo" || hasBlog(site.plan);
   const socialAccess = site.type === "demo" || hasSocialMedia(site.plan);
-  const [stats, upcoming] = await Promise.all([
-    getDashboardStats(site.id, period),
+  // Site de référence des outils : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony
+  const ownSite = activeExternalSite(site.theme);
+  const referenceUrl = publicSiteUrl(site);
+  const [stats, upcoming, ownSiteState] = await Promise.all([
+    // Les visites lues sont celles du site de référence : jamais les deux mesures additionnées
+    getDashboardStats(site.id, period, ownSite ? "external" : "hosted"),
     blog ? getUpcoming(site.id) : Promise.resolve([]),
+    ownSite ? loadExternalSite(getDb(), site) : Promise.resolve(null),
   ]);
+  // Le code de mesure n'a encore envoyé aucune visite du site du praticien : rien à tracer, l'accueil dit quoi faire
+  const awaitingMeasure = ownSite !== null && ownSiteState?.available === true && ownSiteState.site !== null && ownSiteState.site.measure.seenAt === null;
 
   const firstName = session.name.split(" ")[0] ?? session.name;
 
@@ -72,37 +82,77 @@ export default async function HomePage({ searchParams }: Props) {
             }}
             sources={stats.sources}
             socialAccess={socialAccess}
+            awaitingMeasure={awaitingMeasure && ownSite ? { address: siteAddressLabel(ownSite.url) } : null}
           />
         </Card>
 
-        {/* Accès à l'éditeur : uniquement ici, plus dans la navigation */}
-        <Card className="p-6 md:p-7">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold">Votre site</h2>
-              <p className="mt-1 max-w-md text-base text-ink-500">
-                Textes, photos, horaires, tarifs : modifiez votre site en quelques clics,
-                c&apos;est en ligne immédiatement.
-              </p>
+        {/* Le site de référence. Site Harmony : accès à l'éditeur (ici et dans « Mon site », pas dans la navigation) ; site du praticien : accès à « Mon site » */}
+        {ownSite ? (
+          <Card className="p-6 md:p-7" data-testid="site-card" data-reference="external">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold">Votre site</h2>
+                <p className="mt-1 break-all text-base font-medium text-ink-900" data-testid="site-card-url">
+                  {siteAddressLabel(ownSite.url)}
+                </p>
+                <p className="mt-1 max-w-md text-base text-ink-500">
+                  Vos outils s&apos;appuient sur votre site : contenus, liens et statistiques.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Link
+                  href="/mon-site"
+                  data-testid="site-card-manage"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-7 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
+                >
+                  Gérer mon site
+                </Link>
+                <a
+                  href={referenceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="site-card-view"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-6 py-3.5 text-base font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50"
+                >
+                  ↗ Voir mon site
+                </a>
+              </div>
             </div>
-            <div className="flex items-center gap-2.5">
-              <Link
-                href="/editor"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-7 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
-              >
-                ✎ Éditer mon site
-              </Link>
-              <a
-                href={siteUrl(site)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-6 py-3.5 text-base font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50"
-              >
-                ↗ Voir
-              </a>
+          </Card>
+        ) : (
+          <Card className="p-6 md:p-7" data-testid="site-card" data-reference="hosted">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">Votre site</h2>
+                <p className="mt-1 max-w-md text-base text-ink-500">
+                  Textes, photos, horaires, tarifs : modifiez votre site en quelques clics,
+                  c&apos;est en ligne immédiatement.
+                </p>
+                <p className="mt-2 text-sm">
+                  <Link href="/mon-site" data-testid="site-card-connect-link" className="font-medium text-primary-700 hover:underline">
+                    Vous avez déjà un site ?
+                  </Link>
+                </p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Link
+                  href="/editor"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-7 py-3.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-600"
+                >
+                  ✎ Éditer mon site
+                </Link>
+                <a
+                  href={siteUrl(site)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-white/60 px-6 py-3.5 text-base font-medium text-primary-700 transition-colors hover:border-primary-300 hover:bg-primary-50"
+                >
+                  ↗ Voir
+                </a>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -147,8 +197,8 @@ export default async function HomePage({ searchParams }: Props) {
 
         <p className="px-2 text-[13px] text-ink-500">
           Votre site :{" "}
-          <Link href={siteUrl(site)} target="_blank" className="underline">
-            {siteUrl(site)}
+          <Link href={referenceUrl} target="_blank" className="break-all underline">
+            {referenceUrl}
           </Link>
         </p>
       </div>

@@ -12,6 +12,7 @@ import {
   updateArticle,
   withdrawArticle,
 } from "../../actions";
+import { ArticleExportMessage, useArticleExport } from "../article-export";
 
 type ArticleData = {
   id: string;
@@ -37,9 +38,15 @@ const STATUS_LABEL: Record<ArticleData["status"], { label: string; tone: "succes
 export function ArticleEditor({
   article,
   publicationMode,
+  ownSite = false,
 }: {
   article: ArticleData;
   publicationMode: "auto" | "manual";
+  /**
+   * Le site du client est la référence des outils : l'article paraît sur le
+   * site Harmony, et le praticien le reprend sur le sien (copie, image).
+   */
+  ownSite?: boolean;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(article.title);
@@ -54,6 +61,8 @@ export function ArticleEditor({
 
   const status = STATUS_LABEL[article.status];
   const notPublished = article.status !== "published";
+  // « Copier l'article » reprend ce qui est à l'écran, modifications en cours comprises
+  const exporter = useArticleExport(() => ({ title, content }));
 
   async function onSave() {
     setSaving(true);
@@ -161,6 +170,33 @@ export function ArticleEditor({
         {error ? <p className="mt-3 text-sm text-danger-500">{error}</p> : null}
         {message ? <p className="mt-3 text-sm text-success-500">{message}</p> : null}
 
+        {ownSite ? (
+          <div className="mt-4 rounded-2xl bg-primary-50 p-4">
+            <h2 className="text-sm font-semibold text-ink-900">Publier sur votre propre site</h2>
+            <p className="mt-1 text-xs text-ink-700">
+              Cet article paraît sur le blog de votre site Harmony. Pour le publier sur votre propre site, copiez-le puis
+              collez-le dans l&apos;éditeur de votre site ; son image se télécharge à part.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={exporter.copy} disabled={exporter.copying}>
+                {exporter.copying ? <Spinner /> : null} {exporter.copied ? "✓ Article copié" : "Copier l'article"}
+              </Button>
+              {imageUrl ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => exporter.saveImage(imageUrl, title)}
+                  disabled={exporter.savingImage}
+                >
+                  {exporter.savingImage ? <Spinner /> : null} Télécharger l&apos;image
+                </Button>
+              ) : null}
+            </div>
+            <ArticleExportMessage notice={exporter.notice} className="mt-2" />
+          </div>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 pt-4">
           <Button
             type="button"
@@ -173,7 +209,7 @@ export function ArticleEditor({
               })
             }
           >
-            Voir sur le site ↗
+            {ownSite ? "Voir sur le site Harmony ↗" : "Voir sur le site ↗"}
           </Button>
           <Button onClick={onSave} disabled={saving}>
             {saving ? "Enregistrement…" : "Enregistrer"}
@@ -243,9 +279,9 @@ export function ArticleEditor({
             variant="danger"
             size="sm"
             disabled={busy}
-            onClick={() => run(() => withdrawArticle(article.id), "Article retiré du site.")}
+            onClick={() => run(() => withdrawArticle(article.id), ownSite ? "Article retiré du site Harmony." : "Article retiré du site.")}
           >
-            Retirer du site
+            {ownSite ? "Retirer du site Harmony" : "Retirer du site"}
           </Button>
         </Card>
       )}

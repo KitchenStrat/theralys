@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSocialMedia } from "@theralys/db";
 import { destroySession, requireClient } from "@/lib/auth";
-import { getSite, siteUrl } from "@/lib/data";
+import { getSite, publicSiteUrl } from "@/lib/data";
 import { StudioNav } from "./studio-nav";
 
 async function logoutAction() {
@@ -49,10 +49,12 @@ export default async function StudioLayout({ children }: { children: ReactNode }
           />
 
           <div className="border-t border-cream-200 p-4 md:mt-auto">
+            {/* Le site de référence : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony */}
             <a
-              href={siteUrl(site)}
+              href={publicSiteUrl(site)}
               target="_blank"
               rel="noopener noreferrer"
+              data-testid="view-site-link"
               className="flex items-center gap-1.5 rounded-xl px-4 py-3 text-base font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
             >
               ↗ Voir mon site

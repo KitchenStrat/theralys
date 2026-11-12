@@ -1,0 +1,106 @@
+"use client";
+
+import { useEffect, useRef, type ReactNode } from "react";
+import { Button } from "@theralys/ui";
+
+let uidCount = 0;
+
+/** Repère d'une ligne ajoutée dans un formulaire (ceux des lignes venues du profil commencent par une autre lettre). */
+export function newUid(): string {
+  uidCount += 1;
+  return `n${uidCount}`;
+}
+
+/**
+ * Liste modifiable ligne à ligne : ajouter, modifier, retirer. Le nombre de
+ * lignes est borné (`max`, une limite du contrat) : arrivé au plafond, le
+ * bouton d'ajout laisse place à une phrase qui le dit. Après un ajout, le
+ * focus va au premier champ de la nouvelle ligne ; après un retrait, au
+ * bouton d'ajout — jamais perdu.
+ */
+export function ListEditor<T extends { uid: string }>({
+  id,
+  legend,
+  hint,
+  items,
+  onChange,
+  max,
+  addLabel,
+  maxLabel,
+  itemLabel,
+  blank,
+  fieldId,
+  disabled,
+  children,
+}: {
+  id: string;
+  legend: string;
+  hint?: string;
+  items: T[];
+  onChange: (items: T[]) => void;
+  max: number;
+  /** « Ajouter une question » */
+  addLabel: string;
+  /** « 7 questions au plus. » */
+  maxLabel: string;
+  /** Nom d'une ligne, pour son groupe et son bouton « Retirer » : « Question 2 » */
+  itemLabel: (index: number) => string;
+  blank: () => T;
+  /** Identifiant du premier champ d'une ligne */
+  fieldId: (item: T) => string;
+  disabled?: boolean;
+  children: (item: T, index: number, update: (next: T) => void) => ReactNode;
+}) {
+  const focusNext = useRef<string | null>(null);
+  const addId = `${id}-add`;
+
+  // Après le rendu qui suit un ajout ou un retrait : le focus rejoint l'élément prévu
+  useEffect(() => {
+    if (focusNext.current === null) return;
+    document.getElementById(focusNext.current)?.focus();
+    focusNext.current = null;
+  });
+
+  function add() {
+    const item = blank();
+    focusNext.current = fieldId(item);
+    onChange([...items, item]);
+  }
+
+  function remove(uid: string) {
+    focusNext.current = addId;
+    onChange(items.filter((item) => item.uid !== uid));
+  }
+
+  return (
+    <fieldset className="min-w-0" disabled={disabled}>
+      <legend className="text-sm font-semibold text-ink-900">{legend}</legend>
+      {hint ? <p className="mt-0.5 text-xs text-ink-500">{hint}</p> : null}
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-3">
+          {items.map((item, index) => (
+            <li key={item.uid}>
+              <div role="group" aria-label={itemLabel(index)} className="rounded-2xl border border-cream-300 bg-cream-50 p-3 sm:p-4">
+                <div className="space-y-3">{children(item, index, (next) => onChange(items.map((current) => (current.uid === item.uid ? next : current))))}</div>
+                <div className="mt-2 flex justify-end">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(item.uid)} aria-label={`Retirer : ${itemLabel(index)}`}>
+                    Retirer
+                  </Button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="mt-2">
+        {items.length < max ? (
+          <Button id={addId} type="button" variant="secondary" size="sm" onClick={add}>
+            <span aria-hidden>+</span> {addLabel}
+          </Button>
+        ) : (
+          <p className="text-xs text-ink-700">{maxLabel}</p>
+        )}
+      </div>
+    </fieldset>
+  );
+}

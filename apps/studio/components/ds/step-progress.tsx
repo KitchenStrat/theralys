@@ -73,10 +73,7 @@ export function StepProgress({
   const running = status === "running";
   const activeLabel = steps[index]?.label;
   const stepText = done ? "Terminé" : `Étape ${index + 1} sur ${total}`;
-  const meta = [
-    running && estimate ? `${estimate.charAt(0).toUpperCase()}${estimate.slice(1)}` : null,
-    elapsed !== undefined ? `${formatElapsed(elapsed)} ${elapsed >= 120 ? "écoulées" : "écoulée"}` : null,
-  ].filter(Boolean);
+  const estimateText = running && estimate ? `${estimate.charAt(0).toUpperCase()}${estimate.slice(1)}` : null;
 
   return (
     <div data-ds-section={section} aria-busy={running} className={clsx("min-w-0", className)}>
@@ -84,7 +81,18 @@ export function StepProgress({
         <IconBadge icon={icon} size="md" />
         <div className="min-w-0 flex-1">
           <Heading className="font-ds-display text-lg/7 font-bold text-ds-ink-900 text-balance">{title}</Heading>
-          {meta.length > 0 ? <p className="text-ds-body text-ds-ink-600 ds-tnum">{meta.join(" · ")}</p> : null}
+          {estimateText || elapsed !== undefined ? (
+            <p className="text-ds-body text-ds-ink-600">
+              {estimateText}
+              {estimateText && elapsed !== undefined ? " · " : null}
+              {elapsed !== undefined ? (
+                <>
+                  {/* Chiffres tabulaires sur le seul chronomètre : il ne tremble pas en avançant */}
+                  <span className="ds-tnum">{formatElapsed(elapsed)}</span> {elapsed >= 120 ? "écoulées" : "écoulée"}
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       </div>
 

@@ -413,6 +413,14 @@
    Un en-tête de page (`data-ds-ambient`) la pose aussi sur toute la coquille.
    Vif (`from/via/to`) : pictogrammes et grands titres. Profond (`deep-*`) :
    seul fond de dégradé autorisé sous du texte de taille courante. */
+/* Lueurs des décors (bandeaux, halos de la coquille) : la couleur vive de la section,
+   sauf là où elle est trop sombre pour rester sous du texte foncé (Ardoise). */
+:root,
+[data-ds-section],
+.ds-app:has([data-ds-ambient]) {
+  --ds-s-glow: var(--ds-s-from);
+  --ds-s-glow-2: var(--ds-s-to);
+}
 :root,
 [data-ds-section="accueil"],
 .ds-app:has([data-ds-ambient][data-ds-section="accueil"]) {
@@ -566,6 +574,8 @@
   --ds-s-line: oklch(90% 0.02 250); /* #D4DFEB */
   --ds-s-ink: oklch(30% 0.04 250); /* #1E2F41 */
   --ds-s-accent: oklch(45% 0.04 250); /* #44576B */
+  --ds-s-glow: oklch(66% 0.05 250);
+  --ds-s-glow-2: oklch(62% 0.055 255);
 }
 
 /* ── 3. Utilitaires ────────────────────────────────────────────────────────── */
@@ -803,8 +813,8 @@ html:has(.ds-app) {
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(62rem 30rem at 96% -9rem, color-mix(in oklab, var(--ds-s-from) 17%, transparent), transparent 68%),
-      radial-gradient(44rem 24rem at 34% -8rem, color-mix(in oklab, var(--ds-s-to) 12%, transparent), transparent 64%),
+      radial-gradient(62rem 30rem at 96% -9rem, color-mix(in oklab, var(--ds-s-glow) 17%, transparent), transparent 68%),
+      radial-gradient(44rem 24rem at 34% -8rem, color-mix(in oklab, var(--ds-s-glow-2) 12%, transparent), transparent 64%),
       radial-gradient(54rem 30rem at 70% 112%, color-mix(in oklab, var(--color-ds-violet-500) 8%, transparent), transparent 66%);
   }
   .ds-app ::selection {
@@ -877,9 +887,10 @@ html:has(.ds-app) {
 
   /* Décor des bandeaux : halos et anneaux statiques aux couleurs de la section. (Tailles en
      `min(rem, vw)` : Chromium refuse un `min()` qui mêle longueur et pourcentage dans la taille
-     d'un dégradé radial, et la déclaration entière serait ignorée.) Sur teinte
-     douce, le texte posé dessus est foncé (encre de section, ink-700 et plus) : ≥ 4,5:1 même
-     au cœur du halo. */
+     d'un dégradé radial, et la déclaration entière serait ignorée.) Les forces (33 %, 28 %,
+     anneaux 10 % et 9 %) sont réglées sur une mesure du rendu : au pixel le plus sombre de la
+     zone de contenu, ink-600, brand-800 et l'encre de section gardent ≥ 4,5:1 dans les neuf
+     sections. Ne pas les augmenter sans refaire la mesure. */
   .ds-band-art {
     position: absolute;
     inset: 0;
@@ -887,8 +898,8 @@ html:has(.ds-app) {
     pointer-events: none;
     border-radius: inherit;
     background:
-      radial-gradient(min(26rem, 64vw) 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 38%, transparent), transparent 70%),
-      radial-gradient(min(20rem, 52vw) 12rem at 80% 125%, color-mix(in oklab, var(--ds-s-to) 32%, transparent), transparent 70%);
+      radial-gradient(min(26rem, 64vw) 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-glow) 33%, transparent), transparent 70%),
+      radial-gradient(min(20rem, 52vw) 12rem at 80% 125%, color-mix(in oklab, var(--ds-s-glow-2) 28%, transparent), transparent 70%);
   }
   .ds-band-art::before,
   .ds-band-art::after,
@@ -902,14 +913,14 @@ html:has(.ds-app) {
     right: -4.5rem;
     width: 18rem;
     height: 18rem;
-    border: 2.25rem solid color-mix(in oklab, var(--ds-s-from) 13%, transparent);
+    border: 2.25rem solid color-mix(in oklab, var(--ds-s-glow) 10%, transparent);
   }
   .ds-band-art::before {
     right: 10rem;
     bottom: -5.5rem;
     width: 9rem;
     height: 9rem;
-    border: 1.25rem solid color-mix(in oklab, var(--ds-s-to) 11%, transparent);
+    border: 1.25rem solid color-mix(in oklab, var(--ds-s-glow-2) 9%, transparent);
   }
   @media (max-width: 40rem) {
     .ds-band-art::before {
@@ -1349,5 +1360,47 @@ html:has(.ds-app) {
     .ds-success-ripple {
       animation: ds-ripple 700ms var(--ease-ds-out) 120ms backwards;
     }
+  }
+}
+
+/* ── 5. Composants hérités (packages/ui) sous le design system ─────────────────
+   Là où la coquille est montée (`.ds-app`), ou sur une page hors coquille qui
+   porte `.ds-scope` (connexion, création du mot de passe) — et là seulement —
+   les jetons hérités prennent des valeurs lisibles : les `Button`, `Badge`,
+   `Input`… partagés et les utilitaires `text-ink-500`, `bg-primary-500`… des
+   pages passent en AA sans qu'une ligne de packages/ui ne change, donc sans
+   effet sur le back-office. Rien n'est actif tant que ni l'une ni l'autre classe
+   n'est posée. Contrastes avant → après : voir components/ds/README.md. */
+.ds-app,
+.ds-scope {
+  --color-primary-400: var(--color-ds-brand-500); /* bordure de focus des champs */
+  --color-primary-500: var(--color-ds-brand-600); /* aplat sous texte blanc, texte bleu */
+  --color-primary-600: var(--color-ds-brand-700); /* liens, survol des aplats */
+  --color-primary-700: var(--color-ds-brand-800);
+  --color-primary-800: var(--color-ds-brand-900);
+  --color-primary-900: var(--color-ds-brand-950);
+  --color-ink-300: var(--color-ds-ink-450); /* bordure des champs (3:1) */
+  --color-ink-500: var(--color-ds-ink-600); /* texte secondaire */
+  --color-success-500: var(--color-ds-success-700);
+  --color-success-100: var(--color-ds-success-100);
+  --color-info-500: var(--color-ds-blue-700);
+  --color-info-100: var(--color-ds-blue-100);
+  --color-warning-500: var(--color-ds-warning-700);
+  --color-warning-100: var(--color-ds-warning-100);
+  --color-danger-500: var(--color-ds-danger-700);
+  --color-danger-100: var(--color-ds-danger-100);
+  --radius-card: var(--radius-ds-card);
+}
+/* Champs hérités : leur `focus:outline-none` est un utilitaire ; cette règle, hors couche, le dépasse. */
+:is(.ds-app, .ds-scope) :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-ds-brand-600);
+  outline-offset: 1px;
+}
+@layer base {
+  /* Tout élément focalisable sans style propre reçoit l'anneau du design system
+     (couche `base` : les utilitaires `ds-focus-*` des composants gardent la main). */
+  :where(.ds-app, .ds-scope) :where(a, button, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-ds-brand-600);
+    outline-offset: 2px;
   }
 }

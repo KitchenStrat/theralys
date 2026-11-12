@@ -11,12 +11,15 @@ import {
 } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 
-export type BadgeTone = "neutral" | "brand" | "section" | "success" | "warning" | "danger" | "sun";
+/** `primary` et `info` : tons hérités du `Badge` partagé, synonymes de `brand`. */
+export type BadgeTone = "neutral" | "brand" | "section" | "success" | "warning" | "danger" | "sun" | "primary" | "info";
 
 /** Teinte 100 + texte 900 : au moins 9:1, même en 13 px. */
 const TONES: Record<BadgeTone, string> = {
   neutral: "bg-ds-ink-100 text-ds-ink-700",
   brand: "bg-ds-brand-100 text-ds-brand-900",
+  primary: "bg-ds-brand-100 text-ds-brand-900",
+  info: "bg-ds-brand-100 text-ds-brand-900",
   section: "bg-ds-section-tint-2 text-ds-section-ink",
   success: "bg-ds-success-100 text-ds-success-900",
   warning: "bg-ds-warning-100 text-ds-warning-900",
