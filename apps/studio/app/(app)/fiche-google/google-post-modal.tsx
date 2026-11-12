@@ -29,10 +29,7 @@ import { isRelativeAddress } from "@/lib/google/post-cta";
 import type { GoogleCalendarItem } from "@/lib/google/posts";
 import { archiveGooglePost, markGooglePostPublished, regenerateGooglePost, rescheduleGooglePost } from "./actions";
 import { PostStatusPill, type PostStatusKind } from "./post-status";
-import { ErrorNote } from "./shared";
-
-/** Page de gestion de la fiche (publication d'un post) : lien fixe, jamais une URL venue des données. */
-const GOOGLE_BUSINESS_URL = "https://business.google.com/";
+import { ErrorNote, GOOGLE_BUSINESS_URL } from "./shared";
 
 const CTA_ICON: Partial<Record<GoogleCalendarItem["cta"]["type"], LucideIcon>> = {
   BOOK: CalendarCheck,
@@ -195,7 +192,7 @@ function PostModalBody({
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-label="Aperçu" className="min-w-0">
           <div className="relative aspect-[4/3] w-full max-w-[600px] overflow-hidden rounded-ds-md bg-ds-ink-100 ring-1 ring-ds-ink-200">
             {loading ? (
@@ -225,6 +222,24 @@ function PostModalBody({
             )}
           </div>
 
+          {/* Sous le visuel : son téléchargement (et, à côté, le texte seul ou le tout) */}
+          <div className="mt-4 max-w-[600px]">
+            <h3 className="text-ds-body font-semibold text-ds-ink-900">Télécharger</h3>
+            <div className="mt-2.5 flex flex-col gap-2">
+              <DownloadLink href={download("image")} onClick={onDownload} icon={<Download size={18} aria-hidden />}>
+                Télécharger le visuel (JPG 4:3)
+              </DownloadLink>
+              <div className="flex flex-wrap gap-2">
+                <DownloadLink href={download("text")} onClick={onDownload} variant="quiet" icon={<FileText size={16} aria-hidden />}>
+                  Texte (.txt)
+                </DownloadLink>
+                <DownloadLink href={download("all")} onClick={onDownload} variant="quiet" icon={<FileArchive size={16} aria-hidden />}>
+                  Tout en un ZIP
+                </DownloadLink>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-5">
             <h3 className="text-ds-body font-semibold text-ds-ink-900">Bouton d&apos;action</h3>
             {item.cta.type === "NONE" ? (
@@ -239,7 +254,7 @@ function PostModalBody({
                     href={ctaHref}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-w-0 truncate rounded-ds-sm font-medium text-ds-brand-700 underline ds-focus"
+                    className="min-w-0 truncate rounded-ds-sm py-2.5 font-medium text-ds-brand-700 underline ds-focus"
                   >
                     {ctaHref}
                     <span className="sr-only"> (nouvel onglet)</span>
@@ -321,23 +336,6 @@ function PostModalBody({
                 {copied === "alt" ? <InlineSuccess>Copié !</InlineSuccess> : null}
               </div>
             </details>
-          </div>
-
-          <div>
-            <h3 className="text-ds-body font-semibold text-ds-ink-900">Télécharger</h3>
-            <div className="mt-2.5 flex flex-col gap-2">
-              <DownloadLink href={download("image")} onClick={onDownload} icon={<Download size={18} aria-hidden />}>
-                Télécharger le visuel (JPG 4:3)
-              </DownloadLink>
-              <div className="flex flex-wrap gap-2">
-                <DownloadLink href={download("text")} onClick={onDownload} variant="quiet" icon={<FileText size={16} aria-hidden />}>
-                  Texte (.txt)
-                </DownloadLink>
-                <DownloadLink href={download("all")} onClick={onDownload} variant="quiet" icon={<FileArchive size={16} aria-hidden />}>
-                  Tout en un ZIP
-                </DownloadLink>
-              </div>
-            </div>
           </div>
 
           <div className="rounded-ds-md bg-ds-section-tint p-4 text-ds-body text-ds-ink-700 ring-1 ring-ds-section-line/60">
@@ -527,7 +525,7 @@ function SourceBadge({ href, label }: { href?: string; label: string }) {
     );
   }
   return (
-    <a href={safe} target="_blank" rel="noopener noreferrer" className="max-w-full min-w-0 rounded-full ds-focus">
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full min-w-0 items-center rounded-full ds-focus pointer-coarse:min-h-11">
       <Badge tone="neutral" className="max-w-full hover:bg-ds-ink-200">
         <span className="min-w-0 truncate">{label}</span>
         <ExternalLink size={13} aria-hidden className="shrink-0" />

@@ -20,7 +20,7 @@ import {
 import { buildMonthGrid, formatDayFr, monthNameFr } from "@/lib/calendar";
 import type { CalendarItem } from "@/lib/data";
 import { ArticleModal } from "./article-modal";
-import { ArticleStatusPill } from "./article-status";
+import { ArticleStatusPill, frenchSpacing } from "./article-status";
 import { BlogSettingsModal, type BlogSettingsValue } from "./blog-settings-modal";
 
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -135,13 +135,14 @@ export function PublicationsClient({
                 </h2>
                 <MonthLink href={`/publications?mois=${next}`} label="Mois suivant" icon={ChevronRight} />
               </nav>
-              {isCurrentMonth ? null : (
+              {/* Un mois vide propose déjà ce retour dans son état vide */}
+              {isCurrentMonth || items.length === 0 ? null : (
                 <LinkButton href="/publications" variant="quiet" size="sm" icon={<Undo2 size={16} aria-hidden />}>
                   Revenir à ce mois-ci
                 </LinkButton>
               )}
             </div>
-            <p className="mt-3 max-w-[70ch] text-base text-ds-ink-700 text-pretty">
+            <p className="mt-3 text-base text-ds-ink-700 text-pretty">
               {expected > 0 ? (
                 <>
                   <strong className="font-semibold text-ds-ink-900">{plural(expected, "article", "articles")}</strong> en{" "}
@@ -239,8 +240,14 @@ export function PublicationsClient({
         </Card>
       </Stagger>
 
-      {/* Hors de la cascade : une fenêtre ne doit ni attendre son tour ni monter avec les blocs */}
-      <ArticleModal item={selected} ownSite={ownSite !== null} onClose={() => setSelected(null)} />
+      {/* Hors de la cascade : une fenêtre ne doit ni attendre son tour ni monter avec les blocs.
+          `key` : un message d'erreur ne suit pas d'un article à l'autre. */}
+      <ArticleModal
+        key={selected?.articleId ?? selected?.entryId ?? "aucun"}
+        item={selected}
+        ownSite={ownSite !== null}
+        onClose={() => setSelected(null)}
+      />
       <BlogSettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -314,8 +321,7 @@ function EmptyMonth({
           </LinkButton>
         }
       >
-        Votre blog n&apos;avait pas d&apos;article ce mois-là. Les mois qui suivent gardent la trace de tout ce qui a été
-        publié.
+        Votre blog n&apos;avait pas encore d&apos;article ce mois-là.
       </EmptyState>
     );
   }
@@ -347,6 +353,19 @@ function TodayTag() {
     <span className="block text-ds-meta font-semibold text-ds-section-accent xl:absolute xl:-top-2.5 xl:left-2 xl:z-10 xl:rounded-full xl:bg-ds-section-gradient-deep xl:px-2 xl:py-0.5 xl:text-xs xl:text-ds-section-on-deep xl:shadow-sm">
       Aujourd&apos;hui
     </span>
+  );
+}
+
+/**
+ * Marque de l'IA dans le calendrier : abrégée à l'œil (la légende la déplie),
+ * dite en entier aux lecteurs d'écran — un sujet pas encore rédigé le « sera ».
+ */
+function AiMark({ planned }: { planned: boolean }) {
+  return (
+    <AiBadge>
+      <span aria-hidden>IA</span>
+      <span className="sr-only">{planned ? "Sera rédigé par l'IA" : "Rédigé par l'IA"}</span>
+    </AiBadge>
   );
 }
 
@@ -430,22 +449,27 @@ function CalendarDay({
           <span className="sr-only">{fullDate}. </span>
           {/* Dans la grille, cette rangée porte le numéro du jour et la marque de l'IA ; dans la liste, la tuile datée seule */}
           <span className="flex shrink-0 items-center justify-between gap-1">
-            <DayMark iso={iso} isToday={isToday} />
+            {/* Un second article le même jour ne répète pas le numéro dans la case */}
+            <span className={clsx(index > 0 && "xl:hidden")}>
+              <DayMark iso={iso} isToday={isToday} />
+            </span>
             {item.aiGenerated ? (
               <span className="hidden xl:inline-flex">
-                <AiBadge>IA</AiBadge>
+                <AiMark planned={item.kind === "planned"} />
               </span>
             ) : null}
           </span>
           <span className="min-w-0 flex-1 xl:mt-1.5 xl:flex xl:flex-col">
             {isToday && index === 0 ? <TodayTag /> : null}
-            <span className="line-clamp-2 text-base font-semibold text-ds-ink-900 xl:line-clamp-3 xl:text-ds-meta">{item.title}</span>
+            <span className="line-clamp-2 text-base font-semibold text-ds-ink-900 xl:line-clamp-3 xl:text-ds-meta">
+              {frenchSpacing(item.title)}
+            </span>
             <span className="mt-1.5 flex flex-wrap items-center gap-1.5 xl:mt-auto xl:pt-2">
               <ArticleStatusPill status={item.status} />
               {/* Dans la liste, la marque de l'IA suit le statut : la case de la grille est trop étroite pour les deux */}
               {item.aiGenerated ? (
                 <span className="inline-flex xl:hidden">
-                  <AiBadge>IA</AiBadge>
+                  <AiMark planned={item.kind === "planned"} />
                 </span>
               ) : null}
             </span>

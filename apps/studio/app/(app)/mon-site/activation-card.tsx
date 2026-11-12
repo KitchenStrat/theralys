@@ -7,6 +7,7 @@ import { Badge, Button, Card, GreetingChip } from "@/components/ds";
 import { siteAddressLabel } from "@/lib/external-site/format";
 import { activateExternalSite, deactivateExternalSite, disconnectExternalSiteAction, setHostedSiteVisible, type MonSiteResult } from "./actions";
 import { ActionMessage, CheckboxField } from "./fields";
+import { stepLabel } from "./journey";
 import { CARD_TITLE } from "./styles";
 import { AnchorButton, Eyebrow, Notice } from "./ui";
 
@@ -128,7 +129,7 @@ export function ActivationCard({
                 <Check size={28} strokeWidth={3} />
               </span>
               <div className="min-w-0">
-                <p className="text-ds-meta font-semibold">Étape 3 · Activer</p>
+                <p className="text-ds-meta font-semibold">{stepLabel("activer")}</p>
                 <h2
                   id="activation-title"
                   ref={titleRef}
@@ -191,7 +192,7 @@ export function ActivationCard({
         // « La prochaine étape » : liseré en dégradé (une seule carte par écran) et seul bouton principal de la page
         <div className="rounded-ds-card p-5 shadow-ds-pop ds-border-gradient sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Eyebrow icon={Compass}>Étape 3 · Activer</Eyebrow>
+            <Eyebrow icon={Compass}>{stepLabel("activer")}</Eyebrow>
             <Badge tone="sun" icon={Clock}>
               Un clic
             </Badge>
@@ -222,7 +223,7 @@ export function ActivationCard({
         </div>
       ) : (
         <Card padding="lg">
-          <Eyebrow>Étape 3 · Activer</Eyebrow>
+          <Eyebrow>{stepLabel("activer")}</Eyebrow>
           <h2 id="activation-title" ref={titleRef} tabIndex={-1} className={`mt-2.5 rounded-md ds-focus ${CARD_TITLE}`}>
             Utiliser ce site pour mes outils
           </h2>

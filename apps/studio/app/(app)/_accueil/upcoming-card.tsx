@@ -1,6 +1,7 @@
 import { ArrowRight, CalendarDays, Newspaper } from "lucide-react";
 import { Card, CardHeader, EmptyState, LinkButton, StatusPill } from "@/components/ds";
 import type { CalendarItem } from "@/lib/data";
+import { frenchSpacing } from "@/lib/external-site/format";
 
 const dayOf = (iso: string) => String(Number(iso.slice(8, 10)));
 const monthOf = (iso: string) =>
@@ -55,7 +56,7 @@ export function UpcomingCard({ items }: { items: readonly CalendarItem[] }) {
               </span>
             </time>
             <span className="min-w-0 flex-1">
-              <span className="block text-base font-semibold text-ds-ink-900">{item.title}</span>
+              <span className="block text-base font-semibold wrap-break-word text-ds-ink-900">{frenchSpacing(item.title)}</span>
               <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <span className="inline-flex items-center gap-1.5 text-ds-meta font-medium text-ds-section-accent">
                   <Newspaper size={14} aria-hidden />

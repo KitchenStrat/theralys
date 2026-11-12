@@ -1,7 +1,8 @@
 "use client";
 
+import { clsx } from "clsx";
 import { Binoculars, GalleryVerticalEnd, SlidersHorizontal, Stethoscope, Target, type LucideIcon } from "lucide-react";
-import { useState, type MouseEvent } from "react";
+import { forwardRef, useState, type MouseEvent } from "react";
 import { Badge, PageHeader, Stagger, TabPanel, Tabs } from "@/components/ds";
 import { analysisSiteNotice } from "@/lib/google-ads/analysis-site";
 import { metaLandingSuffix, type MetaLanding } from "@/lib/meta-ads/clipboard";
@@ -27,12 +28,24 @@ export type MetaSiteInfo = {
 /** Préfixe des identifiants des onglets (`meta-ads-tab-<onglet>`) et de leur panneau. */
 const TABS_ID = "meta-ads";
 
+/**
+ * Icône d'onglet affichée à partir de 1 280 px seulement : en dessous (zone de
+ * contenu de 744 px à 1 024 px), les cinq onglets tiennent sur une ligne sans
+ * leurs icônes, et aucun ne reste caché hors de la rangée.
+ */
+function wideOnly(Icon: LucideIcon): LucideIcon {
+  const Wide = forwardRef<SVGSVGElement, React.ComponentProps<LucideIcon>>(function Wide({ className, ...props }, ref) {
+    return <Icon ref={ref} {...props} className={clsx(className, "max-xl:hidden")} />;
+  });
+  return Wide as LucideIcon;
+}
+
 const TAB_ICONS: Record<MetaTab, LucideIcon> = {
-  diagnostic: Stethoscope,
-  marche: Binoculars,
-  annonces: GalleryVerticalEnd,
-  plan: Target,
-  parametrage: SlidersHorizontal,
+  diagnostic: wideOnly(Stethoscope),
+  marche: wideOnly(Binoculars),
+  annonces: wideOnly(GalleryVerticalEnd),
+  plan: wideOnly(Target),
+  parametrage: wideOnly(SlidersHorizontal),
 };
 
 export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; data: MetaAdsData; site: MetaSiteInfo }) {

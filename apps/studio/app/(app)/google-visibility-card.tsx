@@ -79,7 +79,7 @@ export function GoogleVisibilityCard({
           icon={Eye}
           title={TITLE}
           description="Compte connecté — les premières données arrivent d'ici 2 à 3 jours."
-          action={<StatusPill status="en-cours">Données en route</StatusPill>}
+          action={<StatusPill status="en-cours">En attente des données</StatusPill>}
         />
       </Card>
     );
@@ -89,7 +89,7 @@ export function GoogleVisibilityCard({
   return (
     <Card id="visibilite">
       <CardHeader icon={Eye} title={TITLE} description="Combien de personnes ont vu votre cabinet dans les résultats de Google." />
-      <div className="mt-5 grid gap-x-8 gap-y-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-center">
+      <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-center">
         <div className="min-w-0">
           <p className="text-base text-ds-ink-700">
             Ce mois-ci,{" "}
@@ -117,7 +117,8 @@ export function GoogleVisibilityCard({
           <ul className="mt-2.5 flex flex-wrap gap-2">
             {visibility.topQueries.map((q, i) => (
               <li key={q.query} className="max-w-full min-w-0">
-                <Badge tone={i === 0 ? "section" : "neutral"} icon={Search} className="max-w-full px-3 py-1.5">
+                {/* Requête longue : le texte se coupe, la loupe garde sa taille */}
+                <Badge tone={i === 0 ? "section" : "neutral"} icon={Search} className="max-w-full px-3 py-1.5 [&>svg]:shrink-0">
                   <span className="min-w-0 truncate">{q.query}</span>
                   <strong className="font-bold ds-tnum">{q.impressions}</strong>
                 </Badge>

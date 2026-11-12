@@ -10,6 +10,7 @@ import {
   CircleCheckBig,
   ClipboardCheck,
   Clock,
+  ExternalLink,
   ListChecks,
   MessageSquareText,
   Minus,
@@ -34,6 +35,7 @@ import {
   Card,
   CardHeader,
   EmptyState,
+  LinkButton,
   ProgressBar,
   ProgressRing,
   Sparkline,
@@ -41,6 +43,7 @@ import {
 } from "@/components/ds";
 import { formatDayFr } from "@/lib/calendar";
 import type { GoogleAuditView, GoogleScoreHistoryPoint } from "@/lib/google/data";
+import { GOOGLE_BUSINESS_URL } from "./shared";
 
 /** Mention du score : en mots, avec une icône — la couleur de l'anneau reste celle de la section. */
 const GRADE: Record<GoogleAudit["grade"], { label: string; tone: BadgeTone; icon: LucideIcon }> = {
@@ -119,9 +122,9 @@ export function AuditTab({
 
   return (
     <div className="space-y-6">
-      <div className={clsx("grid gap-6", hasBenchmark && "xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
+      <div className={clsx("grid grid-cols-1 gap-6", hasBenchmark && "xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
         <Card variant="tinted" className="flex flex-col gap-5">
-          <div className="grid flex-1 items-center gap-x-8 gap-y-5 md:grid-cols-[auto_minmax(0,1fr)]">
+          <div className="grid flex-1 grid-cols-1 items-center gap-x-8 gap-y-5 md:grid-cols-[auto_minmax(0,1fr)]">
             <ProgressRing
               value={score}
               label={`Score ${score} sur 100, grade ${audit.grade}`}
@@ -167,7 +170,7 @@ export function AuditTab({
         {hasBenchmark ? <BenchmarkCard audit={audit} snapshot={latestAudit.snapshot} /> : null}
       </div>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
             icon={ListChecks}
@@ -177,12 +180,15 @@ export function AuditTab({
                 ? undefined
                 : "Dans l'ordre d'impact : commencez par le haut, chaque action se fait depuis votre fiche Google."
             }
-            action={
-              audit.actions.length > 0 ? (
-                <Badge tone="section">{plural(audit.actions.length, "action", "actions")}</Badge>
-              ) : undefined
-            }
           />
+          {audit.actions.length > 0 ? (
+            // L'action de l'onglet : aller appliquer le plan, là où il s'applique
+            <div className="mt-4">
+              <LinkButton href={GOOGLE_BUSINESS_URL} external iconRight={<ExternalLink size={18} aria-hidden />}>
+                Ouvrir ma fiche Google
+              </LinkButton>
+            </div>
+          ) : null}
           {audit.actions.length === 0 ? (
             <p className="mt-5 flex items-start gap-3 rounded-ds-md bg-ds-success-100 p-4 text-base font-medium text-ds-success-900">
               <CircleCheckBig size={22} aria-hidden className="mt-0.5 shrink-0" />
@@ -276,7 +282,7 @@ function ActionItem({ action, index }: { action: GoogleActionItem; index: number
       {/* Sous le titre ; à partir de 640 px, aligné sur lui (largeur de la pastille + espace) */}
       <div className="mt-2.5 sm:pl-[3.125rem]">
         <p className="text-ds-body text-ds-ink-700">{action.why}</p>
-        <p className="mt-3 rounded-ds-sm bg-white px-3.5 py-2.5 text-ds-body text-ds-ink-900 ring-1 ring-ds-ink-200">
+        <p className="mt-3 rounded-ds-sm bg-white px-3.5 py-2.5 text-ds-body text-ds-ink-900 ring-1 ring-ds-ink-200 [overflow-wrap:anywhere]">
           <span className="font-semibold">Comment faire : </span>
           {action.how}
         </p>
@@ -302,7 +308,7 @@ function CheckRow({ check }: { check: GoogleAuditCheck }) {
             {points}
           </span>
         </div>
-        <p className="text-ds-body text-ds-ink-600">{check.detail}</p>
+        <p className="text-ds-body text-ds-ink-600 [overflow-wrap:anywhere]">{check.detail}</p>
         {check.status === "warn" || check.status === "missing" ? (
           // Le mot est déjà lu avec les points : la pastille le montre à l'œil
           <Badge tone={status.tone} icon={status.icon} className="mt-2" aria-hidden>
@@ -391,7 +397,7 @@ function ScoreHistory({ history }: { history: GoogleScoreHistoryPoint[] }) {
   const DeltaIcon = delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
   return (
     <div className="rounded-ds-md bg-white p-4 ring-1 ring-ds-section-line/70">
-      <div className="grid items-center gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+      <div className="grid grid-cols-1 items-center gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
         <div className="min-w-0">
           <h3 className="text-ds-body font-semibold text-ds-ink-900">Historique du score</h3>
           <Sparkline

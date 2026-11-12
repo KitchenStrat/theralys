@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Binoculars,
   CalendarDays,
+  Check,
   CircleCheck,
   CircleHelp,
   FlaskConical,
@@ -20,12 +21,14 @@ import {
   SignalHigh,
   SignalLow,
   SignalMedium,
+  SlidersHorizontal,
   Sparkles,
   TriangleAlert,
   Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   AnimatedNumber,
   Badge,
@@ -59,7 +62,7 @@ import type { MetaAdsAnalysisView, MetaAdsUsageView } from "@/lib/meta-ads/data"
 import { marketUnavailableNotice, type MarketUnavailableNotice } from "@/lib/meta-ads/market-status";
 import { AnalysisProgress } from "./analysis-progress";
 import type { MetaSiteInfo } from "./meta-client";
-import { Notice, StepNumber, TEXT_LINK_ON_TINT } from "./parts";
+import { MetaLine, Notice, TEXT_LINK_ON_TINT } from "./parts";
 import type { MetaTab } from "./tabs";
 import type { AnalysisLaunch } from "./use-analysis-launch";
 
@@ -79,7 +82,7 @@ const ANALYSIS_FAILED_FALLBACK = "L'analyse a échoué : réessayez dans un inst
 /** Verdict : un mot, une icône et une teinte — l'anneau du score, lui, garde la couleur de la section. */
 const VERDICT: Record<MetaAdsVerdict, { tone: BadgeTone; label: string; icon: LucideIcon }> = {
   go: { tone: "success", label: "Feu vert", icon: CircleCheck },
-  go_with_prerequisites: { tone: "warning", label: "Feu vert après réglages", icon: Wrench },
+  go_with_prerequisites: { tone: "warning", label: "Feu vert après réglages", icon: SlidersHorizontal },
   wait: { tone: "danger", label: "Pas encore", icon: Hourglass },
 };
 
@@ -89,11 +92,16 @@ const AFFINITY: Record<MetaAffinity["level"], { tone: BadgeTone; label: string; 
   faible: { tone: "neutral", label: "Affinité faible", icon: SignalLow, rank: 1 },
 };
 
-/** Les trois états d'un point de préparation : toujours une icône et un mot, jamais la couleur seule. */
-const STATUS: Record<MetaAdsReadinessStatus, { label: string; tone: BadgeTone; icon: LucideIcon; bubble: string; row: string }> = {
-  ok: { label: "Acquis", tone: "success", icon: CircleCheck, bubble: "bg-ds-success-100 text-ds-success-700", row: "" },
-  todo: { label: "À régler", tone: "warning", icon: TriangleAlert, bubble: "bg-white text-ds-warning-700 inset-ring inset-ring-ds-warning-500/40", row: "bg-ds-warning-100/60 inset-ring inset-ring-ds-warning-500/25" },
-  unknown: { label: "À vérifier", tone: "neutral", icon: CircleHelp, bubble: "bg-white text-ds-ink-600 inset-ring inset-ring-ds-ink-300", row: "bg-ds-ink-100/70 inset-ring inset-ring-ds-ink-200" },
+/**
+ * Les trois états d'un point de préparation — acquis, à régler, à vérifier :
+ * un repère en tête de ligne, puis le mot dans une pastille à son icône.
+ * Jamais la couleur seule. (Même dessin que la check-list de Google Ads.)
+ */
+const STATUS: Record<MetaAdsReadinessStatus, { label: string; tone: BadgeTone; icon: LucideIcon; mark: string; row: string }> = {
+  ok: { label: "Acquis", tone: "success", icon: Check, mark: "bg-ds-success-600 text-white", row: "" },
+  // warning-500 ne porte que de l'encre foncée
+  todo: { label: "À régler", tone: "warning", icon: TriangleAlert, mark: "bg-ds-warning-500 text-ds-ink-900", row: "bg-ds-warning-100/60 ring-1 ring-ds-warning-500/35" },
+  unknown: { label: "À vérifier", tone: "neutral", icon: CircleHelp, mark: "bg-ds-ink-200 text-ds-ink-700", row: "bg-ds-ink-50 ring-1 ring-ds-ink-200" },
 };
 
 const STATUS_ORDER: Record<MetaAdsReadinessStatus, number> = { todo: 0, unknown: 1, ok: 2 };
@@ -129,7 +137,6 @@ export function DiagnosticTab({
 
   const analysisCard = (
     <AnalysisCard
-      hero={!diagnostic}
       subject={subject}
       current={current}
       usage={usage}
@@ -158,22 +165,24 @@ export function DiagnosticTab({
       ) : null}
 
       {!diagnostic ? (
-        <>
-          {analysisCard}
-          <Explainer subject={subject} />
-        </>
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <Pitch subject={subject} />
+          {/* Sur petit écran, le bouton passe avant l'explication : l'action reste à portée de pouce */}
+          <div className="max-xl:order-first">{analysisCard}</div>
+        </div>
       ) : (
         <>
-          {/* Le verdict d'abord ; à côté (ou dessous), de quoi actualiser l'analyse */}
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <VerdictCard diagnostic={diagnostic} />
+          {/* Le verdict d'abord ; à côté (ou dessous), de quoi actualiser l'analyse. Pendant l'attente, la carte de droite s'allonge : le verdict garde sa hauteur */}
+          <div className={clsx("grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]", pending && "items-start")}>
+            <VerdictCard diagnostic={diagnostic} hasCreatives={Boolean(current?.creatives)} onSelectTab={onSelectTab} />
             {analysisCard}
           </div>
-          <BudgetSection budget={diagnostic.budget} />
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <KeyFigures budget={diagnostic.budget} />
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <ChecksCard checks={diagnostic.checks} externalSite={diagnostic.externalSite === true} onSelectTab={onSelectTab} />
             <div className="space-y-6">
               <AffinityCard affinity={diagnostic.affinity} profession={site.profession} />
+              <BudgetCard budget={diagnostic.budget} />
               {diagnostic.marketNote ? <MarketNoteCard note={diagnostic.marketNote} source={current?.market?.source ?? null} onSelectTab={onSelectTab} /> : null}
             </div>
           </div>
@@ -184,12 +193,10 @@ export function DiagnosticTab({
 }
 
 /**
- * Lancement de l'analyse : ce qu'elle fait, le bouton, le quota du mois, puis
- * l'attente (étapes nommées) et l'issue. Sans analyse encore, c'est la carte
- * mise en avant de l'onglet (`hero`).
+ * Lancement de l'analyse : ce qu'elle fait et pour qui, le bouton, ce qu'il
+ * reste du quota du mois, puis l'attente (étapes nommées) et l'issue.
  */
 function AnalysisCard({
-  hero,
   subject,
   current,
   usage,
@@ -198,7 +205,6 @@ function AnalysisCard({
   marketNotice,
   onSelectTab,
 }: {
-  hero: boolean;
   subject: string;
   current: MetaAdsAnalysisView | null;
   usage: MetaAdsUsageView;
@@ -209,62 +215,38 @@ function AnalysisCard({
   onSelectTab: (tab: MetaTab) => void;
 }) {
   const { pending, running, canLaunch, error, message, startedAt, launch } = launcher;
-  const button = (
-    <Button
-      onClick={launch}
-      loading={running}
-      disabled={!canLaunch}
-      size={hero ? "lg" : "md"}
-      title={!canLaunch ? "Quota du mois atteint" : undefined}
-      icon={current ? <RefreshCw size={18} aria-hidden /> : <Sparkles size={18} aria-hidden />}
-    >
-      {running ? "Analyse en cours…" : current ? "Actualiser l'analyse" : "Lancer l'analyse"}
-    </Button>
-  );
-  const description = (
-    <>
-      Harmony relève les annonces des praticiens autour de vous dans la bibliothèque publicitaire Meta, vérifie que votre cabinet est prêt à
-      investir pour <strong className="font-semibold text-ds-ink-900">{subject}</strong>, puis prépare vos annonces, votre plan vidéo et votre plan
-      de campagne.
-    </>
-  );
+  // « Analyse terminée : veille du marché, diagnostic… mis à jour. » → le fait en gras, sa précision dessous
+  const [messageHead, ...messageRest] = (message ?? "").split(" : ");
+  const messageDetail = messageRest.join(" : ");
 
   return (
-    <Card variant={hero ? "tinted" : "plain"} padding={hero ? "lg" : "md"} className={clsx("flex flex-col", hero && "bg-ds-section-soft")}>
-      {hero ? (
-        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-5">
-          <div className="flex min-w-0 flex-[1_1_24rem] items-start gap-4">
-            <IconBadge icon={Radar} size="lg" />
-            <div className="min-w-0">
-              <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink sm:text-2xl/8">Analyse Meta Ads</h2>
-              <p className="mt-1 max-w-[68ch] text-base text-ds-ink-700">{description}</p>
-            </div>
-          </div>
-          <div className="shrink-0">{button}</div>
-        </div>
-      ) : (
-        <>
-          <CardHeader
-            icon={Radar}
-            title="Analyse Meta Ads"
-            description={current ? `Dernière analyse le ${formatDayFr(current.createdAt, "day")}.` : undefined}
-          />
-          <p className="mt-3 text-ds-body text-ds-ink-600">{description}</p>
-          <div className="mt-4">{button}</div>
-        </>
-      )}
-      {hero && current ? <p className="mt-3 text-ds-meta text-ds-ink-600">Dernière analyse le {formatDayFr(current.createdAt, "day")}.</p> : null}
+    <Card className="flex flex-col">
+      <CardHeader
+        icon={Radar}
+        title="Analyse Meta Ads"
+        description={
+          <>
+            Harmony relève les annonces des praticiens autour de vous dans la bibliothèque publicitaire Meta, vérifie que votre cabinet est prêt à
+            investir pour <strong className="font-semibold text-ds-ink-800">{subject}</strong>, puis prépare vos annonces, votre plan vidéo et votre plan
+            de campagne.
+          </>
+        }
+      />
 
-      <p className={clsx("text-ds-meta text-ds-ink-600", hero ? "mt-5 border-t border-ds-section-line pt-4" : "mt-4")}>
-        Analyses restantes ce mois-ci :{" "}
-        <strong className="font-semibold text-ds-ink-900">
-          {usage.analysesRemaining} sur {META_ADS_ANALYSES_PER_MONTH}
-        </strong>{" "}
-        · comprises dans votre formule, sans frais de données.
-        {!canLaunch ? " La prochaine analyse sera possible le mois prochain." : ""}
-      </p>
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button
+          onClick={launch}
+          loading={running}
+          disabled={!canLaunch}
+          title={!canLaunch ? "Quota du mois atteint" : undefined}
+          icon={current ? <RefreshCw size={18} aria-hidden /> : <Sparkles size={18} aria-hidden />}
+        >
+          {running ? "Analyse en cours…" : current ? "Actualiser l'analyse" : "Lancer l'analyse"}
+        </Button>
+        {current ? <p className="text-ds-body text-ds-ink-600">Dernière analyse le {formatDayFr(current.createdAt, "day")}.</p> : null}
+      </div>
 
-      {/* Région vivante permanente : l'attente y est annoncée ; le détail des étapes s'affiche juste dessous, hors région */}
+      {/* Région vivante permanente : l'attente y est annoncée une fois ; le bloc d'étapes, hors région, annonce ensuite chaque changement */}
       <div aria-live="polite">
         {pending ? (
           <p className="sr-only">
@@ -272,14 +254,40 @@ function AnalysisCard({
           </p>
         ) : null}
       </div>
+
       {pending ? (
-        <div className={clsx("mt-5 rounded-ds-md p-4", hero ? "bg-white inset-ring inset-ring-ds-section-line/70" : "bg-ds-ink-50 inset-ring inset-ring-ds-ink-200")}>
-          <AnalysisProgress startedAt={startedAt} where="Vous pouvez consulter les autres onglets pendant l'analyse : les résultats s'afficheront ici." />
+        <div className="mt-5 rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200">
+          <AnalysisProgress startedAt={startedAt} where="Vous pouvez changer d'onglet : les résultats s'afficheront ici dès la fin de l'analyse." />
         </div>
-      ) : null}
+      ) : (
+        // `mt-auto` : à côté du verdict, la carte s'étire à sa hauteur et le quota reste au pied
+        <div className="mt-auto pt-5">
+          <ProgressBar
+            size="sm"
+            value={usage.analysesRemaining}
+            max={META_ADS_ANALYSES_PER_MONTH}
+            label={
+              <>
+                Analyses restantes ce mois-ci :{" "}
+                <strong className="font-semibold text-ds-ink-900">
+                  {usage.analysesRemaining} sur {META_ADS_ANALYSES_PER_MONTH}
+                </strong>
+              </>
+            }
+            valueText={`${usage.analysesRemaining} sur ${META_ADS_ANALYSES_PER_MONTH}`}
+            hideValueText
+          />
+          <MetaLine className="mt-2.5">Comprises dans votre formule, sans frais de données.</MetaLine>
+          {!canLaunch ? (
+            <Notice tone="section" icon={Info} className="mt-3">
+              Quota du mois atteint : vous pourrez relancer l&apos;analyse le mois prochain.
+            </Notice>
+          ) : null}
+        </div>
+      )}
 
       {generationNotice ? (
-        <Notice tone="warning" icon={TriangleAlert} className="mt-4">
+        <Notice tone="warning" icon={Wrench} className="mt-4">
           {generationNotice} Le diagnostic est là :{" "}
           <button type="button" onClick={() => onSelectTab("annonces")} className={TEXT_LINK_ON_TINT}>
             régénérer les annonces
@@ -299,16 +307,16 @@ function AnalysisCard({
         </Notice>
       ) : null}
       {message && !pending ? (
-        <InlineSuccess size="sm" className="mt-4">
-          {message}
+        <InlineSuccess className="mt-4" detail={messageDetail ? `${messageDetail.charAt(0).toUpperCase()}${messageDetail.slice(1)}` : undefined}>
+          {messageDetail ? messageHead : message}
         </InlineSuccess>
       ) : null}
     </Card>
   );
 }
 
-/** Sans analyse encore : ce que l'analyse apportera, en trois questions. */
-function Explainer({ subject }: { subject: string }) {
+/** Avant la première analyse : ce qu'elle apporte, en trois questions. */
+function Pitch({ subject }: { subject: string }) {
   const questions: { icon: LucideIcon; title: string; text: string }[] = [
     {
       icon: Binoculars,
@@ -327,25 +335,24 @@ function Explainer({ subject }: { subject: string }) {
     },
   ];
   return (
-    <Card padding="lg">
-      <h2 className="font-ds-display text-xl/7 font-bold text-ds-ink-900 text-balance sm:text-2xl/8">Meta Ads est-il pertinent pour {subject} ?</h2>
+    <Card variant="tinted" padding="lg">
+      <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">Meta Ads est-il pertinent pour {subject} ?</h2>
       <p className="mt-2 text-base text-ds-ink-700">Avant de dépenser le moindre euro, l&apos;analyse répond à trois questions :</p>
-      <ol className="mt-5 grid gap-4 md:grid-cols-3">
-        {questions.map(({ icon, title, text }, i) => (
-          <li key={title} className="rounded-ds-md bg-ds-section-tint p-4 inset-ring inset-ring-ds-section-line/70 sm:p-5">
-            <div className="flex items-center gap-3">
-              <IconBadge icon={icon} size="md" />
-              <StepNumber size="sm">{i + 1}</StepNumber>
+      <ol className="mt-5 space-y-3">
+        {questions.map((question, i) => (
+          <li key={question.title} className="flex items-start gap-3.5 rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5">
+            <IconBadge icon={question.icon} size="md" />
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-ds-ink-900">
+                <span className="mr-1.5 text-ds-section-accent ds-tnum">{i + 1}.</span>
+                {question.title}
+              </p>
+              <p className="mt-0.5 text-ds-body text-ds-ink-700">{question.text}</p>
             </div>
-            <p className="mt-3 font-ds-display text-lg/7 font-bold text-ds-section-ink">
-              <span className="sr-only">{i + 1}. </span>
-              {title}
-            </p>
-            <p className="mt-1 text-ds-body text-ds-ink-700">{text}</p>
           </li>
         ))}
       </ol>
-      <p className="mt-5 text-ds-body text-ds-ink-600">
+      <p className="mt-5 text-ds-body text-ds-ink-700">
         Vous obtenez aussi vos annonces prêtes à publier (visuels en trois formats et textes), un plan vidéo à tourner vous-même et un plan de
         campagne complet. Rien n&apos;est publié à votre place : vous diffusez depuis votre compte Meta en suivant le tuto de l&apos;onglet
         Paramétrage et suivi.
@@ -355,96 +362,97 @@ function Explainer({ subject }: { subject: string }) {
 }
 
 /** Le verdict, à lire d'un coup d'œil : le score dans un anneau à la couleur de la section, un mot, puis la phrase en clair. */
-function VerdictCard({ diagnostic }: { diagnostic: MetaAdsDiagnostic }) {
+function VerdictCard({ diagnostic, hasCreatives, onSelectTab }: { diagnostic: MetaAdsDiagnostic; hasCreatives: boolean; onSelectTab: (tab: MetaTab) => void }) {
   const verdict = VERDICT[diagnostic.verdict];
-  const score = Math.max(0, Math.min(100, Math.round(diagnostic.score)));
   return (
-    <section aria-labelledby="meta-verdict" className="flex flex-col justify-center rounded-ds-card p-6 shadow-ds-pop ds-border-gradient sm:p-8">
-      <div className="flex flex-col items-center gap-x-8 gap-y-5 sm:flex-row sm:items-center">
-        <ScoreRing score={score} />
-        <div className="min-w-0 flex-1 text-center sm:text-left">
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 sm:justify-start">
-            <h2 id="meta-verdict" className="text-ds-meta font-semibold tracking-wide text-ds-section-accent uppercase">
-              Verdict
-            </h2>
-            <Badge tone={verdict.tone} icon={verdict.icon}>
-              {verdict.label}
-            </Badge>
-          </div>
-          <p className="mt-2.5 font-ds-display text-2xl/8 font-bold text-ds-ink-900 text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
+    <Card variant="tinted" className="flex flex-col">
+      <h2 className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7">Verdict</h2>
+      <div className="mt-4 flex flex-wrap items-center gap-x-7 gap-y-5">
+        <ScoreRing score={diagnostic.score} />
+        <div className="min-w-0 flex-[1_1_17rem]">
+          <Badge tone={verdict.tone} icon={verdict.icon}>
+            {verdict.label}
+          </Badge>
+          <p className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
         </div>
       </div>
       <p className="mt-5 text-base text-ds-ink-700 text-pretty">{diagnostic.summary}</p>
-      {diagnostic.prerequisites.length > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <p className="text-ds-body font-semibold text-ds-ink-800">À régler :</p>
-          <ul className="contents" aria-label="Points à régler">
-            {diagnostic.prerequisites.map((item) => (
-              <li key={item}>
-                <Badge tone="warning" icon={TriangleAlert} className="max-w-full whitespace-normal">
-                  {item}
-                </Badge>
-              </li>
-            ))}
-          </ul>
+      {diagnostic.prerequisites.length > 0 || hasCreatives ? (
+        // Pied de carte : ce qu'il reste à régler (le détail est dans la check-list), puis la suite — les annonces
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+          {diagnostic.prerequisites.length > 0 ? (
+            // Longue liste : elle prend toute la largeur, le bouton passe dessous
+            <div
+              className={clsx(
+                "flex min-w-0 items-start gap-3 rounded-ds-md bg-white px-4 py-3 text-ds-body text-ds-ink-700 ring-1 ring-ds-section-line/70",
+                diagnostic.prerequisites.length > 3 ? "basis-full" : "flex-[1_1_18rem]",
+              )}
+            >
+              <Wrench size={18} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
+              <p className="min-w-0">
+                <span className="font-semibold text-ds-ink-900">À régler :</span> {diagnostic.prerequisites.join(" · ")}
+              </p>
+            </div>
+          ) : null}
+          {hasCreatives ? (
+            <Button type="button" variant="secondary" iconRight={<ArrowRight size={18} aria-hidden />} onClick={() => onSelectTab("annonces")}>
+              Voir vos annonces
+            </Button>
+          ) : null}
         </div>
       ) : null}
-    </section>
+    </Card>
   );
 }
 
-/** Score de préparation (0..100) dans l'anneau du design system : il se découvre à l'arrivée, le chiffre roule jusqu'à sa valeur. */
+/**
+ * Score de préparation (0..100) dans l'anneau du design system, à la couleur
+ * de la section, sur piste blanche : il se découvre à l'arrivée et le chiffre
+ * roule jusqu'à sa valeur. Le verdict, lui, est dit par la pastille voisine.
+ */
 export function ScoreRing({ score }: { score: number }) {
-  const clamped = Math.max(0, Math.min(100, score));
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
   return (
-    <ProgressRing value={clamped} max={100} label={`Préparation ${clamped} sur 100`} valueText={`${clamped} sur 100`} size={136} thickness={13}>
-      <span className="block font-ds-display text-[2.75rem] leading-none font-bold text-ds-section-ink">
+    <ProgressRing value={clamped} max={100} label={`Préparation ${clamped} sur 100`} size={152} thickness={14} className="[--ds-ring-track:white]">
+      <span className="block font-ds-display text-5xl/none font-extrabold text-ds-section-ink">
         <AnimatedNumber value={clamped} />
       </span>
-      <span className="mt-1 block text-ds-meta font-semibold text-ds-ink-600">sur 100</span>
+      <span className="mt-1.5 block text-ds-meta font-semibold text-ds-ink-600">sur 100</span>
     </ProgressRing>
   );
 }
 
-/** Budget et résultats attendus : quatre chiffres clés, puis d'où ils viennent. */
-function BudgetSection({ budget }: { budget: MetaAdsBudgetEstimate }) {
+/**
+ * Les quatre chiffres qui résument le budget : ce qu'il faut prévoir, ce qu'on
+ * peut en attendre. Sur mobile, les deux budgets tiennent côte à côte ; les
+ * deux fourchettes (« 150 – 600 »), plus longues, prennent toute la largeur.
+ */
+function KeyFigures({ budget }: { budget: MetaAdsBudgetEstimate }) {
   return (
-    <section aria-labelledby="meta-budget">
-      <h2 id="meta-budget" className="font-ds-display text-xl/7 font-bold text-ds-ink-900">
-        Budget
+    <section aria-labelledby="meta-key-figures">
+      <h2 id="meta-key-figures" className="sr-only">
+        Les chiffres clés de votre analyse
       </h2>
-      <p className="mt-0.5 text-ds-body text-ds-ink-600">Ce qu&apos;il faut prévoir pour que la campagne ait un sens.</p>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <KpiTile icon={Wallet} label="Budget conseillé par mois" caption={`minimum ${eur(budget.monthlyMinEur)}`} value={budget.monthlyRecommendedEur} suffix={`${NBSP}€`} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <KpiTile icon={Wallet} label="Budget conseillé par mois" caption={`${eur(budget.monthlyMinEur)} au minimum`} value={budget.monthlyRecommendedEur} suffix={`${NBSP}€`} />
         <KpiTile icon={CalendarDays} label="Budget par jour" caption="budget quotidien" value={budget.dailyRecommendedEur} suffix={`${NBSP}€`} />
         <KpiTile
+          className="max-sm:col-span-2"
           icon={MousePointerClick}
           label="Visites attendues par mois"
           caption="sur le site"
-          value={budget.clicksMin}
-          suffix={`${NBSP}–${NBSP}${num(budget.clicksMax)}`}
+          prefix={`${num(budget.clicksMin)}${NBSP}–${NBSP}`}
+          value={budget.clicksMax}
         />
         <KpiTile
+          className="max-sm:col-span-2"
           icon={PhoneCall}
-          label="Prises de contact par mois"
+          label="Contacts attendus par mois"
           caption="rendez-vous, appels, e-mails"
-          value={budget.contactsMin}
-          suffix={`${NBSP}–${NBSP}${num(budget.contactsMax)}`}
+          prefix={`${num(budget.contactsMin)}${NBSP}–${NBSP}`}
+          value={budget.contactsMax}
         />
       </div>
-      <Notice tone="section" icon={Info} className="mt-4">
-        <p>
-          Minimum pour que la campagne ait un sens :{" "}
-          <strong className="font-semibold text-ds-ink-900">
-            {eur(budget.monthlyMinEur)} par mois ({eur(budget.dailyMinEur)} / jour)
-          </strong>
-          . Les prises de contact comptent les rendez-vous, les appels et les e-mails.
-        </p>
-        <p className="mt-1">
-          D&apos;après les repères de coût d&apos;un cabinet local sur Meta ({budgetBenchmarksLabel()}). Visites et prises de contact sont{" "}
-          <strong className="font-semibold text-ds-ink-900">mesurées par le Pixel</strong> : sans lui, aucun chiffre réel.
-        </p>
-      </Notice>
     </section>
   );
 }
@@ -475,6 +483,39 @@ function AffinityCard({ affinity, profession }: { affinity: MetaAffinity; profes
   );
 }
 
+/** Le détail du budget : chaque chiffre avec sa précision, puis d'où viennent les repères. */
+function BudgetCard({ budget }: { budget: MetaAdsBudgetEstimate }) {
+  return (
+    <Card>
+      <CardHeader icon={Wallet} title="Budget" description="Ce qu'il faut prévoir pour que la campagne ait un sens." />
+      <dl className="mt-4 divide-y divide-ds-ink-200">
+        <Figure label="Minimum" value={eur(budget.monthlyMinEur)} hint={`par mois (${eur(budget.dailyMinEur)} / jour)`} />
+        <Figure label="Conseillé" value={eur(budget.monthlyRecommendedEur)} hint="par mois" highlight />
+        <Figure label="Par jour" value={eur(budget.dailyRecommendedEur)} hint="budget quotidien" />
+        <Figure label="Visites attendues" value={`${num(budget.clicksMin)} – ${num(budget.clicksMax)}`} hint="par mois, sur le site" />
+        <Figure label="Prises de contact" value={`${num(budget.contactsMin)} – ${num(budget.contactsMax)}`} hint="rendez-vous, appels, e-mails" />
+      </dl>
+      <MetaLine className="mt-4">
+        D&apos;après les repères de coût d&apos;un cabinet local sur Meta ({budgetBenchmarksLabel()}). Visites et prises de contact sont{" "}
+        <strong className="font-semibold text-ds-ink-800">mesurées par le Pixel</strong> : sans lui, aucun chiffre réel.
+      </MetaLine>
+    </Card>
+  );
+}
+
+/** Un chiffre détaillé : libellé et précision à gauche, valeur à droite. */
+function Figure({ label, value, hint, highlight = false }: { label: string; value: ReactNode; hint?: string; highlight?: boolean }) {
+  return (
+    <div className={clsx("flex items-baseline justify-between gap-x-4 gap-y-0.5 py-2.5", highlight && "-mx-3 rounded-ds-sm bg-ds-section-tint px-3")}>
+      <dt className="min-w-0 text-ds-body text-ds-ink-700">
+        <span className={clsx("block", highlight && "font-semibold text-ds-section-ink")}>{label}</span>
+        {hint ? <span className="block text-ds-meta text-ds-ink-600">{hint}</span> : null}
+      </dt>
+      <dd className={clsx("shrink-0 text-right text-base font-semibold ds-tnum", highlight ? "text-ds-section-ink" : "text-ds-ink-900")}>{value}</dd>
+    </div>
+  );
+}
+
 function MarketNoteCard({ note, source, onSelectTab }: { note: string; source: string | null; onSelectTab: (tab: MetaTab) => void }) {
   return (
     <Card>
@@ -486,11 +527,9 @@ function MarketNoteCard({ note, source, onSelectTab }: { note: string; source: s
           Données de démonstration.
         </p>
       ) : null}
-      <div className="mt-4">
-        <Button variant="secondary" size="sm" onClick={() => onSelectTab("marche")} iconRight={<ArrowRight size={16} aria-hidden />}>
-          Voir les annonces du marché
-        </Button>
-      </div>
+      <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={() => onSelectTab("marche")} iconRight={<ArrowRight size={16} aria-hidden />}>
+        Voir les annonces du marché
+      </Button>
     </Card>
   );
 }
@@ -519,14 +558,10 @@ function ChecksCard({
             : `${todo.length} point${todo.length > 1 ? "s" : ""} à régler avant (ou juste après) le lancement — les bloquants d'abord.`
         }
       />
-      <ProgressBar
-        className="mt-5"
-        value={acquired}
-        max={Math.max(1, checks.length)}
-        label="Points acquis"
-        valueText={`${acquired} sur ${checks.length}`}
-      />
-      <ul className="mt-4 space-y-1.5" aria-label="Points de préparation">
+      {checks.length > 0 ? (
+        <ProgressBar className="mt-5" value={acquired} max={checks.length} label="Points acquis" valueText={`${acquired} sur ${checks.length}`} />
+      ) : null}
+      <ul className="mt-4 space-y-2" aria-label="Points de préparation">
         {sorted.map((check) => (
           <CheckRow key={check.id} check={check} externalSite={externalSite} onSelectTab={onSelectTab} />
         ))}
@@ -541,14 +576,16 @@ function CheckRow({ check, externalSite, onSelectTab }: { check: MetaAdsReadines
   const link = check.status === "ok" ? null : metaCheckLink(check.id, externalSite);
   const arrow = <ArrowRight size={16} aria-hidden />;
   return (
-    <li className={clsx("flex items-start gap-3.5 rounded-ds-md px-3 py-3 sm:px-4", status.row)}>
-      <span aria-hidden className={clsx("mt-0.5 grid size-9 shrink-0 place-items-center rounded-full", status.bubble)}>
-        <StatusIcon size={20} strokeWidth={2.25} />
+    <li className={clsx("flex items-start gap-3.5 rounded-ds-md px-3.5 py-3", status.row)}>
+      {/* Repère décoratif : le mot du statut est porté par la pastille de droite */}
+      <span aria-hidden className={clsx("mt-0.5 grid size-7 shrink-0 place-items-center rounded-full", status.mark)}>
+        <StatusIcon size={16} strokeWidth={check.status === "ok" ? 3 : 2.5} />
       </span>
       <div className="min-w-0 flex-1">
+        {/* Petit écran : le statut passe toujours sous le libellé (jamais tantôt à droite, tantôt dessous) */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-          <p className="text-base font-semibold text-ds-ink-900">{check.label}</p>
-          <p className="flex flex-wrap items-center gap-1.5">
+          <p className="text-base font-semibold text-ds-ink-900 max-sm:basis-full">{check.label}</p>
+          <span className="flex flex-wrap items-center gap-1.5">
             {check.critical && check.status !== "ok" ? (
               <Badge tone="danger" icon={OctagonAlert}>
                 Bloquant
@@ -557,28 +594,32 @@ function CheckRow({ check, externalSite, onSelectTab }: { check: MetaAdsReadines
             <Badge tone={status.tone} icon={status.icon}>
               {status.label}
             </Badge>
-          </p>
+          </span>
         </div>
         <p className="mt-0.5 text-ds-body text-ds-ink-700">{check.detail}</p>
-        {link === "fiche" ? (
-          <LinkButton href="/fiche-google" variant="secondary" size="sm" className="mt-2.5" iconRight={arrow}>
-            Ouvrir Fiche Google
-          </LinkButton>
-        ) : null}
-        {link === "editor" ? (
-          <LinkButton href="/editor" variant="secondary" size="sm" className="mt-2.5" iconRight={arrow}>
-            Modifier mon site
-          </LinkButton>
-        ) : null}
-        {link === "site" ? (
-          <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" className="mt-2.5" iconRight={arrow}>
-            Ouvrir Mon site
-          </LinkButton>
-        ) : null}
-        {link === "tab" ? (
-          <Button type="button" variant="secondary" size="sm" className="mt-2.5" onClick={() => onSelectTab("parametrage")} iconRight={arrow}>
-            Ouvrir Paramétrage et suivi
-          </Button>
+        {link ? (
+          <div className="mt-2.5">
+            {link === "fiche" ? (
+              <LinkButton href="/fiche-google" variant="secondary" size="sm" iconRight={arrow}>
+                Ouvrir Fiche Google
+              </LinkButton>
+            ) : null}
+            {link === "editor" ? (
+              <LinkButton href="/editor" variant="secondary" size="sm" iconRight={arrow}>
+                Modifier mon site
+              </LinkButton>
+            ) : null}
+            {link === "site" ? (
+              <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" iconRight={arrow}>
+                Ouvrir Mon site
+              </LinkButton>
+            ) : null}
+            {link === "tab" ? (
+              <Button type="button" variant="secondary" size="sm" iconRight={arrow} onClick={() => onSelectTab("parametrage")}>
+                Ouvrir Paramétrage et suivi
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </li>

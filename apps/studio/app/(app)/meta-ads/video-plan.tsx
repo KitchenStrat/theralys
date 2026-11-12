@@ -46,7 +46,7 @@ export function VideoPlanSection({ plan }: { plan: MetaAdsVideoPlan }) {
       ))}
 
       <Card>
-        <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
           <TipList icon={Smartphone} title="Matériel et réglages" items={plan.equipment} />
           <TipList icon={Scissors} title="Conseils de montage" items={plan.editingTips} />
         </div>
@@ -136,7 +136,7 @@ function VideoCard({ video, index }: { video: MetaVideoBrief; index: number }) {
         ))}
       </ol>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <List title="Plans à tourner" items={video.shotList} />
         <List title="À dire" items={video.doSay} tone="ok" />
         <List title="À ne pas dire" items={video.dontSay} tone="warn" />

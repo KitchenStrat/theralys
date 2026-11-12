@@ -84,7 +84,8 @@ export function MetricTile({ label, value, icon, section, changePct, deltaLabel,
         <div className="mt-3.5 flex grow flex-col @min-[24rem]/kpi:flex-row @min-[24rem]/kpi:items-end @min-[24rem]/kpi:gap-8">
           <div className="min-w-0 shrink-0">
             <p className="text-ds-body font-semibold text-ds-ink-800">{label}</p>
-            <p className="mt-1 text-ds-kpi font-bold text-ds-ink-900 @max-[15rem]/kpi:text-[1.75rem]">
+            {/* Tuile étroite : le chiffre se resserre, et encore d'un cran à partir de six chiffres (il ne passe pas à la ligne) */}
+            <p className={clsx("mt-1 text-ds-kpi font-bold text-ds-ink-900", value >= 100_000 ? "@max-[15rem]/kpi:text-[1.375rem]" : "@max-[15rem]/kpi:text-[1.75rem]")}>
               <AnimatedNumber value={value} />
             </p>
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-ds-meta text-ds-ink-600">

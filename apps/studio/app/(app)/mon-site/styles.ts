@@ -18,6 +18,7 @@ export const SUB_TITLE = "font-ds-display text-base/6 font-bold text-ds-ink-900 
 /**
  * Un `Badge` du design system tient sur une ligne. Les mentions longues de cet
  * écran (« Vos outils ne s'appuient pas encore sur ce site ») doivent pouvoir
- * passer à la ligne sur un téléphone plutôt que de faire déborder la page.
+ * passer à la ligne sur un téléphone plutôt que de faire déborder la page
+ * (son pictogramme garde alors sa taille).
  */
-export const BADGE_WRAP = "whitespace-normal! rounded-2xl! text-left";
+export const BADGE_WRAP = "whitespace-normal! rounded-2xl! text-left [&>svg]:shrink-0";

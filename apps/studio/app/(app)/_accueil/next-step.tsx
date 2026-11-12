@@ -2,6 +2,7 @@ import { ArrowRight, CalendarDays } from "lucide-react";
 import { LinkButton, NextStepCard } from "@/components/ds";
 import type { NextStep } from "@/lib/accueil";
 import { formatDayFr } from "@/lib/calendar";
+import { frenchSpacing } from "@/lib/external-site/format";
 import { SETUP_COPY } from "./setup";
 
 const arrow = <ArrowRight size={18} aria-hidden />;
@@ -59,8 +60,10 @@ export function NextStepAside({ step }: { step: NextStep }) {
             </LinkButton>
           }
         >
-          «&nbsp;{step.title}&nbsp;» {step.status === "draft" ? "est en brouillon" : "est prêt, sa parution est programmée"}. Un coup d&apos;œil
-          avant sa mise en ligne : vous pouvez encore le modifier.
+          <span className="wrap-break-word">
+            «&nbsp;{frenchSpacing(step.title)}&nbsp;» {step.status === "draft" ? "est en brouillon" : "est prêt, sa parution est programmée"}. Un coup d&apos;œil
+            avant sa mise en ligne&nbsp;: vous pouvez encore le modifier.
+          </span>
         </NextStepCard>
       );
 
@@ -77,7 +80,9 @@ export function NextStepAside({ step }: { step: NextStep }) {
             </LinkButton>
           }
         >
-          Nous écrivons pour vous «&nbsp;{step.title}&nbsp;». Vous pourrez le relire, le modifier ou le refuser avant sa mise en ligne.
+          <span className="wrap-break-word">
+            Nous écrivons pour vous «&nbsp;{frenchSpacing(step.title)}&nbsp;». Vous pourrez le relire, le modifier ou le refuser avant sa mise en ligne.
+          </span>
         </NextStepCard>
       );
   }

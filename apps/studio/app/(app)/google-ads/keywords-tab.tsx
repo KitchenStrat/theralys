@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import {
   ArrowRight,
   Ban,
@@ -195,7 +195,7 @@ function GroupCard({ group, byText }: { group: GoogleAdsKeywordGroup; byText: Ma
       />
       {/*
         Un seul tableau pour toutes les largeurs. Sur petit écran, il garde deux colonnes (le mot-clé, ses recherches) :
-        coût, concurrence et correspondance passent sous le mot-clé, au lieu d'un défilement horizontal.
+        coût, concurrence et correspondance passent sur une ligne sous le mot-clé, au lieu d'un défilement horizontal.
       */}
       <table className="mt-4 w-full text-ds-body">
         <thead>
@@ -218,36 +218,46 @@ function GroupCard({ group, byText }: { group: GoogleAdsKeywordGroup; byText: Ma
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-ds-ink-200">
+        <tbody>
           {rows.map((k) => (
-            <tr key={k.keyword} className="align-top text-ds-ink-700">
-              <th scope="row" className="py-3 pr-3 text-left font-normal">
-                <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                  <span className="text-base font-semibold text-ds-ink-900">{k.keyword}</span>
-                  {k.core ? <CoreBadge /> : null}
-                  {k.tracked ? <TrackedBadge /> : null}
-                </span>
-                {/* Petit écran : le détail des colonnes masquées, sous le mot-clé */}
-                <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-ds-meta text-ds-ink-600 md:hidden">
-                  <span>
-                    <span className="font-semibold text-ds-ink-800 ds-tnum">{eur(k.cpcEur)}</span> le clic
+            <Fragment key={k.keyword}>
+              <tr className="border-t border-ds-ink-200 align-top text-ds-ink-700 first:border-t-0">
+                <th scope="row" className="pt-3 pr-3 pb-1.5 text-left font-normal md:pb-3">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <span className="text-base font-semibold text-ds-ink-900">{k.keyword}</span>
+                    {k.core ? <CoreBadge /> : null}
+                    {k.tracked ? <TrackedBadge /> : null}
                   </span>
-                  {k.competition ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="sr-only">Concurrence :</span>
-                      <CompetitionBadge keyword={k} />
-                    </span>
-                  ) : null}
-                  <span>Correspondance : {GOOGLE_ADS_MATCH_LABELS[k.match].toLowerCase()}</span>
-                </span>
-              </th>
-              <td className="py-3 pl-3 text-right font-semibold text-ds-ink-900 ds-tnum md:pr-5 md:pl-0">{num(k.searchVolume)}</td>
-              <td className="py-3 pr-5 text-right ds-tnum max-md:hidden">{eur(k.cpcEur)}</td>
-              <td className="py-3 pr-3 max-md:hidden">
-                <CompetitionBadge keyword={k} />
-              </td>
-              <td className="py-3 max-md:hidden">{GOOGLE_ADS_MATCH_LABELS[k.match]}</td>
-            </tr>
+                </th>
+                <td className="pt-3 pb-1.5 pl-3 text-right font-semibold text-ds-ink-900 ds-tnum md:pr-5 md:pb-3 md:pl-0">{num(k.searchVolume)}</td>
+                <td className="py-3 pr-5 text-right ds-tnum max-md:hidden">{eur(k.cpcEur)}</td>
+                <td className="py-3 pr-3 max-md:hidden">
+                  <CompetitionBadge keyword={k} />
+                </td>
+                <td className="py-3 max-md:hidden">{GOOGLE_ADS_MATCH_LABELS[k.match]}</td>
+              </tr>
+              {/* Petit écran : le détail des colonnes masquées, sur une ligne à lui sous le mot-clé (toute la largeur) */}
+              <tr className="md:hidden">
+                <td colSpan={2} className="pb-3 text-ds-meta text-ds-ink-600">
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    {k.cpcEur !== null ? (
+                      <span>
+                        <span className="font-semibold text-ds-ink-800 ds-tnum">{eur(k.cpcEur)}</span> le clic
+                      </span>
+                    ) : (
+                      <span>Coût par clic : —</span>
+                    )}
+                    {k.competition ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        Concurrence
+                        <CompetitionBadge keyword={k} />
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mt-1 block">Correspondance : {GOOGLE_ADS_MATCH_LABELS[k.match].toLowerCase()}</span>
+                </td>
+              </tr>
+            </Fragment>
           ))}
         </tbody>
       </table>

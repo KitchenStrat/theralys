@@ -8,6 +8,9 @@ import { AnimatedNumber, Badge, Spinner, formatDelta } from "@/components/ds";
  * assemblent des éléments du design system (aucun style propre au-delà).
  */
 
+/** Page de gestion de la fiche chez Google (modifier le profil, publier un post) : lien fixe, jamais une URL venue des données. */
+export const GOOGLE_BUSINESS_URL = "https://business.google.com/";
+
 /** Champ de recherche de la fiche à relier (écran d'accueil de la section). */
 export const LINK_QUERY_ID = "google-link-query";
 

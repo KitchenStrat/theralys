@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { clsx } from "clsx";
 import { ArrowRight, Check, Info, Lightbulb, Sparkles } from "lucide-react";
 import { FieldHint, Input, Label, Select } from "@theralys/ui";
@@ -14,6 +14,7 @@ import {
   IconBadge,
   InlineSuccess,
   LinkButton,
+  NBSP,
   ProgressRing,
   type TimedStep,
 } from "@/components/ds";
@@ -84,7 +85,22 @@ export function RequestBar({
   const [sentTopic, setSentTopic] = useState("");
 
   const exhausted = usage.remaining === 0;
-  const disabled = exhausted || pending;
+  // Une erreur met fin à l'attente à l'écran, même si la transition se clôt un instant plus tard
+  const creating = pending && error === null;
+  const disabled = exhausted || creating;
+  // L'attente remplace les champs au-dessus du bouton : elle est amenée à l'écran si elle en dépasse (mobile)
+  const waitingRef = useRef<HTMLDivElement>(null);
+  // Le bouton d'envoi, inactif pendant la création, a perdu le focus : à la réponse, il revient dans
+  // la carte — sur le sujet à corriger après un refus, sinon sur le titre (la fenêtre du contenu
+  // créé s'ouvre ensuite, et y ramène à sa fermeture).
+  const wasCreating = useRef(false);
+  useEffect(() => {
+    if (creating) waitingRef.current?.scrollIntoView({ block: "nearest" });
+    if (wasCreating.current && !creating && document.activeElement === document.body) {
+      document.getElementById(error ? "social-topic" : "demande-sur-mesure-titre")?.focus({ preventScroll: true });
+    }
+    wasCreating.current = creating;
+  }, [creating, error]);
   // Message métier plutôt que l'info-bulle native du navigateur
   const dateOutOfRange = date !== "" && (date < dates.min || date > dates.max);
 
@@ -129,7 +145,8 @@ export function RequestBar({
         <div className="min-w-0">
           <h2
             id="demande-sur-mesure-titre"
-            className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7"
+            tabIndex={-1}
+            className="rounded font-ds-display text-lg/7 font-bold text-ds-section-ink ds-focus sm:text-xl/7"
           >
             Demander un contenu sur mesure
           </h2>
@@ -152,10 +169,17 @@ export function RequestBar({
       ) : null}
 
       <form onSubmit={onSubmit} className="mt-5">
-        {pending ? (
-          <div className="rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5 ds-fade-in sm:p-5">
+        {creating ? (
+          <div
+            ref={waitingRef}
+            className="scroll-mt-24 rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5 ds-fade-in sm:p-5"
+          >
             <GenerationProgress
-              title={sentTopic ? `Harmony prépare votre contenu : « ${sentTopic} »` : "Harmony prépare votre contenu"}
+              title={
+                sentTopic
+                  ? `Harmony prépare votre contenu${NBSP}: «${NBSP}${sentTopic}${NBSP}»`
+                  : "Harmony prépare votre contenu"
+              }
               steps={REQUEST_STEPS}
               running
               estimate="10 à 30 secondes"
@@ -165,7 +189,7 @@ export function RequestBar({
         ) : null}
 
         {/* Les champs restent montés pendant la création : leur saisie est conservée si elle échoue */}
-        <div hidden={pending} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+        <div hidden={creating} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <div className="sm:col-span-2 xl:col-span-1">
             <Label htmlFor="social-topic">Sur quel sujet ? *</Label>
             <Input
@@ -177,7 +201,7 @@ export function RequestBar({
               required
               minLength={3}
               disabled={disabled}
-              className={clsx(FIELD_CLASS, "pointer-coarse:text-base!")}
+              className={FIELD_CLASS}
             />
             <FieldHint>Plus c&apos;est précis, mieux c&apos;est. Vous pouvez citer une de vos spécialités.</FieldHint>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -208,7 +232,7 @@ export function RequestBar({
                 value={format}
                 onChange={(e) => setFormat(e.target.value as SocialFormat)}
                 disabled={disabled}
-                className={clsx(FIELD_CLASS, "min-w-0 pointer-coarse:text-base!")}
+                className={clsx(FIELD_CLASS, "min-w-0")}
               >
                 {FORMAT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -232,7 +256,7 @@ export function RequestBar({
               disabled={disabled}
               aria-invalid={dateOutOfRange || undefined}
               aria-describedby="social-date-hint"
-              className={clsx(FIELD_CLASS, "pointer-coarse:text-base!")}
+              className={FIELD_CLASS}
             />
             <p
               id="social-date-hint"
@@ -297,7 +321,7 @@ export function RequestBar({
             type="submit"
             variant={secondaryAction ? "secondary" : "primary"}
             icon={<Sparkles size={18} aria-hidden />}
-            loading={pending}
+            loading={creating}
             disabled={disabled || dateOutOfRange || topic.trim().length < 3}
           >
             Créer ce contenu
@@ -320,7 +344,7 @@ export function RequestBar({
             ) : (
               <p className="min-w-0 text-ds-body text-ds-ink-700">
                 Il vous reste <strong className="font-semibold text-ds-ink-900">{usage.remaining}</strong> demande
-                {usage.remaining > 1 ? "s" : ""} ce mois-ci.
+                {usage.remaining > 1 ? "s" : ""} <span className="whitespace-nowrap">ce mois-ci.</span>
               </p>
             )}
           </div>

@@ -6,15 +6,14 @@ import { metaMediaItemImage, type MetaAdMedia, type MetaAdMediaItem, type MetaGa
 import { adHook, metaVideoSrc } from "@/lib/meta-ads/market-view";
 import { FOCUS_RING, Icon, PlayGlyph } from "./market-icons";
 import { AdImage, TextPoster } from "./market-media";
+import { TEXT_LINK } from "./parts";
 import { useVisualState } from "./use-visuals-loader";
 
 /** L'attribut n'est pas typé sur `<video>` ; l'affiche et la redirection partent sans référent. */
 const NO_REFERRER = { referrerPolicy: "no-referrer" } as const;
 
-const NAV_BUTTON = clsx(
-  "absolute top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-md ring-1 ring-ink-900/5 backdrop-blur-sm transition hover:bg-white hover:shadow-lg motion-reduce:transition-none",
-  FOCUS_RING,
-);
+/** Précédent / suivant : pastille blanche de 44 px, posée sur le visuel. */
+const NAV_BUTTON = clsx("absolute top-1/2 grid size-11 -translate-y-1/2 cursor-pointer place-items-center rounded-full bg-white text-ds-ink-900 shadow-ds-pop ring-1 ring-ds-ink-900/5 ds-press", FOCUS_RING);
 
 /**
  * Visionneuse de la fiche d'une annonce : image, vidéo (lue par la route
@@ -53,7 +52,7 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
   const alt = `Visuel de l'annonce de ${ad.pageName}${count > 1 ? ` (${unit} ${index + 1} sur ${count})` : ""}`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-cream-100">
+    <div className="flex h-full min-h-0 flex-col bg-ds-ink-100">
       <div className="relative aspect-[4/5] max-h-[62vh] w-full overflow-hidden md:aspect-auto md:max-h-none md:min-h-0 md:flex-1" aria-roledescription={count > 1 ? "carrousel" : undefined}>
         {image ? <img key={image} src={image} alt="" aria-hidden loading="lazy" decoding="async" referrerPolicy="no-referrer" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-2xl" /> : null}
         {item && media && item.kind === "video" ? (
@@ -66,28 +65,28 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
 
         {count > 1 ? (
           <>
-            <span className="absolute left-3 top-3 rounded-full bg-ink-900/70 px-2.5 py-1 text-[11px] font-medium capitalize leading-none text-white backdrop-blur-sm" aria-live="polite">
+            <span className="absolute top-3 left-3 rounded-full bg-ds-ink-900/85 px-2.5 py-1.5 text-xs leading-none font-medium text-white capitalize" aria-live="polite">
               {unit} {index + 1}/{count}
             </span>
             <button type="button" data-testid="meta-detail-prev" onClick={() => go(-1)} aria-label={`${media?.variants ? "Déclinaison" : "Diapositive"} précédente`} className={clsx(NAV_BUTTON, "left-3")}>
-              <Icon name="left" className="h-5 w-5" />
+              <Icon name="left" className="size-5" />
             </button>
             <button type="button" data-testid="meta-detail-next" onClick={() => go(1)} aria-label={`${media?.variants ? "Déclinaison" : "Diapositive"} suivante`} className={clsx(NAV_BUTTON, "right-3")}>
-              <Icon name="right" className="h-5 w-5" />
+              <Icon name="right" className="size-5" />
             </button>
           </>
         ) : null}
       </div>
 
       {visual !== "ready" ? (
-        <p data-testid="meta-detail-visual-note" className="border-t border-cream-200 bg-white/60 px-4 py-3 text-center text-xs leading-relaxed text-ink-500">
+        <p data-testid="meta-detail-visual-note" className="border-t border-ds-ink-200 bg-white px-4 py-3 text-center text-ds-meta text-ds-ink-600">
           {visual === "loading"
             ? "Le visuel de cette annonce est en cours de chargement."
             : visual === "pending"
               ? "Le visuel de cette annonce n'est pas encore chargé : seul son texte est affiché."
               : "Le visuel de cette annonce n'a pas pu être récupéré : seul son texte est affiché."}{" "}
           {ad.libraryUrl ? (
-            <a href={ad.libraryUrl} target="_blank" rel="noopener noreferrer" className={clsx("font-medium text-primary-700 underline-offset-2 hover:underline", FOCUS_RING)}>
+            <a href={ad.libraryUrl} target="_blank" rel="noopener noreferrer" className={TEXT_LINK}>
               Voir sur Meta
             </a>
           ) : null}
@@ -95,7 +94,7 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
       ) : null}
 
       {count > 1 ? (
-        <div className="flex flex-col items-center gap-1.5 border-t border-cream-200 bg-white/60 px-4 py-3">
+        <div className="flex flex-col items-center gap-1.5 border-t border-ds-ink-200 bg-white px-4 py-3">
           <div className="flex items-center gap-1" role="group" aria-label={media?.variants ? "Déclinaisons" : "Diapositives"}>
             {items.map((_, i) => (
               <button
@@ -104,13 +103,14 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
                 onClick={() => setPosition(i)}
                 aria-label={`Afficher la ${unit} ${i + 1}`}
                 aria-current={i === index ? "true" : undefined}
-                className={clsx("flex h-6 w-6 cursor-pointer items-center justify-center rounded-full", FOCUS_RING)}
+                className={clsx("grid size-6 cursor-pointer place-items-center rounded-full", FOCUS_RING)}
               >
-                <span className={clsx("block h-2 rounded-full transition-all duration-300 motion-reduce:transition-none", i === index ? "w-5 bg-primary-600" : "w-2 bg-ink-300 hover:bg-ink-500")} />
+                {/* Le point courant est plus large : la position se lit sans la couleur */}
+                <span className={clsx("block h-2 rounded-full", i === index ? "w-5 bg-ds-section-accent" : "w-2 bg-ds-ink-450")} />
               </button>
             ))}
           </div>
-          {media?.variants ? <p className="text-center text-xs text-ink-500">Meta choisit la déclinaison montrée à chaque personne.</p> : null}
+          {media?.variants ? <p className="text-center text-ds-meta text-ds-ink-600">Meta choisit la déclinaison montrée à chaque personne.</p> : null}
         </div>
       ) : null}
     </div>
@@ -157,7 +157,7 @@ function VideoStage({
         src={metaVideoSrc(adId, index)}
         onError={() => setFailed(true)}
         aria-label={alt.replace(/^Visuel/, "Vidéo")}
-        className="relative h-full w-full bg-ink-900 object-contain"
+        className="relative h-full w-full bg-ds-ink-900 object-contain"
         {...NO_REFERRER}
       />
     );
@@ -166,17 +166,20 @@ function VideoStage({
   return (
     <div data-testid="meta-detail-video" data-state={demo ? "demonstration" : "indisponible"} className="relative h-full w-full">
       {image ? <AdImage src={image} alt={alt} fallback={fallback} className="relative h-full w-full object-contain" /> : fallback}
-      <span aria-hidden className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 pl-0.5 text-ink-500 shadow-lg backdrop-blur-sm">
-        <PlayGlyph className="h-6 w-6" />
+      <span aria-hidden className="absolute top-1/2 left-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white pl-0.5 text-ds-ink-600 shadow-ds-pop">
+        <PlayGlyph className="size-6" />
       </span>
-      <p className="absolute inset-x-3 bottom-3 rounded-xl bg-ink-900/80 px-3.5 py-2.5 text-center text-xs leading-relaxed text-white backdrop-blur-sm" role={demo ? undefined : "status"}>
+      {/* Fond d'encre presque opaque : le blanc reste lisible quel que soit le visuel dessous */}
+      <p className="absolute inset-x-3 bottom-3 rounded-ds-sm bg-ds-ink-900/90 px-3.5 py-2.5 text-center text-ds-meta text-white" role={demo ? undefined : "status"}>
         {demo ? (
           "Vidéo de démonstration (aucun fichier)."
         ) : (
           <>
             Vidéo indisponible pour le moment.{" "}
-            <a href={libraryUrl} target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2 hover:no-underline">
-              Voir sur Meta ↗<span className="sr-only"> (nouvel onglet)</span>
+            <a href={libraryUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded font-semibold underline underline-offset-2 ds-focus-inverse">
+              Voir sur Meta
+              <Icon name="external" className="size-3.5" />
+              <span className="sr-only"> (nouvel onglet)</span>
             </a>
           </>
         )}

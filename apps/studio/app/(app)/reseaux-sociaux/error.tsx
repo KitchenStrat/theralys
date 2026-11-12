@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { RotateCcw, TriangleAlert } from "lucide-react";
 import { Button, Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
+import { SECTION_PURPOSE } from "./social-ui";
 
 /**
  * Frontière d'erreur du segment : une lecture ou un rendu qui échoue affiche
@@ -21,7 +22,7 @@ export default function SocialError({
 
   return (
     <Stagger className="space-y-6">
-      <PageHeader section="reseaux-sociaux" />
+      <PageHeader section="reseaux-sociaux" purpose={SECTION_PURPOSE} />
       <Card padding="none">
         <EmptyState
           icon={TriangleAlert}

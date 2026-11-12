@@ -4,6 +4,7 @@ import { ScanSearch } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Card, StepProgress, useStepTimeline } from "@/components/ds";
+import { stepLabel } from "./journey";
 import { withStepAttributes } from "./step-attributes";
 import { Eyebrow } from "./ui";
 
@@ -134,7 +135,7 @@ export function ReadingPanel({ address, hasPrevious }: { address: string; /** Un
   return (
     <section aria-labelledby="reading-title" data-testid="reading-panel">
       <Card padding="lg">
-        <Eyebrow>{hasPrevious ? "Nouvelle lecture de votre site" : "Étape 1 · Connecter"}</Eyebrow>
+        <Eyebrow>{hasPrevious ? "Nouvelle lecture de votre site" : stepLabel("connecter")}</Eyebrow>
         <div className="mt-3">{progress}</div>
         {/* Région vivante permanente : le retard y est annoncé sans déplacer le focus (le changement d'étape l'est par `StepProgress`) */}
         <p className="text-ds-body font-medium text-ds-ink-800 [&:not(:empty)]:mt-4" role="status">

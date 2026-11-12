@@ -226,7 +226,6 @@ export function ArticleEditor({
             <Button
               type="button"
               variant="quiet"
-              disabled={busy}
               loading={busy && running === "voir"}
               iconRight={<ExternalLink size={18} aria-hidden />}
               onClick={() => {
@@ -239,9 +238,9 @@ export function ArticleEditor({
             >
               {ownSite ? "Voir sur le site Harmony" : "Voir sur le site"}
             </Button>
-            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
+            <div className="flex w-full flex-wrap items-center justify-end gap-x-4 gap-y-3 sm:w-auto">
               {feedback("texte")}
-              <Button onClick={onSave} loading={saving} icon={<Save size={18} aria-hidden />}>
+              <Button onClick={onSave} loading={saving} icon={<Save size={18} aria-hidden />} className="w-full sm:w-auto">
                 Enregistrer
               </Button>
             </div>
@@ -264,7 +263,7 @@ export function ArticleEditor({
               <div className="mt-5">
                 <Label htmlFor="publishAt">Replanifier au</Label>
                 <div className="flex flex-wrap gap-2">
-                  <div className="min-w-0 flex-[1_1_10rem]">
+                  <div className="max-w-60 min-w-0 flex-[1_1_10rem]">
                     <Input
                       id="publishAt"
                       type="date"

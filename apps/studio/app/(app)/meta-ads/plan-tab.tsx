@@ -123,7 +123,7 @@ export function PlanTab({
               <>
                 Installez le Pixel sur votre site (pas-à-pas dans{" "}
                 <button type="button" onClick={() => onSelectTab("parametrage")} className={TEXT_LINK_ON_TINT}>
-                  Paramétrage &amp; suivi
+                  Paramétrage et suivi
                 </button>
                 ), relancez la lecture de votre site depuis « Mon site », puis régénérez les annonces : le plan passera en objectif Conversions.
               </>
@@ -131,15 +131,14 @@ export function PlanTab({
               <>
                 Enregistrez votre Pixel dans{" "}
                 <button type="button" onClick={() => onSelectTab("parametrage")} className={TEXT_LINK_ON_TINT}>
-                  Paramétrage &amp; suivi
+                  Paramétrage et suivi
                 </button>
                 , puis régénérez les annonces : le plan passera en objectif Conversions.
               </>
             )}
           </Notice>
         ) : null}
-        <MetaLine className="mt-4 flex flex-wrap items-center gap-x-1.5">
-          {plan.generator === "mock" ? <FlaskConical size={14} aria-hidden className="shrink-0" /> : null}
+        <MetaLine className="mt-4">
           Plan préparé le {formatDayFr(plan.generatedAt, "day")}
           {plan.generator === "mock" ? " · mode démonstration" : ""}.
         </MetaLine>
@@ -152,7 +151,7 @@ export function PlanTab({
           description="Les réglages à reporter dans le Gestionnaire de publicités Meta."
           action={<CopyButton text={plan.campaign.name} label="Copier le nom" />}
         />
-        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+        <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field icon={Tag} label="Nom de la campagne" value={plan.campaign.name} />
           <Field icon={MapPin} label="Zone" value={`${plan.campaign.geo.city} + ${plan.campaign.geo.radiusKm} km`} hint={plan.campaign.geo.note} />
           <Field icon={UsersRound} label="Âges et genre" value={`${plan.campaign.ages.min} – ${plan.campaign.ages.max} ans · tous`} />
@@ -164,7 +163,7 @@ export function PlanTab({
 
       <Card>
         <CardHeader icon={UsersRound} title="Ensembles de publicités" description="Une audience par ensemble, avec les annonces qui lui sont associées." />
-        <ul className="mt-5 grid gap-4 md:grid-cols-2" aria-label="Ensembles de publicités">
+        <ul className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="Ensembles de publicités">
           {plan.adSets.map((set, i) => (
             <li key={`${i}-${set.name}`} className="rounded-ds-md bg-ds-section-tint p-4 inset-ring inset-ring-ds-section-line/70 sm:p-5">
               <Badge tone={set.audience === "retargeting" ? "brand" : "section"}>{AUDIENCE_LABELS[set.audience]}</Badge>
@@ -220,7 +219,7 @@ export function PlanTab({
             {landingPages.map((page) => (
               <li key={page.url} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-ds-md bg-ds-ink-50 px-4 py-3 inset-ring inset-ring-ds-ink-200">
                 <div className="min-w-0 flex-[1_1_16rem]">
-                  <p className="font-mono text-ds-body break-all text-ds-ink-900">{page.url.replace(/^https?:\/\//, "")}</p>
+                  <p className="font-mono text-ds-body wrap-anywhere text-ds-ink-900">{page.url.replace(/^https?:\/\//, "")}</p>
                   <p className="mt-0.5 text-ds-meta text-ds-ink-600">{page.creativeNames.join(", ")}</p>
                 </div>
                 <CopyButton text={page.url} label="Copier l'URL" />
@@ -249,7 +248,7 @@ export function PlanTab({
 
       <Card>
         <CardHeader icon={Flag} title="Jalons" description="Ce qu'il faut faire et mesurer, étape par étape." />
-        <ol className="mt-5 grid gap-4 xl:grid-cols-3" aria-label="Jalons">
+        <ol className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3" aria-label="Jalons">
           {plan.milestones.map((m, i) => (
             <li key={`${i}-${m.horizon}`} className="relative rounded-ds-md bg-ds-ink-50 p-4 inset-ring inset-ring-ds-ink-200 sm:p-5">
               <div className="flex items-center gap-3">

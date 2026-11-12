@@ -34,3 +34,13 @@ export function ArticleStatusPill({
     </StatusPill>
   );
 }
+
+/**
+ * Espaces insécables de la typographie française, à l'affichage seulement :
+ * un deux-points, un point-virgule, un point d'exclamation ou d'interrogation
+ * ne passe jamais seul à la ligne suivante, un guillemet ne reste pas seul en
+ * fin de ligne. Le titre enregistré n'est pas modifié.
+ */
+export function frenchSpacing(text: string): string {
+  return text.replace(/ ([:;!?»])/g, "\u00a0$1").replace(/« /g, "«\u00a0");
+}

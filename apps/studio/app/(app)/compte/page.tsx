@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { domains, getDb, PLANS, subscriptions, type PlanId } from "@theralys/db";
 import { activeExternalSite, formatDateFr } from "@theralys/shared";
-import { Badge, Card, CardHeader, EmptyState, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
+import { Badge, Card, CardHeader, EmptyState, NBSP, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { DomainSection } from "./domain-section";
@@ -92,19 +92,16 @@ export default async function AccountPage() {
     <Stagger className="space-y-6">
       <PageHeader section="compte">
         {/* À qui est ce compte : le nom de la session et celui du cabinet */}
-        <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-ds-body text-ds-ink-700">
-          <span className="inline-flex items-center gap-2 font-semibold text-ds-section-ink">
-            <span aria-hidden className="grid size-8 place-items-center rounded-full bg-white text-ds-section-accent shadow-sm">
-              <UserRound size={18} />
-            </span>
-            {session.name}
+        <p className="flex items-center gap-3">
+          <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-ds-section-accent shadow-sm">
+            <UserRound size={20} />
           </span>
-          {site.name && site.name !== session.name ? (
-            <>
-              <span aria-hidden>·</span>
-              <span>{site.name}</span>
-            </>
-          ) : null}
+          <span className="min-w-0">
+            <span className="block text-base font-semibold text-ds-section-ink">{session.name}</span>
+            {site.name && site.name !== session.name ? (
+              <span className="block text-ds-body text-ds-ink-700">{site.name}</span>
+            ) : null}
+          </span>
         </p>
       </PageHeader>
 
@@ -114,13 +111,6 @@ export default async function AccountPage() {
             icon={CreditCard}
             title={<span id="compte-abonnement">Mon abonnement</span>}
             description="Votre formule et sa facturation."
-            action={
-              subscription ? null : (
-                <Badge tone="section" icon={Presentation}>
-                  Démonstration
-                </Badge>
-              )
-            }
           />
           {subscription ? (
             <>
@@ -141,9 +131,10 @@ export default async function AccountPage() {
                 <ul className="mt-2 space-y-1.5 text-base text-ds-ink-700">
                   <li className="flex items-start gap-2.5">
                     <Wallet size={18} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
+                    {/* Espace insécable : le prix et son unité ne se séparent pas en fin de ligne */}
                     {subscription.billingPeriod === "annual"
-                      ? `Engagement annuel — ${plan.annualMonthlyPrice} €/mois`
-                      : `Mensuel sans engagement — ${plan.monthlyPrice} €/mois`}
+                      ? `Engagement annuel — ${plan.annualMonthlyPrice}${NBSP}€/mois`
+                      : `Mensuel sans engagement — ${plan.monthlyPrice}${NBSP}€/mois`}
                   </li>
                   {subscription.currentPeriodEnd ? (
                     <li className="flex items-start gap-2.5">

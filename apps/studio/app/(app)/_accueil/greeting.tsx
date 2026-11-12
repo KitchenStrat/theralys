@@ -27,7 +27,7 @@ const strong = (text: string) => <strong className="font-bold">{text}</strong>;
 function Summary({ labels, visitors, rdvClicks }: { labels: PeriodLabels; visitors: number; rdvClicks: number }) {
   const clicks = strong(`${formatNumber(rdvClicks)}${NBSP}fois`);
   if (visitors === 0 && rdvClicks === 0) {
-    return <>{labels.lead}, aucune visite n&apos;a été mesurée sur votre site. Vos chiffres apparaîtront ici dès les premières.</>;
+    return <>{labels.lead}, aucune visite n&apos;a été mesurée sur votre site. Vos chiffres apparaîtront ici dès les premières visites.</>;
   }
   if (visitors === 0) {
     return (
@@ -53,11 +53,11 @@ function chips({ labels, changePct, topSource, nextPublication }: { labels: Peri
   if (labels && changePct !== null) {
     found.push(
       changePct === 0
-        ? { icon: Minus, text: `Visiteurs : stable ${labels.delta}` }
-        : { icon: changePct > 0 ? TrendingUp : TrendingDown, text: `Visiteurs : ${formatDelta(changePct)} ${labels.delta}` },
+        ? { icon: Minus, text: `Visiteurs${NBSP}: stable ${labels.delta}` }
+        : { icon: changePct > 0 ? TrendingUp : TrendingDown, text: `Visiteurs${NBSP}: ${formatDelta(changePct)} ${labels.delta}` },
     );
   }
-  if (labels && topSource) found.push({ icon: Waypoints, text: `Première provenance : ${ANALYTICS_SOURCE_LABELS[topSource]}` });
+  if (labels && topSource) found.push({ icon: Waypoints, text: `Première provenance${NBSP}: ${ANALYTICS_SOURCE_LABELS[topSource]}` });
   if (nextPublication) found.push({ icon: CalendarDays, text: `Prochain article le ${formatDayFr(nextPublication, "day")}` });
   return found.slice(0, 2);
 }
@@ -76,7 +76,8 @@ export function Greeting({ firstName, period, stats, topSource, nextPublication,
   return (
     <GreetingBand
       eyebrow={today.charAt(0).toUpperCase() + today.slice(1)}
-      title={`Bonjour ${firstName}`}
+      // Un prénom composé très long passe à la ligne plutôt que d'élargir le bandeau
+      title={<span className="wrap-break-word">Bonjour {firstName}</span>}
       aside={aside}
       footer={
         shown.length > 0
@@ -89,9 +90,10 @@ export function Greeting({ firstName, period, stats, topSource, nextPublication,
       }
     >
       {awaitingMeasure ? (
+        // Pas de chiffres à résumer : la prochaine étape (à droite) et l'état des statistiques (dessous) disent quoi faire
         <>
-          Vos outils s&apos;appuient sur votre site <strong className="font-bold wrap-anywhere">{awaitingMeasure.address}</strong>. Il reste à y
-          installer le code de mesure pour suivre ses visites ici.
+          Vos outils s&apos;appuient maintenant sur votre site <strong className="font-bold wrap-anywhere">{awaitingMeasure.address}</strong>
+          &nbsp;: contenus, liens et statistiques.
         </>
       ) : (
         <Summary labels={labels} visitors={stats.visitors} rdvClicks={stats.rdvClicks} />

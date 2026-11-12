@@ -37,8 +37,11 @@ const Paragraphs = ({ items }: { items: readonly string[] }) => (
   </div>
 );
 
-/** Tuile d'une liste (spécialité, info pratique) : un fond à peine teinté la détache de ses voisines. */
+/** Tuile d'une spécialité : un fond à peine teinté la détache de ses voisines. */
 const TILE = "rounded-ds-sm bg-ds-ink-50 px-4 py-3 ring-1 ring-ds-ink-200";
+
+/** Liste « intitulé, détail » (infos pratiques, questions) : un filet entre deux lignes, sans cadre. */
+const PAIRS = "divide-y divide-ds-ink-200 [&>div]:py-2.5 [&>div:first-child]:pt-0 [&>div:last-child]:pb-0";
 
 /** Une coordonnée : son pictogramme, son intitulé et sa valeur. */
 function ContactItem({ icon: Icon, label, className, children }: { icon: LucideIcon; label: string; className?: string; children: ReactNode }) {
@@ -113,9 +116,9 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       );
     case "practical":
       return (
-        <dl className="grid gap-3">
+        <dl className={PAIRS}>
           {profile.practical.map((item, index) => (
-            <div key={index} className={TILE}>
+            <div key={index}>
               <dt className="font-semibold text-ds-ink-900">{item.title}</dt>
               <dd className="mt-0.5 text-ds-body">{item.text}</dd>
             </div>
@@ -134,9 +137,9 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       );
     case "faq":
       return (
-        <dl className="space-y-3">
+        <dl className={PAIRS}>
           {profile.faq.map((item, index) => (
-            <div key={index} className={TILE}>
+            <div key={index}>
               <dt className="font-semibold text-ds-ink-900">{item.question}</dt>
               <dd className="mt-0.5 text-ds-body">{item.answer}</dd>
             </div>

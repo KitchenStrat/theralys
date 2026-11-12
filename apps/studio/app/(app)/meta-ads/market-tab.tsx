@@ -1,15 +1,16 @@
 "use client";
 
 import { clsx } from "clsx";
+import { Binoculars, Hourglass, SearchX } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button, Card } from "@theralys/ui";
+import { Button, Card, EmptyState } from "@/components/ds";
 import { META_GALLERY_DEFAULT_FILTERS, type MetaAdMedia, type MetaAdsMarket, type MetaAdsSeed, type MetaGalleryFilters } from "@theralys/shared";
 import type { MetaLibraryView, MetaVisualsView } from "@/lib/meta-ads/data";
 import { marketUnavailableNotice } from "@/lib/meta-ads/market-status";
 import { MarketToastBar } from "./market-feedback";
 import { MarketGallery } from "./market-gallery";
 import { MarketHeader, VisualsBanner } from "./market-header";
-import { FOCUS_RING, Icon, type IconName } from "./market-icons";
+import { Icon, type IconName } from "./market-icons";
 import { InsightsCard } from "./market-insights";
 import type { MetaTab } from "./tabs";
 import type { AnalysisLaunch } from "./use-analysis-launch";
@@ -61,18 +62,12 @@ export function MarketTab({
 }) {
   if (!analysisReady || !seed) {
     return (
-      <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">La veille du marché apparaîtra ici.</p>
-        <p className="mt-1 text-sm">
+      <Card padding="none">
+        <EmptyState as="h2" icon={Binoculars} title="La veille du marché apparaîtra ici." action={<Button onClick={() => onSelectTab("diagnostic")}>Aller au diagnostic</Button>}>
           Lancez l&apos;analyse depuis l&apos;onglet Diagnostic : les annonces des praticiens autour de vous (bibliothèque publicitaire Meta,
           annonces publiques), classées par zone, avec leur durée de diffusion et leur portée, puis une synthèse des angles, accroches et
           offres qui marchent.
-        </p>
-        <div className="mt-5">
-          <Button variant="secondary" onClick={() => onSelectTab("diagnostic")}>
-            Aller au diagnostic
-          </Button>
-        </div>
+        </EmptyState>
       </Card>
     );
   }
@@ -80,16 +75,15 @@ export function MarketTab({
   if (!market) {
     const notice = marketUnavailableNotice({ provider, error, siteType, generationMissing });
     return (
-      <Card className="p-8 text-center text-ink-500" data-testid="meta-market-notice">
-        <p className="font-medium text-ink-700">{notice.title}</p>
-        <p className="mt-1 text-sm">{notice.detail}</p>
-        {notice.retry ? (
-          <div className="mt-5">
-            <Button variant="secondary" onClick={() => onSelectTab("diagnostic")}>
-              Aller au diagnostic
-            </Button>
-          </div>
-        ) : null}
+      <Card padding="none" data-testid="meta-market-notice">
+        <EmptyState
+          as="h2"
+          icon={notice.retry ? SearchX : Hourglass}
+          title={notice.title}
+          action={notice.retry ? <Button onClick={() => onSelectTab("diagnostic")}>Aller au diagnostic</Button> : undefined}
+        >
+          {notice.detail}
+        </EmptyState>
       </Card>
     );
   }
@@ -136,11 +130,12 @@ function MarketWatch({
 
   return (
     <MarketVisualsContext.Provider value={visualsContext}>
-    <div className="space-y-5">
+    <div className="space-y-6">
       <MarketHeader market={market} seed={seed} dismissed={dismissed} launcher={launcher} analysesRemaining={analysesRemaining} />
       <VisualsBanner visuals={visuals} available={source.available} loader={loader} />
 
-      <div role="group" aria-label="Vue de la veille" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-cream-200 bg-white/80 p-1 shadow-(--shadow-card)">
+      {/* Sélecteur de vue, au dessin du sélecteur à segments du design system : la vue active est une pastille blanche, en gras */}
+      <div role="group" aria-label="Vue de la veille" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-ds-ink-100 p-1 inset-ring inset-ring-ds-ink-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {views.map((v) => {
           const active = v.id === view;
           return (
@@ -151,15 +146,14 @@ function MarketWatch({
               aria-pressed={active}
               onClick={() => setView(v.id)}
               className={clsx(
-                "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full px-3.5 text-sm font-medium transition-colors sm:px-4",
-                FOCUS_RING,
-                active ? "bg-primary-600 text-white shadow-sm" : "text-ink-700 hover:bg-cream-100 hover:text-ink-900",
+                "inline-flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-sm whitespace-nowrap ds-focus-inset sm:gap-2 sm:px-4 sm:text-ds-body pointer-coarse:min-h-11",
+                active ? "bg-white font-semibold text-ds-section-ink shadow-ds-card" : "font-medium text-ds-ink-600 hover:text-ds-ink-900",
               )}
             >
-              <Icon name={v.icon} filled={v.id === "bibliotheque" && active} className="hidden h-4 w-4 sm:block" />
+              <Icon name={v.icon} filled={v.id === "bibliotheque" && active} className={clsx("hidden size-4 sm:block", active && "text-ds-section-accent")} />
               {v.label}
               {v.id === "bibliotheque" ? (
-                <span className={clsx("rounded-full px-1.5 py-px text-[11px] tabular-nums leading-4", active ? "bg-white/20 text-white" : "bg-primary-100 text-primary-700")}>
+                <span className={clsx("rounded-full px-2 py-0.5 text-xs leading-4 font-semibold ds-tnum", active ? "bg-ds-section-tint-2 text-ds-section-ink" : "bg-white text-ds-ink-700 inset-ring inset-ring-ds-ink-200")}>
                   {library.kept.length}
                   <span className="sr-only"> {library.kept.length > 1 ? "exemples gardés" : "exemple gardé"}</span>
                 </span>
@@ -177,7 +171,11 @@ function MarketWatch({
         source.available ? (
           <MarketGallery key="bibliotheque" mode="bibliotheque" ads={library.kept} filters={libraryFilters} onFilters={setLibraryFilters} library={library} now={now} onShowWatch={() => setView("annonces")} />
         ) : (
-          <Card className="p-8 text-center text-sm text-ink-500">Votre bibliothèque personnelle est en cours d&apos;activation.</Card>
+          <Card padding="none">
+            <EmptyState as="h3" icon={Hourglass} title="Votre bibliothèque personnelle est en cours d'activation.">
+              Vous pourrez bientôt y garder les annonces qui vous inspirent, avec leur analyse et leurs visuels.
+            </EmptyState>
+          </Card>
         )
       ) : null}
 

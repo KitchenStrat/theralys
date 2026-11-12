@@ -51,6 +51,8 @@ export function DomainSection({
   const heading = ownSiteAddress ? "Domaine de mon site Harmony" : "Mon domaine";
   const yourSite = ownSiteAddress ? "Votre site Harmony" : "Votre site";
   const toYourSite = ownSiteAddress ? "à votre site Harmony" : "à votre site";
+  // À quoi sert un nom de domaine, en une phrase — sauf quand les patients passent par le site du praticien
+  const purpose = ownSiteAddress ? undefined : "L'adresse à laquelle vos patients trouvent votre site.";
   const ownSiteNotice = ownSiteAddress ? (
     <div className="mt-5 flex items-start gap-3 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
       <Info size={20} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
@@ -69,7 +71,7 @@ export function DomainSection({
   if (currentDomain) {
     return (
       <Card as="section">
-        <CardHeader icon={Globe} title={heading} description="L'adresse à laquelle vos patients trouvent votre site." />
+        <CardHeader icon={Globe} title={heading} description={purpose} />
         {ownSiteNotice}
         <div className="mt-5 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70 sm:p-5">
           {domainStatus === "configured" ? (
@@ -133,7 +135,7 @@ export function DomainSection({
 
   return (
     <Card as="section">
-      <CardHeader icon={Globe} title={heading} description="L'adresse à laquelle vos patients trouvent votre site." />
+      <CardHeader icon={Globe} title={heading} description={purpose} />
       {ownSiteNotice}
       <p className="mt-5 text-ds-body text-ds-ink-600">
         {yourSite} est actuellement accessible sur{" "}

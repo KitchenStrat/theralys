@@ -21,15 +21,16 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import type { ExternalProfileOverrides, ExternalSiteProfile, ExternalSiteSource } from "@theralys/shared";
-import { Badge, Button, Card, IconBadge, ProgressBar, type BadgeTone } from "@/components/ds";
+import { AiBadge, Badge, Button, Card, IconBadge, ProgressBar, type BadgeTone } from "@/components/ds";
 import { plural } from "@/lib/external-site/format";
 import { RUBRICS, isRubricCorrected, isRubricEmpty, type RubricId } from "@/lib/external-site/rubrics";
 import { restoreExternalRubric } from "./actions";
 import { ActionMessage } from "./fields";
+import { stepLabel } from "./journey";
 import { RubricForm } from "./rubric-form";
 import { RubricView } from "./rubric-view";
 import { BADGE_WRAP, CARD_TITLE, SUB_TITLE } from "./styles";
-import { Eyebrow } from "./ui";
+import { CardHead, Eyebrow } from "./ui";
 
 /** Le repère de chaque rubrique : on la retrouve d'un coup d'œil dans la liste. */
 const RUBRIC_ICONS: Record<RubricId, LucideIcon> = {
@@ -85,18 +86,24 @@ export function ProfileSection({
   return (
     <section id="profil" aria-labelledby="profile-title" className="scroll-mt-6" data-testid="profile-section">
       <Card padding="lg">
-        <Eyebrow>Étape 2 · Relire</Eyebrow>
-        <div className="mt-3 flex items-start gap-3.5">
-          <IconBadge icon={BookOpenCheck} size="md" />
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Eyebrow>{stepLabel("relire")}</Eyebrow>
+          {/* Le profil est tiré des pages (ou du texte collé) par l'IA : c'est dit, avec la marque commune à tout le studio */}
+          <AiBadge className={BADGE_WRAP}>Préparé par l&apos;IA, à relire par vous</AiBadge>
+        </div>
+        <CardHead
+          className="mt-3"
+          icon={<IconBadge icon={BookOpenCheck} size="md" />}
+          title={
             <h2 id="profile-title" className={CARD_TITLE}>
               Ce que nous avons compris de votre site
             </h2>
-            <p className="mt-1 max-w-[62ch] text-base text-ds-ink-700">
-              Vos contenus s&apos;appuient sur ce profil&nbsp;: relisez-le et corrigez ce qui doit l&apos;être. Vos corrections sont conservées à chaque nouvelle lecture de votre site.
-            </p>
-          </div>
-        </div>
+          }
+        >
+          <p className="max-w-[62ch] text-base text-ds-ink-700">
+            Vos contenus s&apos;appuient sur ce profil&nbsp;: relisez-le et corrigez ce qui doit l&apos;être. Vos corrections sont conservées à chaque nouvelle lecture de votre site.
+          </p>
+        </CardHead>
 
         <div className="mt-5 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70" data-testid="profile-overview">
           <ProgressBar value={filled} max={RUBRICS.length} label="Rubriques remplies" valueText={`${filled} sur ${RUBRICS.length}`} />
@@ -232,7 +239,8 @@ function RubricBlock({
                 aria-label={`Rétablir ce qui a été lu, rubrique ${title}`}
                 data-testid={`rubric-${rubric}-restore`}
               >
-                Rétablir ce qui a été lu
+                {/* Sur un téléphone, le libellé court tient sur la ligne de « Modifier » ; le nom accessible reste entier */}
+                Rétablir<span className="max-sm:hidden"> ce qui a été lu</span>
               </Button>
             ) : null}
             <Button

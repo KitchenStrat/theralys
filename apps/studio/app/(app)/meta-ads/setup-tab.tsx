@@ -81,8 +81,7 @@ export function SetupTab({
           <AccountLink href={META_ADS_MANAGER_URL}>Ouvrir le Gestionnaire de publicités</AccountLink>
           <AccountLink href={META_EVENTS_MANAGER_URL}>Ouvrir le Gestionnaire d&apos;événements</AccountLink>
         </div>
-        {/* Le fil du guide : un trait continu derrière les numéros, du premier au dernier */}
-        <ol className="relative mt-5 border-t border-ds-ink-200 pt-3 before:absolute before:top-10 before:bottom-8 before:left-[1.3125rem] before:w-0.5 before:rounded-full before:bg-ds-section-line">
+        <ol className="mt-5 border-t border-ds-ink-200 pt-3">
           {steps.map((step, index) => (
             <TutorialStepView
               key={step.id}
@@ -176,9 +175,10 @@ function TutorialStepView({
   onSelectTab: (tab: MetaTab) => void;
 }) {
   return (
-    <li className="relative">
+    // Le fil du guide : un trait derrière les numéros, du centre du premier au centre du dernier (2 rem sous le haut de chaque étape)
+    <li className="relative before:absolute before:inset-y-0 before:left-[1.3125rem] before:w-0.5 before:bg-ds-section-line first:before:top-8 last:before:bottom-auto last:before:h-8">
       <details className="group/step" open={index === 0}>
-        <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-ds-md py-2.5 pr-1 text-left ds-focus sm:gap-4 [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-start gap-3.5 rounded-ds-md py-2.5 pr-1 text-left ds-focus sm:gap-4 [&::-webkit-details-marker]:hidden">
           {/* Le liseré blanc interrompt le fil autour du numéro */}
           <StepNumber size="lg" className="relative ring-4 ring-white">
             {index + 1}
@@ -190,7 +190,7 @@ function TutorialStepView({
           <ChevronDown
             size={20}
             aria-hidden
-            className="shrink-0 text-ds-ink-500 transition-transform duration-ds-base ease-ds-out group-open/step:rotate-180 motion-reduce:transition-none"
+            className="mt-3 shrink-0 text-ds-ink-500 transition-transform duration-ds-base ease-ds-out group-open/step:rotate-180 motion-reduce:transition-none"
           />
         </summary>
         <div className="relative bg-white pt-1 pb-5 sm:ml-[3.75rem]">
@@ -275,7 +275,7 @@ function CopyBlock({
           return (
             <li key={c.id} className="rounded-ds-md bg-ds-section-tint px-4 py-3 inset-ring inset-ring-ds-section-line/70">
               <p className="text-ds-body font-semibold text-ds-ink-900">{c.name}</p>
-              <p className="text-ds-meta break-all text-ds-ink-700">
+              <p className="text-ds-meta wrap-anywhere text-ds-ink-700">
                 {ctaLabel(c.cta)}
                 {url ? ` → ${url.replace(/^https?:\/\//, "")}` : ""}
               </p>
@@ -360,19 +360,21 @@ function PixelForm({ initial, cookieBanner, siteDomain }: { initial: MetaTrackin
           (Paramètres → Tracking) pour rester conforme.
         </Notice>
       ) : null}
-      <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+      <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 gap-4">
         <div>
           <Label htmlFor="meta-pixel-id">Identifiant du Pixel (jeu de données)</Label>
           <Input
             id="meta-pixel-id"
             value={form.metaPixelId}
             onChange={(e) => setForm({ metaPixelId: e.target.value })}
-            placeholder="1234567890123456"
+            // « Exemple : » — sans lui, le champ vide a l'air déjà rempli
+            placeholder="Exemple : 1234567890123456"
             autoComplete="off"
             inputMode="numeric"
             spellCheck={false}
             disabled={pending}
-            className="max-w-xs font-mono"
+            // Champ partagé de 38 px : 44 px au doigt
+            className="max-w-xs font-mono pointer-coarse:min-h-11"
           />
           <FieldHint>
             Où le trouver : Gestionnaire d&apos;événements → Sources de données → votre jeu de données → l&apos;identifiant ({META_PIXEL_ID_SHAPE}) sous son
@@ -431,7 +433,7 @@ function ResultsCard({ results, days, tracked }: { results: PaidResults; days: n
           </EmptyState>
         </Card>
       ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-3 sm:gap-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           <KpiTile icon={Users} label={results.unit === "visitors" ? "Visiteurs" : "Visites"} caption="venus d'une annonce Meta" value={results.visits} />
           <KpiTile icon={MousePointerClick} label="Clics RDV" caption="« Prendre rendez-vous »" value={results.rdvClicks} />
           <KpiTile icon={PhoneCall} label="Appels" caption="clics sur le numéro" value={results.callClicks} />

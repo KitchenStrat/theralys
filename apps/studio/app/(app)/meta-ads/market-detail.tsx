@@ -1,6 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
+import { TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Modal } from "@theralys/ui";
 import { META_AD_MEDIA_FORMAT_LABELS, adNote, type MetaGalleryAd } from "@theralys/shared";
@@ -9,9 +10,12 @@ import type { GalleryMode } from "./market-card";
 import { FOCUS_RING, Icon } from "./market-icons";
 import { PageAvatar, RankChip, SignalBadge, ZoneChip } from "./market-media";
 import { MediaViewer } from "./market-viewer";
+import { TEXT_LINK } from "./parts";
 import { useVisualState } from "./use-visuals-loader";
 
-const ACTION = "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-sm font-semibold transition-colors";
+/** Geste de la fiche : pilule de 44 px, pression du design system. */
+const ACTION = "inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 text-sm font-semibold ds-press";
+const ACTION_DANGER = "text-ds-ink-700 inset-ring inset-ring-ds-ink-300 hover:bg-ds-danger-100 hover:text-ds-danger-900 hover:inset-ring-ds-danger-600/40";
 
 export type MarketDetailProps = {
   ad: MetaGalleryAd;
@@ -62,12 +66,12 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
             <MediaViewer key={ad.id} ad={ad} now={now} />
           </div>
 
-          <div className="px-5 pb-6 pt-5 md:min-h-0 md:overflow-y-auto md:px-6 md:pt-6">
-            <header className="flex items-center gap-3 pr-10">
-              <PageAvatar name={ad.pageName} url={media?.avatarUrl} seed={ad.pageId ?? ad.pageName} className="h-11 w-11 text-sm" />
+          <div className="px-5 pt-5 pb-6 md:min-h-0 md:overflow-y-auto md:px-6 md:pt-6">
+            <header className="flex items-center gap-3 pr-12">
+              <PageAvatar name={ad.pageName} url={media?.avatarUrl} seed={ad.pageId ?? ad.pageName} className="size-11 text-ds-body" />
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold leading-tight text-ink-900">{ad.pageName}</h2>
-                {about.length > 0 ? <p className="mt-0.5 text-xs text-ink-500">{about.join(" · ")}</p> : null}
+                <h2 className="font-ds-display text-xl/7 font-bold text-ds-ink-900">{ad.pageName}</h2>
+                {about.length > 0 ? <p className="mt-0.5 text-ds-meta text-ds-ink-600">{about.join(" · ")}</p> : null}
               </div>
             </header>
 
@@ -77,16 +81,20 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
               <RankChip ad={ad} />
             </div>
 
-            <h3 className="mt-5 text-sm font-semibold text-ink-900">Texte de l&apos;annonce</h3>
-            {body ? <p className="mt-1.5 whitespace-pre-line break-words text-sm leading-relaxed text-ink-700">{body}</p> : <p className="mt-1.5 text-sm italic text-ink-500">Annonce sans texte (visuel seul).</p>}
+            <h3 className="mt-5 text-ds-body font-semibold text-ds-ink-900">Texte de l&apos;annonce</h3>
+            {body ? (
+              <p className="mt-1.5 text-base break-words whitespace-pre-line text-ds-ink-700">{body}</p>
+            ) : (
+              <p className="mt-1.5 text-base text-ds-ink-600 italic">Annonce sans texte (visuel seul).</p>
+            )}
             {others.length > 0 ? (
-              <details className="mt-2 text-sm text-ink-700">
-                <summary className={clsx("cursor-pointer rounded text-xs font-medium text-primary-700 hover:underline", FOCUS_RING)}>
+              <details className="mt-2 text-ds-body text-ds-ink-700">
+                <summary className={clsx("py-1.5", TEXT_LINK)}>
                   {others.length > 1 ? `${others.length} autres versions du texte` : "Une autre version du texte"}
                 </summary>
                 <ul className="mt-2 space-y-2">
                   {others.map((text, i) => (
-                    <li key={`${i}-${text.slice(0, 24)}`} className="whitespace-pre-line break-words rounded-xl bg-cream-100/70 px-3 py-2 leading-relaxed">
+                    <li key={`${i}-${text.slice(0, 24)}`} className="rounded-ds-sm bg-ds-ink-50 px-3 py-2 break-words whitespace-pre-line inset-ring inset-ring-ds-ink-200">
                       {text}
                     </li>
                   ))}
@@ -95,29 +103,31 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
             ) : null}
 
             {title || description || caption || media?.ctaText || landing ? (
-              <div className="mt-4 rounded-2xl border border-cream-200 bg-cream-50 p-4">
+              <div className="mt-4 rounded-ds-md bg-ds-section-tint p-4 inset-ring inset-ring-ds-section-line/70">
                 <dl className="space-y-2.5">
                   {title ? <Row label="Titre du lien" strong>{title}</Row> : null}
                   {description ? <Row label="Description">{description}</Row> : null}
                   {caption ? <Row label="Lien affiché">{caption}</Row> : null}
                   {media?.ctaText ? (
                     <Row label="Bouton">
-                      <span className="inline-flex rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-ink-900 ring-1 ring-inset ring-cream-300">{media.ctaText}</span>
+                      <span className="inline-flex rounded-lg bg-white px-2.5 py-1 text-ds-meta font-semibold text-ds-ink-900 inset-ring inset-ring-ds-ink-300">{media.ctaText}</span>
                     </Row>
                   ) : null}
                 </dl>
                 {landing ? (
-                  <a href={landing} target="_blank" rel="noopener noreferrer nofollow" className={clsx("mt-3 inline-flex items-center gap-1 rounded text-sm font-medium text-primary-700 hover:underline", FOCUS_RING)}>
-                    Voir la page de destination ↗<span className="sr-only"> (nouvel onglet)</span>
+                  <a href={landing} target="_blank" rel="noopener noreferrer nofollow" className={clsx("mt-3 inline-flex min-h-9 items-center gap-1.5 text-ds-body", TEXT_LINK)}>
+                    Voir la page de destination
+                    <Icon name="external" className="size-4" />
+                    <span className="sr-only"> (nouvel onglet)</span>
                   </a>
                 ) : null}
               </div>
             ) : null}
 
-            <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
+            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
               <Fact label="Diffusion">
                 <span className="flex items-start gap-1.5">
-                  <span aria-hidden className={clsx("mt-1.5 h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-ds-success-600 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
+                  <span aria-hidden className={clsx("mt-2 size-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-ds-success-600 ring-3 ring-ds-success-600/20" : "bg-ds-ink-300")} />
                   {diffusion.long}
                 </span>
               </Fact>
@@ -128,7 +138,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
                   "Non communiqué"
                 ) : (
                   <>
-                    ≈ {ad.euTotalReach.toLocaleString("fr-FR")} <span className="font-normal text-ink-500">depuis son lancement</span>
+                    ≈ {ad.euTotalReach.toLocaleString("fr-FR")} <span className="font-normal text-ds-ink-600">depuis son lancement</span>
                   </>
                 )}
               </Fact>
@@ -137,7 +147,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
               <Fact label="Zones">{zonesLabel(ad) ?? "Non précisées"}</Fact>
               <Fact label="Signal">{SIGNAL_LABELS[ad.signal].short}</Fact>
               <Fact label="Note">
-                <span className="tabular-nums">{adNote(ad.score)}/10</span>
+                <span className="ds-tnum">{adNote(ad.score)}/10</span>
               </Fact>
               <Fact label="Rang">{rankLabel(ad) ?? "—"}</Fact>
               <Fact label="Format">{format === "sans" ? VISUAL_STATE_LABELS[visual === "ready" ? "none" : visual] : `${META_AD_MEDIA_FORMAT_LABELS[format]}${media && media.items.length > 1 ? ` · ${media.items.length} ${media.variants ? "déclinaisons" : "diapositives"}` : ""}`}</Fact>
@@ -146,14 +156,15 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
           </div>
         </div>
 
-        <div className="border-t border-cream-200 bg-white px-5 py-3.5 md:col-start-2 md:px-6">
+        <div className="border-t border-ds-ink-200 bg-white px-5 py-3.5 md:col-start-2">
           {error ? (
-            <p role="alert" className="mb-3 rounded-lg bg-danger-100 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="mb-3 flex items-start gap-2 rounded-ds-sm bg-ds-danger-100 px-3 py-2 text-ds-body text-ds-danger-900">
+              <TriangleAlert size={16} aria-hidden className="mt-0.5 shrink-0" />
               {error}
             </p>
           ) : null}
-          {/* Mobile : le geste principal sur toute la largeur, puis « Supprimer » et le lien Meta sur une ligne */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Mobile : le geste principal sur toute la largeur, puis « Supprimer » et le lien Meta sur une ligne ; grand écran : les trois sur une seule ligne */}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
             {canEdit && mode === "veille" ? (
               <>
                 <button
@@ -162,20 +173,25 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
                   aria-pressed={ad.kept}
                   onClick={ad.kept ? onUnkeep : onKeep}
                   title={ad.kept ? "Retirer de ma bibliothèque" : "Conserver l'annonce, son analyse et ses visuels dans ma bibliothèque"}
-                  className={clsx(ACTION, FOCUS_RING, "basis-full whitespace-nowrap sm:basis-auto", ad.kept ? "bg-primary-600 text-white hover:bg-primary-700" : "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200 hover:bg-primary-100")}
+                  className={clsx(
+                    ACTION,
+                    FOCUS_RING,
+                    "basis-full whitespace-nowrap sm:basis-auto",
+                    ad.kept ? "bg-ds-section-gradient-deep text-ds-section-on-deep" : "bg-ds-section-tint-2 text-ds-section-ink inset-ring inset-ring-ds-section-line hover:bg-ds-section-line",
+                  )}
                 >
-                  <Icon name="bookmark" filled={ad.kept} className="h-4 w-4 shrink-0" />
+                  <Icon name="bookmark" filled={ad.kept} className="size-4 shrink-0" />
                   {ad.kept ? "Gardée" : "Garder comme exemple"}
                 </button>
-                <button type="button" data-testid="meta-dismiss" onClick={onDismiss} className={clsx(ACTION, FOCUS_RING, "text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30")}>
-                  <Icon name="trash" className="h-4 w-4 shrink-0" />
+                <button type="button" data-testid="meta-dismiss" onClick={onDismiss} className={clsx(ACTION, FOCUS_RING, ACTION_DANGER)}>
+                  <Icon name="trash" className="size-4 shrink-0" />
                   Supprimer
                 </button>
               </>
             ) : null}
             {canEdit && mode === "bibliotheque" ? (
-              <button type="button" data-testid="meta-unkeep" onClick={onRemove} className={clsx(ACTION, FOCUS_RING, "basis-full whitespace-nowrap text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-danger-100 hover:text-danger-500 hover:ring-danger-500/30 sm:basis-auto")}>
-                <Icon name="bookmark" className="h-4 w-4 shrink-0" />
+              <button type="button" data-testid="meta-unkeep" onClick={onRemove} className={clsx(ACTION, FOCUS_RING, ACTION_DANGER, "basis-full whitespace-nowrap sm:basis-auto")}>
+                <Icon name="bookmark" className="size-4 shrink-0" />
                 Retirer de ma bibliothèque
               </button>
             ) : null}
@@ -183,9 +199,11 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
               href={ad.libraryUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={clsx("ml-auto inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full px-1.5 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
+              className={clsx("-mr-1.5 ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full px-1.5 text-sm font-semibold whitespace-nowrap text-ds-brand-800 hover:bg-ds-brand-100", FOCUS_RING)}
             >
-              Voir sur Meta ↗<span className="sr-only"> (nouvel onglet)</span>
+              Voir sur Meta
+              <Icon name="external" className="size-4" />
+              <span className="sr-only"> (nouvel onglet)</span>
             </a>
           </div>
         </div>
@@ -194,9 +212,9 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
           type="button"
           onClick={onClose}
           aria-label="Fermer"
-          className={clsx("absolute right-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white/90 text-ink-700 shadow-md ring-1 ring-ink-900/5 backdrop-blur-sm transition-colors hover:bg-cream-100 hover:text-ink-900", FOCUS_RING)}
+          className={clsx("absolute top-3 right-3 grid size-11 cursor-pointer place-items-center rounded-full bg-white text-ds-ink-700 shadow-ds-card ring-1 ring-ds-ink-900/5 hover:text-ds-ink-900", FOCUS_RING)}
         >
-          <Icon name="close" className="h-4 w-4" />
+          <Icon name="close" className="size-5" />
         </button>
       </div>
     </Modal>
@@ -206,8 +224,8 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
 function Row({ label, strong = false, children }: { label: string; strong?: boolean; children: ReactNode }) {
   return (
     <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-3">
-      <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className={clsx("break-words text-sm", strong ? "font-semibold text-ink-900" : "text-ink-700")}>{children}</dd>
+      <dt className="text-ds-meta text-ds-ink-600">{label}</dt>
+      <dd className={clsx("text-ds-body break-words", strong ? "font-semibold text-ds-ink-900" : "text-ds-ink-700")}>{children}</dd>
     </div>
   );
 }
@@ -215,8 +233,8 @@ function Row({ label, strong = false, children }: { label: string; strong?: bool
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className="mt-0.5 break-words text-sm font-medium text-ink-900">{children}</dd>
+      <dt className="text-ds-meta text-ds-ink-600">{label}</dt>
+      <dd className="mt-0.5 text-ds-body font-medium break-words text-ds-ink-900">{children}</dd>
     </div>
   );
 }

@@ -111,12 +111,14 @@ export function BlogSettingsModal({
             valueText={`Étape ${step + 1} sur ${STEPS.length}`}
             hideValueText
           />
-          {/* `key` : le titre de l'étape arrive en fondu à chaque changement */}
-          <div key={step} className="ds-fade-in">
-            <h2 className="mt-4 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">
-              {current.title}
-            </h2>
-            <p className="mt-1.5 text-base text-ds-ink-700 text-pretty">{current.intro}</p>
+          {/* Le changement d'étape est annoncé (le focus reste sur « Continuer ») ; `key` : le titre arrive en fondu */}
+          <div aria-live="polite">
+            <div key={step} className="ds-fade-in">
+              <h2 className="mt-4 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">
+                {current.title}
+              </h2>
+              <p className="mt-1.5 text-base text-ds-ink-700 text-pretty">{current.intro}</p>
+            </div>
           </div>
         </div>
 
@@ -209,7 +211,7 @@ export function BlogSettingsModal({
               <ul className="mt-4 space-y-2.5">
                 {themes.map((theme, i) => (
                   <li key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-                    <span className="min-w-0 flex-[1_1_12rem] text-base break-words text-ds-ink-900">{theme.label}</span>
+                    <span className="min-w-0 flex-[1_1_7rem] text-base break-words text-ds-ink-900">{theme.label}</span>
                     <div className="flex shrink-0 items-center rounded-full bg-white p-0.5 inset-ring inset-ring-ds-ink-300">
                       <button
                         type="button"
@@ -268,7 +270,8 @@ export function BlogSettingsModal({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ds-ink-200 px-5 py-4 sm:px-8 sm:py-5">
+        {/* Pied collé au bas de la fenêtre : l'action de l'étape reste visible quand le contenu défile */}
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-3xl border-t border-ds-ink-200 bg-white px-5 py-4 sm:px-8 sm:py-5">
           {step > 0 ? (
             <Button variant="quiet" icon={<ArrowLeft size={18} aria-hidden />} onClick={() => setStep(step - 1)}>
               Retour

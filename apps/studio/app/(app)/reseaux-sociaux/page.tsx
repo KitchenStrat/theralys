@@ -1,9 +1,8 @@
-import { Hourglass, Lock, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Hourglass, Lock } from "lucide-react";
 import { hasSocialMedia } from "@theralys/db";
 import { SOCIAL_BIO_LINE } from "@theralys/ai";
 import { monthRange } from "@theralys/shared";
-import { Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
+import { LinkButton } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { clampIsoDay, parisDay, parseMonthParam, shiftIsoDay } from "@/lib/calendar";
 import { getSite, siteUrl } from "@/lib/data";
@@ -19,6 +18,7 @@ import { getSocialRegenerationUsage, type SocialRegenerationUsage } from "@/lib/
 import { swatchesFor } from "@/lib/social/render/theme";
 import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
 import { socialSiteLink } from "@/lib/social/site-link";
+import { SectionUnavailable } from "./section-unavailable";
 import { SocialClient } from "./social-client";
 
 export const metadata = { title: "Réseaux sociaux" };
@@ -38,7 +38,7 @@ export default async function SocialPage({ searchParams }: Props) {
   // Les démos présentent l'offre complète ; les clients suivent leur formule (Scale)
   if (site.type !== "demo" && !hasSocialMedia(site.plan)) {
     return (
-      <Fallback
+      <SectionUnavailable
         icon={Lock}
         title="Les contenus réseaux sociaux ne sont pas inclus dans votre formule"
         action={
@@ -51,7 +51,7 @@ export default async function SocialPage({ searchParams }: Props) {
         mois vos contenus réseaux sociaux prêts à poster — visuels dans vos couleurs, carrousels, stories et
         légendes — préparés à partir de votre site, en plus du blog SEO, des outils de mots-clés et de
         l&apos;Académie.
-      </Fallback>
+      </SectionUnavailable>
     );
   }
 
@@ -77,9 +77,9 @@ export default async function SocialPage({ searchParams }: Props) {
     if (!isMissingSchemaError(err)) throw err;
     console.error("[social] schéma absent — migrations 0001/0002 non appliquées ?", err);
     return (
-      <Fallback icon={Hourglass} title="Cette section est en cours d'activation, revenez dans quelques minutes.">
+      <SectionUnavailable icon={Hourglass} title="Cette section est en cours d'activation, revenez dans quelques minutes.">
         Vos contenus prêts à poster seront préparés à partir de votre site dès l&apos;activation.
-      </Fallback>
+      </SectionUnavailable>
     );
   }
 
@@ -113,29 +113,5 @@ export default async function SocialPage({ searchParams }: Props) {
       requestDates={{ default: clampIsoDay(wanted, min, max), min, max }}
       settings={settings}
     />
-  );
-}
-
-/** Section indisponible (formule, activation en cours) : l'en-tête commun, puis ce qui manque et ce qui viendra. */
-function Fallback({
-  icon,
-  title,
-  action,
-  children,
-}: {
-  icon: LucideIcon;
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Stagger className="space-y-6">
-      <PageHeader section="reseaux-sociaux" />
-      <Card padding="none">
-        <EmptyState icon={icon} title={title} action={action} as="h2">
-          {children}
-        </EmptyState>
-      </Card>
-    </Stagger>
   );
 }

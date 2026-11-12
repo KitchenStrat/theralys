@@ -33,6 +33,12 @@ export const JOURNEY_STEPS = [
 
 export type JourneyStepId = (typeof JOURNEY_STEPS)[number]["id"];
 
+/** Surtitre de la carte d'une étape : « Étape 2 · Relire ». */
+export function stepLabel(id: JourneyStepId): string {
+  const index = JOURNEY_STEPS.findIndex((item) => item.id === id);
+  return `Étape ${index + 1} · ${JOURNEY_STEPS[index]?.short ?? ""}`;
+}
+
 const step = (id: JourneyStepId, done: boolean, description?: string): ChecklistStep => {
   const def = JOURNEY_STEPS.find((item) => item.id === id);
   return { id, label: def?.label ?? id, done, description };

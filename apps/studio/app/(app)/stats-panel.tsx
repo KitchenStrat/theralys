@@ -11,8 +11,6 @@ import { PERIODS, periodLabels } from "./_accueil/periods";
 import { SourcesCard, type SourcesSummary } from "./_accueil/sources-card";
 import { VisitsChart } from "./_accueil/visits-chart";
 
-export type { SourceRow } from "./_accueil/sources-card";
-
 type Daily = { day: string; visitors: number; rdvClicks: number };
 type Metric = "visitors" | "rdvClicks";
 
@@ -62,11 +60,12 @@ const METRICS: Record<
 
 const METRIC_ORDER: readonly Metric[] = ["visitors", "rdvClicks"];
 
+const CHART_ID = "courbe-accueil";
+const HINT_ID = "chiffres-aide";
+
 const WEEKDAY = new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: "UTC" });
 /** Repère de l'axe : le jour de la semaine sur 7 jours (« jeu. »), la date au-delà (« 12 nov. »). */
 const tickOf = (day: string, period: Period) => (period === "7j" ? WEEKDAY.format(new Date(`${day}T00:00:00Z`)) : formatDayFr(day, "short"));
-const CHART_ID = "courbe-accueil";
-const HINT_ID = "chiffres-aide";
 
 /**
  * Les chiffres clés de l'accueil : sélecteur de période (des liens, la période
@@ -153,6 +152,10 @@ export function StatsPanel({ period, stats, sources, socialAccess, awaitingMeasu
           <SourcesCard sources={sources} caption={labels.caption} socialAccess={socialAccess} />
         </div>
       </div>
+      {/* Panneaux des autres périodes : vides et masqués. Leurs onglets sont des liens (la page est relue), mais chacun désigne ainsi un panneau qui existe. */}
+      {PERIODS.filter((entry) => entry.key !== period).map((entry) => (
+        <div key={entry.key} id={`periode-panel-${entry.key}`} role="tabpanel" aria-labelledby={`periode-tab-${entry.key}`} hidden />
+      ))}
     </>
   );
 }

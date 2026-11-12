@@ -2,6 +2,7 @@ import { CircleCheck, ExternalLink, Eye, EyeOff, LayoutTemplate, PenLine, type L
 import { Badge, Card, IconBadge, LinkButton, type BadgeTone } from "@/components/ds";
 import { frenchSpacing, siteAddressLabel } from "@/lib/external-site/format";
 import { BADGE_WRAP, CARD_TITLE } from "./styles";
+import { CardHead } from "./ui";
 
 /**
  * « Votre site Harmony » : le site inclus dans la formule, avec les accès
@@ -32,9 +33,10 @@ export function HostedSiteCard({ url, role, className }: { url: string; role: Ho
     <section aria-labelledby="hosted-site-title" className={className} data-testid="hosted-site-card" data-role={role}>
       <Card padding="lg" className="h-full">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-5">
-          <div className="flex min-w-0 flex-[1_1_20rem] items-start gap-3.5">
-            <IconBadge icon={LayoutTemplate} tone="soft" size="md" />
-            <div className="min-w-0 max-w-xl">
+          <CardHead
+            className="max-w-2xl flex-[1_1_20rem]"
+            icon={<IconBadge icon={LayoutTemplate} tone="soft" size="md" />}
+            title={
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                 <h2 id="hosted-site-title" className={CARD_TITLE}>
                   Votre site Harmony
@@ -43,12 +45,13 @@ export function HostedSiteCard({ url, role, className }: { url: string; role: Ho
                   {badge.label}
                 </Badge>
               </div>
-              <p className="mt-1 wrap-anywhere text-base font-semibold text-ds-ink-900" data-testid="hosted-site-url">
-                {siteAddressLabel(url)}
-              </p>
-              <p className="mt-1.5 text-base text-ds-ink-700">{frenchSpacing(ROLE_TEXT[role])}</p>
-            </div>
-          </div>
+            }
+          >
+            <p className="wrap-anywhere text-base font-semibold text-ds-ink-900" data-testid="hosted-site-url">
+              {siteAddressLabel(url)}
+            </p>
+            <p className="mt-1.5 text-base text-ds-ink-700">{frenchSpacing(ROLE_TEXT[role])}</p>
+          </CardHead>
           <div className="flex max-w-full flex-wrap items-center gap-2">
             <LinkButton href="/editor" variant="secondary" icon={<PenLine size={18} aria-hidden />} data-testid="hosted-site-edit">
               Éditer mon site Harmony

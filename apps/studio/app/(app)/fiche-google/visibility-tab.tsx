@@ -156,7 +156,7 @@ export function VisibilityTab({
     <div className="space-y-6">
       <GoogleVisibilityCard gscAccess connected={searchVisibility.connected} visibility={searchVisibility.visibility} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-[auto_1fr] xl:items-start">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-[auto_1fr] xl:items-start">
         <Card>
           <CardHeader
             icon={Search}
@@ -431,7 +431,7 @@ function AddKeywordForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+    <form onSubmit={onSubmit} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
       <div className="sm:col-span-2">
         <Label htmlFor="google-keyword">Ajouter un mot-clé</Label>
         <Input
@@ -481,7 +481,7 @@ function AddKeywordForm({
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ds-meta text-ds-ink-600 sm:col-span-2">
           Reliez d&apos;abord votre fiche Google.
           {onLinkRequest ? (
-            <button type="button" onClick={onLinkRequest} className="min-h-9 rounded-ds-sm font-semibold text-ds-brand-700 underline ds-focus">
+            <button type="button" onClick={onLinkRequest} className="min-h-9 rounded-ds-sm font-semibold text-ds-brand-700 underline ds-focus pointer-coarse:min-h-11">
               Retrouver ma fiche
             </button>
           ) : null}
@@ -647,9 +647,9 @@ function MapLegend() {
         <div className="min-w-0">
           <h3 className="text-ds-body font-semibold text-ds-ink-900">Lire les pastilles</h3>
           {/* L'échelle continue, et sous elle les rangs repérés, en chiffres, à leur place sur la barre */}
-          <div className="mt-3 flex items-start gap-2.5 text-ds-meta/3 font-medium text-ds-ink-700">
+          <div className="mt-3 flex items-start gap-2.5 text-ds-meta/3 font-medium whitespace-nowrap text-ds-ink-700">
             <span>1re place</span>
-            <span aria-hidden className="block w-36 sm:w-44">
+            <span aria-hidden className="block w-24 shrink-0 min-[360px]:w-36 sm:w-44">
               <span className="relative block h-3 rounded-full" style={{ backgroundImage: rankGradientCss() }}>
                 {RANK_LEGEND_TICKS.slice(1, -1).map((rank) => (
                   <span key={rank} className="absolute -top-0.5 h-4 w-0.5 rounded-full bg-white" style={{ left: tickLeft(rank) }} />
@@ -673,7 +673,7 @@ function MapLegend() {
             <span>20e</span>
           </div>
         </div>
-        <ul className="grid min-w-0 flex-[1_1_18rem] gap-x-6 gap-y-2 sm:grid-cols-2">
+        <ul className="grid min-w-0 flex-[1_1_18rem] grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
           {bands.map((band) => (
             <li key={band.id} className="flex items-start gap-2.5 text-ds-meta text-ds-ink-700">
               <span className="mt-0.5 grid w-9 shrink-0 place-items-center">{band.swatch}</span>

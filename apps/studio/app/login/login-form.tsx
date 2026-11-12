@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { LogIn, TriangleAlert } from "lucide-react";
 import { Input, Label } from "@theralys/ui";
 import { Button } from "@/components/ds";
@@ -14,9 +14,15 @@ export function LoginForm({
   action: (prev: State, formData: FormData) => Promise<State>;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
+  // Présentation seulement : après un refus, le formulaire est remis à zéro ; l'adresse saisie, elle, reste affichée
+  const [email, setEmail] = useState("");
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form
+      action={formAction}
+      onSubmit={(event) => setEmail(String(new FormData(event.currentTarget).get("email") ?? ""))}
+      className="space-y-5"
+    >
       <div>
         <Label htmlFor="email" className="text-ds-body! text-ds-ink-800!">
           Email
@@ -27,6 +33,7 @@ export function LoginForm({
           type="email"
           autoComplete="email"
           required
+          defaultValue={email}
           aria-describedby={state.error ? "login-erreur" : undefined}
           className="min-h-12 text-base!"
         />

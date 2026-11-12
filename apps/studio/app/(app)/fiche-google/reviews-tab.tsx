@@ -172,7 +172,7 @@ export function ReviewsTab({
         ) : null}
 
         {summary.total > 0 ? (
-          <div className="mt-6 grid gap-x-8 gap-y-7 md:grid-cols-2 xl:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1fr)]">
+          <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-7 md:grid-cols-2 xl:grid-cols-[auto_minmax(0,1.1fr)_minmax(0,1fr)]">
             <div className="flex items-center gap-5 md:col-span-2 xl:col-span-1 xl:flex-col xl:items-start xl:justify-center xl:gap-3 xl:border-r xl:border-ds-ink-200 xl:pr-8">
               <p className="font-ds-display text-[4rem]/none font-extrabold tracking-tight text-ds-section-ink">
                 {summary.average === null ? (
@@ -304,7 +304,13 @@ export function ReviewsTab({
                 icon={SearchX}
                 title="Aucun avis dans ce filtre."
                 action={
-                  <Button variant="secondary" onClick={() => setFilter("tous")}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setFilter("tous");
+                      setShown(PAGE_SIZE);
+                    }}
+                  >
                     Voir tous les avis
                   </Button>
                 }

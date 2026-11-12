@@ -1,4 +1,4 @@
-import type { ChecklistStep, SectionKey } from "@/components/ds";
+import { NBSP, type ChecklistStep, type SectionKey } from "@/components/ds";
 import type { SetupKey, SetupTask } from "@/lib/accueil";
 
 /**
@@ -31,7 +31,7 @@ export const SETUP_COPY: Record<
     section: "mon-site",
     todo: "Vérifiez les pages de votre site",
     done: "Les pages de votre site sont vérifiées",
-    description: "Textes, photos, horaires, tarifs : assurez-vous que tout vous ressemble, puis enregistrez.",
+    description: `Textes, photos, horaires, tarifs${NBSP}: assurez-vous que tout vous ressemble, puis enregistrez.`,
     href: "/editor",
     action: "Ouvrir l'éditeur",
   },
@@ -39,7 +39,7 @@ export const SETUP_COPY: Record<
     section: "mon-site",
     todo: "Publiez votre site",
     done: "Votre site est publié",
-    description: "Dans l'éditeur, enregistrez vos modifications : elles sont en ligne immédiatement.",
+    description: `Dans l'éditeur, enregistrez vos modifications${NBSP}: elles sont en ligne immédiatement.`,
     href: "/editor",
     action: "Ouvrir l'éditeur",
   },

@@ -10,9 +10,9 @@ import { buttonClasses, type ButtonSize, type ButtonVariant } from "@/components
  * boutons gardent `aria-pressed`, numéro d'étape.
  */
 
-/** Lien dans une phrase (bleu de marque, souligné) ; `ON_TINT` : variante lisible sur un encart teinté. */
-export const TEXT_LINK = "rounded font-semibold text-ds-brand-700 underline underline-offset-2 ds-focus";
-export const TEXT_LINK_ON_TINT = "rounded font-semibold text-ds-brand-800 underline underline-offset-2 ds-focus";
+/** Lien dans une phrase (bleu de marque, souligné), posé sur un `<a>` ou un `<button>` ; `ON_TINT` : variante lisible sur un encart teinté. */
+export const TEXT_LINK = "cursor-pointer rounded font-semibold text-ds-brand-700 underline underline-offset-2 ds-focus";
+export const TEXT_LINK_ON_TINT = "cursor-pointer rounded font-semibold text-ds-brand-800 underline underline-offset-2 ds-focus";
 
 export type NoticeTone = "section" | "neutral" | "warning" | "danger" | "success";
 

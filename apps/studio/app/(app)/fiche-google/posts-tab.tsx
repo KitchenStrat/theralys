@@ -522,7 +522,7 @@ function RequestBar({
         </p>
       ) : null}
 
-      <form onSubmit={onSubmit} className="mt-5 grid gap-4 sm:grid-cols-2">
+      <form onSubmit={onSubmit} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Label htmlFor="google-post-topic">Sur quel sujet ? *</Label>
           <Input
@@ -707,7 +707,7 @@ function CalendarCell({
   const dayNumber = Number(iso.slice(8, 10));
   if (items.length === 0) {
     return (
-      <div className="min-h-24 rounded-ds-sm bg-ds-ink-50 p-0.5 ring-1 ring-ds-ink-200 sm:p-2">
+      <div className="min-h-24 rounded-ds-sm bg-ds-ink-50 ring-1 ring-ds-ink-200 sm:p-2">
         <DayNumber value={dayNumber} isToday={isToday} />
       </div>
     );
@@ -715,7 +715,8 @@ function CalendarCell({
   const shown = items.slice(0, CHIP_MAX);
   const more = items.length - shown.length;
   return (
-    <div className="min-h-24 rounded-ds-sm bg-white p-0.5 ring-1 ring-ds-section-line sm:p-2">
+    // Sous 640 px, la pastille prend toute la largeur de la case : c'est elle, la cible du doigt
+    <div className="min-h-24 rounded-ds-sm bg-white ring-1 ring-ds-section-line sm:p-2">
       <DayNumber value={dayNumber} isToday={isToday} />
       <div className="mt-0.5 space-y-1 sm:mt-1">
         {shown.map((item) => (

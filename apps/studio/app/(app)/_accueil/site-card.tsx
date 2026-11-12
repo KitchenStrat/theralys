@@ -46,7 +46,7 @@ export function SiteCard({ reference, address, viewHref, emphasis }: Props) {
       ) : (
         <>
           <p className="mt-3.5 text-base text-ds-ink-700">
-            Textes, photos, horaires, tarifs : modifiez votre site en quelques clics, c&apos;est en ligne immédiatement.
+            Textes, photos, horaires, tarifs&nbsp;: modifiez votre site en quelques clics, c&apos;est en ligne immédiatement.
           </p>
           <p className="mt-2 text-ds-body">
             <Link

@@ -296,7 +296,7 @@ function CreativeCard({
               {creative.name}
             </h2>
             <p className="mt-0.5 text-ds-body text-ds-ink-600">
-              Page d&apos;atterrissage : <span className="font-medium break-all text-ds-ink-800">{pageAddress ?? LANDING_UNAVAILABLE}</span>
+              Page d&apos;atterrissage : <span className="font-medium wrap-anywhere text-ds-ink-800">{pageAddress ?? LANDING_UNAVAILABLE}</span>
             </p>
           </div>
         </div>
@@ -306,7 +306,7 @@ function CreativeCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,28.5rem)_minmax(0,1fr)]">
+      <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,28.5rem)_minmax(0,1fr)]">
         {/* L'annonce telle qu'elle se présentera dans le fil : la page, le texte, le visuel, puis le lien et son bouton */}
         <div>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -360,11 +360,11 @@ function CreativeCard({
           />
           <TextField label="Titre" text={creative.headline} max={META_ADS_TEXT.headlineMax} />
           <TextField label="Description" text={creative.description} max={META_ADS_TEXT.descriptionMax} />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField label="Accroche sur le visuel" text={creative.hook} max={META_ADS_TEXT.hookMax} />
             <TextField label="Ligne secondaire" text={creative.subline} max={META_ADS_TEXT.sublineMax} />
           </div>
-          <dl className="grid gap-3 sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-ds-md bg-ds-section-tint px-4 py-3 inset-ring inset-ring-ds-section-line/70">
               <dt className="text-ds-meta font-semibold text-ds-ink-700">Bouton</dt>
               <dd className="mt-0.5 text-base font-semibold text-ds-section-ink">{ctaLabel(creative.cta)}</dd>

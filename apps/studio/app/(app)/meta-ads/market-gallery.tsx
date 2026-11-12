@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card } from "@theralys/ui";
+import { Binoculars, Bookmark, ChevronDown, SearchX } from "lucide-react";
+import { Button, Card, EmptyState } from "@/components/ds";
 import {
   META_GALLERY_DEFAULT_FILTERS,
   META_LIBRARY_BULK_MAX,
@@ -112,21 +113,21 @@ export function MarketGallery({
 
   if (ads.length === 0) {
     return mode === "bibliotheque" ? (
-      <Card className="p-8 text-center text-ink-500" data-testid="meta-library-empty">
-        <p className="font-medium text-ink-700">Votre bibliothèque est vide.</p>
-        <p className="mx-auto mt-1 max-w-xl text-sm">
+      <Card padding="none" data-testid="meta-library-empty">
+        <EmptyState
+          as="h3"
+          icon={Bookmark}
+          title="Votre bibliothèque est vide."
+          action={<Button onClick={onShowWatch}>Voir les annonces</Button>}
+        >
           Dans l&apos;onglet Annonces, cliquez sur « Garder comme exemple » pour conserver une annonce, son analyse et ses visuels, même quand elle ne sera plus diffusée.
-        </p>
-        <div className="mt-5">
-          <Button variant="secondary" onClick={onShowWatch}>
-            Voir les annonces
-          </Button>
-        </div>
+        </EmptyState>
       </Card>
     ) : (
-      <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Aucune annonce à afficher dans votre veille.</p>
-        <p className="mt-1 text-sm">Relancez l&apos;analyse depuis l&apos;onglet Diagnostic pour repérer de nouvelles annonces.</p>
+      <Card padding="none">
+        <EmptyState as="h3" icon={Binoculars} title="Aucune annonce à afficher dans votre veille.">
+          Relancez l&apos;analyse depuis l&apos;onglet Diagnostic pour repérer de nouvelles annonces.
+        </EmptyState>
       </Card>
     );
   }
@@ -143,18 +144,23 @@ export function MarketGallery({
         onToggleSelecting={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
 
-      {!canEdit && mode === "veille" ? <p className="mt-3 px-1 text-sm text-ink-500">Votre bibliothèque personnelle est en cours d&apos;activation.</p> : null}
+      {!canEdit && mode === "veille" ? <p className="mt-3 px-1 text-ds-body text-ds-ink-600">Votre bibliothèque personnelle est en cours d&apos;activation.</p> : null}
 
       {filtered.length === 0 ? (
-        <div className="mt-5 rounded-card border border-dashed border-cream-300 bg-white/60 px-6 py-12 text-center">
-          <p className="font-medium text-ink-700">Aucune annonce ne correspond à ces filtres.</p>
-          <p className="mt-1 text-sm text-ink-500">Élargissez la recherche ou revenez à la liste complète.</p>
-          <div className="mt-5">
+        <EmptyState
+          as="h3"
+          tone="tinted"
+          icon={SearchX}
+          title="Aucune annonce ne correspond à ces filtres."
+          className="mt-5"
+          action={
             <Button variant="secondary" onClick={() => changeFilters(META_GALLERY_DEFAULT_FILTERS)}>
               Réinitialiser les filtres
             </Button>
-          </div>
-        </div>
+          }
+        >
+          Élargissez la recherche ou revenez à la liste complète.
+        </EmptyState>
       ) : (
         // Conteneur de requêtes : le nombre de colonnes suit la largeur de la galerie, pas celle de la fenêtre
         <div className="@container mt-5">
@@ -192,10 +198,10 @@ export function MarketGallery({
 
       {filtered.length > limit ? (
         <div className="mt-6 flex flex-col items-center gap-2">
-          <Button variant="secondary" data-testid="meta-gallery-more" onClick={() => setLimit((current) => current + PAGE_SIZE)}>
+          <Button variant="secondary" data-testid="meta-gallery-more" onClick={() => setLimit((current) => current + PAGE_SIZE)} iconRight={<ChevronDown size={18} aria-hidden />}>
             Afficher plus
           </Button>
-          <p className="text-xs tabular-nums text-ink-500">
+          <p className="text-ds-meta text-ds-ink-600 ds-tnum">
             {visible.length} annonces affichées sur {filtered.length}
           </p>
         </div>

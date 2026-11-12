@@ -8,8 +8,10 @@ import { frenchSpacing, readsRemaining, readsRemainingLabel, siteAddressLabel } 
 import { disconnectExternalSiteAction, rereadExternalSite } from "./actions";
 import { ConnectForm } from "./connect-form";
 import { ActionMessage } from "./fields";
+import { stepLabel } from "./journey";
 import { PasteForm } from "./paste-form";
 import { SUB_TITLE } from "./styles";
+import { CardHead } from "./ui";
 
 /**
  * La première lecture du site a échoué : ce qui s'est passé et quoi faire
@@ -60,7 +62,7 @@ export function ReadErrorPanel({
     <section aria-labelledby="read-error-title" data-testid="read-error-panel" data-error={error}>
       <Card padding="none" className="overflow-hidden">
         <div className="bg-ds-warning-100 px-5 py-5 sm:px-8 sm:py-6">
-          <p className="text-ds-meta font-semibold text-ds-warning-900">Étape 1 · Connecter</p>
+          <p className="text-ds-meta font-semibold text-ds-warning-900">{stepLabel("connecter")}</p>
           <div className="mt-2.5 flex items-start gap-3.5">
             <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-ds-sm bg-white text-ds-warning-700 shadow-sm">
               <TriangleAlert size={22} strokeWidth={2} />
@@ -80,16 +82,12 @@ export function ReadErrorPanel({
         <div className="px-5 py-6 sm:px-8 sm:py-7">
           {canPaste ? (
             <div className="mb-7 border-b border-ds-ink-200 pb-7">
-              <div className="flex items-start gap-3.5">
-                <IconBadge icon={ClipboardPaste} tone="soft" size="sm" />
-                <div className="min-w-0">
-                  <h3 className={SUB_TITLE}>Coller le texte de mon site</h3>
-                  <p className="mt-1 max-w-[62ch] text-base text-ds-ink-700">
-                    Ouvrez votre site, copiez le texte de vos pages (accueil, spécialités, présentation, tarifs, contact) et collez-le ci-dessous, à la suite. Nous en tirons le même
-                    profil que si nous avions lu votre site.
-                  </p>
-                </div>
-              </div>
+              <CardHead icon={<IconBadge icon={ClipboardPaste} tone="soft" size="sm" />} title={<h3 className={SUB_TITLE}>Coller le texte de mon site</h3>}>
+                <p className="max-w-[62ch] text-base text-ds-ink-700">
+                  Ouvrez votre site, copiez le texte de vos pages (accueil, spécialités, présentation, tarifs, contact) et collez-le ci-dessous, à la suite. Nous en tirons le même profil
+                  que si nous avions lu votre site.
+                </p>
+              </CardHead>
               <div className="mt-5">
                 <PasteForm idPrefix="paste" />
               </div>

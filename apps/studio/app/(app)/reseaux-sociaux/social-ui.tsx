@@ -24,6 +24,13 @@ import type { SocialCalendarItem } from "@/lib/social/data";
  * composé à partir du design system (`@/components/ds`).
  */
 
+/**
+ * Phrase d'usage de la section, sous le titre de page. Elle précise celle du
+ * registre (« nous préparons, vous validez ») : ici rien n'est publié à la place
+ * du praticien — il télécharge, colle la légende et publie lui-même.
+ */
+export const SECTION_PURPOSE = "Vos contenus du mois, prêts à poster : nous les préparons, vous les publiez.";
+
 export type SocialFormatKey = SocialCalendarItem["format"];
 
 export const FORMAT_LABEL: Record<SocialFormatKey, string> = {
@@ -42,6 +49,15 @@ export const FORMAT_STYLE: Record<SocialFormatKey, { icon: LucideIcon; tile: str
   carousel: { icon: GalleryHorizontalEnd, tile: "bg-linear-to-br from-ds-indigo-500 to-ds-violet-600" },
   story: { icon: Smartphone, tile: "bg-linear-to-br from-ds-teal-500 to-ds-cyan-600" },
 };
+
+/**
+ * Typographie française à l'affichage d'un sujet : l'espace devant « ? ! : ; »
+ * et à l'intérieur des guillemets devient insécable, pour qu'un signe ne se
+ * retrouve jamais seul en début de ligne. Le texte enregistré n'est pas modifié.
+ */
+export function nbspFr(text: string): string {
+  return text.replace(/ ([?!:;»])/g, "\u00a0$1").replace(/« /g, "«\u00a0");
+}
 
 /** Nom accessible d'un contenu : « Carrousel — Un exercice simple (sur mesure) ». */
 export function itemLabel(item: SocialCalendarItem): string {
@@ -156,7 +172,7 @@ export function CustomBadge({ className }: { className?: string }) {
 /**
  * Ligne cliquable d'un contenu (liste du mois, fenêtre d'une journée) :
  * vignette de format, sujet, précisions, statut. Sur mobile, le statut passe
- * sous le sujet pour lui laisser toute la largeur.
+ * sous le sujet, à droite des précisions, pour laisser au sujet toute la largeur.
  */
 export function ContentRow({
   item,
@@ -176,24 +192,25 @@ export function ContentRow({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="group/row grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3.5 gap-y-1.5 rounded-ds-sm px-2 py-2.5 text-left ds-focus-inset hover:bg-ds-section-tint sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]"
+      className="group/row grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-1.5 rounded-ds-sm px-2 py-2.5 text-left ds-focus-inset hover:bg-ds-section-tint sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-y-0.5"
     >
-      <FormatTile
-        format={item.format}
-        accentColor={item.accentColor}
-        className="row-span-2 self-start sm:row-span-1 sm:self-center"
-      />
-      <span className="min-w-0">
-        <span className="line-clamp-2 text-base font-semibold text-ds-ink-900">{item.topic}</span>
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-ds-meta text-ds-ink-600">{meta}</span>
+      <FormatTile format={item.format} accentColor={item.accentColor} className="row-span-2 self-start sm:self-center" />
+      <span className="col-span-2 col-start-2 line-clamp-2 text-base font-semibold text-ds-ink-900 sm:col-span-1">
+        {nbspFr(item.topic)}
       </span>
-      <span className="col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end">
-        <ContentStatus status={statusOf(item).key} />
+      {/* Mobile : précisions et statut se suivent sur une ligne qui se replie. Dès 640 px (`contents`), chacun rejoint sa colonne. */}
+      <span className="col-span-2 col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:contents">
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-ds-meta text-ds-ink-600 sm:col-start-2 sm:row-start-2">
+          {meta}
+        </span>
+        <span className="sm:col-start-3 sm:row-span-2 sm:row-start-1 sm:self-center">
+          <ContentStatus status={statusOf(item).key} />
+        </span>
       </span>
       <ChevronRight
         size={18}
         aria-hidden
-        className="hidden shrink-0 text-ds-ink-400 motion-safe:transition-transform motion-safe:duration-ds-fast motion-safe:group-hover/row:translate-x-0.5 sm:block"
+        className="col-start-4 row-span-2 row-start-1 hidden shrink-0 text-ds-ink-400 motion-safe:transition-transform motion-safe:duration-ds-fast motion-safe:group-hover/row:translate-x-0.5 sm:block"
       />
     </button>
   );
@@ -243,7 +260,8 @@ export function ErrorNote({ id, className, children }: { id?: string; className?
   return (
     <p id={id} role="alert" className={clsx("flex items-start gap-2 text-ds-body font-medium text-ds-danger-700", className)}>
       <TriangleAlert size={18} aria-hidden className="mt-0.5 shrink-0" />
-      <span className="min-w-0">{children}</span>
+      {/* Message venu du serveur : ses guillemets et sa ponctuation ne se détachent pas en fin de ligne */}
+      <span className="min-w-0">{typeof children === "string" ? nbspFr(children) : children}</span>
     </p>
   );
 }
@@ -324,13 +342,18 @@ export function ModalHeader({
 
 /**
  * Zones de texte de la section : même dessin que les champs partagés
- * (`Input`, `Select`), que la coquille restyle ; texte en 15 px pour la lecture.
+ * (`Input`, `Select`), que la coquille restyle ; texte en 15 px pour la lecture,
+ * 16 px au doigt (en dessous, iOS agrandit la page à chaque saisie).
  */
 export const TEXTAREA_CLASS =
-  "w-full rounded-xl border border-ink-300 px-3 py-2 text-ds-body text-ink-900 placeholder:text-ink-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100";
+  "w-full rounded-xl border border-ink-300 px-3 py-2 text-ds-body text-ink-900 placeholder:text-ink-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 pointer-coarse:text-base";
 
-/** Champs à une ligne : 44 px de haut, comme les boutons qu'ils côtoient. */
-export const FIELD_CLASS = "min-h-11";
+/**
+ * À ajouter aux champs partagés à une ligne : 44 px de haut, comme les boutons
+ * qu'ils côtoient ; 16 px au doigt ; inactifs, ils se voient comme tels.
+ */
+export const FIELD_CLASS =
+  "min-h-11 pointer-coarse:text-base disabled:cursor-not-allowed disabled:bg-ds-ink-100 disabled:text-ds-ink-600";
 
 /**
  * À poser sur un `Segmented` partagé (ou sur le conteneur de boutons hérités) :

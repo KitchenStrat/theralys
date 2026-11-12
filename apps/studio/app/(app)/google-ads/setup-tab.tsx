@@ -217,7 +217,7 @@ function Guide({
                   ref={(element) => {
                     summaries.current[index] = element;
                   }}
-                  className="flex cursor-pointer list-none items-center gap-3.5 rounded-ds-md p-3.5 ds-focus sm:px-4 [&::-webkit-details-marker]:hidden"
+                  className="flex cursor-pointer list-none items-start gap-3.5 rounded-ds-md p-3.5 ds-focus sm:px-4 [&::-webkit-details-marker]:hidden"
                 >
                   <span
                     aria-hidden
@@ -228,17 +228,19 @@ function Guide({
                   >
                     {index + 1}
                   </span>
-                  <span className="min-w-0 flex-1">
+                  {/* `min-h-9` : un titre d'une ligne reste centré sur sa pastille */}
+                  <span className="flex min-h-9 min-w-0 flex-1 flex-col justify-center">
                     <span className="block text-base font-semibold text-ds-ink-900">
                       <span className="sr-only">Étape {index + 1} : </span>
                       {step.title}
                     </span>
-                    <span className="block text-ds-body text-ds-ink-600">{step.summary}</span>
+                    {/* Sur téléphone, l'accroche d'une étape repliée est masquée : la liste des onze étapes tient en deux écrans */}
+                    <span className={clsx("block text-ds-body text-ds-ink-600", open ? "" : "max-sm:hidden")}>{step.summary}</span>
                   </span>
                   <ChevronDown
                     size={20}
                     aria-hidden
-                    className="shrink-0 text-ds-ink-600 transition-transform duration-ds-base ease-ds-out group-open/step:rotate-180 motion-reduce:transition-none"
+                    className="mt-2 shrink-0 text-ds-ink-600 transition-transform duration-ds-base ease-ds-out group-open/step:rotate-180 motion-reduce:transition-none"
                   />
                 </summary>
                 <div className="px-3.5 pb-4 sm:pr-5 sm:pl-[4.125rem]">
@@ -317,12 +319,12 @@ function CopyBlock({
   }
   if (!plan && !keywords) {
     return (
-      <p className={clsx(box, "text-ds-body text-ds-ink-700")}>
-        Les données à coller viendront de votre analyse :{" "}
-        <button type="button" onClick={() => onSelectTab("diagnostic")} className={TEXT_LINK}>
-          lancer l&apos;analyse
-        </button>
-      </p>
+      <div className={clsx(box, "flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5")}>
+        <p className="min-w-0 flex-[1_1_14rem] text-ds-body text-ds-ink-700">Les données à coller viendront de votre analyse : lancez-la depuis l&apos;onglet Diagnostic.</p>
+        <Button type="button" variant="secondary" size="sm" iconRight={<ArrowRight size={16} aria-hidden />} onClick={() => onSelectTab("diagnostic")}>
+          Aller au diagnostic
+        </Button>
+      </div>
     );
   }
   if (copy === "negatives") {

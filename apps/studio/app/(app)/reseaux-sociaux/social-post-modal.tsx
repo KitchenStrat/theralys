@@ -37,7 +37,6 @@ import {
   Button,
   GenerationProgress,
   InlineSuccess,
-  LinkButton,
   Skeleton,
   type TimedStep,
 } from "@/components/ds";
@@ -64,6 +63,7 @@ import {
   ModalHeader,
   TEXTAREA_CLASS,
   TOUCH_BUTTONS_CLASS,
+  nbspFr,
   type ContentStatusKey,
 } from "./social-ui";
 
@@ -77,7 +77,7 @@ const SIZE_HELP: Record<SocialSize, string> = {
 const SIZE_ASPECT: Record<SocialSize, string> = {
   square: "aspect-square max-w-[540px]",
   portrait: "aspect-[4/5] max-w-[400px]",
-  story: "aspect-[9/16] max-w-[340px]",
+  story: "aspect-[9/16] max-w-[260px] sm:max-w-[340px]",
   landscape: "aspect-[4/3] max-w-[560px]",
 };
 const NETWORKS: Record<SocialCalendarItem["format"], string> = {
@@ -204,6 +204,17 @@ function PostModalBody({
   const [regenerating, startRegenerating] = useTransition();
   const [regenMessage, setRegenMessage] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(regenRemaining);
+  // « Régénérer », inactif pendant l'attente, a perdu le focus : il le retrouve à la réponse
+  const wasRegenerating = useRef(false);
+  const regenWaitingRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // L'attente s'affiche sous le bouton : elle est amenée à l'écran si elle en dépasse
+    if (regenerating) regenWaitingRef.current?.scrollIntoView({ block: "nearest" });
+    if (wasRegenerating.current && !regenerating && document.activeElement === document.body) {
+      actionsRef.current?.querySelector<HTMLElement>('[data-focus="regen"]:not(:disabled)')?.focus({ preventScroll: true });
+    }
+    wasRegenerating.current = regenerating;
+  }, [regenerating]);
 
   const isCarousel = item.format === "carousel";
   const published = item.status === "published";
@@ -330,7 +341,7 @@ function PostModalBody({
     <Modal open onClose={onClose} title={item.topic} size="xl" plain>
       {/* Bandeau : retour, sujet, format, statut, origine */}
       <ModalHeader
-        title={item.topic}
+        title={nbspFr(item.topic)}
         onClose={onClose}
         lead={
           <span className="hidden sm:block">
@@ -733,7 +744,7 @@ function PostModalBody({
               <div className="rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
                 <h3 className="flex items-center gap-2 font-ds-display text-lg/7 font-bold text-ds-section-ink">
                   <Sparkles size={18} aria-hidden className="shrink-0 text-ds-section-accent" />
-                  Envie d&apos;une autre version ?
+                  Envie d&apos;une autre version&nbsp;?
                 </h3>
                 <label htmlFor={`instructions-${item.id}`} className="mt-2 block text-ds-body font-semibold text-ds-ink-900">
                   Instructions pour régénérer ce contenu
@@ -781,6 +792,7 @@ function PostModalBody({
                     size="sm"
                     icon={<Sparkles size={16} aria-hidden />}
                     loading={regenerating}
+                    data-focus="regen"
                     onClick={regenerate}
                     disabled={busy || regenBlocked !== undefined}
                     title={regenBlocked}
@@ -794,8 +806,11 @@ function PostModalBody({
                     {regenBlocked}
                   </p>
                 ) : null}
-                {regenerating ? (
-                  <div className="mt-3 rounded-ds-sm bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5 ds-fade-in">
+                {regenerating && error === null ? (
+                  <div
+                    ref={regenWaitingRef}
+                    className="mt-3 scroll-mb-4 rounded-ds-sm bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5 ds-fade-in"
+                  >
                     <GenerationProgress
                       title="Harmony prépare une nouvelle version"
                       steps={REGEN_STEPS}
@@ -956,8 +971,15 @@ function useFocusAfterToggle<T>(
 function SourceBadge({ href, label }: { href?: string; label: string }) {
   if (!href) return <Badge tone="neutral">{label}</Badge>;
   return (
-    <LinkButton href={href} external variant="secondary" size="sm" iconRight={<ExternalLink size={14} aria-hidden />}>
-      {label}
-    </LinkButton>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-ds-sm bg-ds-ink-100 px-3 py-1.5 text-ds-meta font-medium text-ds-brand-800 ds-focus hover:bg-ds-brand-100 pointer-coarse:min-h-11"
+    >
+      <span className="min-w-0">{label}</span>
+      <ExternalLink size={14} aria-hidden className="shrink-0" />
+      <span className="sr-only"> (nouvel onglet)</span>
+    </a>
   );
 }

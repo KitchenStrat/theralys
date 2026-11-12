@@ -43,7 +43,7 @@ export default async function LoginPage({ searchParams }: Props) {
         ) : null}
         <Card padding="lg">
           <h1 className="font-ds-display text-ds-title font-bold text-ds-ink-900 text-balance">Connectez-vous</h1>
-          <p className="mt-1.5 mb-6 text-base text-ds-ink-600">Retrouvez votre espace praticien.</p>
+          <p className="mt-1.5 mb-6 text-base text-ds-ink-600">Saisissez l&apos;email et le mot de passe de votre espace.</p>
           <LoginForm action={loginAction} />
         </Card>
       </Stagger>

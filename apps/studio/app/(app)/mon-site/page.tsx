@@ -10,6 +10,7 @@ import { detectedItems, formatDayParis, formatMomentParis, siteAddressLabel } fr
 import { installGuides, measureState, privacyParagraph } from "@/lib/external-site/measure";
 import { ActivationCard } from "./activation-card";
 import { ConnectForm } from "./connect-form";
+import { HashAnchor } from "./hash-anchor";
 import { HostedSiteCard, type HostedSiteRole } from "./hosted-site-card";
 import { currentStep, journeyOf, type Journey } from "./journey";
 import { JourneyAside, JourneyOutline } from "./journey-aside";
@@ -20,6 +21,7 @@ import { ReadErrorPanel } from "./read-error-panel";
 import { ReadingPanel } from "./reading-panel";
 import { SiteSummary } from "./site-summary";
 import { CARD_TITLE } from "./styles";
+import { CardHead } from "./ui";
 
 export const metadata = { title: "Mon site" };
 export const dynamic = "force-dynamic";
@@ -68,26 +70,32 @@ export default async function MonSitePage() {
     return (
       <Screen state="none">
         <HostedSiteCard url={hostedUrl} role="reference" className="xl:col-span-2" />
-        <section aria-labelledby="connect-title" data-testid="connect-card">
-          <Card padding="lg" className="h-full">
-            <div className="flex items-start gap-3.5">
-              <IconBadge icon={Link2} size="md" />
+        <section aria-labelledby="connect-title" className="xl:col-span-2" data-testid="connect-card">
+          <Card padding="lg">
+            {/* Le formulaire, et à côté (dessous sur un écran étroit) ce qui se passera ensuite */}
+            <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] xl:gap-10">
               <div className="min-w-0">
-                <h2 id="connect-title" className={CARD_TITLE}>
-                  Vous avez déjà un site&nbsp;?
-                </h2>
-                <p className="mt-1 max-w-[62ch] text-base text-ds-ink-700">
-                  Indiquez son adresse&nbsp;: nous lisons ses pages pour comprendre votre activité. Tous vos outils s&apos;appuient ensuite sur lui&nbsp;: vos contenus reprennent ce que vous
-                  proposez vraiment, vos liens y mènent et vos statistiques comptent ses visites.
-                </p>
+                <CardHead
+                  icon={<IconBadge icon={Link2} size="md" />}
+                  title={
+                    <h2 id="connect-title" className={CARD_TITLE}>
+                      Vous avez déjà un site&nbsp;?
+                    </h2>
+                  }
+                >
+                  <p className="max-w-[62ch] text-base text-ds-ink-700">
+                    Indiquez son adresse&nbsp;: nous lisons ses pages pour comprendre votre activité. Tous vos outils s&apos;appuient ensuite sur lui&nbsp;: vos contenus reprennent ce que
+                    vous proposez vraiment, vos liens y mènent et vos statistiques comptent ses visites.
+                  </p>
+                </CardHead>
+                <div className="mt-6">
+                  <ConnectForm idPrefix="connect" ownHosts={ownHosts} />
+                </div>
               </div>
-            </div>
-            <div className="mt-6">
-              <ConnectForm idPrefix="connect" ownHosts={ownHosts} />
+              <JourneyOutline />
             </div>
           </Card>
         </section>
-        <JourneyOutline />
       </Screen>
     );
   }
@@ -159,6 +167,7 @@ function Screen({ state, journey, rows = 1, children }: { state: ReadScreenState
       <div className="min-w-0 xl:col-span-2">
         <PageHeader section="mon-site" />
         <ReadAnnouncer state={state} />
+        <HashAnchor />
       </div>
       {journey ? <JourneyAside journey={journey} rows={rows} /> : null}
       {children}

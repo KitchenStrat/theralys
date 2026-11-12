@@ -19,6 +19,9 @@ const BENEFITS: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: Megaphone, title: "Un post par semaine", text: "Préparé à partir de votre site : il ne vous reste qu'à le publier sur votre fiche." },
 ];
 
+/** Le déroulé de la liaison, annoncé avant de commencer. */
+const STEPS = ["Tapez le nom de votre cabinet et sa ville", "Choisissez votre fiche dans la liste", "Harmony lit votre fiche et prépare son audit"];
+
 /**
  * Écran d'accueil de la section tant que la fiche n'est pas reliée : à quoi
  * sert la section, et la seule chose à faire — retrouver sa fiche (nom +
@@ -81,8 +84,9 @@ export function LinkCard({ siteName, onLinked }: { siteName: string; onLinked?: 
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <NextStepCard
+        className="min-w-0"
         eyebrow="Votre première étape"
         title="Reliez votre fiche Google"
         duration="2 min"
@@ -155,6 +159,22 @@ export function LinkCard({ siteName, onLinked }: { siteName: string; onLinked?: 
               </>
             ) : null}
 
+            {results.length === 0 && !pending && !message ? (
+              <ol className="mt-5 grid grid-cols-1 gap-x-4 gap-y-2.5 sm:grid-cols-3" aria-label="Comment relier votre fiche">
+                {STEPS.map((step, index) => (
+                  <li key={step} className="flex items-start gap-2.5 text-ds-body text-ds-ink-700">
+                    <span
+                      aria-hidden
+                      className="grid size-7 shrink-0 place-items-center rounded-full bg-ds-section-tint-2 text-ds-meta font-bold text-ds-section-ink ds-tnum"
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+
             {pending ? <WaitNote className="mt-4">Liaison et première synchronisation en cours… Ne fermez pas la page.</WaitNote> : null}
             {message ? <InlineSuccess className="mt-4">{message}</InlineSuccess> : null}
             {error ? <ErrorNote className="mt-4">{error}</ErrorNote> : null}
@@ -171,7 +191,7 @@ export function LinkCard({ siteName, onLinked }: { siteName: string; onLinked?: 
         </p>
       </NextStepCard>
 
-      <Card variant="tinted">
+      <Card variant="tinted" className="min-w-0">
         <h2 className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7">
           Ce que vous y gagnez
         </h2>

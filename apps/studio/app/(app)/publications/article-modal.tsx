@@ -7,7 +7,7 @@ import { AiBadge, Badge, Button, LinkButton } from "@/components/ds";
 import type { CalendarItem } from "@/lib/data";
 import { getArticleCopySource, getArticleViewUrl } from "../actions";
 import { ArticleExportMessage, useArticleExport } from "./article-export";
-import { ArticleStatusPill } from "./article-status";
+import { ArticleStatusPill, frenchSpacing } from "./article-status";
 
 const STATUS_LABEL: Record<CalendarItem["status"], (d: string) => string> = {
   published: (d) => `Publié le ${d}`,
@@ -83,25 +83,21 @@ export function ArticleModal({
             <ArticleStatusPill status={item.status}>{STATUS_LABEL[item.status](dateLabel)}</ArticleStatusPill>
             {item.aiGenerated ? <AiBadge>{isArticle ? "Rédigé par l'IA" : "Sera rédigé par l'IA"}</AiBadge> : null}
           </div>
-          <h2 className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-ink-900 text-balance">{item.title}</h2>
-          {isArticle ? (
+          <h2 className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-ink-900 text-balance">{frenchSpacing(item.title)}</h2>
+          {isArticle || item.motifTitle ? (
             <p className="mt-2.5 flex flex-wrap items-center gap-2">
               {item.motifTitle ? (
                 <Badge tone="section" icon={Tag}>
                   {item.motifTitle}
                 </Badge>
               ) : null}
-              <Badge icon={Clock}>{item.readingTimeMin ?? 3} min de lecture</Badge>
+              {isArticle ? <Badge icon={Clock}>{item.readingTimeMin ?? 3} min de lecture</Badge> : null}
             </p>
-          ) : (
+          ) : null}
+          {isArticle ? null : (
             <div className="mt-4 flex items-start gap-3.5 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
               <CalendarClock size={22} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
               <p className="text-base text-ds-ink-700 text-pretty">
-                {item.motifTitle ? (
-                  <>
-                    <strong className="font-semibold text-ds-ink-900">{item.motifTitle}.</strong>{" "}
-                  </>
-                ) : null}
                 Notre IA rédigera cet article 7 jours avant sa date de publication. Vous pourrez le relire, le modifier ou le
                 refuser avant sa mise en ligne.
               </p>

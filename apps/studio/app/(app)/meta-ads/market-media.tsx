@@ -1,8 +1,10 @@
 "use client";
 
 import { clsx } from "clsx";
+import { Signal, SignalHigh, SignalLow, SignalMedium, TrendingUp, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { META_MARKET_SCOPE_LABELS, adIsTrending, metaMediaBadge, type MetaAdMedia, type MetaGalleryAd } from "@theralys/shared";
+import { Badge, Spinner, type BadgeTone } from "@/components/ds";
+import { META_MARKET_SCOPE_LABELS, adIsTrending, metaMediaBadge, type MetaAdMedia, type MetaGalleryAd, type MetaMarketSignal } from "@theralys/shared";
 import { SIGNAL_LABELS, VISUAL_STATE_LABELS, pageInitials, posterTone, rankLabel } from "@/lib/meta-ads/market-view";
 import { Icon, type IconName } from "./market-icons";
 import { useVisualState } from "./use-visuals-loader";
@@ -53,7 +55,7 @@ function AdImageInner({ src, alt, className, fallback }: AdImageProps) {
       draggable={false}
       onLoad={() => setState("ok")}
       onError={() => setState("failed")}
-      className={clsx(className, "transition-opacity duration-300 motion-reduce:transition-none", state === "ok" ? "opacity-100" : "opacity-0")}
+      className={clsx(className, "transition-opacity duration-ds-enter ease-ds-out motion-reduce:transition-none", state === "ok" ? "opacity-100" : "opacity-0")}
     />
   );
 }
@@ -68,7 +70,7 @@ export function TextPoster({ adId, hook, large = false }: { adId: string; hook: 
   return (
     <span
       // Carte : marge basse pour la pastille de zone posée sur le visuel
-      className={clsx("flex h-full w-full flex-col justify-end text-left", large ? "p-8" : "px-4 pb-12 pt-11")}
+      className={clsx("flex h-full w-full flex-col justify-end text-left", large ? "p-8" : "px-4 pt-11 pb-12")}
       style={{
         color: tone.ink,
         background: `radial-gradient(110% 60% at 100% 0%, rgb(255 255 255 / 0.55), transparent 60%), linear-gradient(165deg, ${tone.from}, ${tone.to})`,
@@ -77,7 +79,7 @@ export function TextPoster({ adId, hook, large = false }: { adId: string; hook: 
       <span aria-hidden className={clsx("block font-serif leading-none opacity-30", large ? "text-7xl" : "text-[2.75rem]")}>
         «
       </span>
-      <span className={clsx("mt-1 block text-balance font-semibold leading-snug tracking-tight", large ? "line-clamp-[9] text-2xl" : "line-clamp-5 text-[17px]")}>
+      <span className={clsx("mt-1 block font-ds-display leading-snug font-bold tracking-tight text-balance", large ? "line-clamp-[9] text-2xl" : "line-clamp-5 text-[17px]")}>
         {hook || "Annonce sans texte"}
       </span>
     </span>
@@ -85,13 +87,13 @@ export function TextPoster({ adId, hook, large = false }: { adId: string; hook: 
 }
 
 /** Avatar de la page ; sans image (ou si elle ne charge pas) : initiales sur une pastille teintée. */
-export function PageAvatar({ name, url, seed, className = "h-7 w-7 text-[11px]" }: { name: string; url: string | null | undefined; seed: string; className?: string }) {
+export function PageAvatar({ name, url, seed, className = "size-7 text-xs" }: { name: string; url: string | null | undefined; seed: string; className?: string }) {
   const [failed, setFailed] = useState(false);
   const tone = posterTone(seed);
   return (
     <span
       aria-hidden
-      className={clsx("relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full font-semibold ring-1 ring-ink-900/5", className)}
+      className={clsx("relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold ring-1 ring-ds-ink-900/5 select-none", className)}
       style={{ background: `linear-gradient(140deg, ${tone.from}, ${tone.to})`, color: tone.ink }}
     >
       {pageInitials(name)}
@@ -113,19 +115,16 @@ export function FormatBadge({ ad, className }: { ad: Pick<MetaGalleryAd, "id" | 
   const state = useVisualState(ad);
   const media = ad.media;
   return (
-    <span data-visual={state} className={clsx("inline-flex items-center gap-1 rounded-full bg-ink-900/70 px-2 py-1 text-[11px] font-medium leading-none text-white backdrop-blur-sm", className)}>
+    // Fond d'encre presque opaque : le blanc reste lisible quel que soit le visuel dessous
+    <span data-visual={state} className={clsx("inline-flex items-center gap-1.5 rounded-full bg-ds-ink-900/85 px-2.5 py-1 text-xs leading-none font-medium text-white", className)}>
       {state === "ready" && media ? (
         <>
-          <Icon name={FORMAT_ICONS[media.format]} className="h-3.5 w-3.5" />
+          <Icon name={FORMAT_ICONS[media.format]} className="size-3.5" />
           {metaMediaBadge(media)}
         </>
       ) : (
         <>
-          {state === "loading" ? (
-            <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-white/40 border-t-white motion-reduce:animate-none" />
-          ) : (
-            <Icon name="image" className="h-3.5 w-3.5" />
-          )}
+          {state === "loading" ? <Spinner className="size-3" /> : <Icon name="image" className="size-3.5" />}
           {VISUAL_STATE_LABELS[state === "ready" ? "none" : state]}
         </>
       )}
@@ -133,25 +132,29 @@ export function FormatBadge({ ad, className }: { ad: Pick<MetaGalleryAd, "id" | 
   );
 }
 
-/** Teintes des signaux : celles des pastilles du studio, texte assombri pour rester lisible en petit corps. */
-const SIGNAL_TONES: Record<"success" | "warning" | "neutral", string> = {
-  success: "bg-success-100 text-green-800",
-  warning: "bg-warning-100 text-yellow-800",
-  neutral: "bg-cream-200 text-ink-700",
+/** Signal d'une annonce : une teinte, une icône à trois niveaux et le mot — jamais la couleur seule. */
+const SIGNALS: Record<MetaMarketSignal, { tone: BadgeTone; icon: LucideIcon }> = {
+  fort: { tone: "success", icon: SignalHigh },
+  moyen: { tone: "warning", icon: SignalMedium },
+  faible: { tone: "neutral", icon: SignalLow },
 };
 
 /** « Tendance » (encore diffusée, signal fort), sinon le signal de l'annonce. */
 export function SignalBadge({ ad }: { ad: Pick<MetaGalleryAd, "active" | "signal"> }) {
   if (adIsTrending(ad)) {
+    // Mise en avant, pas un statut : l'accent chaud du design system
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
-        <Icon name="trend" className="h-3.5 w-3.5" />
+      <Badge tone="sun" icon={TrendingUp}>
         Tendance
-      </span>
+      </Badge>
     );
   }
-  const signal = SIGNAL_LABELS[ad.signal];
-  return <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", SIGNAL_TONES[signal.tone])}>{signal.label}</span>;
+  const signal = SIGNALS[ad.signal] ?? { tone: "neutral" as const, icon: Signal };
+  return (
+    <Badge tone={signal.tone} icon={signal.icon}>
+      {SIGNAL_LABELS[ad.signal].label}
+    </Badge>
+  );
 }
 
 /** Zone de l'annonce (« Autour de vous ») ; rien pour les annonces nationales ou d'autres zones. */
@@ -160,11 +163,11 @@ export function ZoneChip({ ad, overlay = false }: { ad: Pick<MetaGalleryAd, "sco
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1 rounded-full text-[11px] font-medium leading-none",
-        overlay ? "bg-white/90 px-2 py-1 text-ink-900 shadow-sm backdrop-blur-sm" : "bg-primary-50 px-2.5 py-1 text-primary-700 ring-1 ring-inset ring-primary-100",
+        "inline-flex items-center gap-1 rounded-full text-xs leading-none font-medium",
+        overlay ? "bg-white px-2.5 py-1.5 text-ds-ink-900 shadow-ds-card" : "bg-ds-section-tint-2 px-2.5 py-1.5 text-ds-section-ink",
       )}
     >
-      <Icon name="pin" className="h-3.5 w-3.5 text-primary-600" />
+      <Icon name="pin" className="size-3.5 text-ds-section-accent" />
       {META_MARKET_SCOPE_LABELS[ad.scope]}
     </span>
   );
@@ -175,7 +178,7 @@ export function RankChip({ ad }: { ad: Pick<MetaGalleryAd, "rank" | "rankTotal">
   const label = rankLabel(ad);
   if (!label) return null;
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-cream-100 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-ink-700" title="Rang par note parmi les annonces repérées">
+    <span className="inline-flex items-center rounded-full bg-ds-ink-100 px-2 py-1 text-xs leading-none font-medium whitespace-nowrap text-ds-ink-700 ds-tnum" title="Rang par note parmi les annonces repérées">
       <span className="sr-only">Rang </span>
       {label}
     </span>

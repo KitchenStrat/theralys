@@ -56,7 +56,7 @@ import type { GoogleAdsAnalysisView, GoogleAdsUsage } from "@/lib/google-ads/dat
 import { MON_SITE_HREF } from "@/lib/google-ads/external-tracking";
 import { launchAdsAnalysis } from "./actions";
 import type { AdsSiteInfo } from "./ads-client";
-import { CheckBadge, CheckMark, Figure, FigureList, FinePrint, Notice, TEXT_LINK } from "./ads-ui";
+import { CheckBadge, CheckMark, Figure, FigureList, FinePrint, Notice } from "./ads-ui";
 import type { AdsTab } from "./tabs";
 
 const usd = (value: number) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
@@ -217,14 +217,16 @@ export function DiagnosticTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      {/* Les deux cartes ont la même hauteur ; pendant l'attente, celle de l'analyse s'allonge (étapes) et le verdict garde la sienne plutôt que de s'étirer à vide */}
+      <div className={clsx("grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]", running && "items-start")}>
         <VerdictCard diagnostic={diagnostic} hasPlan={Boolean(current?.plan)} onSelectTab={onSelectTab} />
         {launcher}
       </div>
       <KeyFigures demand={diagnostic.demand} budget={diagnostic.budget} />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <ChecksCard checks={diagnostic.checks} externalSite={diagnostic.externalSite === true} onSelectTab={onSelectTab} />
-        <div className="space-y-6">
+        {/* Détail des chiffres : côte à côte sur tablette, empilés dans la colonne de droite sur grand écran */}
+        <div className="grid items-start gap-6 md:grid-cols-2 xl:grid-cols-1">
           <DemandCard demand={diagnostic.demand} onSelectTab={onSelectTab} />
           <BudgetCard budget={diagnostic.budget} forecast={current?.forecast ?? null} />
         </div>
@@ -338,16 +340,17 @@ function AnalysisCard({
 
       {latest?.status === "error" && !error ? (
         <Notice tone="danger" role="alert" className="mt-4">
-          {latest.error?.trim() ? `La dernière analyse a échoué : ${latest.error.trim()}` : ANALYSIS_FAILED_FALLBACK}
-          {current ? " — les résultats affichés sont ceux de l'analyse précédente." : ""}
+          {sentence(latest.error?.trim() ? `La dernière analyse a échoué : ${latest.error.trim()}` : ANALYSIS_FAILED_FALLBACK)}
+          {current ? " Les résultats affichés sont ceux de l'analyse précédente." : ""}
         </Notice>
       ) : null}
       {current && !current.plan && !pending ? (
         <Notice tone="warning" icon={Wrench} className="mt-4">
-          {current.error?.trim() ? current.error.trim() : "Le plan d'action n'a pas pu être généré."} Mots-clés et diagnostic sont là :{" "}
-          <button type="button" onClick={() => onSelectTab("plan")} className={TEXT_LINK}>
-            générer le plan d&apos;action
-          </button>
+          <p>{sentence(current.error?.trim() ? current.error.trim() : "Le plan d'action n'a pas pu être généré.")} Mots-clés et diagnostic sont là.</p>
+          {/* Un vrai bouton (cible de 44 px au doigt) : il mène à l'onglet Plan, où le plan se génère */}
+          <Button type="button" variant="secondary" size="sm" className="mt-2.5" iconRight={<ArrowRight size={16} aria-hidden />} onClick={() => onSelectTab("plan")}>
+            Aller générer le plan d&apos;action
+          </Button>
         </Notice>
       ) : null}
       {error ? (
@@ -385,7 +388,7 @@ function AnalysisProgress({ launchedHere, subject }: { launchedHere: boolean; su
         detail={detail}
         hint={
           launchedHere
-            ? "Vous pouvez changer d'onglet : les résultats s'afficheront ici dès la fin de l'analyse."
+            ? "Restez sur cet onglet : les résultats s'afficheront ici dès la fin de l'analyse."
             : "Elle a été lancée depuis un autre onglet ou un autre appareil : les résultats s'afficheront dans un instant, sans rien toucher."
         }
       />
@@ -404,15 +407,17 @@ function Pitch({ subject }: { subject: string }) {
     <Card variant="tinted" padding="lg">
       <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">Google Ads est-il pertinent pour {subject} ?</h2>
       <p className="mt-2 text-base text-ds-ink-700">Avant de dépenser le moindre euro, l&apos;analyse répond à trois questions :</p>
-      <ol className="mt-5 grid gap-3 md:grid-cols-3">
+      <ol className="mt-5 space-y-3">
         {questions.map((question, i) => (
-          <li key={question.title} className="rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5">
-            <IconBadge icon={question.icon} size="sm" />
-            <p className="mt-3 text-base font-semibold text-ds-ink-900">
-              <span className="mr-1.5 text-ds-section-accent ds-tnum">{i + 1}.</span>
-              {question.title}
-            </p>
-            <p className="mt-1 text-ds-body text-ds-ink-700">{question.text}</p>
+          <li key={question.title} className="flex items-start gap-3.5 rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5">
+            <IconBadge icon={question.icon} size="md" />
+            <div className="min-w-0">
+              <p className="text-base font-semibold text-ds-ink-900">
+                <span className="mr-1.5 text-ds-section-accent ds-tnum">{i + 1}.</span>
+                {question.title}
+              </p>
+              <p className="mt-0.5 text-ds-body text-ds-ink-700">{question.text}</p>
+            </div>
           </li>
         ))}
       </ol>
@@ -447,22 +452,13 @@ function VerdictCard({ diagnostic, hasPlan, onSelectTab }: { diagnostic: GoogleA
       </div>
       <p className="mt-5 text-base text-ds-ink-700 text-pretty">{diagnostic.summary}</p>
       {diagnostic.prerequisites.length > 0 || hasPlan ? (
-        // Pied de carte : ce qu'il reste à régler à gauche, la suite (le plan) à droite
-        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pt-5">
+        // Pied de carte : ce qu'il reste à régler (le détail est dans la check-list), puis la suite — le plan
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           {diagnostic.prerequisites.length > 0 ? (
-            <div className="min-w-0 flex-[1_1_16rem]">
-              <p className="text-ds-body font-semibold text-ds-ink-800">À régler :</p>
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {diagnostic.prerequisites.map((label) => (
-                  <li key={label} className="max-w-full">
-                    {/* `!` : le badge du design system interdit le retour à la ligne ; un libellé long doit pouvoir se replier à 320 px */}
-                    <Badge tone="warning" icon={Wrench} className="max-w-full rounded-ds-sm! text-left whitespace-normal!">
-                      {label}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            // Longue liste : elle prend toute la largeur, le bouton passe dessous
+            <Notice tone="plain" icon={Wrench} className={clsx("min-w-0", diagnostic.prerequisites.length > 3 ? "basis-full" : "flex-[1_1_18rem]")}>
+              <span className="font-semibold text-ds-ink-900">À régler :</span> {diagnostic.prerequisites.join(" · ")}
+            </Notice>
           ) : null}
           {hasPlan ? (
             <Button type="button" variant="secondary" iconRight={<ArrowRight size={18} aria-hidden />} onClick={() => onSelectTab("plan")}>
@@ -680,4 +676,9 @@ function CheckRow({ check, externalSite, onSelectTab }: { check: GoogleAdsReadin
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Termine un message par un point s'il n'a pas déjà sa ponctuation (une autre phrase le suit). */
+function sentence(text: string): string {
+  return /[.!?…]$/.test(text) ? text : `${text}.`;
 }

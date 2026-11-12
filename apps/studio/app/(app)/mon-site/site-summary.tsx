@@ -1,15 +1,16 @@
 "use client";
 
-import { ChevronDown, CircleCheck, CircleDashed, ClipboardPaste, Clock, ExternalLink, FileText, Globe, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, CircleCheck, CircleDashed, ClipboardPaste, Clock, ExternalLink, FileText, Globe, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { EXTERNAL_PASTE_FALLBACK_ERRORS, EXTERNAL_READ_ERRORS, type ExternalPageKind, type ExternalReadError, type ExternalSiteSource } from "@theralys/shared";
 import { Badge, Button, Card, IconBadge } from "@/components/ds";
 import { PAGE_KIND_LABELS, frenchSpacing, plural, readsRemaining, readsRemainingLabel, siteAddressLabel, type DetectedItem } from "@/lib/external-site/format";
 import { rereadExternalSite } from "./actions";
 import { ActionMessage } from "./fields";
+import { stepLabel } from "./journey";
 import { PasteForm } from "./paste-form";
 import { BADGE_WRAP, CARD_TITLE, FOCUS_RING, SUB_TITLE, TEXT_LINK } from "./styles";
-import { Eyebrow, Notice } from "./ui";
+import { CardHead, Eyebrow, Notice } from "./ui";
 
 /**
  * En-tête du site connecté et lu : son adresse, la date de la dernière
@@ -65,45 +66,49 @@ export function SiteSummary({
   }
 
   return (
-    <section id="votre-site" aria-labelledby="site-summary-title" className="scroll-mt-6" data-testid="site-summary">
+    <section aria-labelledby="site-summary-title" data-testid="site-summary">
       <Card padding="lg">
-        <Eyebrow>Étape 1 · Connecter</Eyebrow>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-          <div className="flex min-w-0 flex-[1_1_18rem] items-start gap-3.5">
-            <IconBadge icon={Globe} size="lg" className="max-sm:size-11 max-sm:rounded-ds-sm" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <h2 id="site-summary-title" className={CARD_TITLE}>
-                  Votre site
-                </h2>
-                <Badge tone={active ? "success" : "neutral"} icon={active ? CircleCheck : CircleDashed} className={BADGE_WRAP} data-testid="reference-badge" data-active={active}>
-                  {active ? "Vos outils s'appuient sur ce site" : "Vos outils ne s'appuient pas encore sur ce site"}
-                </Badge>
-              </div>
-              <p className="mt-1.5 text-lg/7">
-                <a href={url} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`} data-testid="site-url">
-                  {siteAddressLabel(url)}
-                  <ExternalLink size={16} aria-hidden className="ml-1.5 inline-block align-[-2px]" />
-                  <span className="sr-only"> (nouvel onglet)</span>
-                </a>
-              </p>
-              <p className="mt-1.5 flex items-start gap-1.5 text-ds-body text-ds-ink-600" data-testid="site-read-at">
-                <Clock size={16} aria-hidden className="mt-1 shrink-0" />
-                <span>
-                  {pasted ? "Profil préparé à partir du texte que vous avez collé" : "Dernière lecture"}
-                  {readAtLabel ? ` le ${readAtLabel}` : ""}.
-                </span>
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-start gap-1.5 sm:items-end">
-            <Button type="button" variant="secondary" disabled={pending || !canRead} loading={pending} icon={<RefreshCw size={18} aria-hidden />} onClick={reread} data-testid="reread-site">
-              Relire mon site
-            </Button>
-            <p className="max-w-xs text-ds-meta text-ds-ink-600 sm:text-right" data-testid="reads-remaining">
+        <Eyebrow icon={Check}>{stepLabel("connecter")}</Eyebrow>
+        <CardHead
+          className="mt-3"
+          icon={<IconBadge icon={Globe} size="md" />}
+          title={
+            <h2 id="site-summary-title" className={CARD_TITLE}>
+              Votre site
+            </h2>
+          }
+        >
+          <p className="text-lg/7">
+            <a href={url} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`} data-testid="site-url">
+              {siteAddressLabel(url)}
+              <ExternalLink size={16} aria-hidden className="ml-1.5 inline-block align-[-2px]" />
+              <span className="sr-only"> (nouvel onglet)</span>
+            </a>
+          </p>
+          <p className="mt-2">
+            <Badge tone={active ? "success" : "neutral"} icon={active ? CircleCheck : CircleDashed} className={BADGE_WRAP} data-testid="reference-badge" data-active={active}>
+              {active ? "Vos outils s'appuient sur ce site" : "Vos outils ne s'appuient pas encore sur ce site"}
+            </Badge>
+          </p>
+        </CardHead>
+
+        {/* La lecture : quand elle a eu lieu, ce qu'il en reste ce mois-ci, et le bouton pour la refaire */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-ds-md bg-ds-ink-50 px-4 py-3.5 ring-1 ring-ds-ink-200">
+          <div className="min-w-0 flex-[1_1_16rem]">
+            <p className="flex items-start gap-2 text-ds-body font-medium text-ds-ink-800" data-testid="site-read-at">
+              <Clock size={16} aria-hidden className="mt-1 shrink-0 text-ds-section-accent" />
+              <span>
+                {pasted ? "Profil préparé à partir du texte que vous avez collé" : "Dernière lecture"}
+                {readAtLabel ? ` le ${readAtLabel}` : ""}.
+              </span>
+            </p>
+            <p className="mt-0.5 pl-6 text-ds-meta text-ds-ink-600" data-testid="reads-remaining">
               {frenchSpacing(readsRemainingLabel(reads))}
             </p>
           </div>
+          <Button type="button" variant="secondary" disabled={pending || !canRead} loading={pending} icon={<RefreshCw size={18} aria-hidden />} onClick={reread} data-testid="reread-site">
+            Relire mon site
+          </Button>
         </div>
 
         <div className="[&:not(:empty)]:mt-3">
@@ -154,7 +159,7 @@ export function SiteSummary({
         ) : null}
 
         {pasted ? null : (
-          <div className="mt-6 space-y-5 border-t border-ds-ink-200 pt-5">
+          <div className="mt-5 space-y-5">
             <details className="group rounded-ds-md bg-ds-section-tint ring-1 ring-ds-section-line/70" data-testid="pages-read">
               <summary className={`flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-ds-md px-4 py-2 text-base font-semibold text-ds-section-ink [&::-webkit-details-marker]:hidden ${FOCUS_RING}`}>
                 <FileText size={20} aria-hidden className="shrink-0 text-ds-section-accent" />

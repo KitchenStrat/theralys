@@ -11,6 +11,23 @@ import { buttonClasses, type ButtonSize, type ButtonVariant } from "@/components
  * repère numéroté. Rien ici ne fixe la section : tout suit celle de la page.
  */
 
+/**
+ * Tête d'une carte : pastille d'icône, titre (avec ses badges), puis le texte
+ * d'explication. Le `CardHeader` du design system ne sait pas porter
+ * l'identifiant du titre, dont dépendent les `aria-labelledby` de cet écran.
+ * Sur un téléphone, l'explication repasse sous la pastille pour garder toute
+ * la largeur de la carte ; à partir de 640 px elle s'aligne sous le titre.
+ */
+export function CardHead({ icon, title, className, children }: { icon: ReactNode; title: ReactNode; className?: string; children?: ReactNode }) {
+  return (
+    <div className={clsx("grid grid-cols-[auto_minmax(0,1fr)] gap-x-3.5 gap-y-2.5 sm:gap-y-1", className)}>
+      <div className="self-start">{icon}</div>
+      <div className="min-w-0 self-center">{title}</div>
+      {children ? <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2">{children}</div> : null}
+    </div>
+  );
+}
+
 /** Surtitre d'une carte : sa place dans le parcours (« Étape 2 »), à l'accent de la section. */
 export function Eyebrow({ icon: Icon, className, children }: { icon?: LucideIcon; className?: string; children: ReactNode }) {
   return (

@@ -8,8 +8,9 @@ import { Badge, Button, IconBadge, type BadgeTone } from "@/components/ds";
 import { frenchSpacing } from "@/lib/external-site/format";
 import { measureStatusLabel, type InstallGuide, type MeasureState } from "@/lib/external-site/measure";
 import { CopyButton } from "./copy-button";
+import { stepLabel } from "./journey";
 import { BADGE_WRAP, CARD_TITLE, FOCUS_RING, SUB_TITLE } from "./styles";
-import { Eyebrow, NumberDot } from "./ui";
+import { CardHead, Eyebrow, NumberDot } from "./ui";
 
 /** État de l'installation : une icône et un mot, jamais la couleur seule. */
 const STATUS: Record<MeasureState, { tone: BadgeTone; icon: LucideIcon }> = {
@@ -25,8 +26,9 @@ const STATUS: Record<MeasureState, { tone: BadgeTone; icon: LucideIcon }> = {
  * l'installation et le paragraphe pour la politique de confidentialité.
  *
  * `next` : c'est la prochaine étape du parcours (site activé, aucune visite
- * reçue encore) — la carte prend le liseré en dégradé et « Copier le code »
- * devient le bouton principal de l'écran.
+ * reçue encore) — la carte prend le liseré en dégradé et porte le bouton
+ * principal de l'écran : « Copier le code » tant que le code n'est pas en
+ * place, « Vérifier » une fois qu'il a été repéré dans les pages.
  */
 export function MeasureCard({
   tag,
@@ -52,6 +54,8 @@ export function MeasureCard({
   const wasChecking = useRef(false);
   const { detected, others } = guides;
   const status = measureStatusLabel(state, seenLabel);
+  // Le geste attendu, quand la carte est la prochaine étape : copier le code, ou vérifier qu'une visite arrive
+  const mainAction = !next ? null : state === "detected" ? "check" : "copy";
 
   // La vérification vient de se terminer : l'état relu est annoncé, même s'il n'a pas changé
   useEffect(() => {
@@ -64,16 +68,17 @@ export function MeasureCard({
       {/* Le même élément dans les deux cas (et non `Card` d'un côté, un bloc de l'autre) : la carte ne se remonte pas quand elle devient la prochaine étape */}
       <div className={clsx("rounded-ds-card p-6 sm:p-8", next ? "shadow-ds-pop ds-border-gradient" : "bg-white shadow-ds-card ring-1 ring-ds-ink-900/5")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Eyebrow icon={next ? Compass : undefined}>Étape 4 · Mesurer</Eyebrow>
+          <Eyebrow icon={next ? Compass : undefined}>{stepLabel("mesurer")}</Eyebrow>
           {next ? (
             <Badge tone="sun" icon={Clock}>
               Quelques minutes
             </Badge>
           ) : null}
         </div>
-        <div className="mt-3 flex items-start gap-3.5">
-          <IconBadge icon={ChartNoAxesColumn} size="md" />
-          <div className="min-w-0">
+        <CardHead
+          className="mt-3"
+          icon={<IconBadge icon={ChartNoAxesColumn} size="md" />}
+          title={
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <h2 id="measure-title" className={CARD_TITLE}>
                 Statistiques de votre site
@@ -82,29 +87,31 @@ export function MeasureCard({
                 {status}
               </Badge>
             </div>
-            <p className="mt-2 max-w-[62ch] text-base text-ds-ink-700">
-              Pour suivre ici les visites de votre site, collez-y le petit code ci-dessous. Il compte les visites, le site d&apos;où viennent vos visiteurs, et les clics sur vos liens de
-              rendez-vous et sur votre numéro de téléphone. Il ne dépose aucun cookie et ne fait aucun suivi publicitaire&nbsp;: il ne demande donc pas de bandeau de consentement.
-            </p>
-            <ul className="mt-3 flex flex-wrap gap-2">
-              <li>
-                <Badge tone="section" icon={Cookie}>
-                  Aucun cookie
-                </Badge>
-              </li>
-              <li>
-                <Badge tone="section" icon={EyeOff}>
-                  Aucun suivi publicitaire
-                </Badge>
-              </li>
-              <li>
-                <Badge tone="section" icon={ShieldCheck} className={BADGE_WRAP}>
-                  Pas de bandeau de consentement à ajouter
-                </Badge>
-              </li>
-            </ul>
-          </div>
-        </div>
+          }
+        >
+          <p className="max-w-[62ch] text-base text-ds-ink-700">
+            Pour suivre ici les visites de votre site, collez-y le petit code ci-dessous. Il compte les visites, le site d&apos;où viennent vos visiteurs, et les clics sur vos liens de
+            rendez-vous et sur votre numéro de téléphone. Il ne dépose aucun cookie et ne fait aucun suivi publicitaire&nbsp;: il ne demande donc pas de bandeau de consentement.
+          </p>
+          {/* Les trois assurances de la phrase ci-dessus, lisibles d'un coup d'œil */}
+          <ul className="mt-3 flex flex-wrap gap-2">
+            <li>
+              <Badge tone="section" icon={Cookie}>
+                Aucun cookie
+              </Badge>
+            </li>
+            <li>
+              <Badge tone="section" icon={EyeOff}>
+                Aucun suivi publicitaire
+              </Badge>
+            </li>
+            <li>
+              <Badge tone="section" icon={ShieldCheck} className={BADGE_WRAP}>
+                Pas de bandeau de consentement à ajouter
+              </Badge>
+            </li>
+          </ul>
+        </CardHead>
 
         <div className="mt-7">
           <h3 className={clsx("flex items-center gap-3", SUB_TITLE)}>
@@ -117,7 +124,7 @@ export function MeasureCard({
               <code data-testid="measure-tag">{tag}</code>
             </pre>
             <div className="mt-3">
-              <CopyButton text={tag} label="Copier le code" copiedLabel="Code copié" testId="copy-measure-tag" variant={next ? "primary" : "secondary"} />
+              <CopyButton text={tag} label="Copier le code" copiedLabel="Code copié" testId="copy-measure-tag" variant={mainAction === "copy" ? "primary" : "secondary"} />
             </div>
           </div>
         </div>
@@ -142,7 +149,8 @@ export function MeasureCard({
             )}
             <div className="mt-4">
               {detected ? <p className="text-ds-body font-medium text-ds-ink-700">Avec un autre outil&nbsp;:</p> : null}
-              <ul className="mt-2 space-y-2">
+              {/* Deux colonnes à partir de 640 px : la liste tient en moitié moins de hauteur ; un pas-à-pas ouvert n'allonge que sa case */}
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2 sm:items-start">
                 {others.map((guide) => (
                   <li key={guide.id}>
                     <details className="group rounded-ds-sm bg-white ring-1 ring-ds-ink-200" data-testid={`install-guide-${guide.id}`}>
@@ -179,7 +187,15 @@ export function MeasureCard({
               propre visite n&apos;est pas comptée&nbsp;: c&apos;est voulu.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button type="button" variant="secondary" size="sm" loading={checking} icon={<SearchCheck size={16} aria-hidden />} onClick={() => startChecking(() => router.refresh())} data-testid="measure-check">
+              <Button
+                type="button"
+                variant={mainAction === "check" ? "primary" : "secondary"}
+                size={mainAction === "check" ? "md" : "sm"}
+                loading={checking}
+                icon={<SearchCheck size={mainAction === "check" ? 18 : 16} aria-hidden />}
+                onClick={() => startChecking(() => router.refresh())}
+                data-testid="measure-check"
+              >
                 Vérifier
               </Button>
               {/* Région vivante permanente : le résultat de la vérification y est annoncé */}
@@ -191,16 +207,12 @@ export function MeasureCard({
         </div>
 
         <div className="mt-7 border-t border-ds-ink-200 pt-6">
-          <div className="flex items-start gap-3">
-            <IconBadge icon={ShieldCheck} tone="soft" size="sm" />
-            <div className="min-w-0">
-              <h3 className={SUB_TITLE}>À ajouter à votre politique de confidentialité</h3>
-              <p className="mt-1 max-w-[62ch] text-ds-body text-ds-ink-700">
-                Vos visiteurs doivent être informés de cette mesure et pouvoir la refuser. Copiez ce paragraphe dans la page «&nbsp;Politique de confidentialité&nbsp;» (ou «&nbsp;Mentions légales&nbsp;») de
-                votre site&nbsp;: il donne l&apos;adresse à ouvrir pour refuser la mesure.
-              </p>
-            </div>
-          </div>
+          <CardHead icon={<IconBadge icon={ShieldCheck} tone="soft" size="sm" />} title={<h3 className={SUB_TITLE}>À ajouter à votre politique de confidentialité</h3>}>
+            <p className="max-w-[62ch] text-ds-body text-ds-ink-700">
+              Vos visiteurs doivent être informés de cette mesure et pouvoir la refuser. Copiez ce paragraphe dans la page «&nbsp;Politique de confidentialité&nbsp;» (ou «&nbsp;Mentions légales&nbsp;») de
+              votre site&nbsp;: il donne l&apos;adresse à ouvrir pour refuser la mesure.
+            </p>
+          </CardHead>
           <blockquote
             className="mt-4 max-w-3xl rounded-ds-sm border-l-4 border-ds-section-accent bg-ds-ink-50 px-4 py-3.5 text-ds-body wrap-anywhere whitespace-pre-line text-ds-ink-800"
             data-testid="privacy-paragraph"

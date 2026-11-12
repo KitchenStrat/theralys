@@ -18,8 +18,16 @@ import { SuccessMark } from "./ui";
 /** 44 px de haut (cible au doigt) et texte en 16 px : un téléphone ne zoome pas sur le champ à la saisie. */
 const FIELD_SIZE = "min-h-11 text-base! disabled:bg-ds-ink-100 disabled:text-ds-ink-600";
 
+/**
+ * Zone de texte : là où le navigateur le permet (`field-sizing`), elle grandit avec son contenu — tout le texte reste
+ * sous les yeux pendant qu'on le corrige —, jusqu'à une hauteur au-delà de laquelle elle défile. Ailleurs, elle garde
+ * la hauteur donnée par `rows`.
+ */
 const TEXTAREA_CLASS =
-  "block w-full rounded-xl border border-ink-300 bg-white px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-ds-ink-100 disabled:text-ds-ink-600";
+  "block max-h-[32rem] w-full field-sizing-content rounded-xl border border-ink-300 bg-white px-3 py-2.5 text-base text-ink-900 placeholder:text-ink-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:bg-ds-ink-100 disabled:text-ds-ink-600";
+
+/** Hauteur de `rows` lignes de 24 px, marges (20 px) et bordure (2 px) comprises : le plancher d'une zone qui suit son contenu. */
+const rowsHeight = (rows: number): string => `calc(${rows} * 1.5rem + 1.375rem)`;
 
 /** Bordure d'un champ en erreur (`aria-invalid`) : elle accompagne le message, elle ne le remplace pas. */
 const INVALID_BORDER = "aria-invalid:border-danger-500";
@@ -147,6 +155,7 @@ export function TextAreaField({
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy((hint !== undefined || maxLength !== undefined) && `${id}-hint`, error && `${id}-error`)}
         className={clsx(TEXTAREA_CLASS, INVALID_BORDER)}
+        style={{ minHeight: rowsHeight(rows) }}
         data-testid={testId}
       />
       {hint !== undefined || maxLength !== undefined ? (

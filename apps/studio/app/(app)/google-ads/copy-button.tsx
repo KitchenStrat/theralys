@@ -60,10 +60,11 @@ export function CopyButton({
         {state === "failed" ? "Copie impossible — sélectionnez le texte" : label}
       </Button>
       {state === "copied" ? (
-        // Recouvre la face du bouton sans le retirer : ni saut de mise en page, ni perte du focus (l'anneau reste visible autour)
+        // Recouvre la face du bouton sans le retirer : ni saut de mise en page, ni perte du focus (l'anneau reste visible autour).
+        // Pas de fondu : le libellé du bouton et « Copié ! » ne doivent jamais se lire l'un sur l'autre ; seule la coche surgit.
         <span
           className={clsx(
-            "pointer-events-none absolute inset-0 grid place-items-center overflow-hidden bg-white inset-ring inset-ring-ds-success-600/45 ds-fade-in",
+            "pointer-events-none absolute inset-0 grid place-items-center overflow-hidden bg-white inset-ring inset-ring-ds-success-600/45",
             size === "sm" ? "rounded-[1.125rem] pointer-coarse:rounded-[1.375rem]" : size === "lg" ? "rounded-3xl" : "rounded-[1.375rem]",
           )}
         >

@@ -1,6 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
+import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   META_GALLERY_DEFAULT_FILTERS,
@@ -24,8 +25,10 @@ const FORMAT_PILLS: { id: MetaGalleryFormat; testId: string; label: string }[] =
   { id: "sans", testId: "sans", label: "Sans visuel" },
 ];
 
-const SELECT =
-  "h-10 w-full cursor-pointer appearance-none truncate rounded-full border border-cream-300 bg-white pl-3.5 pr-8 text-[13px] font-medium text-ink-900 transition-colors hover:border-ink-300 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:pl-4 sm:pr-9 sm:text-sm";
+/** Champ de la barre d'outils : 40 px (44 px au doigt), bordure de champ du design system (3:1) ; l'anneau de focus vient de la coquille. */
+const FIELD = "h-10 w-full rounded-full border border-ds-ink-450 bg-white text-ds-body text-ds-ink-900 hover:border-ds-ink-600 pointer-coarse:h-11";
+
+const SELECT = clsx(FIELD, "cursor-pointer appearance-none truncate pr-9 pl-4 font-medium");
 
 /**
  * Barre d'outils de la galerie : recherche, tri, zone, mode sélection, puis
@@ -59,10 +62,10 @@ export function MarketToolbar({
 
   return (
     // Une seule rangée qui se replie : sur mobile, « Sélectionner » rejoint le compteur sur la dernière ligne
-    <div className="flex flex-wrap items-center gap-2 rounded-card border border-cream-200 bg-white p-3 shadow-(--shadow-card) sm:gap-x-2.5 sm:p-4" role="search" aria-label="Filtrer les annonces">
-      <label className="relative min-w-0 basis-full sm:basis-48 sm:flex-1">
+    <div className="flex flex-wrap items-center gap-2 rounded-ds-card bg-white p-3 shadow-ds-card ring-1 ring-ds-ink-900/5 sm:gap-x-2.5 sm:p-4" role="search" aria-label="Filtrer les annonces">
+      <label className="relative min-w-0 basis-full sm:flex-1 sm:basis-48">
         <span className="sr-only">Rechercher une annonce</span>
-        <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
+        <Icon name="search" className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ds-ink-600" />
         <input
           type="search"
           data-testid="meta-gallery-search"
@@ -71,7 +74,7 @@ export function MarketToolbar({
           placeholder="Rechercher une annonce"
           autoComplete="off"
           enterKeyHint="search"
-          className="h-10 w-full rounded-full border border-cream-300 bg-cream-50 pl-10 pr-4 text-sm text-ink-900 transition-colors placeholder:text-ink-500 hover:border-ink-300 focus:border-primary-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-100 [&::-webkit-search-cancel-button]:cursor-pointer"
+          className={clsx(FIELD, "pr-4 pl-10 placeholder:text-ds-ink-500 [&::-webkit-search-cancel-button]:cursor-pointer")}
         />
       </label>
 
@@ -105,12 +108,13 @@ export function MarketToolbar({
           aria-pressed={selecting}
           onClick={onToggleSelecting}
           className={clsx(
-            "order-last inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-colors sm:order-none sm:h-10 sm:px-4",
+            "order-last inline-flex min-h-10 shrink-0 cursor-pointer items-center gap-2 rounded-full px-4 text-ds-body ds-press sm:order-none pointer-coarse:min-h-11",
             FOCUS_RING,
-            selecting ? "bg-ink-900 text-white hover:bg-ink-700" : "border border-cream-300 bg-white text-ink-900 hover:border-ink-300 hover:bg-cream-50",
+            // Mode sélection actif : aplat d'encre et libellé gras, en plus de `aria-pressed`
+            selecting ? "bg-ds-ink-900 font-semibold text-white" : "bg-white font-medium text-ds-brand-800 inset-ring inset-ring-ds-ink-300 hover:bg-ds-brand-50",
           )}
         >
-          <Icon name="select" className="h-4 w-4" />
+          <Icon name="select" className="size-4" />
           Sélectionner
         </button>
       ) : null}
@@ -118,7 +122,8 @@ export function MarketToolbar({
       {/* Retour à la ligne : formats et filtres à bascule sous la recherche */}
       <span aria-hidden className="hidden h-0 basis-full sm:block" />
 
-      <div role="group" aria-label="Format" className="-mx-3 flex min-w-0 basis-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 [scrollbar-width:none] sm:mx-0 sm:basis-auto sm:px-0 [&::-webkit-scrollbar]:hidden">
+      {/* La rangée défile sur mobile ; ses marges intérieures laissent la place de l'anneau de focus, qui n'est jamais rogné */}
+      <div role="group" aria-label="Format" className="-mx-3 -my-1.5 flex min-w-0 basis-[calc(100%+1.5rem)] gap-1.5 overflow-x-auto px-3 py-1.5 [scrollbar-width:none] sm:-mx-1.5 sm:basis-auto sm:px-1.5 [&::-webkit-scrollbar]:hidden">
         {pills.map((pill) => (
           <Pill key={pill.id} testId={`meta-gallery-format-${pill.testId}`} active={filters.format === pill.id} count={formatCount(pill.id)} onClick={() => onChange({ ...filters, format: pill.id })}>
             {pill.label}
@@ -126,7 +131,7 @@ export function MarketToolbar({
         ))}
       </div>
 
-      <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-cream-300 lg:block" />
+      <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-ds-ink-300 lg:block" />
 
       <div className="flex basis-full flex-wrap gap-1.5 sm:basis-auto">
         <Pill testId="meta-gallery-active" tone="toggle" active={filters.activeOnly} count={counts.active} onClick={() => onChange({ ...filters, activeOnly: !filters.activeOnly })} dot>
@@ -137,19 +142,19 @@ export function MarketToolbar({
         </Pill>
       </div>
 
-      <div className="order-last ml-auto flex min-h-8 items-center gap-1 pl-1">
+      <div className="order-last ml-auto flex min-h-9 items-center gap-1 pl-1">
         {!pristine ? (
           <button
             type="button"
             data-testid="meta-gallery-reset"
             onClick={() => onChange(META_GALLERY_DEFAULT_FILTERS)}
-            className={clsx("inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-xs font-medium text-primary-700 transition-colors hover:bg-primary-50", FOCUS_RING)}
+            className={clsx("inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-ds-meta font-semibold text-ds-brand-800 hover:bg-ds-brand-100 pointer-coarse:min-h-11", FOCUS_RING)}
           >
-            <Icon name="undo" className="h-3.5 w-3.5" />
+            <Icon name="undo" className="size-3.5" />
             Réinitialiser
           </button>
         ) : null}
-        <p data-testid="meta-gallery-count" aria-live="polite" className="whitespace-nowrap text-sm font-medium tabular-nums text-ink-700">
+        <p data-testid="meta-gallery-count" aria-live="polite" className="text-ds-body font-semibold whitespace-nowrap text-ds-ink-800 ds-tnum">
           {galleryCountLabel(shown, counts.total)}
         </p>
       </div>
@@ -162,9 +167,7 @@ function SelectField({ label, className, children }: { label: string; className?
     <label className={clsx("relative block", className)}>
       <span className="sr-only">{label}</span>
       {children}
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500 sm:right-3.5" aria-hidden>
-        <path d="M5.5 8l4.5 4.5L14.5 8" />
-      </svg>
+      <ChevronDown aria-hidden className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-ds-ink-600" />
     </label>
   );
 }
@@ -194,24 +197,25 @@ function Pill({
       aria-pressed={active}
       onClick={onClick}
       className={clsx(
-        "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-xs font-medium transition-colors",
+        "inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-ds-meta whitespace-nowrap ds-press pointer-coarse:min-h-11",
         FOCUS_RING,
+        // Format actif : aplat profond de la section et libellé gras ; filtre actif : teinte, liseré et coche
         tone === "tab"
           ? active
-            ? "bg-primary-600 text-white shadow-sm"
-            : "bg-cream-100 text-ink-700 hover:bg-cream-200"
+            ? "bg-ds-section-gradient-deep font-semibold text-ds-section-on-deep"
+            : "bg-ds-ink-100 font-medium text-ds-ink-700 hover:bg-ds-ink-200"
           : active
-            ? "bg-primary-50 text-primary-800 ring-1 ring-inset ring-primary-300"
-            : "bg-white text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-cream-50 hover:ring-ink-300",
+            ? "bg-ds-section-tint-2 font-semibold text-ds-section-ink inset-ring inset-ring-ds-section-accent/60"
+            : "bg-white font-medium text-ds-ink-700 inset-ring inset-ring-ds-ink-300 hover:bg-ds-ink-50",
       )}
     >
-      {dot ? <span aria-hidden className="h-2 w-2 rounded-full bg-ds-success-600" /> : null}
-      {tone === "toggle" && active ? <Icon name="check" className="h-3.5 w-3.5" /> : null}
+      {dot ? <span aria-hidden className="size-2 rounded-full bg-ds-success-600" /> : null}
+      {tone === "toggle" && active ? <Icon name="check" className="size-3.5" /> : null}
       {children}
       <span
         className={clsx(
-          "rounded-full px-1.5 py-px text-[11px] tabular-nums leading-4",
-          tone === "tab" ? (active ? "bg-white/20 text-white" : "bg-white text-ink-700") : active ? "bg-primary-100 text-primary-800" : "bg-cream-100 text-ink-700",
+          "rounded-full px-1.5 py-px text-xs leading-4 ds-tnum",
+          tone === "tab" ? (active ? "bg-white text-ds-section-ink" : "bg-white text-ds-ink-700") : active ? "bg-white text-ds-section-ink" : "bg-ds-ink-100 text-ds-ink-700",
         )}
       >
         {count}

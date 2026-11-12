@@ -1,3 +1,4 @@
+import { clsx } from "clsx";
 import type { AnalyticsSource } from "@theralys/shared";
 import { SetupChecklist, Stagger, type SectionKey } from "@/components/ds";
 import { remainingSetupTasks, type NextStep, type SetupTask } from "@/lib/accueil";
@@ -61,8 +62,12 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
         aside={nextStep ? <NextStepAside step={nextStep} /> : undefined}
       />
 
-      {/* Deux colonnes à partir de `xl` : les chiffres à gauche (leur titre et leurs tuiles sur toute la largeur), le reste à droite */}
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+      {/*
+        Deux colonnes à partir de `xl` : les chiffres à gauche (leur titre et leurs tuiles sur toute la largeur), le reste à
+        droite. Sans chiffres à montrer (code de mesure attendu), l'état qui les remplace prend toute la largeur et les cartes
+        suivantes se rangent côte à côte dessous : une colonne de gauche presque vide ne dirait rien.
+      */}
+      <div className={clsx("grid items-start gap-6", awaitingMeasure ? "" : "xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]")}>
         <StatsPanel
           period={period}
           // Seulement ce que le panneau affiche : il est rendu dans le navigateur, ses données voyagent avec la page
@@ -79,7 +84,13 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
         />
 
         {/* `min-w-0` : une colonne ne s'élargit jamais au-delà de l'écran (titre de publication, adresse longue) */}
-        <div className="min-w-0 space-y-6">
+        <div
+          className={
+            awaitingMeasure
+              ? "grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,19rem),1fr))] items-start gap-6 *:min-w-0"
+              : "min-w-0 space-y-6"
+          }
+        >
           {remainingSetupTasks(setup) > 0 ? <SetupChecklist steps={checklistSteps(setup)} section="accueil" /> : null}
           <SiteCard {...site} emphasis={nextStep === null} />
           {upcoming ? <UpcomingCard items={upcoming} /> : null}

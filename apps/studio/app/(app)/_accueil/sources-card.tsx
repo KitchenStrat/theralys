@@ -37,7 +37,7 @@ const SOURCE_LOOK: Record<AnalyticsSource, { icon: LucideIcon; section: SectionK
 /**
  * « Provenance des visites » : une ligne par source mesurée, sa part en % et
  * une jauge. État vide pédagogique : la mesure commence avec le lien de bio
- * (Réseaux sociaux → Votre lien de bio) et les sites d'origine des visiteurs.
+ * (section Réseaux sociaux, « Votre lien de bio ») et les sites d'origine des visiteurs.
  */
 export function SourcesCard({
   sources,
@@ -99,15 +99,15 @@ export function SourcesCard({
       ) : (
         <div className="mt-5 rounded-ds-md bg-ds-section-tint px-4 py-3.5 text-ds-body text-ds-ink-700 ring-1 ring-ds-section-line/70">
           <p>
-            Aucune provenance mesurée pour l&apos;instant : elle apparaît dès les prochaines visites (Instagram, Facebook, Google, accès
+            Aucune provenance mesurée pour l&apos;instant&nbsp;: elle apparaît dès les prochaines visites (Instagram, Facebook, Google, accès
             direct…).
           </p>
           {socialAccess ? (
             <p className="mt-1.5">
               Pour savoir ce que vos réseaux vous apportent, mettez dans Instagram et Facebook le lien de bio que nous vous avons
-              préparé :{" "}
+              préparé&nbsp;:{" "}
               <Link href="/reseaux-sociaux" className="rounded font-semibold text-ds-brand-800 underline underline-offset-2 ds-focus">
-                Réseaux sociaux → Votre lien de bio
+                Votre lien de bio, dans Réseaux sociaux
               </Link>
               .
             </p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { clsx } from "clsx";
 import { ArrowRight, ChartColumn, ExternalLink, Globe, House, RefreshCw, ScanSearch } from "lucide-react";
 import Link from "next/link";
 import { Card, CardHeader, LinkButton } from "@/components/ds";
@@ -32,6 +33,13 @@ const FINDING_LABEL: Record<TrackingFindingStatus, string> = {
   ok: "Repéré",
   todo: "Non repéré",
   unknown: "À vérifier",
+};
+
+/** Fond de la ligne : il appuie le statut, que le pictogramme et le mot disent déjà. */
+const FINDING_BOX: Record<TrackingFindingStatus, string> = {
+  ok: "bg-ds-success-100/50 ring-ds-success-600/25",
+  todo: "bg-ds-warning-100/60 ring-ds-warning-500/35",
+  unknown: "bg-ds-ink-50 ring-ds-ink-200",
 };
 
 /**
@@ -70,7 +78,7 @@ export function ExternalTrackingCard({
         {findings.map((finding) => (
           <li
             key={finding.id}
-            className="flex items-start gap-3.5 rounded-ds-md bg-ds-ink-50 px-3.5 py-3 ring-1 ring-ds-ink-200"
+            className={clsx("flex items-start gap-3.5 rounded-ds-md px-3.5 py-3 ring-1", FINDING_BOX[finding.status])}
             data-testid={`external-finding-${finding.id}`}
             data-status={finding.status}
           >
