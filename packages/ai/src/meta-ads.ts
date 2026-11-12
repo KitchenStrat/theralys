@@ -42,7 +42,9 @@ import {
   clampMetaText,
   isMetaAdsAngle,
   isMetaAdsCta,
+  landingPageSlug,
   normalizeAdsText,
+  normalizeLandingPath,
   truncateAtWord,
   type MetaAdCreative,
   type MetaAdsAngle,
@@ -67,7 +69,7 @@ import {
 } from "@theralys/shared";
 import { completeStructured, type AnthropicClientOptions } from "./anthropic";
 import { resolveAiMode } from "./generate-site";
-import { GOOGLE_ADS_FORBIDDEN_PATTERNS, parseAdsInstructions, softenAdsWording } from "./google-ads";
+import { GOOGLE_ADS_FORBIDDEN_PATTERNS, externalSitePromptNote, landingPathOfSpecialty, parseAdsInstructions, softenAdsWording } from "./google-ads";
 import { checkEthicalCompliance, type GuardrailViolation } from "./guardrails";
 import { sanitizeSocialBrief } from "./social";
 import { deArticle, elideDe } from "./mock/french";
@@ -133,6 +135,8 @@ const INSIGHT_ANGLES_MAX = 5;
 const INSIGHT_LIST_MAX = 8;
 const INSIGHT_TEXT_MAX = 300;
 const SUMMARY_MAX = 900;
+/** Longueur maximale d'un chemin d'atterrissage (celle des chemins relevés sur le site du client) : même borne dans le schéma et dans le prompt. */
+const LANDING_PATH_MAX = 200;
 
 // ─── Schémas zod des sorties du modèle ───────────────────────────────────────
 
@@ -175,7 +179,7 @@ const creativeSchema = z.object({
   template: z.string().trim().max(40).default(DEFAULT_TEMPLATE),
   accentRole: z.string().trim().max(20).default("primary"),
   altText: z.string().trim().max(500).default(""),
-  landingPath: z.string().trim().max(200).default("/"),
+  landingPath: z.string().trim().max(LANDING_PATH_MAX).default("/"),
 });
 
 export const metaCreativesSchema = z.object({
@@ -423,12 +427,6 @@ function cleanPlanText(text: string, max: number, min = 1): string | null {
   return checkEthicalCompliance(clamped).ok ? clamped : null;
 }
 
-/** Chemin comparable : minuscules, sans barre finale, « / » conservé. */
-function canonicalPath(path: string): string {
-  const trimmed = path.trim().toLowerCase().replace(/\/+$/, "");
-  return trimmed === "" ? "/" : trimmed;
-}
-
 /** Donnée injectée dans le prompt sur une ligne : sans caractère de contrôle, chevron ni guillemet, ≤ max. */
 function dataText(text: string, max = 160): string {
   let out = "";
@@ -454,11 +452,6 @@ function canReassure(brief: SocialSiteBrief): boolean {
 
 function homePath(pages: readonly MetaAdsLandingPage[]): string {
   return pages.find((p) => p.kind === "home")?.path ?? pages[0]?.path ?? "/";
-}
-
-/** Chemins connus par forme canonique → chemin exact du site. */
-function knownPaths(pages: readonly MetaAdsLandingPage[]): Map<string, string> {
-  return new Map<string, string>([[canonicalPath(homePath(pages)), homePath(pages)], ...pages.map((p) => [canonicalPath(p.path), p.path] as const)]);
 }
 
 /** Annonces transmises à l'IA : les mieux notées, au plus META_MARKET_SAMPLE_FOR_AI. */
@@ -501,8 +494,15 @@ export function photoForAngle(brief: SocialSiteBrief, angle: MetaAdsAngle, speci
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
-/** Bloc <site> réduit : qui parle, pages et spécialités, infos pratiques, avis, photos — pas le détail des textes. */
-function metaSiteBlock(brief: SocialSiteBrief): string {
+/**
+ * Bloc <site> réduit : qui parle, pages et spécialités, infos pratiques,
+ * avis, photos — pas le détail des textes. Le domaine est celui de l'adresse
+ * de référence (site du client quand il est la référence). Avec
+ * `landingPages` (créas, vidéos, plan), chaque page de spécialité porte dans
+ * "page" son chemin d'atterrissage réel sur ce site, `null` si elle n'en a
+ * pas — jamais un identifiant dont le modèle tirerait un chemin.
+ */
+function metaSiteBlock(brief: SocialSiteBrief, landingPages?: readonly MetaAdsLandingPage[]): string {
   const { practitioner: p, home } = brief;
   const site = {
     praticien: { prenom: p.firstName, metier: p.profession, pratique: p.practiceName, ville: p.city },
@@ -520,8 +520,13 @@ function metaSiteBlock(brief: SocialSiteBrief): string {
       infosPratiques: home.infoCards.map((c) => ({ titre: c.title, texte: clampText(c.text, 160) })),
       adresse: home.contact?.address ?? null,
     },
-    specialites: home.specialties.map((s) => ({ titre: s.title, slug: s.slug, resume: clampText(s.excerpt, 160), photoId: s.photoId ?? null })),
-    pagesSpecialites: brief.motifPages.map((m) => ({ titre: m.title, slug: m.slug, resume: clampText(m.summary, 200), photoId: m.photoId ?? null })),
+    specialites: home.specialties.map((s) => ({ titre: s.title, resume: clampText(s.excerpt, 160), photoId: s.photoId ?? null })),
+    pagesSpecialites: brief.motifPages.map((m) => ({
+      titre: m.title,
+      ...(landingPages ? { page: landingPathOfSpecialty(m.slug, landingPages) } : {}),
+      resume: clampText(m.summary, 200),
+      photoId: m.photoId ?? null,
+    })),
     avis: brief.reviews.slice(0, 4).map((r) => ({ auteur: r.authorName, note: r.rating, texte: clampText(r.text, 200) })),
     photos: brief.photos.map((ph) => ({ id: ph.id, type: ph.kind, orientation: ph.orientation, portraitSafe: ph.portraitSafe, description: clampText(ph.hint, 120) })),
   };
@@ -623,6 +628,9 @@ Produis un JSON de la forme :
 { "summary": "…", "angles": [ { "label": "…", "description": "…", "adIds": ["…"] } ], "hooks": ["…"], "offers": ["…"], "formats": "…", "seasonality": "…", "gaps": ["…"], "warnings": ["…"] }`;
 }
 
+/** Site du client : ce qui s'y installe (jamais dans le studio), dit au modèle avec le bilan. */
+const EXTERNAL_SITE_PROMPT_NOTE = externalSitePromptNote("Le Pixel Meta et le bandeau cookies");
+
 /** Bilan de préparation et budget, en données, pour les prompts de génération. */
 function diagnosticBlock(input: MetaAdsGenerationInput): string {
   const { diagnostic } = input;
@@ -634,7 +642,7 @@ function diagnosticBlock(input: MetaAdsGenerationInput): string {
 - ${dataText(diagnostic.summary, 400)}
 - Prérequis à régler : ${diagnostic.prerequisites.length > 0 ? diagnostic.prerequisites.map((p) => dataText(p)).join(" ; ") : "aucun"}.
 PRÉPARATION DU CABINET :
-${checks}
+${checks}${diagnostic.externalSite ? `\n${EXTERNAL_SITE_PROMPT_NOTE}` : ""}
 BUDGET CONSEILLÉ : ${fmtEurInt(b.monthlyRecommendedEur)} par mois (monthlyEur = ${b.monthlyRecommendedEur}), soit ${b.dailyRecommendedEur} € par jour (dailyEur = ${b.dailyRecommendedEur}) ; minimum ${fmtEurInt(b.monthlyMinEur)} par mois ; ${b.clicksMin} à ${b.clicksMax} visites et ${b.contactsMin} à ${b.contactsMax} prises de contact attendues par mois.${diagnostic.marketNote ? `\nLECTURE DE LA VEILLE : ${dataText(diagnostic.marketNote, 300)}` : ""}`;
 }
 
@@ -650,9 +658,10 @@ function insightsBlock(market: MetaAdsMarket | null): string {
 - À ne jamais reprendre : ${i.warnings.map((w) => dataText(w, 160)).join(" ; ") || "rien de notable"}`;
 }
 
+/** Pages d'atterrissage, chemin entier (jusqu'à la borne du schéma) : un chemin tronqué ne serait plus reconnu à la finalisation. */
 function landingPagesBlock(pages: readonly MetaAdsLandingPage[]): string {
-  const lines = pages.map((p) => `- "${dataText(p.path, 120)}" — ${dataText(p.title, 80)} (${p.kind === "home" ? "accueil" : "spécialité"})`).join("\n");
-  return `PAGES D'ATTERRISSAGE (seuls chemins autorisés pour "landingPath") :\n${lines || '- "/" — Accueil (accueil)'}`;
+  const lines = pages.map((p) => `- "${dataText(p.path, LANDING_PATH_MAX)}" — ${dataText(p.title, 80)} (${p.kind === "home" ? "accueil" : "spécialité"})`).join("\n");
+  return `PAGES D'ATTERRISSAGE (seuls chemins autorisés pour "landingPath", à recopier à l'identique) :\n${lines || '- "/" — Accueil (accueil)'}`;
 }
 
 export function metaCreativesUserPrompt(brief: SocialSiteBrief, input: MetaAdsGenerationInput): string {
@@ -665,7 +674,7 @@ export function metaCreativesUserPrompt(brief: SocialSiteBrief, input: MetaAdsGe
     )
     .join("\n");
   const angles = canReassure(brief) ? "réassurance, pédagogie, avis (la fiche le permet), ancrage local" : "réassurance, pédagogie, ancrage local, première séance";
-  return `${metaSiteBlock(brief)}${instructionsBlock(brief)}${metaInstructionsBlock(input.instructions)}
+  return `${metaSiteBlock(brief, input.landingPages)}${instructionsBlock(brief)}${metaInstructionsBlock(input.instructions)}
 
 ${diagnosticBlock(input)}
 
@@ -683,7 +692,7 @@ CRÉAS À PRODUIRE ("creatives") : ${META_CREATIVES_MIN} à ${META_CREATIVES_MAX
 - "cta" : ${booking ? '"BOOK_NOW" (prise de rendez-vous en ligne) par défaut, "LEARN_MORE" pour une créa pédagogique' : '"CONTACT_US" par défaut (pas de prise de rendez-vous en ligne : jamais "BOOK_NOW"), "LEARN_MORE" pour une créa pédagogique'}.
 - "hook" : accroche posée sur le visuel ≤ ${META_ADS_TEXT.hookMax} caractères, lisible en 2 secondes ; "subline" : ligne secondaire ≤ ${META_ADS_TEXT.sublineMax} caractères.
 - "photoId" : un identifiant de PHOTOS DU SITE — portrait du praticien ou cabinet d'abord (réassurance, avis, local), photo de la spécialité pour la pédagogie ; null si aucune photo ne convient.
-- "template" : ${META_CREATIVE_TEMPLATES.map((t) => `"${t}"`).join(" ou ")} ; "accentRole" : "primary", "primaryDark", "deep" ou "soft" (alterne) ; "altText" : description factuelle du visuel (≤ ${ALT_MAX}) ; "landingPath" : un chemin de PAGES D'ATTERRISSAGE cohérent avec l'angle (page de spécialité pour la pédagogie, accueil sinon).
+- "template" : ${META_CREATIVE_TEMPLATES.map((t) => `"${t}"`).join(" ou ")} ; "accentRole" : "primary", "primaryDark", "deep" ou "soft" (alterne) ; "altText" : description factuelle du visuel (≤ ${ALT_MAX}) ; "landingPath" : un chemin de PAGES D'ATTERRISSAGE recopié à l'identique, cohérent avec l'angle (page de spécialité pour la pédagogie, accueil sinon) — ne compose jamais un chemin toi-même.
 
 "notes" : 2 à 5 conseils courts (≤ ${NOTE_MAX}) pour décliner et tester les créas (ordre de test, variante d'accroche, visuel à tourner, quoi couper après 14 jours). Si une instruction du praticien n'a pas pu être suivie (donnée absente, règle), explique-le en une note commençant par « Nous avons adapté vos instructions : ».
 
@@ -723,10 +732,12 @@ export function metaPlanUserPrompt(brief: SocialSiteBrief, input: MetaAdsPlanInp
   const creatives = input.creatives?.creatives.map((c) => `- ${c.id} : ${dataText(c.name, 60)} (angle ${c.angle}, page ${dataText(c.landingPath, 80)})`).join("\n") || "- aucune créa générée";
   const videos = input.videoPlan?.videos.map((v) => `- ${v.id} : ${dataText(v.title, 80)} (angle ${v.angle}, ${v.durationSeconds} s)`).join("\n") || "- aucune vidéo";
   const event = booking ? "Schedule" : "Contact";
+  // Site du client : le Pixel s'installe sur ce site ; l'onglet Paramétrage & suivi n'agit que sur le site hébergé
+  const pixelPlace = input.diagnostic.externalSite ? "sur le site du praticien, dit « votre site »" : "onglet Paramétrage & suivi";
   const objective = hasPixel
     ? `le Pixel est installé : "objective.type" = "conversions_site" (l'objectif de campagne est toujours les conversions sur le site mesurées par le Pixel), "pixelEvent" = "${event}" (${booking ? "clic « Prendre rendez-vous »" : "appel ou e-mail depuis le site"}), "rationale" en 2 phrases.`
-    : `le Pixel n'est PAS installé : "objective.type" = "traffic" en repli, "pixelEvent" = "${event}" (l'événement à viser dès que le Pixel sera posé), "rationale" qui demande d'installer le Pixel d'abord (onglet Paramétrage & suivi) puis de passer la campagne en conversions.`;
-  return `${metaSiteBlock(brief)}${instructionsBlock(brief)}${metaInstructionsBlock(input.instructions)}
+    : `le Pixel n'est PAS installé : "objective.type" = "traffic" en repli, "pixelEvent" = "${event}" (l'événement à viser dès que le Pixel sera posé), "rationale" qui demande d'installer le Pixel d'abord (${pixelPlace}) puis de passer la campagne en conversions.`;
+  return `${metaSiteBlock(brief, input.landingPages)}${instructionsBlock(brief)}${metaInstructionsBlock(input.instructions)}
 
 ${diagnosticBlock(input)}
 
@@ -812,6 +823,8 @@ type TextContext = {
   brief: SocialSiteBrief | null;
   /** Noms propres masqués avant la relecture de conformité (`protectedNames`) */
   names: string[];
+  /** Bilan établi pour le site du client : les textes ne renvoient pas vers l'éditeur du site hébergé */
+  externalSite: boolean;
 };
 
 /** « autour du sommeil et de la récupération », « autour de la gestion du stress », « autour de l'ancrage » (`deArticle` du mock social). */
@@ -827,7 +840,9 @@ function textContext(brief: SocialSiteBrief, input: MetaAdsGenerationInput, feat
   const { firstName, profession, practiceName, city } = brief.practitioner;
   const names = protectedNames(brief);
   const specialty = specialtyPage(input, featured);
-  const motif = specialty ? brief.motifPages.find((m) => canonicalPath(`/${m.slug}`) === canonicalPath(specialty.path)) : undefined;
+  // Page du brief de la même spécialité (sa photo) : par l'identifiant de la page d'atterrissage, quel que soit son chemin sur le site
+  const specialtySlug = specialty ? landingPageSlug(specialty) : null;
+  const motif = specialtySlug ? brief.motifPages.find((m) => m.slug.toLowerCase() === specialtySlug) : undefined;
   const review = brief.reviews.find((r) => r.text.length <= 160 && compliantAdText(r.text, names)) ?? null;
   const google = canReassure(brief) && brief.google ? { rating: fmtRating(brief.google.rating), count: brief.google.reviewCount } : null;
   return {
@@ -849,6 +864,7 @@ function textContext(brief: SocialSiteBrief, input: MetaAdsGenerationInput, feat
     photos: brief.photos,
     brief,
     names,
+    externalSite: input.diagnostic.externalSite === true,
   };
 }
 
@@ -873,6 +889,7 @@ function genericContext(input: MetaAdsGenerationInput): TextContext {
     photos: [],
     brief: null,
     names: [],
+    externalSite: input.diagnostic.externalSite === true,
   };
 }
 
@@ -1039,7 +1056,7 @@ export function codeCreative(ctx: TextContext, angle: MetaAdsAngle): RawCreative
 function defaultCreativeNotes(ctx: TextContext, angles: readonly MetaAdsAngle[]): string[] {
   const test = angles.slice(0, 3).map((a) => angleLabel(a).toLowerCase());
   return [
-    ...(ctx.photos.length < 3 ? ["Ajoutez des photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat."] : []),
+    ...(ctx.photos.length < 3 ? [`Ajoutez des photos de vous et du cabinet dans ${ctx.externalSite ? "le studio" : "l'éditeur"} : sur Meta, le visuel fait l'essentiel du résultat.`] : []),
     `Testez d'abord trois créas (${test.join(", ")}) pendant 14 jours à budget égal, puis coupez celle au coût par contact le plus élevé.`,
     "Déclinez chaque créa en trois formats (carré, portrait 4:5, story 9:16) : les kits du studio les fournissent prêts à importer.",
     "Changez une seule chose à la fois (accroche, photo ou titre) pour savoir ce qui a joué.",
@@ -1211,10 +1228,16 @@ function eventLabel(event: MetaPixelEvent): string {
   return event === "Schedule" ? "clic « Prendre rendez-vous »" : event === "Contact" ? "appel ou e-mail depuis le site" : "formulaire de contact";
 }
 
+/**
+ * Justification de l'objectif écrite par le code. Sans Pixel, elle dit où
+ * l'installer : dans l'onglet Paramétrage & suivi pour le site hébergé (qui
+ * le charge alors), sur le site lui-même quand c'est celui du client.
+ */
 function defaultRationale(ctx: PlanContext): string {
+  const pixelPlace = ctx.input.diagnostic.externalSite ? "sur votre site" : "(onglet Paramétrage & suivi, identifiant du Pixel)";
   return ctx.hasPixel
     ? `Le Pixel est installé : la campagne est optimisée sur les prises de contact réelles (${eventLabel(ctx.event)}), pas sur les clics. Meta apprend sur ces événements et montre les annonces aux personnes les plus susceptibles de contacter le cabinet.`
-    : `Le Pixel n'est pas installé : installez-le d'abord (onglet Paramétrage & suivi, identifiant du Pixel), vérifiez un événement ${ctx.event} de test, puis créez la campagne en objectif « conversions sur le site ». En attendant, une campagne « Trafic » ne mesure que des clics et n'apprend rien des prises de contact.`;
+    : `Le Pixel n'est pas installé : installez-le d'abord ${pixelPlace}, vérifiez un événement ${ctx.event} de test, puis créez la campagne en objectif « conversions sur le site ». En attendant, une campagne « Trafic » ne mesure que des clics et n'apprend rien des prises de contact.`;
 }
 
 function defaultGeoNote(): string {
@@ -1289,7 +1312,8 @@ export function defaultMetaMilestones(input: MetaAdsPlanInput): MetaAdsPlan["mil
         "Ajuster la zone : resserrer si les contacts viennent de la ville, élargir sinon.",
         "Décider : maintenir, renforcer ou mettre en pause, d'après le coût par contact.",
       ],
-      kpis: ["Coût par contact en baisse par rapport au premier mois", "Fréquence ≤ 3 par personne", "Part des contacts venus de Meta dans le bloc Résultats du studio"],
+      // Site du client : le studio n'y distingue pas une visite venue d'une annonce — pas de repère sur son bloc Résultats
+      kpis: ["Coût par contact en baisse par rapport au premier mois", "Fréquence ≤ 3 par personne", ...(input.diagnostic.externalSite ? [] : ["Part des contacts venus de Meta dans le bloc Résultats du studio"])],
     },
   ];
 }
@@ -1644,7 +1668,6 @@ export function finalizeMetaCreatives(
   const parsed = parseMetaInstructions(input.instructions, input.landingPages);
   const ctx = textContext(brief, input, parsed.featured);
   const names = ctx.names;
-  const paths = knownPaths(input.landingPages);
   const photoIds = new Set(brief.photos.map((p) => p.id));
   const reassure = canReassure(brief);
   const booking = brief.hasBookingUrl;
@@ -1678,7 +1701,8 @@ export function finalizeMetaCreatives(
       template: (META_CREATIVE_TEMPLATES as readonly string[]).includes(c.template) ? (c.template as SocialTemplate) : DEFAULT_TEMPLATE,
       accentRole: (SOCIAL_ACCENT_ROLES as readonly string[]).includes(c.accentRole) ? (c.accentRole as SocialAccentRole) : SOCIAL_ACCENT_ROLES[index % SOCIAL_ACCENT_ROLES.length]!,
       altText: cleanPlanText(c.altText, ALT_MAX, 10) ?? codeAltText(ctx, hook, photoId),
-      landingPath: paths.get(canonicalPath(c.landingPath)) ?? (angle === "education" ? fb.landingPath : ctx.home),
+      // Chemin exact d'une page actuelle (casse, barre finale, ancien chemin « /<slug> » d'une page de spécialité), sinon le repli de l'angle
+      landingPath: normalizeLandingPath(c.landingPath, input.landingPages) ?? (angle === "education" ? fb.landingPath : ctx.home),
     });
   }
   while (creatives.length < META_CREATIVES_MIN) {
@@ -1833,10 +1857,15 @@ const AUDIENCE_LABEL: Record<(typeof AUDIENCES)[number], string> = { large: "Lar
  */
 export const META_LANDING_TIP = `Ajoutez « ${META_ADS_LANDING_SUFFIX} » à la fin de l'URL de destination de chaque annonce (ex. https://votre-site.fr/${META_ADS_LANDING_SUFFIX}) : le site reconnaît la provenance Meta Ads et le bloc Résultats du studio compte ces visites et prises de contact.`;
 
-/** Conseils du plan : ceux du modèle (sans doublon du suffixe) puis, toujours en dernier, le conseil du suffixe d'URL. */
-function withLandingTip(tips: readonly string[]): string[] {
-  const kept = tips.filter((t) => !t.includes(META_ADS_LANDING_SUFFIX)).slice(0, TIPS_MAX - 1);
-  return [...kept, META_LANDING_TIP];
+/**
+ * Conseils du plan : ceux du modèle (sans doublon du suffixe) puis, toujours
+ * en dernier, le conseil du suffixe d'URL. Site du client (`externalSite`) :
+ * pas de conseil de suffixe — la mesure installée sur ce site ne lit aucun
+ * paramètre d'adresse, le studio n'y reconnaîtrait pas la provenance.
+ */
+function withLandingTip(tips: readonly string[], externalSite = false): string[] {
+  const kept = tips.filter((t) => !t.includes(META_ADS_LANDING_SUFFIX));
+  return externalSite ? kept.slice(0, TIPS_MAX) : [...kept.slice(0, TIPS_MAX - 1), META_LANDING_TIP];
 }
 
 /**
@@ -1849,7 +1878,9 @@ function withLandingTip(tips: readonly string[]): string[] {
  * « large » et « retargeting » toujours présents avec des identifiants de
  * créas et vidéos connus, budget = bilan, plan de test, jalons J+7 / J+30 /
  * J+60 (manquants écrits par le code), 3 à 6 conseils conformes dont,
- * toujours, le suffixe d'URL `landingSuffix` (META_ADS_LANDING_SUFFIX).
+ * toujours, le suffixe d'URL `landingSuffix` (META_ADS_LANDING_SUFFIX) —
+ * sauf pour le site du client (`diagnostic.externalSite`), où ce suffixe
+ * n'est lu par personne : ni `landingSuffix`, ni conseil.
  */
 export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, generator: MetaAdsPlan["generator"], now: Date = new Date()): MetaAdsPlan {
   const ctx = planContext(input);
@@ -1891,12 +1922,12 @@ export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, g
       placements: cleanPlanText(raw.campaign.placements, 300, 10) ?? defaultPlacements(),
       language: "fr",
       schedule: cleanPlanText(raw.campaign.schedule, 300, 10) ?? defaultSchedule(),
-      landingSuffix: META_ADS_LANDING_SUFFIX,
+      ...(input.diagnostic.externalSite ? {} : { landingSuffix: META_ADS_LANDING_SUFFIX }),
     },
     adSets,
     budget: { dailyEur: ctx.daily, monthlyEur: ctx.monthly, testPlan: cleanPlanText(raw.budget.testPlan, 500, 10) ?? defaultTestPlan(ctx) },
     milestones: finalizeMilestones(raw.milestones, input),
-    tips: withLandingTip(tips),
+    tips: withLandingTip(tips, input.diagnostic.externalSite === true),
   };
 }
 
@@ -1985,7 +2016,7 @@ export function mockMetaPlan(brief: SocialSiteBrief, input: MetaAdsPlanInput): M
     adSets: defaultAdSets(ctx, city, ages),
     budget: { dailyEur: ctx.daily, monthlyEur: ctx.monthly, testPlan: defaultTestPlan(ctx) },
     milestones: defaultMetaMilestones(input),
-    tips: withLandingTip(uniqueBy([...defaultMetaTips(input).slice(0, other.length > 0 ? 3 : 5), ...other], key)),
+    tips: withLandingTip(uniqueBy([...defaultMetaTips(input).slice(0, other.length > 0 ? 3 : 5), ...other], key), input.diagnostic.externalSite === true),
   };
 }
 

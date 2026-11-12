@@ -2,7 +2,8 @@
  * Meta Ads (studio) — services de données partagés entre le studio (server
  * actions) et les scripts : contexte du site (graine métier / ville /
  * département / termes, pages d'atterrissage, entrée du diagnostic, brief et
- * photos), analyse complète (veille de la bibliothèque publicitaire Meta →
+ * photos — lus sur le site du client quand il est la référence, cf.
+ * `external-site.ts`), analyse complète (veille de la bibliothèque publicitaire Meta →
  * sélection par zone → synthèse IA → diagnostic déterministe → créas, plan
  * vidéo et plan de campagne), régénération avec instructions, quotas mensuels.
  *
@@ -102,7 +103,7 @@ import {
 import { createMetaAdsPlanner, resolveProfession, type MetaAdsPlanner } from "@theralys/ai";
 import { MetaAdLibraryError, createAdLibraryProvider, isMetaTokenError, type AdLibraryProvider, type AdLibrarySearchResult, type MockLocality } from "@theralys/providers/meta";
 import { fetchRegionCommunes, nearbyCitiesFrom } from "@theralys/providers/meta/geo";
-import { landingPagesFrom, onlineMotifPages, phoneFromSections } from "./google-ads";
+import { adsReferenceOf, externalAdsSite, landingPagesFrom, onlineMotifPages, phoneFromSections, type AdsReferenceLoader, type AdsSitePage } from "./google-ads";
 import { loadGoogleBrief } from "./google-brief";
 import { hasRealGoogleProvider, type DbExecutor } from "./google-profile";
 import { enrichSiteAdsMedia, libraryForAnalysis, mediaProviderFor, type MetaMediaStore } from "./meta-library";
@@ -172,9 +173,13 @@ export type MetaAdsContext = {
   site: Site;
   prospect: Prospect | null;
   seed: MetaAdsSeed;
-  /** Accueil « / » puis spécialités « /<slug> » */
+  /**
+   * Accueil « / » puis pages de spécialité, en chemins relatifs à l'adresse
+   * de référence : « /motifs/<slug> » sur le site hébergé, chemin réel de la
+   * page sur le site du client.
+   */
   landingPages: MetaAdsLandingPage[];
-  /** Entrée du diagnostic sans la veille (ajoutée après les appels) */
+  /** Entrée du diagnostic sans la veille (ajoutée après les appels) ; `externalSite` quand le site du client est la référence */
   diagnosticInput: Omit<MetaAdsDiagnosticInput, "market">;
   /** id photo → URL (jamais transmis au modèle) */
   photosById: Record<string, string>;
@@ -824,16 +829,6 @@ export async function getMetaAdsUsage(db: DbExecutor, siteId: string, now = new 
 }
 
 /**
- * Contexte Meta Ads d'un site : métier et ville du prospect (sinon le nom du
- * site), adresse (`prospect.googleAddress`, sinon section Contact de
- * l'accueil), spécialités = titres des pages de spécialité en ligne,
- * concurrents = titres des `competitors` du dernier relevé terminé (≤ 6),
- * pages d'atterrissage, RDV / téléphone, Pixel et bandeau
- * (`site.theme.tracking`), Facebook / Instagram (`site.theme.social`),
- * photos et brief (`loadGoogleBrief`), fiche reliée + dernier audit. Lève si
- * le site n'existe pas.
- */
-/**
  * Communes de la région du praticien (référentiel public) : grandes villes
  * voisines pour les recherches locales et index des communes pour situer les
  * villes ciblées. Échec toléré (réseau, délai) : la veille s'en passe.
@@ -854,24 +849,51 @@ export async function loadLocalGeography(
 }
 
 /**
- * Contexte du site. `opts.geography` (analyse sur la vraie bibliothèque)
- * ajoute les villes voisines à la graine et l'index des communes ;
- * `opts.library` lit les annonces supprimées et les exemples gardés.
+ * Contexte Meta Ads d'un site : métier et ville du prospect (sinon le nom du
+ * site), adresse (`prospect.googleAddress`, sinon section Contact de
+ * l'accueil), spécialités = titres des pages de spécialité en ligne,
+ * concurrents = titres des `competitors` du dernier relevé terminé (≤ 6),
+ * pages d'atterrissage, RDV / téléphone, Pixel et bandeau
+ * (`site.theme.tracking`), Facebook / Instagram (`site.theme.social`),
+ * photos et brief (`loadGoogleBrief`), fiche reliée + dernier audit. Lève si
+ * le site n'existe pas.
+ *
+ * Quand le site du client est la référence (`adsReferenceOf`), les pages du
+ * site hébergé ne sont pas lues : spécialités, téléphone, adresse de repli et
+ * pages d'atterrissage viennent de ce site (`externalAdsSite`), le Pixel et
+ * le bandeau sont ceux repérés à sa dernière lecture, et les réseaux sociaux
+ * sont ceux des réglages du site, complétés par les liens trouvés sur ce site.
+ *
+ * `opts.geography` (analyse sur la vraie bibliothèque) ajoute les villes
+ * voisines à la graine et l'index des communes ; `opts.library` lit les
+ * annonces supprimées et les exemples gardés ; `opts.loadReference` et
+ * `opts.loadBrief` remplacent les lectures de la référence et du brief dans
+ * les tests.
  */
 export async function loadMetaAdsContext(
   db: Database,
   siteId: string,
   env: NodeJS.ProcessEnv = process.env,
-  opts: { geography?: boolean; library?: boolean | "meta" | "mock"; fetchImpl?: typeof fetch } = {},
+  opts: {
+    geography?: boolean;
+    library?: boolean | "meta" | "mock";
+    fetchImpl?: typeof fetch;
+    loadReference?: AdsReferenceLoader;
+    loadBrief?: typeof loadGoogleBrief;
+  } = {},
 ): Promise<MetaAdsContext> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) throw new Error(`Site introuvable : ${siteId}`);
+  const reference = await adsReferenceOf(db, site, opts.loadReference);
+  const external = reference ? externalAdsSite(reference) : null;
   const [prospect, sitePages, audit, scan, briefResult] = await Promise.all([
     site.prospectId ? db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) }) : Promise.resolve(undefined),
-    db.query.pages.findMany({
-      where: and(eq(pages.siteId, siteId), inArray(pages.type, ["home", "motif"])),
-      columns: { type: true, slug: true, title: true, sections: true, position: true },
-    }),
+    external
+      ? Promise.resolve<AdsSitePage[]>([])
+      : db.query.pages.findMany({
+          where: and(eq(pages.siteId, siteId), inArray(pages.type, ["home", "motif"])),
+          columns: { type: true, slug: true, title: true, sections: true, position: true },
+        }),
     db.query.googleProfileAudits.findFirst({
       where: eq(googleProfileAudits.siteId, siteId),
       orderBy: [desc(googleProfileAudits.createdAt)],
@@ -882,15 +904,15 @@ export async function loadMetaAdsContext(
       orderBy: [desc(googleRankScans.scannedAt)],
       columns: { competitors: true },
     }),
-    loadGoogleBrief(db, siteId),
+    (opts.loadBrief ?? loadGoogleBrief)(db, siteId),
   ]);
   const home = sitePages.find((p) => p.type === "home");
   const motifs = onlineMotifPages(sitePages.filter((p) => p.type === "motif"), site);
   const profession = prospect?.profession.trim() || resolveProfession(site.name).practitionerLabel.feminin;
   const city = prospect?.city.trim() ?? "";
-  const address = prospect?.googleAddress?.trim() || addressFromSections(home?.sections);
+  const address = prospect?.googleAddress?.trim() || (external ? external.address : addressFromSections(home?.sections));
   const competitorNames = (scan?.competitors ?? []).map((c) => c.title.trim()).filter(Boolean).slice(0, 6);
-  const seedInput = { profession, city, address, specialties: motifs.map((m) => m.title), competitorNames };
+  const seedInput = { profession, city, address, specialties: external ? external.specialties : motifs.map((m) => m.title), competitorNames };
   let seed = buildMetaSeed(seedInput);
   let localIndex: MetaLocalIndex | null = null;
   if (opts.geography) {
@@ -901,23 +923,28 @@ export async function loadMetaAdsContext(
   const library = opts.library ? await libraryForAnalysis(db, siteId, opts.library === true ? "meta" : opts.library) : { dismissedIds: [], favorites: [] };
   const tracking = site.theme.tracking;
   const social = site.theme.social;
+  // Mêmes pages que Google Ads, avec l'identifiant de spécialité qui relie chaque page au brief
+  const landingPages: MetaAdsLandingPage[] = external ? external.landingPages : landingPagesFrom(motifs);
   return {
     site,
     prospect: prospect ?? null,
     seed,
-    landingPages: landingPagesFrom(motifs).map((p): MetaAdsLandingPage => ({ path: p.path, title: p.title, kind: p.kind })),
+    landingPages,
     diagnosticInput: {
       profession,
       city,
       hasBookingUrl: Boolean(site.bookingUrl),
-      hasPhone: Boolean(phoneFromSections(home?.sections)),
-      hasPixel: Boolean(tracking?.metaPixelId?.trim()),
-      cookieBanner: tracking?.cookieBanner !== false,
+      hasPhone: external ? Boolean(external.phone) : Boolean(phoneFromSections(home?.sections)),
+      // Site du client : Pixel et bandeau repérés dans ses pages ; l'identifiant saisi dans le studio n'agit que sur le site hébergé
+      hasPixel: external ? Boolean(external.tags.metaPixelId?.trim()) : Boolean(tracking?.metaPixelId?.trim()),
+      cookieBanner: external ? external.tags.consentBanner === true : tracking?.cookieBanner !== false,
       photosCount: briefResult.brief.photos.length,
-      facebookUrl: social?.facebook?.trim() || null,
-      instagramUrl: social?.instagram?.trim() || null,
-      motifPages: motifs.length,
+      // Réglages du site d'abord ; site du client : puis les liens trouvés sur ce site
+      facebookUrl: social?.facebook?.trim() || external?.social.facebook?.trim() || null,
+      instagramUrl: social?.instagram?.trim() || external?.social.instagram?.trim() || null,
+      motifPages: external ? external.motifPages : motifs.length,
       profile: metaProfileFrom(prospect ?? null, audit ?? null, hasRealGoogleProvider(env)),
+      ...(external ? { externalSite: true } : {}),
     },
     photosById: briefResult.photosById,
     brief: briefResult.brief,
@@ -951,7 +978,7 @@ export function runMetaAdsAnalysis(...args: Parameters<typeof runMetaAdsAnalysis
 async function runMetaAdsAnalysisAttributed(
   db: Database,
   siteId: string,
-  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; mediaStore?: MetaMediaStore | null } = {},
+  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; mediaStore?: MetaMediaStore | null; loadReference?: AdsReferenceLoader; loadBrief?: typeof loadGoogleBrief } = {},
 ): Promise<MetaAnalysisOutcome> {
   const now = opts.now ?? new Date();
   const env = opts.env ?? process.env;
@@ -960,7 +987,7 @@ async function runMetaAdsAnalysisAttributed(
     // Le référentiel des communes ne sert que la vraie bibliothèque (la veille simulée porte ses propres zones)
     const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { type: true } });
     const marketMode = site ? (marketProviderFor(env, site.type)?.mode ?? "none") : "none";
-    ctx = await loadMetaAdsContext(db, siteId, env, { geography: marketMode === "meta", library: marketMode === "mock" ? "mock" : "meta" });
+    ctx = await loadMetaAdsContext(db, siteId, env, { geography: marketMode === "meta", library: marketMode === "mock" ? "mock" : "meta", loadReference: opts.loadReference, loadBrief: opts.loadBrief });
   } catch (err) {
     console.error(`[meta-ads] contexte du site ${siteId} indisponible :`, err);
     return { status: "error", analysisId: null, message: metaErrorMessage(err) };
@@ -1137,7 +1164,7 @@ export function regenerateMetaAds(...args: Parameters<typeof regenerateMetaAdsAt
 async function regenerateMetaAdsAttributed(
   db: Database,
   siteId: string,
-  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv },
+  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; loadReference?: AdsReferenceLoader; loadBrief?: typeof loadGoogleBrief },
 ): Promise<MetaRegenOutcome> {
   const now = opts.now ?? new Date();
   const env = opts.env ?? process.env;
@@ -1162,7 +1189,7 @@ async function regenerateMetaAdsAttributed(
 
     try {
       const instructions = cleanMetaInstructions(opts.instructions);
-      const ctx = await loadMetaAdsContext(db, siteId, env);
+      const ctx = await loadMetaAdsContext(db, siteId, env, { loadReference: opts.loadReference, loadBrief: opts.loadBrief });
       const planner = createMetaAdsPlanner(env);
       const label = `régénération ${analysis.id} (${site.slug})`;
       // Diagnostic recalculé sur le contexte courant, veille conservée : un Pixel posé depuis l'analyse fait passer le plan en conversions

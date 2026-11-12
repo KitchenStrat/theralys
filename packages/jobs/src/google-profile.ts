@@ -38,6 +38,7 @@ import {
   GOOGLE_REVIEWS_SYNC_DEPTH,
   GOOGLE_SCAN_MAX_MISSING_POINTS,
   GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS,
+  activeExternalSite,
   aggregateCompetitors,
   auditGoogleProfile,
   benchmarkFrom,
@@ -47,10 +48,12 @@ import {
   gridPoints,
   gridRadiusKm,
   isMockPlaceId,
+  referenceSiteUrl,
   summarizeScan,
   usageMonthKey,
   type GeoPoint,
   type GoogleAudit,
+  type GoogleAuditInput,
   type GoogleBenchmark,
   type GoogleCompetitor,
   type GoogleGridPoint,
@@ -399,6 +402,21 @@ async function reviewsForAudit(db: Database, siteId: string) {
   };
 }
 
+/**
+ * Site auquel l'audit compare le site web déclaré sur la fiche, et que le
+ * plan d'action recommande d'y inscrire : l'adresse de référence — celle du
+ * site du client quand il est la référence (`external`, libellés neutres
+ * « votre site »), sinon celle du site hébergé, comme avant.
+ */
+export function auditSiteOf(site: Pick<Site, "slug" | "domain" | "theme" | "bookingUrl">, env: NodeJS.ProcessEnv = process.env): GoogleAuditInput["site"] {
+  return {
+    // Même règle que `publicSiteUrl` de `google-brief.ts` (adresse de référence d'un site)
+    url: referenceSiteUrl(siteUrl(site, env), site.theme),
+    hasBookingUrl: Boolean(site.bookingUrl),
+    ...(activeExternalSite(site.theme) ? { external: true } : {}),
+  };
+}
+
 async function computeAudit(db: Database, site: Site, snapshot: GoogleProfileSnapshot, now: Date): Promise<GoogleAudit> {
   const [benchmark, { reviews, reviewsHaveOwnerReplies }] = await Promise.all([
     benchmarkForSite(db, site.id),
@@ -409,7 +427,7 @@ async function computeAudit(db: Database, site: Site, snapshot: GoogleProfileSna
     benchmark,
     reviews,
     reviewsHaveOwnerReplies,
-    site: { url: siteUrl(site), hasBookingUrl: Boolean(site.bookingUrl) },
+    site: auditSiteOf(site),
     now,
   });
 }

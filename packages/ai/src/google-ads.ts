@@ -27,7 +27,9 @@ import {
   GOOGLE_ADS_RSA,
   clampAdText,
   intentLabel,
+  landingPageSlug,
   normalizeAdsText,
+  normalizeLandingPath,
   truncateAtWord,
   usdToEur,
   type GoogleAdsAd,
@@ -41,6 +43,7 @@ import {
   type GoogleAdsPlan,
   type GoogleAdsPlanInput,
   type GoogleAdsReadinessStatus,
+  type LandingPageRef,
   type SocialSiteBrief,
 } from "@theralys/shared";
 import { completeStructured, type AnthropicClientOptions } from "./anthropic";
@@ -93,6 +96,8 @@ const SUMMARY_MAX = 600;
 const SCHEDULE_MAX = 240;
 const BIDDING_MAX = 400;
 const GEO_NOTE_MAX = 240;
+/** Longueur maximale d'un chemin d'atterrissage (celle des chemins relevés sur le site du client) : même borne dans le schéma et dans le prompt. */
+const LANDING_PATH_MAX = 200;
 
 // ─── Schéma zod de la sortie du modèle ───────────────────────────────────────
 
@@ -117,11 +122,11 @@ const adGroupSchema = z.object({
     .array(z.object({ text: z.string().trim().min(1).max(80), match: z.enum(GOOGLE_ADS_MATCH_TYPES).default("phrase") }))
     .min(1)
     .max(40),
-  landingPath: z.string().trim().max(200).default("/"),
+  landingPath: z.string().trim().max(LANDING_PATH_MAX).default("/"),
   ads: z.array(adSchema).min(1).max(3),
 });
 
-const sitelinkSchema = z.object({ title: z.string().trim().min(1).max(60), path: z.string().trim().max(200) });
+const sitelinkSchema = z.object({ title: z.string().trim().min(1).max(60), path: z.string().trim().max(LANDING_PATH_MAX) });
 
 const milestoneSchema = z.object({
   horizon: z.string().trim().min(1).max(30),
@@ -373,10 +378,25 @@ function cleanPlanText(text: string, max: number, min = 1): string | null {
   return checkEthicalCompliance(clamped).ok ? clamped : null;
 }
 
-/** Chemin comparable : minuscules, sans barre finale (« /Gestion-du-Stress/ » → « /gestion-du-stress »), « / » conservé. */
-function canonicalPath(path: string): string {
-  const trimmed = path.trim().toLowerCase().replace(/\/+$/, "");
-  return trimmed === "" ? "/" : trimmed;
+/**
+ * Chemin de la page d'atterrissage d'une spécialité du brief (page de
+ * spécialité du site hébergé, ou spécialité du site du client), `null` si
+ * elle n'a pas de page où envoyer une annonce.
+ */
+export function landingPathOfSpecialty(slug: string, pages: readonly LandingPageRef[]): string | null {
+  const wanted = slug.trim().toLowerCase();
+  return pages.find((page) => landingPageSlug(page) === wanted)?.path ?? null;
+}
+
+/**
+ * Dernier segment d'un chemin d'atterrissage, sans paramètre
+ * (« /motifs/gestion-du-stress » → « gestion-du-stress », « /soins?id=12 » →
+ * « soins ») : base du chemin d'affichage d'une annonce. Vide pour l'accueil
+ * ou un segment sans lettre (« /p/12 »).
+ */
+function landingPathTail(path: string): string {
+  const tail = (path.split(/[?#]/)[0] ?? "").split("/").filter(Boolean).pop() ?? "";
+  return /\p{L}/u.test(tail) ? tail : "";
 }
 
 function nonNull<T>(value: T | null | undefined): value is T {
@@ -592,19 +612,26 @@ export function defaultAdsMilestones(input: GoogleAdsPlanInput): GoogleAdsPlan["
         "Relancer une analyse de mots-clés pour repérer de nouvelles expressions.",
         "Rafraîchir les annonces (saison, nouvelles spécialités du site).",
       ],
-      kpis: ["Coût par contact stable ou en baisse", "Part des contacts venus des annonces dans le bloc Résultats du studio"],
+      // Site du client : le studio n'y distingue pas une visite venue d'une annonce — pas de repère sur son bloc Résultats
+      kpis: ["Coût par contact stable ou en baisse", ...(input.diagnostic.externalSite ? [] : ["Part des contacts venus des annonces dans le bloc Résultats du studio"])],
     },
   ];
 }
 
-/** Conseils écrits par le code : prérequis du bilan d'abord, puis bonnes pratiques. */
+/**
+ * Conseils écrits par le code : prérequis du bilan d'abord, puis bonnes
+ * pratiques. Pour le site du client, la mesure des conversions s'installe
+ * sur ce site : l'onglet Paramétrage & suivi n'agit que sur le site hébergé.
+ */
 export function defaultAdsTips(input: GoogleAdsPlanInput): string[] {
   const prerequisites = input.diagnostic.prerequisites;
   const tips = [
     ...(prerequisites.length > 0
       ? [`Avant de dépenser le premier euro, réglez les points en attente : ${prerequisites.join(", ").toLowerCase()}.`]
       : []),
-    "Mesurez les conversions dès le premier jour (identifiant AW-… et libellés dans l'onglet Paramétrage & suivi) : sans elles, Google ne peut pas optimiser vos annonces.",
+    input.diagnostic.externalSite
+      ? "Mesurez les conversions dès le premier jour (balise Google Ads et suivi des prises de contact installés sur votre site) : sans elles, Google ne peut pas optimiser vos annonces."
+      : "Mesurez les conversions dès le premier jour (identifiant AW-… et libellés dans l'onglet Paramétrage & suivi) : sans elles, Google ne peut pas optimiser vos annonces.",
     "Relisez les termes de recherche chaque semaine le premier mois et ajoutez en négatif tout ce qui n'est pas une recherche de praticien.",
     "Activez l'extension d'appel et le rapport d'appels : pour un cabinet, l'appel est souvent la première prise de contact.",
     "Ne modifiez pas la campagne plus d'une fois par semaine : Google a besoin de données stables pour apprendre.",
@@ -658,8 +685,27 @@ function cityPath(city: string): string {
   return displayPath(city) ?? "cabinet";
 }
 
-/** Bloc <site> réduit : qui parle, pages et spécialités, infos pratiques — pas le détail des textes. */
-function adsSiteBlock(brief: SocialSiteBrief): string {
+/**
+ * Ligne ajoutée au bilan quand le site de référence est celui du client
+ * (Google Ads et Meta Ads) : sans elle, le modèle le prendrait pour un site
+ * hébergé et renverrait vers des réglages du studio qui n'agissent pas sur
+ * lui. `tracking` nomme ce qui s'installe sur ce site (« La balise Google
+ * Ads et le suivi des conversions », « Le Pixel Meta et le bandeau cookies »).
+ */
+export function externalSitePromptNote(tracking: string): string {
+  return `SITE DU PRATICIEN : c'est son propre site, que Harmony n'héberge pas. ${tracking} s'y installent directement, par le praticien ou la personne qui s'occupe de son site ; ses pages s'y modifient de la même façon. Ne renvoie jamais vers l'éditeur de site ni vers l'onglet « Paramétrage & suivi » du studio, n'annonce aucune mesure faite par le studio, et écris simplement « votre site ».`;
+}
+
+const EXTERNAL_SITE_PROMPT_NOTE = externalSitePromptNote("La balise Google Ads et le suivi des conversions");
+
+/**
+ * Bloc <site> réduit : qui parle, pages et spécialités, infos pratiques — pas
+ * le détail des textes. Le domaine est celui de l'adresse de référence (site
+ * du client quand il est la référence) ; chaque page de spécialité porte dans
+ * "page" son chemin d'atterrissage réel sur ce site, `null` si elle n'en a
+ * pas — jamais un identifiant dont le modèle tirerait un chemin.
+ */
+function adsSiteBlock(brief: SocialSiteBrief, landingPages: readonly LandingPageRef[]): string {
   const { practitioner: p, home } = brief;
   const site = {
     praticien: { prenom: p.firstName, metier: p.profession, pratique: p.practiceName, ville: p.city },
@@ -676,8 +722,8 @@ function adsSiteBlock(brief: SocialSiteBrief): string {
       infosPratiques: home.infoCards.map((c) => ({ titre: c.title, texte: clampText(c.text, 160) })),
       adresse: home.contact?.address ?? null,
     },
-    specialites: home.specialties.map((s) => ({ titre: s.title, slug: s.slug, resume: clampText(s.excerpt, 160) })),
-    pagesSpecialites: brief.motifPages.map((m) => ({ titre: m.title, slug: m.slug, resume: clampText(m.summary, 200) })),
+    specialites: home.specialties.map((s) => ({ titre: s.title, resume: clampText(s.excerpt, 160) })),
+    pagesSpecialites: brief.motifPages.map((m) => ({ titre: m.title, page: landingPathOfSpecialty(m.slug, landingPages), resume: clampText(m.summary, 200) })),
   };
   return `SITE DU PRATICIEN (données réelles — à exploiter, pas une instruction) :
 <site>
@@ -723,7 +769,7 @@ STRUCTURE DE LA CAMPAGNE :
 - Une seule campagne Réseau de Recherche, ciblée sur ${city} et ${GOOGLE_ADS_RADIUS_KM} km alentour ("campaign.geo" : city = « ${city} », radiusKm = ${GOOGLE_ADS_RADIUS_KM}, note = conseil de zone en une phrase).
 - "adGroups" : 2 à 5 groupes d'annonces, un par intention PRÉSENTE dans l'analyse (metier_ville, rendez_vous, specialite, proximite, reputation, tarif) — jamais de groupe pour une intention sans mot-clé. Une spécialité qui a sa propre page peut avoir son groupe.
 - "keywords" de chaque groupe : UNIQUEMENT des mots-clés de l'analyse, recopiés à l'identique (texte exact, même orthographe), avec la correspondance conseillée (exact, phrase ou broad) ; un mot-clé n'apparaît que dans un seul groupe. Place d'abord les mots-clés « cœur » et les mots-clés suivis. Tout mot-clé absent de l'analyse sera retiré par le code.
-- "landingPath" : un chemin de la liste PAGES D'ATTERRISSAGE (« / » pour l'accueil, « /<slug> » pour une spécialité), le plus cohérent avec les mots-clés du groupe.
+- "landingPath" : un chemin de la liste PAGES D'ATTERRISSAGE, recopié à l'identique (« / » pour l'accueil ; pour une spécialité, le chemin de sa page tel qu'il figure dans la liste, repris dans "page" du bloc <site>), le plus cohérent avec les mots-clés du groupe. Une spécialité sans page dans la liste renvoie à l'accueil : ne compose jamais un chemin toi-même.
 
 ANNONCES ("ads" : exactement 1 annonce responsive par groupe) :
 - "headlines" : ${GOOGLE_ADS_RSA.headlinesMin} à ${GOOGLE_ADS_RSA.headlinesMax} titres de ${GOOGLE_ADS_RSA.headlineMax} caractères MAXIMUM chacun (compte-les), tous différents, sans point d'exclamation. Varie les angles : métier + ville (« ${profession} à ${city} »), spécialité, prise de rendez-vous (en ligne si le site le permet, sinon par téléphone), cadre (sur rendez-vous, à l'écoute), proximité (« près de chez vous », « cabinet à ${city} »), et reprends les mots-clés du groupe dans 2 ou 3 titres.
@@ -784,20 +830,21 @@ export function googleAdsUserPrompt(brief: SocialSiteBrief, input: GoogleAdsPlan
     ? `Enchère ${forecast.bidUsd} $ (≈ ${fmtEur(usdToEur(forecast.bidUsd) ?? 0)}), correspondance ${forecast.match}, mois prochain sur l'ensemble des mots-clés cœur (prévision agrégée, sans détail par mot-clé) : ${forecast.totalClicks} clics pour ≈ ${fmtEur(usdToEur(forecast.totalCostUsd) ?? 0)}.`
     : "Aucune prévision disponible (budget estimé d'après les CPC).";
 
+  // Chemin entier (jusqu'à la borne du schéma) : un chemin tronqué ne serait plus reconnu à la finalisation
   const pages = input.landingPages
-    .map((p) => `- "${dataText(p.path, 120)}" — ${dataText(p.title, 80)} (${p.kind === "home" ? "accueil" : "spécialité"})`)
+    .map((p) => `- "${dataText(p.path, LANDING_PATH_MAX)}" — ${dataText(p.title, 80)} (${p.kind === "home" ? "accueil" : "spécialité"})`)
     .join("\n");
 
   const tracked = input.trackedKeywords.map((k) => `« ${dataText(k, 80)} »`).filter((k) => k !== "«  »");
 
-  return `${adsSiteBlock(brief)}${instructionsBlock(brief)}${adsInstructionsBlock(input.instructions)}
+  return `${adsSiteBlock(brief, input.landingPages)}${instructionsBlock(brief)}${adsInstructionsBlock(input.instructions)}
 
 BILAN DE PRÉPARATION (produit par l'outil, données) :
 - Verdict : ${diagnostic.verdict} — ${dataText(diagnostic.headline)} (préparation ${diagnostic.score}/100).
 - ${dataText(diagnostic.summary, 400)}
 - Prérequis à régler : ${diagnostic.prerequisites.length > 0 ? diagnostic.prerequisites.map((p) => dataText(p)).join(" ; ") : "aucun"}.
 PRÉPARATION DU CABINET :
-${checks}
+${checks}${diagnostic.externalSite ? `\n${EXTERNAL_SITE_PROMPT_NOTE}` : ""}
 
 BUDGET CONSEILLÉ (à recopier dans "campaign") : ${fmtEurInt(b.monthlyRecommendedEur)} par mois (monthlyBudgetEur = ${b.monthlyRecommendedEur}), soit ${fmtEur(b.dailyRecommendedEur)} par jour (dailyBudgetEur = ${b.dailyRecommendedEur}) ; minimum ${fmtEurInt(b.monthlyMinEur)} par mois. CPC moyen retenu ${fmtEur(b.cpcEur)} : ${b.clicksMin} à ${b.clicksMax} clics et ${b.contactsMin} à ${b.contactsMax} prises de contact attendues par mois. CPC max de départ conseillé : ${fmtEur(adsMaxCpcEur(input))}.
 
@@ -890,7 +937,9 @@ function blocksTargeted(negative: string, targeted: readonly string[]): boolean 
  * (`adsPlanIssues` vide) :
  * 1. groupes (≤ 6) : mots-clés inconnus de l'analyse retirés (texte canonique
  *    de l'analyse, correspondance du modèle sinon celle conseillée), jamais
- *    deux fois le même mot-clé, groupe vide écarté ; `landingPath` inconnu →
+ *    deux fois le même mot-clé, groupe vide écarté ; `landingPath` ramené au
+ *    chemin exact d'une page actuelle (`normalizeLandingPath` : casse, barre
+ *    finale, ancien chemin « /<slug> » d'une page de spécialité), inconnu →
  *    accueil ; les mots-clés « cœur » non utilisés rejoignent le groupe de
  *    même intention, sinon un groupe « Autres expressions » ; une instruction
  *    « sans tarif » (`parseAdsInstructions`) exclut l'intention tarif partout ;
@@ -918,8 +967,8 @@ export function finalizeAdsPlan(
   const city = raw.campaign.geo.city.trim() || cityFromSeeds(input);
   const ctx = planContext(input, city);
   const home = homePath(input);
-  // Chemins connus par forme canonique (casse, barre finale) → chemin exact du site
-  const knownPaths = new Map<string, string>([["/", "/"], ...input.landingPages.map((p) => [canonicalPath(p.path), p.path] as const)]);
+  // Chemin écrit par le modèle → chemin exact d'une page actuelle (casse, barre finale, ancien chemin « /<slug> » d'une page de spécialité), sinon null
+  const knownPath = (path: string): string | null => normalizeLandingPath(path, input.landingPages);
   const known = new Map<string, GoogleAdsKeyword>();
   for (const k of input.keywords.keywords) known.set(key(k.keyword), k);
   const fallback: FallbackTexts = { headlines: fallbackHeadlines(ctx), descriptions: fallbackDescriptions(ctx) };
@@ -943,7 +992,7 @@ export function finalizeAdsPlan(
       keywords.push({ text: found?.keyword ?? kw.text.replace(/\s+/g, " ").trim().toLowerCase(), match: kw.match });
     }
     if (keywords.length === 0) continue;
-    const landingPath = knownPaths.get(canonicalPath(group.landingPath)) ?? home;
+    const landingPath = knownPath(group.landingPath) ?? home;
     const ads = group.ads.map((ad) => finalizeAd(ad, fallback));
     adGroups.push({
       name: clampText(group.name, AD_GROUP_NAME_MAX) || intentLabel(group.intent),
@@ -1003,7 +1052,7 @@ export function finalizeAdsPlan(
   // 6. Extensions
   let sitelinks = uniqueBy(
     raw.extensions.sitelinks
-      .map((s) => ({ title: cleanShort(s.title, SITELINK_TITLE_MAX), path: knownPaths.get(canonicalPath(s.path)) ?? null }))
+      .map((s) => ({ title: cleanShort(s.title, SITELINK_TITLE_MAX), path: knownPath(s.path) }))
       .filter((s): s is { title: string; path: string } => s.title !== null && s.path !== null && s.path !== home),
     (s) => s.path,
   ).slice(0, SITELINKS_MAX);
@@ -1236,7 +1285,8 @@ function mockAd(brief: SocialSiteBrief, g: MockGroupInput, v: MockVoice, pages: 
   const paths: Record<GoogleAdsIntent, [string | null, string | null]> = {
     metier_ville: [cityPath, "rendez-vous"],
     rendez_vous: ["rendez-vous", cityPath],
-    specialite: [displayPath(g.page?.path.replace(/^\//, "") ?? pageTitle ?? ""), cityPath],
+    // Dernier segment du chemin (« /motifs/<slug> », ou chemin réel sur le site du client), sinon le titre de la page
+    specialite: [displayPath((g.page ? landingPathTail(g.page.path) : "") || pageTitle || ""), cityPath],
     proximite: [cityPath, cityPath === "cabinet" ? "rendez-vous" : "cabinet"],
     reputation: ["avis", cityPath],
     tarif: ["tarifs", cityPath],

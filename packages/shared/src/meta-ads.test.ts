@@ -1614,7 +1614,105 @@ describe("metaReadinessChecks", () => {
   });
 });
 
+describe("metaReadinessChecks — site du client (externalSite)", () => {
+  const externalInput: MetaAdsDiagnosticInput = { ...readyInput, externalSite: true };
+
+  it("mêmes dix points, mêmes libellés ; rendez-vous, Instagram, avis et fiche Google ne changent pas", () => {
+    const hosted = metaReadinessChecks(readyInput);
+    const external = metaReadinessChecks(externalInput);
+    expect(external.map((c) => [c.id, c.label, c.critical])).toEqual(hosted.map((c) => [c.id, c.label, c.critical]));
+    expect(external.every((c) => c.status === "ok")).toBe(true);
+    const poor: MetaAdsDiagnosticInput = { ...readyInput, hasBookingUrl: false, instagramUrl: null, photosCount: 1, profile: { linked: false, rating: null, votes: null } };
+    for (const id of ["instagram", "booking", "reviews", "profile_linked"]) {
+      expect(checkOf({ ...poor, externalSite: true }, id)).toEqual(checkOf(poor, id));
+    }
+    // Photos : même seuil, même compte quand il est atteint
+    expect(checkOf(externalInput, "photos")).toEqual(checkOf(readyInput, "photos"));
+    // Une page Facebook connue se dit de la même façon
+    expect(checkOf(externalInput, "facebook_page")).toEqual(checkOf(readyInput, "facebook_page"));
+  });
+
+  it("Pixel : repéré sur le site du client (prises de contact à contrôler chez Meta), sinon à installer sur ce site puis site à relire — toujours bloquant", () => {
+    const found = checkOf(externalInput, "pixel");
+    expect(found).toMatchObject({ status: "ok", critical: true });
+    expect(found.detail).toBe("Le Pixel Meta a été repéré sur votre site : contrôlez dans le Gestionnaire d'événements de Meta que vos prises de rendez-vous et vos appels y sont bien comptés.");
+    const missing = checkOf({ ...externalInput, hasPixel: false }, "pixel");
+    expect(missing).toMatchObject({ status: "todo", critical: true });
+    expect(missing.detail).toBe(
+      "Aucun Pixel Meta n'a été repéré sur votre site. Installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+    );
+  });
+
+  it("bandeau cookies : repéré → ok ; non repéré → inconnu (la lecture ne connaît pas tous les bandeaux), jamais « à régler »", () => {
+    expect(checkOf(externalInput, "cookie_banner")).toMatchObject({ status: "ok", critical: false, detail: "Un bandeau cookies a été repéré sur votre site." });
+    expect(checkOf({ ...externalInput, cookieBanner: false }, "cookie_banner")).toMatchObject({
+      status: "unknown",
+      critical: false,
+      detail: "Aucun bandeau cookies n'a été repéré sur votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
+    });
+  });
+
+  it("page Facebook, téléphone et pages de spécialité : textes sans renvoi vers l'éditeur du site hébergé", () => {
+    expect(checkOf({ ...externalInput, facebookUrl: null }, "facebook_page")).toMatchObject({
+      status: "todo",
+      critical: false,
+      detail: "Une page Facebook est indispensable pour diffuser des annonces : indiquez son lien dans « Mon site ».",
+    });
+    expect(checkOf(externalInput, "phone").detail).toBe("Votre numéro de téléphone figure sur votre site.");
+    expect(checkOf({ ...externalInput, hasPhone: false }, "phone")).toMatchObject({
+      status: "todo",
+      critical: false,
+      detail: "Aucun numéro de téléphone n'a été trouvé sur votre site : affichez-le bien en vue ou, s'il y figure déjà, indiquez-le dans « Mon site ».",
+    });
+    expect(checkOf({ ...externalInput, hasPhone: false, hasBookingUrl: false }, "phone").critical).toBe(true);
+    expect(checkOf(externalInput, "landing_pages").detail).toBe("2 pages de spécialité trouvées sur votre site : des pages d'atterrissage ciblées.");
+    expect(checkOf({ ...externalInput, motifPages: 0 }, "landing_pages")).toMatchObject({
+      status: "todo",
+      detail: "Aucune page de spécialité n'a été trouvée sur votre site : vos annonces mèneront à votre page d'accueil.",
+    });
+    // Photos : elles s'ajoutent dans le studio, l'éditeur du site hébergé n'étant plus le lieu de travail du praticien
+    expect(checkOf({ ...externalInput, photosCount: 2 }, "photos")).toMatchObject({
+      status: "todo",
+      critical: false,
+      detail: "Ajoutez au moins 3 photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.",
+    });
+    const worst: MetaAdsDiagnosticInput = { ...externalInput, hasPixel: false, cookieBanner: false, facebookUrl: null, hasPhone: false, motifPages: 0, photosCount: 0 };
+    for (const id of ["pixel", "cookie_banner", "facebook_page", "phone", "photos", "landing_pages"]) {
+      for (const input of [externalInput, worst]) {
+        expect(checkOf(input, id).detail).not.toMatch(/Harmony|éditeur|Paramétrage|Tracking|Pied de page/);
+      }
+    }
+  });
+
+  it("site hébergé (drapeau absent) : textes d'origine", () => {
+    expect(checkOf(readyInput, "pixel").detail).toBe("Les clics RDV, appels et e-mails remontent dans Meta : vos campagnes s'optimisent sur de vraies prises de contact.");
+    expect(checkOf({ ...readyInput, cookieBanner: false }, "cookie_banner")).toMatchObject({
+      status: "todo",
+      detail: "Votre bandeau est désactivé : le Pixel partirait sans consentement. Réactivez-le dans l'éditeur (Paramètres → Tracking).",
+    });
+    expect(checkOf(readyInput, "cookie_banner").detail).toBe("Le Pixel se charge après consentement, comme l'exige la CNIL.");
+    expect(checkOf({ ...readyInput, facebookUrl: null }, "facebook_page").detail).toBe("Une page Facebook est indispensable pour diffuser des annonces : ajoutez son lien dans l'éditeur (Pied de page → Réseaux).");
+    expect(checkOf(readyInput, "phone").detail).toBe("Les appels depuis le site comptent comme des contacts.");
+    expect(checkOf({ ...readyInput, hasPhone: false }, "phone").detail).toBe("Affichez un numéro sur le site : beaucoup de patients préfèrent appeler.");
+    expect(checkOf({ ...readyInput, motifPages: 0 }, "landing_pages").detail).toBe("Des pages dédiées par spécialité font de meilleures pages d'atterrissage.");
+    expect(checkOf({ ...readyInput, photosCount: 2 }, "photos").detail).toBe("Ajoutez au moins 3 photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat.");
+  });
+});
+
 describe("diagnoseMetaAds", () => {
+  it("site du client : un bandeau non repéré ne bloque rien (−3, hors prérequis) ; le bilan porte le drapeau, absent pour un site hébergé", () => {
+    const external: MetaAdsDiagnosticInput = { ...readyInput, externalSite: true };
+    expect(diagnoseMetaAds(external, now)).toMatchObject({ verdict: "go", score: 100, prerequisites: [], externalSite: true });
+    expect(diagnoseMetaAds({ ...external, cookieBanner: false }, now)).toMatchObject({ verdict: "go", score: 97, prerequisites: [] });
+    // Pixel non repéré : bloquant, comme pour un site hébergé
+    const noPixel = diagnoseMetaAds({ ...external, hasPixel: false }, now);
+    expect(noPixel).toMatchObject({ verdict: "wait", score: 80, externalSite: true });
+    expect(noPixel.prerequisites[0]).toBe("Pixel Meta installé sur le site");
+    expect("externalSite" in diagnoseMetaAds(readyInput, now)).toBe(false);
+    // Site hébergé : bandeau désactivé = point à régler (−8), inchangé
+    expect(diagnoseMetaAds({ ...readyInput, cookieBanner: false }, now)).toMatchObject({ verdict: "go_with_prerequisites", score: 92, prerequisites: ["Bandeau cookies actif"] });
+  });
+
   it("sans Pixel → wait, le Pixel en tête des prérequis, score −20", () => {
     const d = diagnoseMetaAds({ ...readyInput, hasPixel: false }, now);
     expect(d.verdict).toBe("wait");
@@ -1853,6 +1951,18 @@ describe("metaCreativeIssues", () => {
     const set = creativeSet([creative("c1", "reassurance", { landingPath: "stress" }), creative("c2", "education", { landingPath: "/inconnue" }), creative("c3", "local")]);
     expect(metaCreativeIssues(set, landingPaths)).toEqual(["créa 1 (Créa c1) : page d'atterrissage invalide", "créa 1 (Créa c1) : page d'atterrissage inconnue", "créa 2 (Créa c2) : page d'atterrissage inconnue"]);
     expect(metaCreativeIssues(set)).toEqual(["créa 1 (Créa c1) : page d'atterrissage invalide"]);
+  });
+
+  it("créas enregistrées avec l'ancien chemin « /<slug> » d'une page de spécialité : connues tant que la page existe sous « /motifs/<slug> »", () => {
+    const current = ["/", "/motifs/stress", "/motifs/sommeil"];
+    const stored = creativeSet([creative("c1", "reassurance"), creative("c2", "education", { landingPath: "/stress" }), creative("c3", "local", { landingPath: "/motifs/sommeil" })]);
+    expect(metaCreativeIssues(stored, current)).toEqual([]);
+    // Page supprimée depuis : toujours signalée
+    const gone = creativeSet([creative("c1", "reassurance"), creative("c2", "education", { landingPath: "/hypnose" }), creative("c3", "local")]);
+    expect(metaCreativeIssues(gone, current)).toEqual(["créa 2 (Créa c2) : page d'atterrissage inconnue"]);
+    // Site du client : chemins réels, sans forme imposée
+    const external = ["/", "/accompagnements/stress"];
+    expect(metaCreativeIssues(creativeSet([creative("c1", "reassurance"), creative("c2", "education", { landingPath: "/accompagnements/stress" }), creative("c3", "local")]), external)).toEqual([]);
   });
 
   it("violation d'attribut personnel dans n'importe quel champ texte", () => {

@@ -18,11 +18,14 @@ import {
   checkAdsCompliance,
   createGoogleAdsPlanner,
   defaultAdsMilestones,
+  defaultAdsTips,
+  externalSitePromptNote,
   finalizeAdsPlan,
   googleAdsPlanModelSchema,
   googleAdsPlanSchema,
   googleAdsSystemPrompt,
   googleAdsUserPrompt,
+  landingPathOfSpecialty,
   mockAdsPlan,
   parseAdsInstructions,
   softenAdsWording,
@@ -98,8 +101,15 @@ const IDEAS: GoogleAdsKeywordData[] = [
 
 const LANDING_PAGES: GoogleAdsPlanInput["landingPages"] = [
   { path: "/", title: "Accueil", kind: "home" },
-  { path: "/gestion-du-stress", title: "Gestion du stress", kind: "motif" },
-  { path: "/sommeil", title: "Sommeil et récupération", kind: "motif" },
+  { path: "/motifs/gestion-du-stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+  { path: "/motifs/sommeil", title: "Sommeil et récupération", kind: "motif", slug: "sommeil" },
+];
+
+/** Site du client : pages réelles (chemins sans rapport avec l'identifiant de la spécialité), reliées au brief par `slug`. */
+const EXTERNAL_LANDING_PAGES: GoogleAdsPlanInput["landingPages"] = [
+  { path: "/", title: "Accueil", kind: "home" },
+  { path: "/accompagnements/stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+  { path: "/Sommeil?lang=fr", title: "Sommeil et récupération", kind: "motif", slug: "sommeil" },
 ];
 
 function input(overrides: Partial<GoogleAdsPlanInput> = {}, opts: { forecast?: boolean; ideas?: GoogleAdsKeywordData[] } = {}): GoogleAdsPlanInput {
@@ -295,7 +305,10 @@ describe("prompts", () => {
     const user = googleAdsUserPrompt(b, i);
     expect(user).toContain("<site>");
     expect(user).toContain('"metier":"Sophrologue"');
-    expect(user).toContain('"slug":"gestion-du-stress"');
+    // Chaque page de spécialité porte son chemin d'atterrissage réel, jamais un identifiant dont le modèle tirerait un chemin
+    expect(user).toContain('"page":"/motifs/gestion-du-stress"');
+    expect(user).not.toContain('"slug"');
+    expect(user).toContain('"domaine":"claire-dupont.harmony-web.fr"');
     expect(user).toContain("<consignes>\nNe jamais citer de tarif.\n</consignes>");
     expect(user).toContain("INSTRUCTIONS POUR CE PLAN");
     expect(user).toContain("<instructions>\nMettre en avant le sommeil.\n</instructions>");
@@ -324,7 +337,10 @@ describe("prompts", () => {
     expect(user).toContain("sur l'ensemble des mots-clés cœur (prévision agrégée, sans détail par mot-clé) : 120 clics");
     expect(user).toContain(`${i.forecast!.totalClicks} clics`);
     expect(user).toContain('- "/" — Accueil (accueil)');
-    expect(user).toContain('- "/gestion-du-stress" — Gestion du stress (spécialité)');
+    expect(user).toContain('- "/motifs/gestion-du-stress" — Gestion du stress (spécialité)');
+    expect(user).toContain('- "/motifs/sommeil" — Sommeil et récupération (spécialité)');
+    // Site hébergé : aucune mention d'un site que Harmony n'hébergerait pas
+    expect(user).not.toContain("SITE DU PRATICIEN : c'est son propre site");
     expect(user).toContain("MOTS-CLÉS SUIVIS DANS FICHE GOOGLE : « sophrologue albi »");
     expect(user).toContain('"geo": { "city": "Albi", "radiusKm": 15');
     expect(user).toContain('"intent": "metier_ville|rendez_vous|specialite|proximite|reputation|tarif"');
@@ -508,11 +524,11 @@ describe("finalizeAdsPlan", () => {
       negatives: ["Emploi", "vétérinaire", "albi", "sophrologue albi", " gratuit "],
       extensions: {
         sitelinks: [
-          { title: "Gestion du stress et retour au calme", path: "/gestion-du-stress" },
+          { title: "Gestion du stress et retour au calme", path: "/motifs/gestion-du-stress" },
           { title: "Accueil", path: "/" },
           { title: "Page inconnue", path: "/inconnue" },
-          { title: "Sommeil", path: "/sommeil" },
-          { title: "Encore sommeil", path: "/sommeil" },
+          { title: "Sommeil", path: "/motifs/sommeil" },
+          { title: "Encore sommeil", path: "/motifs/sommeil" },
         ],
         callouts: ["Sur rendez-vous !", "Le meilleur cabinet", "Séances individuelles", "Une accroche beaucoup trop longue pour Google Ads"],
         call: true,
@@ -533,8 +549,8 @@ describe("finalizeAdsPlan", () => {
     expect(plan.negatives).not.toContain("albi");
     expect(plan.negatives).not.toContain("sophrologue albi");
     expect(plan.extensions.sitelinks).toEqual([
-      { title: "Gestion du stress et", path: "/gestion-du-stress" },
-      { title: "Sommeil", path: "/sommeil" },
+      { title: "Gestion du stress et", path: "/motifs/gestion-du-stress" },
+      { title: "Sommeil", path: "/motifs/sommeil" },
     ]);
     // « ! » retiré, non conforme écartée, trop longue tronquée à 25
     expect(plan.extensions.callouts).toEqual(["Sur rendez-vous", "Séances individuelles", "Une accroche beaucoup"]);
@@ -588,7 +604,7 @@ describe("finalizeAdsPlan", () => {
             ],
           },
         ],
-        extensions: { ...raw.extensions, callouts: [`Cabinet à ${city}`, "Sur rendez-vous"], sitelinks: [{ title: "Accompagnement émotionnel du sommeil", path: "/sommeil" }] },
+        extensions: { ...raw.extensions, callouts: [`Cabinet à ${city}`, "Sur rendez-vous"], sitelinks: [{ title: "Accompagnement émotionnel du sommeil", path: "/motifs/sommeil" }] },
       },
       i,
       "anthropic",
@@ -615,20 +631,71 @@ describe("finalizeAdsPlan", () => {
     const plan = finalizeAdsPlan(
       rawPlan({
         adGroups: [
-          { ...group, name: "Stress", intent: "specialite", keywords: [{ text: "gestion du stress albi", match: "phrase" }], landingPath: "/Gestion-du-Stress/" },
-          { ...group, name: "Sommeil", intent: "specialite", keywords: [{ text: "sophrologie sommeil albi", match: "phrase" }], landingPath: "/SOMMEIL" },
+          { ...group, name: "Stress", intent: "specialite", keywords: [{ text: "gestion du stress albi", match: "phrase" }], landingPath: "/Motifs/Gestion-du-Stress/" },
+          { ...group, name: "Sommeil", intent: "specialite", keywords: [{ text: "sophrologie sommeil albi", match: "phrase" }], landingPath: "/MOTIFS/SOMMEIL" },
           { ...group, name: "Accueil", intent: "metier_ville", keywords: [{ text: "sophrologue albi", match: "phrase" }], landingPath: "" },
         ],
-        extensions: { sitelinks: [{ title: "Stress", path: "/gestion-du-stress/" }, { title: "Sommeil", path: "/Sommeil" }, { title: "Inconnue", path: "/inconnue/" }], callouts: [], call: true, location: true },
+        extensions: { sitelinks: [{ title: "Stress", path: "/motifs/gestion-du-stress/" }, { title: "Sommeil", path: "/Motifs/Sommeil" }, { title: "Inconnue", path: "/motifs/inconnue/" }], callouts: [], call: true, location: true },
       }),
       i,
       "anthropic",
       NOW,
     );
-    expect(plan.adGroups.map((g) => g.landingPath)).toEqual(["/gestion-du-stress", "/sommeil", "/", "/"]);
+    expect(plan.adGroups.map((g) => g.landingPath)).toEqual(["/motifs/gestion-du-stress", "/motifs/sommeil", "/", "/"]);
     expect(plan.extensions.sitelinks).toEqual([
-      { title: "Stress", path: "/gestion-du-stress" },
-      { title: "Sommeil", path: "/sommeil" },
+      { title: "Stress", path: "/motifs/gestion-du-stress" },
+      { title: "Sommeil", path: "/motifs/sommeil" },
+    ]);
+    expect(adsPlanIssues(plan)).toEqual([]);
+  });
+
+  it("ancien chemin « /<slug> » (plans d'avant la correction, ou modèle qui le compose) : ramené à « /motifs/<slug> » dans les groupes et les liens annexes quand la page existe", () => {
+    const i = input();
+    const group = rawPlan().adGroups[0]!;
+    const plan = finalizeAdsPlan(
+      rawPlan({
+        adGroups: [
+          { ...group, name: "Stress", intent: "specialite", keywords: [{ text: "gestion du stress albi", match: "phrase" }], landingPath: "/gestion-du-stress" },
+          { ...group, name: "Sommeil", intent: "specialite", keywords: [{ text: "sophrologie sommeil albi", match: "phrase" }], landingPath: "/Sommeil/" },
+          { ...group, name: "Disparue", intent: "metier_ville", keywords: [{ text: "sophrologue albi", match: "phrase" }], landingPath: "/hypnose" },
+        ],
+        extensions: { sitelinks: [{ title: "Stress", path: "/gestion-du-stress" }, { title: "Sommeil", path: "/sommeil" }, { title: "Disparue", path: "/hypnose" }], callouts: [], call: true, location: true },
+      }),
+      i,
+      "anthropic",
+      NOW,
+    );
+    expect(plan.adGroups.slice(0, 3).map((g) => g.landingPath)).toEqual(["/motifs/gestion-du-stress", "/motifs/sommeil", "/"]);
+    expect(plan.extensions.sitelinks).toEqual([
+      { title: "Stress", path: "/motifs/gestion-du-stress" },
+      { title: "Sommeil", path: "/motifs/sommeil" },
+    ]);
+    // Tout chemin du plan est celui d'une page d'atterrissage actuelle
+    const paths = LANDING_PAGES.map((p) => p.path);
+    for (const path of [...plan.adGroups.map((g) => g.landingPath), ...plan.extensions.sitelinks.map((s) => s.path)]) expect(paths).toContain(path);
+    expect(adsPlanIssues(plan)).toEqual([]);
+  });
+
+  it("site du client : seuls ses chemins réels sont gardés (casse et paramètres conservés) ; un chemin du site hébergé rejoint la page de la même spécialité, sinon l'accueil", () => {
+    const i = input({ landingPages: EXTERNAL_LANDING_PAGES });
+    const group = rawPlan().adGroups[0]!;
+    const plan = finalizeAdsPlan(
+      rawPlan({
+        adGroups: [
+          { ...group, name: "Stress", intent: "specialite", keywords: [{ text: "gestion du stress albi", match: "phrase" }], landingPath: "/accompagnements/stress/" },
+          { ...group, name: "Sommeil", intent: "specialite", keywords: [{ text: "sophrologie sommeil albi", match: "phrase" }], landingPath: "/motifs/sommeil" },
+          { ...group, name: "Inventée", intent: "metier_ville", keywords: [{ text: "sophrologue albi", match: "phrase" }], landingPath: "/accompagnements/hypnose" },
+        ],
+        extensions: { sitelinks: [{ title: "Stress", path: "/gestion-du-stress" }, { title: "Sommeil", path: "/sommeil?lang=fr" }, { title: "Inventée", path: "/tarifs" }], callouts: [], call: true, location: true },
+      }),
+      i,
+      "anthropic",
+      NOW,
+    );
+    expect(plan.adGroups.slice(0, 3).map((g) => g.landingPath)).toEqual(["/accompagnements/stress", "/Sommeil?lang=fr", "/"]);
+    expect(plan.extensions.sitelinks).toEqual([
+      { title: "Stress", path: "/accompagnements/stress" },
+      { title: "Sommeil", path: "/Sommeil?lang=fr" },
     ]);
     expect(adsPlanIssues(plan)).toEqual([]);
   });
@@ -659,8 +726,11 @@ describe("mockAdsPlan", () => {
     expect(() => googleAdsPlanSchema.parse(raw)).not.toThrow();
     // Spécialités scindées par page d'atterrissage : un groupe par page, 4 groupes au plus
     expect(raw.adGroups.map((g) => g.intent)).toEqual(["metier_ville", "rendez_vous", "specialite", "specialite"]);
-    expect(raw.adGroups[2]).toMatchObject({ landingPath: "/gestion-du-stress", name: "Gestion du stress", keywords: [{ text: "gestion du stress albi" }] });
-    expect(raw.adGroups[3]).toMatchObject({ landingPath: "/sommeil", name: "Sommeil et récupération", keywords: [{ text: "sophrologie sommeil albi" }] });
+    expect(raw.adGroups[2]).toMatchObject({ landingPath: "/motifs/gestion-du-stress", name: "Gestion du stress", keywords: [{ text: "gestion du stress albi" }] });
+    expect(raw.adGroups[3]).toMatchObject({ landingPath: "/motifs/sommeil", name: "Sommeil et récupération", keywords: [{ text: "sophrologie sommeil albi" }] });
+    // Chemin d'affichage tiré du dernier segment de la page (le préfixe « /motifs » n'y figure pas)
+    expect(raw.adGroups[2]!.ads[0]).toMatchObject({ path1: "gestion-du", path2: "albi" });
+    expect(raw.adGroups[3]!.ads[0]!.path1).toBe("sommeil");
     // Tous les mots-clés du groupe de l'analyse, texte exact
     expect(raw.adGroups[0]!.keywords.map((k) => k.text)).toEqual(i.keywords.groups[0]!.keywords);
     // Voix « je » / vouvoiement / ton chaleureux
@@ -687,7 +757,7 @@ describe("mockAdsPlan", () => {
     expect(raw.campaign.bidding).toContain("« Maximiser les clics »");
     expect(raw.campaign.bidding).toContain(`CPC max de ${eur(adsMaxCpcEur(i))}`);
     expect(raw.campaign.bidding).toContain("après 30 conversions");
-    expect(raw.extensions.sitelinks.map((s) => s.path)).toEqual(["/gestion-du-stress", "/sommeil"]);
+    expect(raw.extensions.sitelinks.map((s) => s.path)).toEqual(["/motifs/gestion-du-stress", "/motifs/sommeil"]);
     expect(raw.extensions.callouts).toContain("Cabinet à Albi");
     expect(raw.extensions.call).toBe(true);
     expect(raw.tips[0]).toContain("réglez les points en attente : balise google ads sur le site, conversions mesurées");
@@ -707,7 +777,7 @@ describe("mockAdsPlan", () => {
     expect(one.adGroups.map((g) => [g.intent, g.landingPath])).toEqual([
       ["metier_ville", "/"],
       ["rendez_vous", "/"],
-      ["specialite", "/sommeil"],
+      ["specialite", "/motifs/sommeil"],
       ["specialite", "/"],
     ]);
     expect(one.adGroups[3]!.keywords).toEqual([{ text: "gestion du stress albi", match: "phrase" }]);
@@ -744,11 +814,11 @@ describe("mockAdsPlan", () => {
 
     const featured = mockAdsPlan(b, { ...i, instructions: "Mettre en avant le sommeil" });
     expect(featured.adGroups[0]!.intent).toBe("specialite");
-    expect(featured.adGroups[0]!.landingPath).toBe("/sommeil");
+    expect(featured.adGroups[0]!.landingPath).toBe("/motifs/sommeil");
     expect(featured.adGroups[0]!.name).toBe("Sommeil et récupération");
     expect(featured.adGroups[0]!.keywords[0]!.text).toBe("sophrologie sommeil albi");
     expect(featured.adGroups[0]!.ads[0]!.headlines[0]).toBe("Sommeil et récupération");
-    expect(featured.extensions.sitelinks[0]!.path).toBe("/sommeil");
+    expect(featured.extensions.sitelinks[0]!.path).toBe("/motifs/sommeil");
     expect(featured.tips.some((t) => t.includes("« Sommeil et récupération » est le premier groupe"))).toBe(true);
 
     const other = mockAdsPlan(b, { ...i, instructions: "Diffuser surtout le samedi matin. Sans tarif." });
@@ -769,6 +839,123 @@ describe("mockAdsPlan", () => {
     expect(parseAdsInstructions(undefined, LANDING_PAGES)).toEqual({ noTarif: false, featured: null, other: [] });
     // Déterminisme avec instructions
     expect(mockAdsPlan(b, { ...i, instructions: "Mettre en avant le sommeil" })).toEqual(featured);
+  });
+});
+
+// ─── Site du client ──────────────────────────────────────────────────────────
+
+/** Entrée d'un plan quand le site du client est la référence : ses pages réelles, bilan établi pour ce site. */
+function externalInput(overrides: Partial<GoogleAdsPlanInput> = {}): GoogleAdsPlanInput {
+  const base = input({ landingPages: EXTERNAL_LANDING_PAGES });
+  const diagnostic = diagnoseGoogleAds(
+    {
+      profession: "Sophrologue",
+      city: "Albi",
+      hasBookingUrl: true,
+      hasPhone: true,
+      hasAdsTag: false,
+      hasConversionLabels: false,
+      motifPages: 2,
+      profile: { linked: true, claimed: true, rating: 4.9, votes: 27, hasHours: true, photos: 6, auditScore: 80 },
+      benchmark: { medianRating: 4.7, medianVotes: 30 },
+      keywords: base.keywords,
+      forecast: base.forecast,
+      externalSite: true,
+      hasTagManager: false,
+    },
+    NOW,
+  );
+  return { ...base, diagnostic, ...overrides };
+}
+
+describe("site du client (référence des outils)", () => {
+  const externalBrief = () => brief({ domain: "www.cabinet-dupont.fr", siteName: "Cabinet Dupont" });
+
+  it("landingPathOfSpecialty : chemin de la page d'une spécialité du brief, par son identifiant ; null sans page", () => {
+    expect(landingPathOfSpecialty("gestion-du-stress", LANDING_PAGES)).toBe("/motifs/gestion-du-stress");
+    expect(landingPathOfSpecialty("gestion-du-stress", EXTERNAL_LANDING_PAGES)).toBe("/accompagnements/stress");
+    expect(landingPathOfSpecialty("Sommeil", EXTERNAL_LANDING_PAGES)).toBe("/Sommeil?lang=fr");
+    expect(landingPathOfSpecialty("hypnose", EXTERNAL_LANDING_PAGES)).toBeNull();
+    // Pages décrites par leur seul chemin : la forme du site hébergé suffit
+    expect(landingPathOfSpecialty("sommeil", [{ path: "/" }, { path: "/motifs/sommeil" }])).toBe("/motifs/sommeil");
+  });
+
+  it("prompts : domaine et chemins du site du client, page réelle de chaque spécialité, note « site non hébergé », règle de chemin sans forme imposée", () => {
+    const i = externalInput();
+    const user = googleAdsUserPrompt(externalBrief(), i);
+    expect(user).toContain('"domaine":"www.cabinet-dupont.fr"');
+    expect(user).not.toContain("harmony-web.fr");
+    expect(user).toContain('- "/" — Accueil (accueil)');
+    expect(user).toContain('- "/accompagnements/stress" — Gestion du stress (spécialité)');
+    expect(user).toContain('- "/Sommeil?lang=fr" — Sommeil et récupération (spécialité)');
+    expect(user).toContain('{"titre":"Gestion du stress","page":"/accompagnements/stress"');
+    expect(user).toContain('{"titre":"Sommeil et récupération","page":"/Sommeil?lang=fr"');
+    expect(user).not.toMatch(/\/motifs\//);
+    expect(user).not.toContain('"slug"');
+    // Une spécialité sans page sur le site : pas de chemin à inventer
+    const noPage = googleAdsUserPrompt(externalBrief(), externalInput({ landingPages: EXTERNAL_LANDING_PAGES.slice(0, 2) }));
+    expect(noPage).toContain('{"titre":"Sommeil et récupération","page":null');
+    // Bilan : points formulés pour ce site, et note qui écarte l'éditeur et l'onglet du studio
+    expect(user).toContain("- Balise Google Ads sur le site : à régler");
+    expect(user).toContain("- Conversions mesurées : inconnu");
+    const note = externalSitePromptNote("La balise Google Ads et le suivi des conversions");
+    expect(user).toContain(note);
+    expect(note).toContain("que Harmony n'héberge pas");
+    expect(note).toContain("écris simplement « votre site »");
+    expect(user.indexOf(note)).toBeGreaterThan(user.indexOf("PRÉPARATION DU CABINET"));
+    expect(user.indexOf(note)).toBeLessThan(user.indexOf("BUDGET CONSEILLÉ"));
+    // Règle du prompt système : un chemin de la liste, recopié — plus de forme « /<slug> »
+    const system = googleAdsSystemPrompt(externalBrief());
+    expect(system).toContain('"landingPath" : un chemin de la liste PAGES D\'ATTERRISSAGE, recopié à l\'identique');
+    expect(system).toContain("ne compose jamais un chemin toi-même");
+    expect(system).not.toContain("/<slug>");
+    expect(googleAdsSystemPrompt(brief())).toBe(googleAdsSystemPrompt(brief()));
+  });
+
+  it("un chemin long du site du client est donné en entier au modèle (borne du schéma), et reconnu à la finalisation", () => {
+    const long = `/accompagnements/${"gestion-du-stress-et-des-emotions-".repeat(5)}albi`;
+    expect(long.length).toBeGreaterThan(120);
+    expect(long.length).toBeLessThanOrEqual(200);
+    const pages: GoogleAdsPlanInput["landingPages"] = [EXTERNAL_LANDING_PAGES[0]!, { path: long, title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" }];
+    const i = externalInput({ landingPages: pages });
+    expect(googleAdsUserPrompt(externalBrief(), i)).toContain(`- "${long}" — Gestion du stress (spécialité)`);
+    const group = rawPlan().adGroups[0]!;
+    const raw = googleAdsPlanSchema.parse(rawPlan({ adGroups: [{ ...group, intent: "specialite", keywords: [{ text: "gestion du stress albi", match: "phrase" }], landingPath: long }] }));
+    expect(finalizeAdsPlan(raw, i, "anthropic", NOW).adGroups[0]!.landingPath).toBe(long);
+  });
+
+  it("mock : les groupes de spécialité mènent aux pages réelles du site du client ; chemin d'affichage tiré du dernier segment, sinon du titre", () => {
+    const i = externalInput();
+    const raw = mockAdsPlan(externalBrief(), i);
+    expect(raw.adGroups.map((g) => [g.intent, g.landingPath])).toEqual([
+      ["metier_ville", "/"],
+      ["rendez_vous", "/"],
+      ["specialite", "/accompagnements/stress"],
+      ["specialite", "/Sommeil?lang=fr"],
+    ]);
+    expect(raw.adGroups[2]!.ads[0]!.path1).toBe("stress");
+    expect(raw.adGroups[3]!.ads[0]!.path1).toBe("sommeil");
+    expect(raw.extensions.sitelinks.map((s) => s.path)).toEqual(["/accompagnements/stress", "/Sommeil?lang=fr"]);
+    // Dernier segment sans lettre (« /p/12 ») : le titre de la page sert de chemin d'affichage
+    const numeric = mockAdsPlan(externalBrief(), externalInput({ landingPages: [EXTERNAL_LANDING_PAGES[0]!, { path: "/p/12", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" }] }));
+    expect(numeric.adGroups.find((g) => g.landingPath === "/p/12")!.ads[0]!.path1).toBe("gestion-du");
+    const plan = finalizeAdsPlan(raw, i, "mock", NOW);
+    expect(adsPlanIssues(plan)).toEqual([]);
+    const paths = EXTERNAL_LANDING_PAGES.map((p) => p.path);
+    for (const path of [...plan.adGroups.map((g) => g.landingPath), ...plan.extensions.sitelinks.map((s) => s.path)]) expect(paths).toContain(path);
+  });
+
+  it("textes écrits par le code : la mesure s'installe sur le site du client (pas dans l'onglet du studio) ; pas de repère sur le bloc Résultats du studio", () => {
+    const i = externalInput();
+    const tips = defaultAdsTips(i);
+    expect(tips).toContain("Mesurez les conversions dès le premier jour (balise Google Ads et suivi des prises de contact installés sur votre site) : sans elles, Google ne peut pas optimiser vos annonces.");
+    for (const tip of tips) expect(tip).not.toMatch(/Paramétrage|Harmony|éditeur|…$/);
+    expect(defaultAdsMilestones(i)[3]!.kpis).toEqual(["Coût par contact stable ou en baisse"]);
+    expect(JSON.stringify(mockAdsPlan(externalBrief(), i))).not.toMatch(/Paramétrage|bloc Résultats|Harmony/);
+    // Site hébergé : textes d'origine
+    const hosted = input();
+    expect(defaultAdsTips(hosted)).toContain("Mesurez les conversions dès le premier jour (identifiant AW-… et libellés dans l'onglet Paramétrage & suivi) : sans elles, Google ne peut pas optimiser vos annonces.");
+    expect(defaultAdsMilestones(hosted)[3]!.kpis).toEqual(["Coût par contact stable ou en baisse", "Part des contacts venus des annonces dans le bloc Résultats du studio"]);
   });
 });
 

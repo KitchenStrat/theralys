@@ -14,7 +14,7 @@
  * Pixel (clic RDV, appel, e-mail) — source de vérité des résultats.
  */
 
-import { adsProfessionFamily, normalizeAdsText } from "./google-ads";
+import { EXTERNAL_SITE_CHECK_DETAILS, adsProfessionFamily, normalizeAdsText, normalizeLandingPath } from "./google-ads";
 import { distanceKm } from "./google-profile";
 import { filterRelevantAds, isCountryLevelLocation, type MetaRelevanceSummary } from "./meta-relevance";
 import type { SocialAccentRole, SocialTemplate } from "./social";
@@ -1019,15 +1019,23 @@ export type MetaAdsDiagnosticInput = {
   city: string;
   hasBookingUrl: boolean;
   hasPhone: boolean;
-  /** Identifiant du Pixel renseigné dans le suivi du site */
+  /** Identifiant du Pixel renseigné dans le suivi du site ; site du client : Pixel repéré dans ses pages */
   hasPixel: boolean;
-  /** Bandeau cookies actif sur le site */
+  /** Bandeau cookies actif sur le site ; site du client : bandeau de consentement repéré dans ses pages */
   cookieBanner: boolean;
   /** Photos du site disponibles pour les visuels */
   photosCount: number;
   facebookUrl: string | null;
   instagramUrl: string | null;
+  /** Pages de spécialités en ligne ; site du client : spécialités qui ont leur page sur ce site */
   motifPages: number;
+  /**
+   * Le site de référence est celui du client, que le produit n'héberge pas :
+   * Pixel et bandeau y sont constatés à la dernière lecture, jamais posés par
+   * le produit. Téléphone, Pixel, bandeau, page Facebook et pages sont alors
+   * formulés pour ce site. Absent : site hébergé.
+   */
+  externalSite?: boolean;
   profile: { linked: boolean; rating: number | null; votes: number | null };
   /** Lecture de la veille : zone, comptes par zone (toutes les annonces repérées), signaux forts par zone, annonces conservées */
   market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "strongCounts" | "ads"> | null;
@@ -1059,6 +1067,12 @@ export type MetaAdsDiagnostic = {
   budget: MetaAdsBudgetEstimate;
   /** Lecture de la veille : concurrence locale faible ou forte */
   marketNote: string | null;
+  /**
+   * Bilan établi pour le site du client (non hébergé) : les écrans et le plan
+   * ne renvoient alors ni vers l'éditeur du site hébergé ni vers la saisie de
+   * l'identifiant du Pixel. Absent : site hébergé.
+   */
+  externalSite?: boolean;
 };
 
 function round10(value: number): number {
@@ -1091,33 +1105,52 @@ function check(id: MetaAdsCheckId, label: string, status: MetaAdsReadinessStatus
   return { id, label, status, detail, critical };
 }
 
-/** Points de préparation, dans l'ordre d'affichage. Le Pixel est bloquant : sans lui, aucune donnée réelle de conversion. */
+/**
+ * Points de préparation, dans l'ordre d'affichage. Le Pixel est bloquant :
+ * sans lui, aucune donnée réelle de conversion. Avec `externalSite` (site du
+ * client), le Pixel et le bandeau sont ceux repérés à la dernière lecture du
+ * site — un bandeau non repéré reste « inconnu », la lecture ne connaissant
+ * pas tous les bandeaux —, et les textes renvoient vers le site lui-même,
+ * vers « Mon site » ou vers le studio, jamais vers l'éditeur du site hébergé.
+ */
 export function metaReadinessChecks(input: MetaAdsDiagnosticInput): MetaAdsReadinessCheck[] {
   const contactCritical = !input.hasBookingUrl && !input.hasPhone;
   const p = input.profile;
+  const external = input.externalSite === true;
+  const texts = EXTERNAL_SITE_CHECK_DETAILS;
   const reviewsStatus: MetaAdsReadinessStatus = p.votes === null || p.rating === null ? "unknown" : p.votes >= 10 && p.rating >= 4.3 ? "ok" : "todo";
   return [
     check(
       "pixel",
       "Pixel Meta installé sur le site",
       input.hasPixel ? "ok" : "todo",
-      input.hasPixel
-        ? "Les clics RDV, appels et e-mails remontent dans Meta : vos campagnes s'optimisent sur de vraies prises de contact."
-        : "Collez l'identifiant de votre Pixel dans l'onglet Paramétrage & suivi : c'est la seule façon de mesurer de vraies prises de contact et de laisser Meta optimiser dessus.",
+      external
+        ? input.hasPixel
+          ? texts.pixelOk
+          : texts.pixelTodo
+        : input.hasPixel
+          ? "Les clics RDV, appels et e-mails remontent dans Meta : vos campagnes s'optimisent sur de vraies prises de contact."
+          : "Collez l'identifiant de votre Pixel dans l'onglet Paramétrage & suivi : c'est la seule façon de mesurer de vraies prises de contact et de laisser Meta optimiser dessus.",
       true,
     ),
-    check(
-      "cookie_banner",
-      "Bandeau cookies actif",
-      input.cookieBanner ? "ok" : "todo",
-      input.cookieBanner ? "Le Pixel se charge après consentement, comme l'exige la CNIL." : "Votre bandeau est désactivé : le Pixel partirait sans consentement. Réactivez-le dans l'éditeur (Paramètres → Tracking).",
-      false,
-    ),
+    external
+      ? check("cookie_banner", "Bandeau cookies actif", input.cookieBanner ? "ok" : "unknown", input.cookieBanner ? texts.cookieBannerOk : texts.cookieBannerUnknown, false)
+      : check(
+          "cookie_banner",
+          "Bandeau cookies actif",
+          input.cookieBanner ? "ok" : "todo",
+          input.cookieBanner ? "Le Pixel se charge après consentement, comme l'exige la CNIL." : "Votre bandeau est désactivé : le Pixel partirait sans consentement. Réactivez-le dans l'éditeur (Paramètres → Tracking).",
+          false,
+        ),
     check(
       "facebook_page",
       "Page Facebook reliée au site",
       input.facebookUrl ? "ok" : "todo",
-      input.facebookUrl ? "Vos annonces seront diffusées au nom de cette page." : "Une page Facebook est indispensable pour diffuser des annonces : ajoutez son lien dans l'éditeur (Pied de page → Réseaux).",
+      input.facebookUrl
+        ? "Vos annonces seront diffusées au nom de cette page."
+        : external
+          ? texts.facebookPageTodo
+          : "Une page Facebook est indispensable pour diffuser des annonces : ajoutez son lien dans l'éditeur (Pied de page → Réseaux).",
       false,
     ),
     check(
@@ -1138,14 +1171,24 @@ export function metaReadinessChecks(input: MetaAdsDiagnosticInput): MetaAdsReadi
       "phone",
       "Numéro de téléphone affiché",
       input.hasPhone ? "ok" : "todo",
-      input.hasPhone ? "Les appels depuis le site comptent comme des contacts." : "Affichez un numéro sur le site : beaucoup de patients préfèrent appeler.",
+      external
+        ? input.hasPhone
+          ? texts.phoneOk
+          : texts.phoneTodo
+        : input.hasPhone
+          ? "Les appels depuis le site comptent comme des contacts."
+          : "Affichez un numéro sur le site : beaucoup de patients préfèrent appeler.",
       contactCritical,
     ),
     check(
       "photos",
       "Photos pour les visuels",
       input.photosCount >= 3 ? "ok" : "todo",
-      input.photosCount >= 3 ? `${input.photosCount} photos disponibles pour vos annonces.` : "Ajoutez au moins 3 photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat.",
+      input.photosCount >= 3
+        ? `${input.photosCount} photos disponibles pour vos annonces.`
+        : external
+          ? texts.photosTodo
+          : "Ajoutez au moins 3 photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat.",
       false,
     ),
     check(
@@ -1166,7 +1209,13 @@ export function metaReadinessChecks(input: MetaAdsDiagnosticInput): MetaAdsReadi
       "landing_pages",
       "Pages de spécialités dédiées",
       input.motifPages > 0 ? "ok" : "todo",
-      input.motifPages > 0 ? `${input.motifPages} page${input.motifPages > 1 ? "s" : ""} de spécialité pour accueillir les clics.` : "Des pages dédiées par spécialité font de meilleures pages d'atterrissage.",
+      external
+        ? input.motifPages > 0
+          ? texts.landingPagesOk(input.motifPages)
+          : texts.landingPagesTodo
+        : input.motifPages > 0
+          ? `${input.motifPages} page${input.motifPages > 1 ? "s" : ""} de spécialité pour accueillir les clics.`
+          : "Des pages dédiées par spécialité font de meilleures pages d'atterrissage.",
       false,
     ),
   ];
@@ -1223,6 +1272,7 @@ export function diagnoseMetaAds(input: MetaAdsDiagnosticInput, now = new Date())
     prerequisites: [...criticalTodos, ...minorTodos].map((c) => c.label),
     budget,
     marketNote,
+    ...(input.externalSite ? { externalSite: true } : {}),
   };
 }
 
@@ -1252,7 +1302,12 @@ export type MetaAdCreative = {
   template: SocialTemplate;
   accentRole: SocialAccentRole;
   altText: string;
-  /** Page d'atterrissage sur le site (« / » ou « /<slug> ») */
+  /**
+   * Chemin de la page d'atterrissage, relatif à l'adresse de référence du
+   * site : « / », « /motifs/<slug> » sur le site hébergé, chemin réel de la
+   * page sur le site du client. Les créas enregistrées avant la correction
+   * du chemin des pages de spécialité portent « /<slug> » : `normalizeLandingPath`.
+   */
   landingPath: string;
 };
 
@@ -1356,7 +1411,14 @@ export type MetaAdsPlan = {
   tips: string[];
 };
 
-export type MetaAdsLandingPage = { path: string; title: string; kind: "home" | "motif" };
+export type MetaAdsLandingPage = {
+  /** Chemin relatif à l'adresse de référence du site (site hébergé, ou site du client quand il est la référence) */
+  path: string;
+  title: string;
+  kind: "home" | "motif";
+  /** Identifiant de la spécialité (page du site hébergé, ou spécialité du site du client) : relie la page au brief du site */
+  slug?: string;
+};
 
 export type MetaAdsGenerationInput = {
   diagnostic: MetaAdsDiagnostic;
@@ -1440,9 +1502,15 @@ export function clampMetaText(text: string, max: number): string {
   return base.replace(/[\s,;:(«\-–—]+$/g, "").trim();
 }
 
-/** Écarts d'un jeu de créas au contrat (vide = conforme). */
+/**
+ * Écarts d'un jeu de créas au contrat (vide = conforme). Avec `landingPaths`
+ * (chemins des pages actuelles), une page d'atterrissage est connue si son
+ * chemin y figure ou désigne encore l'une d'elles (`normalizeLandingPath` :
+ * ancien chemin « /<slug> » d'une page de spécialité, casse, barre finale).
+ */
 export function metaCreativeIssues(set: MetaAdsCreativeSet, landingPaths?: readonly string[]): string[] {
   const issues: string[] = [];
+  const pages = landingPaths?.map((path) => ({ path }));
   if (set.creatives.length < META_CREATIVES_MIN || set.creatives.length > META_CREATIVES_MAX) issues.push(`${set.creatives.length} créas (attendu ${META_CREATIVES_MIN} à ${META_CREATIVES_MAX})`);
   const ids = new Set<string>();
   const angles = new Set<string>();
@@ -1460,7 +1528,7 @@ export function metaCreativeIssues(set: MetaAdsCreativeSet, landingPaths?: reado
     if (c.hook.trim() === "" || c.hook.length > META_ADS_TEXT.hookMax) issues.push(`${where} : accroche vide ou > ${META_ADS_TEXT.hookMax}`);
     if (c.subline.length > META_ADS_TEXT.sublineMax) issues.push(`${where} : ligne secondaire > ${META_ADS_TEXT.sublineMax}`);
     if (!c.landingPath.startsWith("/")) issues.push(`${where} : page d'atterrissage invalide`);
-    if (landingPaths && !landingPaths.includes(c.landingPath)) issues.push(`${where} : page d'atterrissage inconnue`);
+    if (pages && normalizeLandingPath(c.landingPath, pages) === null) issues.push(`${where} : page d'atterrissage inconnue`);
     for (const text of [c.primaryText, c.headline, c.description, c.hook, c.subline]) {
       for (const rule of metaPersonalAttributeViolations(text)) issues.push(`${where} : ${rule}`);
     }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GOOGLE_REPLY_MAX, buildSocialBrief, slugify, socialSlotsForMonth, type SocialSiteBrief } from "@theralys/shared";
+import { GOOGLE_REPLY_MAX, buildSocialBrief, slugify, socialSlotsForMonth, type SocialBriefResult, type SocialSiteBrief, type SocialSourceRef } from "@theralys/shared";
 import type { GenerationInput } from "./types";
 import { mockGenerateArticles, mockGenerateHome, mockGenerateReviews } from "./mock/generator";
 import { resolveProfession } from "./mock/catalog";
@@ -17,8 +17,10 @@ import {
   googleReviewsSystemPrompt,
   googleReviewsUserPrompt,
   mockReviewReply,
+  publicArticleUrl,
   replySignature,
   reviewerFirstName,
+  toGooglePost,
   topicKey,
   type ReviewForAnalysis,
   type ReviewPromptRow,
@@ -26,13 +28,18 @@ import {
 import { checkEthicalCompliance } from "./guardrails";
 import { rotatePillars, socialMonthUserPrompt, socialSystemPrompt } from "./social-prompts";
 import { createSocialGenerator } from "./social";
-import type { SocialPlan } from "./social";
+import type { FinalizedPost, SocialPlan } from "./social";
 
 const env = { AI_MOCK: "1" } as NodeJS.ProcessEnv;
 const NOW = new Date("2026-10-26T09:00:00Z");
 
 /** Brief de test ; avec `articles`, les articles du mock (publiés, hors du mois planifié) nourrissent les piliers conseil/article. */
 function brief(opts: { articles?: boolean } = {}): SocialSiteBrief {
+  return briefResult(opts).brief;
+}
+
+/** Le même brief avec ses photos et ses références (libellé, lien du studio et, pour un article en ligne, adresse publique). */
+function briefResult(opts: { articles?: boolean } = {}): SocialBriefResult {
   const input: GenerationInput = {
     firstName: "Claire",
     lastName: "Dupont",
@@ -72,7 +79,7 @@ function brief(opts: { articles?: boolean } = {}): SocialSiteBrief {
     voice: null,
     practiceName: resolveProfession("Sophrologue").practiceName,
     now: NOW,
-  }).brief;
+  });
 }
 
 describe("analyse des avis (mock)", () => {
@@ -122,6 +129,111 @@ describe("posts Google (mock, via le générateur social)", () => {
     // Lien de réservation « tel: » : bouton « Appeler »
     expect(chooseGoogleCta("conseil", { siteUrl: "https://s.fr", bookingUrl: "tel:+33563000000" }, null)).toEqual({ type: "CALL", url: "tel:+33563000000" });
     expect(chooseGoogleCta("coulisses", { siteUrl: "https://s.fr", bookingUrl: "tel:+33563000000" }, null)).toEqual({ type: "LEARN_MORE", url: "https://s.fr" });
+  });
+
+  it("le bouton n'est jamais une adresse relative : un lien du studio ou un chemin est ignoré, la règle des autres posts s'applique (rendez-vous, puis site)", () => {
+    const links = { siteUrl: "https://s.fr", bookingUrl: "https://rdv.fr" };
+    for (const relative of ["/publications/3f1c", "publications/3f1c", "//s.fr/blog/x", "blog/x", "  ", "javascript:alert(1)", "https://"]) {
+      expect(chooseGoogleCta("nouvel_article", links, relative)).toEqual({ type: "BOOK", url: "https://rdv.fr" });
+      expect(chooseGoogleCta("article", { ...links, bookingUrl: null }, relative)).toEqual({ type: "LEARN_MORE", url: "https://s.fr" });
+    }
+    expect(chooseGoogleCta("nouvel_article", links, " https://s.fr/blog/x ")).toEqual({ type: "LEARN_MORE", url: "https://s.fr/blog/x" });
+    // L'adresse publique d'un article ne sert qu'aux posts qui l'annoncent
+    expect(chooseGoogleCta("conseil", links, "https://s.fr/blog/x")).toEqual({ type: "BOOK", url: "https://rdv.fr" });
+  });
+
+  it("publicArticleUrl : adresse publique du premier article cité, seulement s'il est déjà en ligne — jamais le lien du studio, jamais un autre article", () => {
+    const article = (id: string, publicHref?: string): SocialSourceRef => ({ kind: "article", id: `article:${id}`, label: `Article « ${id} »`, href: `/publications/${id}`, ...(publicHref ? { publicHref } : {}) });
+    const page: SocialSourceRef = { kind: "page", id: "page:p1", label: "Page « Stress »", href: "https://s.fr/motifs/stress" };
+    expect(publicArticleUrl([page, article("a1", "https://s.fr/blog/dos-noue")])).toBe("https://s.fr/blog/dos-noue");
+    expect(publicArticleUrl([article("a1")])).toBeNull();
+    // Article annoncé pas encore en ligne : aucun lien, même si un autre article cité l'est
+    expect(publicArticleUrl([article("a1"), article("a2", "https://s.fr/blog/autre")])).toBeNull();
+    expect(publicArticleUrl([article("a1", "/blog/dos-noue")])).toBeNull();
+    expect(publicArticleUrl([page])).toBeNull();
+    expect(publicArticleUrl([])).toBeNull();
+  });
+
+  it("toGooglePost : un post qui annonce un article mène à son adresse publique, pas au studio ; article pas encore en ligne → rendez-vous, puis site", () => {
+    const b = brief();
+    const post = (sourceRefs: SocialSourceRef[], pillar: FinalizedPost["pillar"] = "nouvel_article"): FinalizedPost => ({
+      scheduledFor: "2026-11-03",
+      format: "static",
+      template: "affirmation",
+      pillar,
+      topic: "Nouvel article : dos noué au bureau",
+      content: {
+        pillar,
+        accentRole: "primary",
+        caption: "Un nouvel article est en ligne sur le blog.\n\nPour prendre rendez-vous, le lien est dans ma bio.",
+        hashtags: [],
+        altText: "Visuel de l'article",
+        slides: [{ role: "single", title: "Dos noué au bureau", body: "Ce que la sophrologie peut changer." }],
+        sourceRefs,
+        voice: b.voice,
+        generator: "mock",
+      },
+    });
+    const links = { siteUrl: "https://claire-dupont.harmony-web.fr", bookingUrl: "https://rdv.example" };
+    const online: SocialSourceRef = { kind: "article", id: "article:a1", label: "Article « Dos noué »", href: "/publications/a1", publicHref: "https://claire-dupont.harmony-web.fr/blog/dos-noue" };
+    const upcoming: SocialSourceRef = { kind: "article", id: "article:a2", label: "Article « À venir »", href: "/publications/a2" };
+    expect(toGooglePost(post([online]), links).content.cta).toEqual({ type: "LEARN_MORE", url: "https://claire-dupont.harmony-web.fr/blog/dos-noue" });
+    expect(toGooglePost(post([online], "article"), links).content.cta).toEqual({ type: "LEARN_MORE", url: "https://claire-dupont.harmony-web.fr/blog/dos-noue" });
+    // Article pas encore en ligne : jamais « /publications/<id> »
+    expect(toGooglePost(post([upcoming]), links).content.cta).toEqual({ type: "BOOK", url: "https://rdv.example" });
+    expect(toGooglePost(post([upcoming]), { ...links, bookingUrl: "tel:+33563000000" }).content.cta).toEqual({ type: "CALL", url: "tel:+33563000000" });
+    expect(toGooglePost(post([upcoming]), { ...links, bookingUrl: null }).content.cta).toEqual({ type: "LEARN_MORE", url: links.siteUrl });
+    // Les références gardent le lien du studio, pour le praticien
+    expect(toGooglePost(post([online]), links).content.sourceRefs).toEqual([online]);
+    // Site du client comme référence : le blog reste sur le site hébergé, le repli mène au site du client
+    const external = { siteUrl: "https://www.cabinet-dupont.fr", bookingUrl: null };
+    expect(toGooglePost(post([online]), external).content.cta.url).toBe("https://claire-dupont.harmony-web.fr/blog/dos-noue");
+    expect(toGooglePost(post([upcoming]), external).content.cta).toEqual({ type: "LEARN_MORE", url: "https://www.cabinet-dupont.fr" });
+  });
+
+  it("mois complet avec les références du brief : l'annonce d'un article en ligne mène à l'article public, celle d'un article à venir au rendez-vous puis au site — jamais au studio", async () => {
+    const today = new Date("2026-12-03T18:00:00Z");
+    const generation: GenerationInput = { firstName: "Claire", lastName: "Dupont", profession: "Sophrologue", city: "Albi", gender: "feminin", highlightedMotifs: [], motifPageCount: 6 };
+    const home = mockGenerateHome(generation);
+    const [first, second] = mockGenerateArticles(generation, home.motifsPlan);
+    const article = (id: string, source: NonNullable<typeof first>, status: string, publishAt: Date) => ({ id, slug: source.slug, title: source.title, excerpt: source.excerpt, content: source.content, imageUrl: null, status, publishAt });
+    // Un article paru ce matin (en ligne), un autre planifié dans une semaine
+    const articles = [article("a-online", first!, "published", new Date("2026-12-03T08:00:00Z")), article("a-upcoming", second!, "scheduled", new Date("2026-12-10T08:00:00Z"))];
+    const siteUrl = `https://${slugify(home.siteName)}.harmony-web.fr`;
+    const { brief: b, photosById, refsById } = buildSocialBrief({
+      site: { id: "site-1", name: home.siteName, type: "client", theme: home.theme, bookingUrl: "https://rdv.example", url: siteUrl },
+      prospect: { firstName: "Claire", lastName: "Dupont", profession: "Sophrologue", city: "Albi", gender: "feminin", googleRating: 4.9, googleReviewCount: 27 },
+      pages: [{ id: "home-1", type: "home", slug: "", title: "Accueil", metaDescription: home.metaDescription, sections: home.sections }],
+      articles,
+      reviews: [],
+      voice: null,
+      practiceName: resolveProfession("Sophrologue").practiceName,
+      now: today,
+    });
+    expect(refsById["article:a-online"]).toMatchObject({ href: "/publications/a-online", publicHref: `${siteUrl}/blog/${first!.slug}` });
+    expect(refsById["article:a-upcoming"]).toMatchObject({ href: "/publications/a-upcoming" });
+    expect(refsById["article:a-upcoming"]).not.toHaveProperty("publicHref");
+
+    const slots = socialSlotsForMonth({ year: 2026, month: 12, today, articles: articles.map((a) => ({ id: a.id, publishAt: a.publishAt })), postDays: [2] });
+    expect(slots.filter((slot) => slot.kind === "nouvel_article").map((slot) => slot.date)).toEqual(["2026-12-04", "2026-12-11"]);
+    const generator = createGooglePostGenerator(env);
+    const announcements = async (bookingUrl: string | null) => {
+      const posts = await generator.planMonth(b, { month: "2026-12", slots, recentTopics: [], photosById, refsById }, { siteUrl, bookingUrl });
+      // Aucun bouton, quel que soit le post, ne porte une adresse relative ou un lien du studio
+      for (const post of posts) {
+        expect(post.content.cta.url).toMatch(/^https:\/\//);
+        expect(post.content.cta.url).not.toContain("/publications/");
+      }
+      return Object.fromEntries(posts.filter((post) => post.pillar === "nouvel_article").map((post) => [post.scheduledFor, post.content.cta]));
+    };
+    expect(await announcements("https://rdv.example")).toEqual({
+      "2026-12-04": { type: "LEARN_MORE", url: `${siteUrl}/blog/${first!.slug}` },
+      "2026-12-11": { type: "BOOK", url: "https://rdv.example" },
+    });
+    expect(await announcements(null)).toEqual({
+      "2026-12-04": { type: "LEARN_MORE", url: `${siteUrl}/blog/${first!.slug}` },
+      "2026-12-11": { type: "LEARN_MORE", url: siteUrl },
+    });
   });
 
   it("mois complet (5 créneaux, carrousels et stories compris) → 5 posts, sujets distincts, visuel unique", async () => {

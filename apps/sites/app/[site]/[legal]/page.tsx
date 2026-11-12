@@ -1,22 +1,31 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { buildLegalPage, isLegalPageSlug, LEGAL_PAGES } from "@theralys/shared";
 import { Markdown } from "@/components/markdown";
+import { robotsMetadata } from "@/lib/indexing";
 import { buildLegalInput } from "@/lib/legal-input";
+import { legacyMotifRedirect, publicPathPrefix, type PageSearchParams } from "@/lib/motif-redirect";
 import { NOT_FOUND_METADATA } from "@/lib/not-found";
-import { getHomePage, getProspect, getSiteByKey, siteBaseUrl } from "@/lib/site-data";
+import { getHomePage, getMotifPages, getProspect, getSiteByKey, siteBaseUrl } from "@/lib/site-data";
 
-type Props = { params: Promise<{ site: string; legal: string }> };
+type Props = {
+  params: Promise<{ site: string; legal: string }>;
+  searchParams: Promise<PageSearchParams>;
+};
 
 /**
  * Pages légales générées (mentions légales, confidentialité, cookies) à partir
  * des informations du praticien et des réglages du site — cf.
- * `buildLegalPage` (@theralys/shared). Tout autre slug à ce niveau → 404.
+ * `buildLegalPage` (@theralys/shared). Le slug d'une page de spécialité à ce
+ * niveau est une ancienne adresse d'annonce, redirigée vers `/motifs/<slug>`
+ * (`lib/motif-redirect.ts`) ; tout autre slug → 404.
  */
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params }: Pick<Props, "params">): Promise<Metadata> {
   const { site: siteKey, legal: slug } = await params;
   // Slug inconnu à ce niveau (ex. /<site>/ancienne-page) : métadonnées de la 404
+  // (sans objet pour une ancienne adresse d'annonce : la page redirige avant tout rendu)
   if (!isLegalPageSlug(slug)) return NOT_FOUND_METADATA;
   const site = await getSiteByKey(siteKey);
   if (!site) return {};
@@ -26,14 +35,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: meta.title,
     description: `${meta.title} du site ${site.name}.`,
     alternates: { canonical: `${siteBaseUrl(site)}/${slug}` },
-    // Pages indexables (sauf démos, jamais indexées)
-    robots: site.type === "demo" ? { index: false, follow: false } : { index: true, follow: true },
+    // Pages indexables, sauf sur un site qui ne l'est pas (démo, site hébergé masqué derrière le site du client)
+    robots: robotsMetadata(site) ?? { index: true, follow: true },
   };
 }
 
-export default async function LegalPage({ params }: Props) {
+/**
+ * Ancienne adresse d'atterrissage d'une annonce : `/<slug>` d'une page de
+ * spécialité en ligne → redirection permanente vers `/motifs/<slug>`,
+ * paramètres de campagne conservés. Sans effet pour tout autre segment.
+ */
+async function redirectLegacyMotifLink(siteKey: string, segment: string, searchParams: PageSearchParams): Promise<void> {
+  const site = await getSiteByKey(siteKey);
+  if (!site) return;
+  const target = legacyMotifRedirect({
+    segment,
+    motifSlugs: (await getMotifPages(site)).map((page) => page.slug),
+    prefix: publicPathPrefix(siteKey, (await headers()).get("host")),
+    searchParams,
+  });
+  if (target) permanentRedirect(target);
+}
+
+export default async function LegalPage({ params, searchParams }: Props) {
   const { site: siteKey, legal: slug } = await params;
-  if (!isLegalPageSlug(slug)) notFound();
+  if (!isLegalPageSlug(slug)) {
+    await redirectLegacyMotifLink(siteKey, slug, await searchParams);
+    notFound();
+  }
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
 

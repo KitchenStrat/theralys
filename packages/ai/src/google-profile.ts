@@ -36,6 +36,7 @@ import {
   type SocialPillar,
   type SocialSiteBrief,
   type SocialSlot,
+  type SocialSourceRef,
   type SocialTemplate,
   type SocialVoice,
 } from "@theralys/shared";
@@ -510,7 +511,7 @@ export function localizeMockGooglePost(
 
 /** Liens disponibles pour le bouton d'action (choisi par le code, jamais par le modèle). */
 export type GooglePostLinks = {
-  /** URL publique du site (avec protocole) */
+  /** Adresse publique de référence, avec protocole : site du client quand il est la référence, sinon site hébergé */
   siteUrl: string;
   bookingUrl: string | null;
 };
@@ -531,12 +532,40 @@ export type GooglePostGenerator = {
 };
 
 /**
- * Bouton d'action selon le pilier et les liens disponibles : lien de l'article
- * annoncé, sinon prise de rendez-vous (« Réserver », ou « Appeler » quand le
- * lien de réservation est un numéro `tel:`), sinon le site.
+ * Adresse web absolue (http ou https), sinon `null`. Le bouton d'un post est
+ * lu par des visiteurs de Google : un chemin relatif ou un lien du studio
+ * (« /publications/<id> ») ne les mènerait nulle part.
+ */
+function publicWebUrl(value: string | null | undefined): string | null {
+  const url = value?.trim() ?? "";
+  if (!/^https?:\/\//i.test(url)) return null;
+  try {
+    return new URL(url).hostname !== "" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Adresse publique de l'article qu'annonce une publication, ou `null`. Sa
+ * référence porte `href` (l'article dans le studio, pour le praticien) et,
+ * seulement quand l'article est déjà en ligne, `publicHref` : c'est la seule
+ * adresse qu'on donne à un lecteur. Un article pas encore en ligne n'a donc
+ * pas de lien, et jamais celui d'un autre article.
+ */
+export function publicArticleUrl(sourceRefs: readonly Pick<SocialSourceRef, "kind" | "publicHref">[]): string | null {
+  return publicWebUrl(sourceRefs.find((ref) => ref.kind === "article")?.publicHref);
+}
+
+/**
+ * Bouton d'action selon le pilier et les liens disponibles : adresse publique
+ * de l'article annoncé (`articleHref`, ignorée si elle n'est pas une adresse
+ * web absolue), sinon prise de rendez-vous (« Réserver », ou « Appeler »
+ * quand le lien de réservation est un numéro `tel:`), sinon le site.
  */
 export function chooseGoogleCta(pillar: SocialPillar, links: GooglePostLinks, articleHref: string | null): { type: GooglePostCta; url: string | null } {
-  if ((pillar === "article" || pillar === "nouvel_article") && articleHref) return { type: "LEARN_MORE", url: articleHref };
+  const articleUrl = publicWebUrl(articleHref);
+  if ((pillar === "article" || pillar === "nouvel_article") && articleUrl) return { type: "LEARN_MORE", url: articleUrl };
   if (links.bookingUrl && pillar !== "idee_recue" && pillar !== "coulisses") {
     return { type: /^tel:/i.test(links.bookingUrl.trim()) ? "CALL" : "BOOK", url: links.bookingUrl };
   }
@@ -568,11 +597,14 @@ export function cleanGoogleSummary(text: string): string {
  * ou d'une story devient le visuel unique) → post Google : texte sans
  * hashtags ni « lien dans ma bio », visuel 4:3, bouton d'action. Un template
  * hors GOOGLE_POST_TEMPLATES devient « photo-titre » si la diapositive a une
- * photo, sinon « affirmation ».
+ * photo, sinon « affirmation ». Le bouton d'un post qui annonce un article
+ * mène à son adresse publique s'il est déjà en ligne (`publicArticleUrl`),
+ * sinon à la prise de rendez-vous, puis au site — jamais au studio.
  */
 export function toGooglePost(post: FinalizedPost, links: GooglePostLinks): FinalizedGooglePost {
   const slide = post.content.slides[0] ?? { role: "single" as const, title: post.topic, body: "" };
-  const articleHref = post.content.sourceRefs.find((r) => r.kind === "article" && r.href)?.href ?? null;
+  // Jamais `href` : pour un article, c'est son adresse dans le studio
+  const articleHref = publicArticleUrl(post.content.sourceRefs);
   const template: SocialTemplate = GOOGLE_POST_TEMPLATES.includes(post.template)
     ? post.template
     : slide.imageUrl

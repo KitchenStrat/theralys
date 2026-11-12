@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Tracker } from "@/components/tracker";
 import { TrackingScripts } from "@/components/tracking-scripts";
+import { robotsMetadata } from "@/lib/indexing";
 import { navAnchors } from "@/lib/nav";
 import { findSection } from "@/lib/page-sections";
 import { getHomePage, getMotifPages, getProspect, getSiteByKey, isDemoExpired } from "@/lib/site-data";
@@ -30,8 +31,10 @@ export async function generateMetadata({ params }: Omit<Props, "children">): Pro
   return {
     title: { default: site.name, template: `%s — ${site.name}` },
     icons: { icon: [{ url: faviconUrl }] },
-    // Les démos ne sont jamais indexées (noindex + robots.txt)
-    robots: site.type === "demo" ? { index: false, follow: false } : undefined,
+    // Jamais indexés (noindex + robots.txt + plan du site vide) : les démos, et le site hébergé d'un client
+    // tant que son propre site est la référence. Vaut pour toutes les pages qui ne fixent pas leur directive
+    // (accueil, spécialités, blog, articles) ; les pages légales reprennent la même règle.
+    robots: robotsMetadata(site),
   };
 }
 

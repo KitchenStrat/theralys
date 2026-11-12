@@ -7,6 +7,7 @@ import {
   GOOGLE_ADS_INTENTS,
   GOOGLE_ADS_KEYWORDS_MAX,
   GOOGLE_ADS_LOCATION_CODE_FR,
+  EXTERNAL_SITE_CHECK_DETAILS,
   GOOGLE_ADS_RSA,
   GOOGLE_ADS_SEEDS_MAX,
   adsKeywordExclusion,
@@ -19,10 +20,14 @@ import {
   diagnoseGoogleAds,
   estimateAdsBudget,
   hasConversionLabels,
+  hostedMotifPath,
   intentLabel,
   isGoogleAdsIntent,
   isGoogleAdsLanding,
+  landingPageSlug,
   normalizeAdsText,
+  normalizeLandingPath,
+  resolveLandingPage,
   selectAdsKeywords,
   suggestBidUsd,
   summarizeDemand,
@@ -33,6 +38,7 @@ import {
   type GoogleAdsKeyword,
   type GoogleAdsKeywordData,
   type GoogleAdsKeywordSet,
+  type GoogleAdsLandingPage,
   type GoogleAdsPlan,
 } from "./google-ads";
 
@@ -789,6 +795,99 @@ describe("adsReadinessChecks", () => {
     expect(checks.find((c) => c.id === "photos")?.detail).toContain("Synchronisez");
     expect(adsReadinessChecks({ ...readyInput, profile: { ...readyInput.profile, photos: 2 } }).find((c) => c.id === "photos")).toMatchObject({ status: "todo" });
   });
+
+  it("site hébergé (drapeau absent) : textes et statuts d'origine pour le téléphone, la balise, les conversions et les pages", () => {
+    const of = (input: GoogleAdsDiagnosticInput, id: string) => adsReadinessChecks(input).find((c) => c.id === id)!;
+    expect(of(readyInput, "phone").detail).toBe("Les clics sur votre numéro seront comptés comme des conversions.");
+    expect(of({ ...readyInput, hasPhone: false }, "phone").detail).toBe("Affichez un numéro sur le site : l'appel est la conversion la plus fréquente pour un cabinet.");
+    expect(of({ ...readyInput, hasAdsTag: false }, "tracking_tag")).toMatchObject({
+      status: "todo",
+      detail: "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",
+    });
+    // Google Tag Manager ne compte que pour le site du client : sans le drapeau, il est ignoré
+    expect(of({ ...readyInput, hasAdsTag: false, hasTagManager: true }, "tracking_tag").status).toBe("todo");
+    expect(of(readyInput, "tracking_conversions")).toMatchObject({ status: "ok", detail: "Clics RDV, appels et e-mails remontent dans Google Ads." });
+    expect(of({ ...readyInput, hasConversionLabels: false }, "tracking_conversions")).toMatchObject({
+      status: "todo",
+      detail: "Collez vos libellés de conversion : le site enverra les clics RDV, appels et e-mails à Google Ads.",
+    });
+    expect(of(readyInput, "landing_pages").detail).toBe("2 pages de spécialité : des pages d'atterrissage ciblées.");
+    expect(of({ ...readyInput, motifPages: 0 }, "landing_pages").detail).toBe("Des pages dédiées par spécialité améliorent le score de qualité et le coût par clic.");
+    expect(of({ ...readyInput, externalSite: false }, "tracking_conversions").status).toBe("ok");
+  });
+});
+
+describe("adsReadinessChecks — site du client (externalSite)", () => {
+  const externalInput: GoogleAdsDiagnosticInput = { ...readyInput, externalSite: true, hasAdsTag: true, hasConversionLabels: false, hasTagManager: false };
+  const of = (input: GoogleAdsDiagnosticInput, id: string) => adsReadinessChecks(input).find((c) => c.id === id)!;
+
+  it("mêmes dix points, dans le même ordre ; les points de la fiche Google et le rendez-vous ne changent pas", () => {
+    const hosted = adsReadinessChecks(readyInput);
+    const external = adsReadinessChecks(externalInput);
+    expect(external.map((c) => c.id)).toEqual(hosted.map((c) => c.id));
+    expect(external.map((c) => c.label)).toEqual(hosted.map((c) => c.label));
+    for (const id of ["profile_linked", "profile_claimed", "booking", "reviews", "hours", "photos"]) {
+      expect(of(externalInput, id)).toEqual(hosted.find((c) => c.id === id));
+    }
+  });
+
+  it("téléphone : numéro lu sur le site du client, sinon à afficher sur ce site ou à indiquer dans « Mon site »", () => {
+    expect(of(externalInput, "phone")).toMatchObject({ status: "ok", critical: false, detail: "Votre numéro de téléphone figure sur votre site." });
+    const missing = of({ ...externalInput, hasPhone: false }, "phone");
+    expect(missing).toMatchObject({ status: "todo", critical: false });
+    expect(missing.detail).toBe("Aucun numéro de téléphone n'a été trouvé sur votre site : affichez-le bien en vue ou, s'il y figure déjà, indiquez-le dans « Mon site ».");
+    // Toujours bloquant quand ni rendez-vous ni téléphone
+    expect(of({ ...externalInput, hasPhone: false, hasBookingUrl: false }, "phone")).toMatchObject({ status: "todo", critical: true });
+  });
+
+  it("balise : acquise avec une balise Google Ads ou Google Tag Manager repérés ; sinon à installer sur le site du client, puis site à relire depuis « Mon site »", () => {
+    expect(of(externalInput, "tracking_tag")).toMatchObject({ status: "ok", detail: "La balise Google Ads a été repérée sur votre site." });
+    expect(of({ ...externalInput, hasAdsTag: false, hasTagManager: true }, "tracking_tag")).toMatchObject({
+      status: "ok",
+      detail: "Google Tag Manager a été repéré sur votre site : votre balise Google Ads peut passer par lui.",
+    });
+    // Les deux repérés : c'est la balise elle-même qui est citée
+    expect(of({ ...externalInput, hasTagManager: true }, "tracking_tag").detail).toBe(EXTERNAL_SITE_CHECK_DETAILS.adsTagOk);
+    const missing = of({ ...externalInput, hasAdsTag: false }, "tracking_tag");
+    expect(missing).toMatchObject({ status: "todo", critical: false });
+    expect(missing.detail).toBe(
+      "Aucune balise Google Ads n'a été repérée sur votre site. Installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+    );
+  });
+
+  it("conversions : invérifiables de l'extérieur — « inconnu », jamais bloquant ni à régler, quels que soient les libellés saisis dans le studio", () => {
+    for (const hasConversionLabels of [false, true]) {
+      const check = of({ ...externalInput, hasConversionLabels }, "tracking_conversions");
+      expect(check).toMatchObject({ status: "unknown", critical: false, label: "Conversions mesurées" });
+      expect(check.detail).toBe("Nous ne pouvons pas le vérifier depuis votre site : contrôlez dans votre compte Google Ads que vos prises de rendez-vous et vos appels y sont bien comptés.");
+    }
+  });
+
+  it("pages de spécialité : celles trouvées sur le site du client, accord au singulier et au pluriel ; sans page, les annonces mènent à l'accueil", () => {
+    expect(of(externalInput, "landing_pages")).toMatchObject({ status: "ok", detail: "2 pages de spécialité trouvées sur votre site : des pages d'atterrissage ciblées." });
+    expect(of({ ...externalInput, motifPages: 1 }, "landing_pages").detail).toBe("1 page de spécialité trouvée sur votre site : des pages d'atterrissage ciblées.");
+    expect(of({ ...externalInput, motifPages: 0 }, "landing_pages")).toMatchObject({
+      status: "todo",
+      critical: false,
+      detail: "Aucune page de spécialité n'a été trouvée sur votre site : vos annonces mèneront à votre page d'accueil.",
+    });
+  });
+
+  it("aucun texte ne renvoie vers l'éditeur du site hébergé, la saisie des identifiants ou la marque ; tous vouvoient", () => {
+    const worst: GoogleAdsDiagnosticInput = { ...externalInput, hasPhone: false, hasAdsTag: false, motifPages: 0 };
+    for (const input of [externalInput, worst, { ...worst, hasTagManager: true }]) {
+      for (const id of ["phone", "tracking_tag", "tracking_conversions", "landing_pages"]) {
+        const { detail } = of(input, id);
+        expect(detail).not.toMatch(/Harmony|éditeur|Paramétrage|libellés|AW-/);
+        expect(detail).not.toMatch(/\b(?:tu|ton|ta|tes|toi)\b/i);
+        expect(detail).toMatch(/votre site/);
+        expect(detail).toMatch(/[.]$/);
+      }
+    }
+    for (const text of Object.values(EXTERNAL_SITE_CHECK_DETAILS)) {
+      expect(typeof text === "function" ? text(3) : text).not.toMatch(/Harmony|éditeur|Paramétrage/);
+    }
+  });
 });
 
 describe("diagnoseGoogleAds", () => {
@@ -835,6 +934,87 @@ describe("diagnoseGoogleAds", () => {
     expect(diagnostic.budget.basis).toBe("forecast");
     const weak = diagnoseGoogleAds({ ...readyInput, keywords: select([idea("ostéopathe toulouse", 12)]) }, now);
     expect(weak.summary).toContain("La demande mesurée sur vos expressions est faible");
+  });
+
+  it("site du client : les conversions inconnues ne bloquent rien et ne sont pas un prérequis ; le bilan porte le drapeau, absent pour un site hébergé", () => {
+    const external: GoogleAdsDiagnosticInput = { ...readyInput, externalSite: true, hasConversionLabels: false };
+    const go = diagnoseGoogleAds(external, now);
+    expect(go).toMatchObject({ verdict: "go", score: 97, prerequisites: [], externalSite: true });
+    expect(go.checks.find((c) => c.id === "tracking_conversions")?.status).toBe("unknown");
+    // Balise non repérée : un réglage mineur, comme pour un site hébergé ; Google Tag Manager suffit
+    const noTag = diagnoseGoogleAds({ ...external, hasAdsTag: false }, now);
+    expect(noTag).toMatchObject({ verdict: "go_with_prerequisites", score: 89, prerequisites: ["Balise Google Ads sur le site"] });
+    expect(diagnoseGoogleAds({ ...external, hasAdsTag: false, hasTagManager: true }, now)).toMatchObject({ verdict: "go", prerequisites: [] });
+    // Sans page ni téléphone : mêmes règles de verdict que pour un site hébergé
+    expect(diagnoseGoogleAds({ ...external, motifPages: 0 }, now).prerequisites).toEqual(["Pages de spécialités dédiées"]);
+    expect(diagnoseGoogleAds({ ...external, hasPhone: false, hasBookingUrl: false }, now).verdict).toBe("wait");
+    // Site hébergé : aucune clé de plus dans le bilan enregistré
+    expect("externalSite" in diagnoseGoogleAds(readyInput, now)).toBe(false);
+    expect("externalSite" in diagnoseGoogleAds({ ...readyInput, externalSite: false }, now)).toBe(false);
+  });
+});
+
+// ─── Pages d'atterrissage ────────────────────────────────────────────────────
+
+describe("pages d'atterrissage : chemin des pages de spécialité et chemins enregistrés", () => {
+  const hosted: GoogleAdsLandingPage[] = [
+    { path: "/", title: "Accueil", kind: "home" },
+    { path: "/motifs/gestion-du-stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+    { path: "/motifs/sommeil", title: "Sommeil et récupération", kind: "motif", slug: "sommeil" },
+  ];
+  /** Site du client : chemins réels, sans rapport avec l'identifiant de la spécialité */
+  const external: GoogleAdsLandingPage[] = [
+    { path: "/", title: "Accueil", kind: "home" },
+    { path: "/Accompagnements/Stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+    { path: "/sommeil?lang=fr", title: "Sommeil", kind: "motif", slug: "troubles-du-sommeil" },
+  ];
+
+  it("hostedMotifPath : les pages de spécialité du site hébergé sont servies sous « /motifs/<slug> »", () => {
+    expect(hostedMotifPath("gestion-du-stress")).toBe("/motifs/gestion-du-stress");
+  });
+
+  it("landingPageSlug : identifiant porté par la page, sinon celui de son chemin hébergé ; rien pour l'accueil ni pour un chemin à plusieurs niveaux", () => {
+    expect(landingPageSlug(hosted[1]!)).toBe("gestion-du-stress");
+    expect(landingPageSlug({ path: "/motifs/Sommeil/" })).toBe("sommeil");
+    expect(landingPageSlug({ path: "/sommeil" })).toBe("sommeil");
+    expect(landingPageSlug({ path: "/" })).toBeNull();
+    expect(landingPageSlug({ path: "/accompagnements/stress" })).toBeNull();
+    expect(landingPageSlug(external[1]!)).toBe("gestion-du-stress");
+  });
+
+  it("chemin exact, casse ou barre finale différentes : le chemin exact de la page actuelle", () => {
+    expect(normalizeLandingPath("/", hosted)).toBe("/");
+    expect(normalizeLandingPath("", hosted)).toBe("/");
+    expect(normalizeLandingPath("/motifs/gestion-du-stress", hosted)).toBe("/motifs/gestion-du-stress");
+    expect(normalizeLandingPath(" /Motifs/Gestion-du-Stress/ ", hosted)).toBe("/motifs/gestion-du-stress");
+    expect(resolveLandingPage("/motifs/sommeil/", hosted)).toBe(hosted[2]);
+    // Site du client : la casse du chemin réel est conservée, les paramètres aussi
+    expect(normalizeLandingPath("/accompagnements/stress/", external)).toBe("/Accompagnements/Stress");
+    expect(normalizeLandingPath("/sommeil?lang=fr", external)).toBe("/sommeil?lang=fr");
+  });
+
+  it("ancien chemin « /<slug> » d'un plan enregistré : ramené à « /motifs/<slug> » quand la page de spécialité existe toujours", () => {
+    expect(normalizeLandingPath("/gestion-du-stress", hosted)).toBe("/motifs/gestion-du-stress");
+    expect(normalizeLandingPath("/Sommeil/", hosted)).toBe("/motifs/sommeil");
+    expect(resolveLandingPage("/sommeil", hosted)).toBe(hosted[2]);
+    // Pages décrites par leur seul chemin (sans identifiant) : même résultat
+    const bare = hosted.map((page) => ({ path: page.path }));
+    expect(normalizeLandingPath("/gestion-du-stress", bare)).toBe("/motifs/gestion-du-stress");
+    // Page supprimée depuis, ou chemin qui n'a jamais été une page : inconnu, l'appelant retient l'accueil
+    expect(normalizeLandingPath("/hypnose", hosted)).toBeNull();
+    expect(normalizeLandingPath("/motifs/hypnose", hosted)).toBeNull();
+    expect(normalizeLandingPath("/blog/un-article", hosted)).toBeNull();
+    expect(normalizeLandingPath("gestion-du-stress", hosted)).toBeNull();
+    expect(resolveLandingPage("/hypnose", hosted)).toBeNull();
+    expect(normalizeLandingPath("/", [])).toBeNull();
+  });
+
+  it("plan d'avant la connexion du site du client : un chemin du site hébergé rejoint la page de la même spécialité sur ce site, sinon rien", () => {
+    expect(normalizeLandingPath("/motifs/gestion-du-stress", external)).toBe("/Accompagnements/Stress");
+    expect(normalizeLandingPath("/gestion-du-stress", external)).toBe("/Accompagnements/Stress");
+    // « /sommeil » est d'abord un vrai chemin de ce site, hors paramètres : pas de page à ce chemin exact, et aucune spécialité « sommeil »
+    expect(normalizeLandingPath("/motifs/sommeil", external)).toBeNull();
+    expect(normalizeLandingPath("/motifs/troubles-du-sommeil", external)).toBe("/sommeil?lang=fr");
   });
 });
 

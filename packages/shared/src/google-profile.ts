@@ -391,7 +391,13 @@ export type GoogleAuditInput = {
   reviews: { rating: number; reviewedAt: Date | string | null; ownerReply: string | null }[];
   /** Les avis portent-ils l'information « réponse du propriétaire » ? (false : Places seul) */
   reviewsHaveOwnerReplies: boolean;
-  site: { url: string; hasBookingUrl: boolean };
+  /**
+   * Site auquel la fiche doit renvoyer : `url` est l'adresse de référence
+   * (site hébergé, ou site du client quand il est la référence). `external` :
+   * c'est le site du client — les textes disent « votre site », jamais
+   * « votre site Harmony ».
+   */
+  site: { url: string; hasBookingUrl: boolean; external?: boolean };
   now: Date;
 };
 
@@ -486,15 +492,17 @@ export function auditGoogleProfile(input: GoogleAuditInput): GoogleAudit {
   );
   const siteHost = hostOf(site.url);
   const websiteHost = hostOf(s.website);
+  // Le site du client n'est pas un « site Harmony » : libellé neutre quand il est la référence
+  const ownSite = site.external ? "votre site" : "votre site Harmony";
   push(
     s.website
       ? websiteHost && siteHost && websiteHost === siteHost
-        ? { id: "website", label: "Site web", status: "ok", points: 8, maxPoints: 8, detail: `Lien vers votre site Harmony (${websiteHost}).` }
-        : { id: "website", label: "Site web", status: "warn", points: 5, maxPoints: 8, detail: `Lien vers ${websiteHost ?? s.website}, pas vers votre site Harmony.` }
+        ? { id: "website", label: "Site web", status: "ok", points: 8, maxPoints: 8, detail: `Lien vers ${ownSite} (${websiteHost}).` }
+        : { id: "website", label: "Site web", status: "warn", points: 5, maxPoints: 8, detail: `Lien vers ${websiteHost ?? s.website}, pas vers ${ownSite}.` }
       : { id: "website", label: "Site web", status: "missing", points: 0, maxPoints: 8, detail: "Aucun site web sur la fiche." },
     {
       id: "link-website",
-      title: "Reliez la fiche à votre site Harmony",
+      title: `Reliez la fiche à ${ownSite}`,
       why: "Le lien envoie les visiteurs Google vers vos pages de spécialité et votre prise de rendez-vous.",
       how: `Fiche → Modifier le profil → Site web : ${site.url}`,
       impact: "fort",
@@ -815,6 +823,12 @@ export type GooglePostContent = {
   accentRole: SocialAccentRole;
   /** Texte du post (≤ GOOGLE_POST_SUMMARY_MAX), sans hashtags ni « lien dans ma bio » */
   summary: string;
+  /**
+   * Bouton d'action : `url` est une adresse publique absolue (article en
+   * ligne, prise de rendez-vous, site), ou un numéro `tel:`. Les posts
+   * enregistrés avant la correction du lien des articles peuvent encore porter
+   * un chemin du studio (« /publications/<id> »), à ne pas afficher comme un lien.
+   */
   cta: { type: GooglePostCta; url: string | null };
   /** Visuel 4:3 rendu par le moteur social (template statique) */
   slide: SocialSlide;

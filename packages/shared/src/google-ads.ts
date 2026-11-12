@@ -856,12 +856,21 @@ export type GoogleAdsDiagnosticInput = {
   city: string;
   hasBookingUrl: boolean;
   hasPhone: boolean;
-  /** Identifiant Google Ads (AW-…) renseigné dans le suivi du site */
+  /** Identifiant Google Ads (AW-…) renseigné dans le suivi du site ; site du client : balise repérée dans ses pages */
   hasAdsTag: boolean;
-  /** Au moins un libellé de conversion renseigné */
+  /** Au moins un libellé de conversion renseigné (toujours faux pour le site du client : rien ne permet de le lire) */
   hasConversionLabels: boolean;
-  /** Pages de spécialités en ligne */
+  /** Pages de spécialités en ligne ; site du client : spécialités qui ont leur page sur ce site */
   motifPages: number;
+  /**
+   * Le site de référence est celui du client, que le produit n'héberge pas :
+   * le produit n'y pose aucune balise, il constate seulement ce que la
+   * dernière lecture du site a relevé. Téléphone, balise, conversions et
+   * pages sont alors évalués et formulés pour ce site. Absent : site hébergé.
+   */
+  externalSite?: boolean;
+  /** Site du client : Google Tag Manager repéré dans ses pages (la balise Google Ads peut passer par lui) */
+  hasTagManager?: boolean;
   profile: {
     linked: boolean;
     claimed: boolean | null;
@@ -917,6 +926,12 @@ export type GoogleAdsDiagnostic = {
   /** Libellés des points à régler, bloquants d'abord */
   prerequisites: string[];
   budget: GoogleAdsBudgetEstimate;
+  /**
+   * Bilan établi pour le site du client (non hébergé) : les écrans et le plan
+   * ne renvoient alors ni vers l'éditeur du site hébergé ni vers la saisie
+   * des identifiants de suivi. Absent : site hébergé.
+   */
+  externalSite?: boolean;
 };
 
 export function summarizeDemand(keywords: GoogleAdsKeywordSet | null): GoogleAdsDemand {
@@ -985,13 +1000,48 @@ function check(id: GoogleAdsCheckId, label: string, status: GoogleAdsReadinessSt
   return { id, label, status, detail, critical };
 }
 
-/** Points de préparation, dans l'ordre d'affichage. */
+/**
+ * Textes des points de préparation quand le site de référence est celui du
+ * client (Google Ads et Meta Ads). Le produit n'installe ni ne modifie rien
+ * sur ce site : chaque texte dit ce que sa dernière lecture a relevé et où
+ * agir — sur le site lui-même, puis dans « Mon site » pour le relire ou le
+ * corriger. Jamais de renvoi vers l'éditeur du site hébergé.
+ */
+export const EXTERNAL_SITE_CHECK_DETAILS = {
+  phoneOk: "Votre numéro de téléphone figure sur votre site.",
+  phoneTodo: "Aucun numéro de téléphone n'a été trouvé sur votre site : affichez-le bien en vue ou, s'il y figure déjà, indiquez-le dans « Mon site ».",
+  landingPagesOk: (count: number): string => `${count} page${count > 1 ? "s" : ""} de spécialité trouvée${count > 1 ? "s" : ""} sur votre site : des pages d'atterrissage ciblées.`,
+  landingPagesTodo: "Aucune page de spécialité n'a été trouvée sur votre site : vos annonces mèneront à votre page d'accueil.",
+  adsTagOk: "La balise Google Ads a été repérée sur votre site.",
+  tagManagerOk: "Google Tag Manager a été repéré sur votre site : votre balise Google Ads peut passer par lui.",
+  adsTagTodo:
+    "Aucune balise Google Ads n'a été repérée sur votre site. Installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+  conversionsUnknown: "Nous ne pouvons pas le vérifier depuis votre site : contrôlez dans votre compte Google Ads que vos prises de rendez-vous et vos appels y sont bien comptés.",
+  pixelOk: "Le Pixel Meta a été repéré sur votre site : contrôlez dans le Gestionnaire d'événements de Meta que vos prises de rendez-vous et vos appels y sont bien comptés.",
+  pixelTodo:
+    "Aucun Pixel Meta n'a été repéré sur votre site. Installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+  cookieBannerOk: "Un bandeau cookies a été repéré sur votre site.",
+  cookieBannerUnknown: "Aucun bandeau cookies n'a été repéré sur votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
+  facebookPageTodo: "Une page Facebook est indispensable pour diffuser des annonces : indiquez son lien dans « Mon site ».",
+  photosTodo: "Ajoutez au moins 3 photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.",
+} as const;
+
+/**
+ * Points de préparation, dans l'ordre d'affichage. Avec `externalSite` (site
+ * du client), quatre points changent : le téléphone et les pages sont ceux
+ * lus sur ce site ; la balise est acquise dès qu'une balise Google Ads ou
+ * Google Tag Manager y a été repérée ; les conversions, invérifiables de
+ * l'extérieur, passent en « inconnu » sans jamais bloquer.
+ */
 export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsReadinessCheck[] {
   const p = input.profile;
+  const external = input.externalSite === true;
+  const texts = EXTERNAL_SITE_CHECK_DETAILS;
   const contactCritical = !input.hasBookingUrl && !input.hasPhone;
   const minVotes = Math.max(10, Math.round((input.benchmark?.medianVotes ?? 0) * 0.5));
   const reviewsStatus: GoogleAdsReadinessStatus =
     p.votes === null || p.rating === null ? "unknown" : p.votes >= minVotes && p.rating >= 4.3 ? "ok" : "todo";
+  const tagDetected = input.hasAdsTag || (external && input.hasTagManager === true);
   return [
     check(
       "profile_linked",
@@ -1026,9 +1076,13 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
       "phone",
       "Numéro de téléphone affiché",
       input.hasPhone ? "ok" : "todo",
-      input.hasPhone
-        ? "Les clics sur votre numéro seront comptés comme des conversions."
-        : "Affichez un numéro sur le site : l'appel est la conversion la plus fréquente pour un cabinet.",
+      external
+        ? input.hasPhone
+          ? texts.phoneOk
+          : texts.phoneTodo
+        : input.hasPhone
+          ? "Les clics sur votre numéro seront comptés comme des conversions."
+          : "Affichez un numéro sur le site : l'appel est la conversion la plus fréquente pour un cabinet.",
       contactCritical,
     ),
     check(
@@ -1067,24 +1121,39 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
     check(
       "tracking_tag",
       "Balise Google Ads sur le site",
-      input.hasAdsTag ? "ok" : "todo",
-      input.hasAdsTag
-        ? "La balise se charge sur le site (après consentement quand le bandeau cookies est actif)."
-        : "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",
+      tagDetected ? "ok" : "todo",
+      external
+        ? input.hasAdsTag
+          ? texts.adsTagOk
+          : tagDetected
+            ? texts.tagManagerOk
+            : texts.adsTagTodo
+        : input.hasAdsTag
+          ? "La balise se charge sur le site (après consentement quand le bandeau cookies est actif)."
+          : "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",
       false,
     ),
-    check(
-      "tracking_conversions",
-      "Conversions mesurées",
-      input.hasConversionLabels ? "ok" : "todo",
-      input.hasConversionLabels ? "Clics RDV, appels et e-mails remontent dans Google Ads." : "Collez vos libellés de conversion : le site enverra les clics RDV, appels et e-mails à Google Ads.",
-      false,
-    ),
+    // Site du client : les conversions se règlent dans son compte Google Ads, rien ne permet de les lire — ni acquis, ni à régler
+    external
+      ? check("tracking_conversions", "Conversions mesurées", "unknown", texts.conversionsUnknown, false)
+      : check(
+          "tracking_conversions",
+          "Conversions mesurées",
+          input.hasConversionLabels ? "ok" : "todo",
+          input.hasConversionLabels ? "Clics RDV, appels et e-mails remontent dans Google Ads." : "Collez vos libellés de conversion : le site enverra les clics RDV, appels et e-mails à Google Ads.",
+          false,
+        ),
     check(
       "landing_pages",
       "Pages de spécialités dédiées",
       input.motifPages > 0 ? "ok" : "todo",
-      input.motifPages > 0 ? `${input.motifPages} page${input.motifPages > 1 ? "s" : ""} de spécialité : des pages d'atterrissage ciblées.` : "Des pages dédiées par spécialité améliorent le score de qualité et le coût par clic.",
+      external
+        ? input.motifPages > 0
+          ? texts.landingPagesOk(input.motifPages)
+          : texts.landingPagesTodo
+        : input.motifPages > 0
+          ? `${input.motifPages} page${input.motifPages > 1 ? "s" : ""} de spécialité : des pages d'atterrissage ciblées.`
+          : "Des pages dédiées par spécialité améliorent le score de qualité et le coût par clic.",
       false,
     ),
   ];
@@ -1130,6 +1199,7 @@ export function diagnoseGoogleAds(input: GoogleAdsDiagnosticInput, now = new Dat
     checks,
     prerequisites: [...criticalTodos, ...minorTodos].map((c) => c.label),
     budget,
+    ...(input.externalSite ? { externalSite: true } : {}),
   };
 }
 
@@ -1149,7 +1219,12 @@ export type GoogleAdsAdGroup = {
   name: string;
   intent: GoogleAdsIntent;
   keywords: { text: string; match: GoogleAdsMatchType }[];
-  /** Chemin de la page d'atterrissage sur le site (« / » ou « /<slug-motif> ») */
+  /**
+   * Chemin de la page d'atterrissage, relatif à l'adresse de référence du
+   * site : « / », « /motifs/<slug> » sur le site hébergé, chemin réel de la
+   * page sur le site du client. Les plans enregistrés avant la correction du
+   * chemin des pages de spécialité portent « /<slug> » : `normalizeLandingPath`.
+   */
   landingPath: string;
   ads: GoogleAdsAd[];
 };
@@ -1184,13 +1259,76 @@ export type GoogleAdsPlan = {
   tips: string[];
 };
 
-export type GoogleAdsLandingPage = { path: string; title: string; kind: "home" | "motif" };
+export type GoogleAdsLandingPage = {
+  /** Chemin relatif à l'adresse de référence du site (site hébergé, ou site du client quand il est la référence) */
+  path: string;
+  title: string;
+  kind: "home" | "motif";
+  /** Identifiant de la spécialité (page du site hébergé, ou spécialité du site du client) : relie la page au brief du site */
+  slug?: string;
+};
+
+/** Ce qu'il faut d'une page d'atterrissage pour reconnaître un chemin (Google Ads comme Meta Ads). */
+export type LandingPageRef = { path: string; slug?: string };
+
+/**
+ * Chemin d'une page de spécialité sur le site hébergé. Le site public sert
+ * ces pages sous « /motifs/<slug> » ; « /<slug> » seul mène à la page
+ * introuvable.
+ */
+export function hostedMotifPath(slug: string): string {
+  return `/motifs/${slug}`;
+}
+
+/** Chemin comparable : minuscules, sans barre finale (« /Motifs/Sommeil/ » → « /motifs/sommeil »), « / » conservé. */
+function canonicalLandingPath(path: string): string {
+  const trimmed = path.trim().toLowerCase().replace(/\/+$/, "");
+  return trimmed === "" ? "/" : trimmed;
+}
+
+/** Spécialité que désigne un chemin du site hébergé : « /motifs/<slug> », ou l'ancienne forme « /<slug> » ; null sinon. */
+function hostedSlugOf(canonicalPath: string): string | null {
+  return /^\/(?:motifs\/)?([^/?#]+)$/.exec(canonicalPath)?.[1] ?? null;
+}
+
+/** Identifiant de spécialité d'une page d'atterrissage : son `slug`, sinon celui que porte son chemin sur le site hébergé ; null pour l'accueil. */
+export function landingPageSlug(page: LandingPageRef): string | null {
+  return page.slug?.trim().toLowerCase() || hostedSlugOf(canonicalLandingPath(page.path));
+}
+
+/**
+ * Page d'atterrissage actuelle que désigne un chemin écrit par le modèle ou
+ * enregistré dans un plan, ou `null`. Le chemin est comparé sans tenir compte
+ * de la casse ni de la barre finale. À défaut, un chemin du site hébergé est
+ * rapproché de la page de la même spécialité : c'est ce qui rend lisibles
+ * les plans enregistrés avec l'ancien chemin « /<slug> » (devenu
+ * « /motifs/<slug> »), et ceux d'avant la connexion du site du client quand
+ * la spécialité y a sa page.
+ */
+export function resolveLandingPage<T extends LandingPageRef>(path: string, pages: readonly T[]): T | null {
+  const wanted = canonicalLandingPath(path);
+  const exact = pages.find((page) => canonicalLandingPath(page.path) === wanted);
+  if (exact) return exact;
+  const slug = hostedSlugOf(wanted);
+  if (slug === null) return null;
+  return pages.find((page) => landingPageSlug(page) === slug) ?? null;
+}
+
+/**
+ * Chemin d'atterrissage d'un plan ramené au chemin exact de la page actuelle
+ * (`resolveLandingPage`), ou `null` si plus aucune page ne lui correspond —
+ * l'appelant retient alors l'accueil. À utiliser partout où un chemin
+ * enregistré est affiché, copié ou validé.
+ */
+export function normalizeLandingPath(path: string, pages: readonly LandingPageRef[]): string | null {
+  return resolveLandingPage(path, pages)?.path ?? null;
+}
 
 export type GoogleAdsPlanInput = {
   diagnostic: GoogleAdsDiagnostic;
   keywords: GoogleAdsKeywordSet;
   forecast: GoogleAdsForecast | null;
-  /** Pages d'atterrissage possibles (accueil + spécialités) */
+  /** Pages d'atterrissage possibles (accueil + spécialités), chemins relatifs à l'adresse de référence du site */
   landingPages: GoogleAdsLandingPage[];
   /** Mots-clés suivis dans Fiche Google */
   trackedKeywords: string[];

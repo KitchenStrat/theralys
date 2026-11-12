@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isIndexable } from "@/lib/indexing";
 import {
   getMotifPages,
   getPublishedArticles,
@@ -9,14 +10,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Sitemap par site — vide pour les démos (non indexées). */
+/**
+ * Sitemap par site — vide pour un site non indexé : démo, ou site hébergé
+ * masqué tant que le site du client est la référence (`isIndexable`).
+ */
 export async function GET(_request: Request, ctx: { params: Promise<{ site: string }> }) {
   const { site: siteKey } = await ctx.params;
   const site = await getSiteByKey(siteKey);
   if (!site) return new NextResponse("Not found", { status: 404 });
 
   const urls: { loc: string; lastmod?: string }[] = [];
-  if (site.type !== "demo") {
+  if (isIndexable(site)) {
     const base = siteBaseUrl(site);
     const [motifs, articles] = await Promise.all([
       getMotifPages(site),

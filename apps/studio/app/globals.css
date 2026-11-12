@@ -236,3 +236,1061 @@
     display: none;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM DU STUDIO (« ds ») — socle, en lancement masqué
+   ────────────────────────────────────────────────────────────────────────────
+   Tout ce qui suit est NOUVEAU et préfixé `ds-` : aucun jeton, aucune classe
+   existants ne change de sens, et rien ici ne cible une page existante. Les
+   composants vivent dans apps/studio/components/ds, la page de démonstration
+   dans app/apercu-design, le mode d'emploi dans components/ds/README.md.
+
+   Règles tenues par construction :
+   · texte blanc de taille courante seulement sur un fond de luminosité OKLCH
+     ≤ 0,55 (dégradés « profonds », brand-600 et plus foncé) ;
+   · on n'anime que `transform`/`translate`/`scale`/`rotate` et `opacity` ;
+   · tout mouvement est posé sous `prefers-reduced-motion: no-preference` ;
+     sans cette préférence, il reste au plus un fondu ;
+   · aucune boucle hors indicateurs de chargement.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Jetons ─────────────────────────────────────────────────────────────── */
+@theme static {
+  /* Bleu de marque (teinte 240,3°) — 500 = #0E97DD, valeur exacte de la marque */
+  --color-ds-brand-50: oklch(97.7% 0.012 240.3); /* #F1F9FF */
+  --color-ds-brand-100: oklch(95.1% 0.026 240.3); /* #E0F2FF */
+  --color-ds-brand-200: oklch(90.2% 0.053 240.3); /* #C0E4FF */
+  --color-ds-brand-300: oklch(83% 0.094 240.3); /* #8ED0FF */
+  --color-ds-brand-400: oklch(74.5% 0.14 240.3); /* #49B7FC */
+  --color-ds-brand-500: #0e97dd; /* oklch(64.6% 0.146 240.3) */
+  --color-ds-brand-600: oklch(55% 0.127 240.3); /* #0079B4 */
+  --color-ds-brand-700: oklch(49% 0.113 240.3); /* #00679A */
+  --color-ds-brand-800: oklch(42.5% 0.095 240.3); /* #06547D */
+  --color-ds-brand-900: oklch(36.5% 0.08 240.3); /* #074364 */
+  --color-ds-brand-950: oklch(28.5% 0.062 240.3); /* #042D45 */
+  /* teal */
+  --color-ds-teal-50: oklch(97.5% 0.02 185); /* #E9FCF8 */
+  --color-ds-teal-100: oklch(95% 0.04 185); /* #D2F8F2 */
+  --color-ds-teal-200: oklch(90% 0.07 185); /* #A9EEE4 */
+  --color-ds-teal-300: oklch(83% 0.11 185); /* #67DFD1 */
+  --color-ds-teal-500: oklch(64.5% 0.114 185); /* #00A497 */
+  --color-ds-teal-600: oklch(55% 0.097 185); /* #008479 */
+  --color-ds-teal-700: oklch(47% 0.083 185); /* #006A61 */
+  --color-ds-teal-900: oklch(34% 0.06 185); /* #00423C */
+  /* cyan */
+  --color-ds-cyan-50: oklch(97.5% 0.019 215); /* #E9FAFF */
+  --color-ds-cyan-100: oklch(95% 0.039 215); /* #D2F6FF */
+  --color-ds-cyan-200: oklch(90% 0.07 215); /* #A8EBFB */
+  --color-ds-cyan-300: oklch(83% 0.11 215); /* #66DAF4 */
+  --color-ds-cyan-500: oklch(64.5% 0.114 215); /* #009EB9 */
+  --color-ds-cyan-600: oklch(55% 0.097 215); /* #017F95 */
+  --color-ds-cyan-700: oklch(47% 0.083 215); /* #006678 */
+  --color-ds-cyan-900: oklch(34% 0.06 215); /* #003F4B */
+  /* blue */
+  --color-ds-blue-50: oklch(97.5% 0.012 260); /* #F2F7FF */
+  --color-ds-blue-100: oklch(95% 0.024 260); /* #E5EFFF */
+  --color-ds-blue-200: oklch(90% 0.049 260); /* #CCDFFF */
+  --color-ds-blue-300: oklch(83% 0.085 260); /* #A7C9FF */
+  --color-ds-blue-500: oklch(64.5% 0.16 260); /* #508BEE */
+  --color-ds-blue-600: oklch(55% 0.17 260); /* #2F6DD3 */
+  --color-ds-blue-700: oklch(47% 0.16 260); /* #1C55B2 */
+  --color-ds-blue-900: oklch(34% 0.1 260); /* #16366B */
+  /* indigo */
+  --color-ds-indigo-50: oklch(97.5% 0.012 277); /* #F4F6FF */
+  --color-ds-indigo-100: oklch(95% 0.024 277); /* #EAEDFF */
+  --color-ds-indigo-200: oklch(90% 0.049 277); /* #D5DCFF */
+  --color-ds-indigo-300: oklch(83% 0.085 277); /* #B9C3FF */
+  --color-ds-indigo-500: oklch(64.5% 0.16 277); /* #7781ED */
+  --color-ds-indigo-600: oklch(55% 0.17 277); /* #5C62D2 */
+  --color-ds-indigo-700: oklch(47% 0.16 277); /* #484BB2 */
+  --color-ds-indigo-900: oklch(34% 0.1 277); /* #2C306A */
+  /* violet */
+  --color-ds-violet-50: oklch(97.5% 0.013 293); /* #F7F5FF */
+  --color-ds-violet-100: oklch(95% 0.026 293); /* #EFECFF */
+  --color-ds-violet-200: oklch(90% 0.053 293); /* #DFD8FF */
+  --color-ds-violet-300: oklch(83% 0.093 293); /* #C9BCFF */
+  --color-ds-violet-500: oklch(64.5% 0.16 293); /* #9377E5 */
+  --color-ds-violet-600: oklch(55% 0.17 293); /* #7858CA */
+  --color-ds-violet-700: oklch(47% 0.16 293); /* #6142AA */
+  --color-ds-violet-900: oklch(34% 0.1 293); /* #3B2B66 */
+  /* Neutres teintés (245°) */
+  --color-ds-ink-25: oklch(99.2% 0.003 245); /* #FBFDFE */
+  --color-ds-ink-50: oklch(98.4% 0.005 245); /* #F7FAFD */
+  --color-ds-ink-100: oklch(96.7% 0.008 245); /* #F0F5F9 */
+  --color-ds-ink-200: oklch(92.8% 0.013 245); /* #E0E8F0 */
+  --color-ds-ink-300: oklch(86.8% 0.02 245); /* #C9D5E0 */
+  --color-ds-ink-400: oklch(70.5% 0.032 245); /* #90A3B3 */
+  --color-ds-ink-450: oklch(64% 0.035 245); /* #7B8FA0 */
+  --color-ds-ink-500: oklch(55.5% 0.04 245); /* #607689 */
+  --color-ds-ink-600: oklch(44.6% 0.04 245); /* #425769 */
+  --color-ds-ink-700: oklch(37.2% 0.04 245); /* #2E4354 */
+  --color-ds-ink-800: oklch(27.9% 0.038 245); /* #182B3A */
+  --color-ds-ink-900: oklch(20.8% 0.035 245); /* #091927 */
+  /* success */
+  --color-ds-success-100: oklch(95% 0.045 155); /* #D8F8E2 */
+  --color-ds-success-600: oklch(55% 0.136 155); /* #00884D */
+  --color-ds-success-700: oklch(46% 0.114 155); /* #006A3A */
+  --color-ds-success-900: oklch(33% 0.08 155); /* #024122 */
+  /* warning */
+  --color-ds-warning-100: oklch(95.5% 0.036 75); /* #FFEDD6 */
+  --color-ds-warning-500: oklch(77% 0.16 75); /* #EFA30F */
+  --color-ds-warning-700: oklch(50% 0.106 75); /* #865900 */
+  --color-ds-warning-900: oklch(36% 0.076 75); /* #543600 */
+  /* danger */
+  --color-ds-danger-100: oklch(94% 0.03 25); /* #FFE4E1 */
+  --color-ds-danger-600: oklch(55% 0.21 25); /* #D01C29 */
+  --color-ds-danger-700: oklch(48% 0.18 25); /* #AC1922 */
+  --color-ds-danger-900: oklch(34% 0.12 25); /* #691214 */
+  /* sun */
+  --color-ds-sun-100: oklch(95.5% 0.028 60); /* #FFECDE */
+  --color-ds-sun-200: oklch(91% 0.058 60); /* #FFD9BB */
+  --color-ds-sun-400: oklch(80% 0.14 60); /* #FFA659 */
+  --color-ds-sun-600: oklch(60% 0.14 60); /* #BB6802 */
+  --color-ds-sun-700: oklch(50% 0.117 60); /* #925001 */
+  --color-ds-sun-900: oklch(36% 0.085 60); /* #5D3000 */
+
+  /* Séries de graphiques — ordre fixe, validé (daltonisme, contraste ≥ 3:1 sur blanc) */
+  --color-ds-chart-1: oklch(55% 0.127 240.3); /* #0079B4 bleu de marque */
+  --color-ds-chart-2: oklch(60% 0.14 60); /* #BB6802 soleil */
+  --color-ds-chart-3: oklch(55% 0.17 293); /* #7858CA violet */
+  --color-ds-chart-4: oklch(62% 0.11 185); /* #009B8F teal */
+  --color-ds-chart-muted: oklch(64% 0.035 245); /* #7B8FA0 période de comparaison */
+
+  /* Typographie */
+  --font-ds-display: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --text-ds-meta: 0.8125rem; /* 13 px : badges, mentions */
+  --text-ds-meta--line-height: 1.25rem;
+  --text-ds-body: 0.9375rem; /* 15 px : texte secondaire, boutons, navigation */
+  --text-ds-body--line-height: 1.5rem;
+  --text-ds-title: 1.75rem; /* titre de page (mobile) */
+  --text-ds-title--line-height: 2.125rem;
+  --text-ds-title--letter-spacing: -0.015em;
+  --text-ds-kpi: 2.125rem; /* chiffre clé */
+  --text-ds-kpi--line-height: 1.1;
+  --text-ds-kpi--letter-spacing: -0.02em;
+
+  /* Rayons */
+  --radius-ds-sm: 0.75rem; /* champs, entrées de navigation */
+  --radius-ds-md: 1rem; /* tuiles, pastilles d'icône */
+  --radius-ds-card: 1.25rem; /* cartes */
+  --radius-ds-band: 1.75rem; /* bandeaux d'en-tête */
+
+  /* Ombres teintées bleu nuit : repos, flottant, barre basse */
+  --shadow-ds-card: 0 1px 2px oklch(36% 0.08 245 / 0.06), 0 10px 28px -14px oklch(36% 0.08 245 / 0.2);
+  --shadow-ds-pop: 0 2px 6px oklch(36% 0.08 245 / 0.08), 0 24px 48px -20px oklch(36% 0.08 245 / 0.32);
+  --shadow-ds-bar: 0 -1px 0 oklch(36% 0.08 245 / 0.07), 0 -14px 32px -18px oklch(36% 0.08 245 / 0.28);
+
+  /* Mouvement : durées (`duration-ds-*`) et courbes (`ease-ds-*`) */
+  --transition-duration-ds-press: 100ms; /* pression */
+  --transition-duration-ds-fast: 150ms; /* survol, apparition d'un petit élément */
+  --transition-duration-ds-base: 200ms; /* fondu, bascule */
+  --transition-duration-ds-move: 240ms; /* indicateur qui glisse */
+  --transition-duration-ds-enter: 280ms; /* entrée d'un bloc */
+  --transition-duration-ds-slow: 400ms; /* grande surface, rare */
+  --ease-ds-out: cubic-bezier(0.22, 0.8, 0.35, 1); /* entrées, survols */
+  --ease-ds-enter: cubic-bezier(0.05, 0.7, 0.1, 1); /* surfaces qui arrivent (feuille, modale) */
+  --ease-ds-move: cubic-bezier(0.2, 0, 0, 1); /* déplacements à l'écran */
+  --ease-ds-exit: cubic-bezier(0.3, 0, 1, 1); /* sorties */
+  --ease-ds-spring: cubic-bezier(0.34, 1.45, 0.64, 1); /* léger rebond, moments de réussite */
+}
+
+/* Identité de la section courante, exposée en utilitaires : `bg-ds-section-tint`,
+   `text-ds-section-ink`, `border-ds-section-line`, `text-ds-section-accent`… */
+@theme inline {
+  --color-ds-section-tint: var(--ds-s-tint);
+  --color-ds-section-tint-2: var(--ds-s-tint-2);
+  --color-ds-section-line: var(--ds-s-line);
+  --color-ds-section-ink: var(--ds-s-ink);
+  --color-ds-section-accent: var(--ds-s-accent);
+  --color-ds-section-from: var(--ds-s-from);
+  --color-ds-section-to: var(--ds-s-to);
+  --color-ds-section-on: var(--ds-s-on);
+  --color-ds-section-on-deep: var(--ds-s-on-deep);
+}
+
+/* ── 2. Sections : un dégradé nommé, sa variante profonde, ses teintes ─────────
+   `data-ds-section="…"` pose l'identité sur un élément et ses descendants.
+   Un en-tête de page (`data-ds-ambient`) la pose aussi sur toute la coquille.
+   Vif (`from/via/to`) : pictogrammes et grands titres. Profond (`deep-*`) :
+   seul fond de dégradé autorisé sous du texte de taille courante. */
+:root,
+[data-ds-section="accueil"],
+.ds-app:has([data-ds-ambient][data-ds-section="accueil"]) {
+  /* Horizon */
+  --ds-s-from: oklch(64.6% 0.146 240.3); /* #0E97DD */
+  --ds-s-via: oklch(59.8% 0.156 250.9); /* #2482D8 (milieu) */
+  --ds-s-to: oklch(55% 0.17 260); /* #2F6DD3 */
+  --ds-s-deep-from: oklch(55% 0.127 240.3); /* #0079B4 */
+  --ds-s-deep-via: oklch(51% 0.141 252.4); /* #1867B3 (milieu) */
+  --ds-s-deep-to: oklch(47% 0.16 262); /* #2454B3 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.012 250); /* #F1F8FF */
+  --ds-s-tint-2: oklch(95% 0.025 250); /* #E2F0FF */
+  --ds-s-line: oklch(90% 0.05 250); /* #C6E1FF */
+  --ds-s-ink: oklch(34% 0.097 250); /* #003967 */
+  --ds-s-accent: oklch(52% 0.147 250); /* #006BB9 */
+}
+[data-ds-section="mon-site"],
+.ds-app:has([data-ds-ambient][data-ds-section="mon-site"]) {
+  /* Oasis */
+  --ds-s-from: oklch(64% 0.118 170); /* #23A381 */
+  --ds-s-via: oklch(62% 0.106 183.9); /* #149B8D (milieu) */
+  --ds-s-to: oklch(60% 0.102 200); /* #009298 */
+  --ds-s-deep-from: oklch(54.5% 0.1 170); /* #1B8367 */
+  --ds-s-deep-via: oklch(51.2% 0.087 184.8); /* #0E776D (milieu) */
+  --ds-s-deep-to: oklch(48% 0.082 203); /* #006B72 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.02 180); /* #E9FCF7 */
+  --ds-s-tint-2: oklch(95% 0.04 180); /* #D3F8EF */
+  --ds-s-line: oklch(90% 0.07 180); /* #ABEEE0 */
+  --ds-s-ink: oklch(34% 0.06 180); /* #034239 */
+  --ds-s-accent: oklch(52% 0.09 180); /* #127A6B */
+}
+[data-ds-section="publications"],
+.ds-app:has([data-ds-ambient][data-ds-section="publications"]) {
+  /* Lagon */
+  --ds-s-from: oklch(65.5% 0.114 212); /* #01A2B9 */
+  --ds-s-via: oklch(62.7% 0.123 228.6); /* #0295C3 (milieu) */
+  --ds-s-to: oklch(60% 0.14 242); /* #0A88CC */
+  --ds-s-deep-from: oklch(55% 0.097 215); /* #017F95 */
+  --ds-s-deep-via: oklch(52% 0.102 229.5); /* #047398 (milieu) */
+  --ds-s-deep-to: oklch(49% 0.113 242); /* #09669A */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.015 227); /* #EDF9FF */
+  --ds-s-tint-2: oklch(95% 0.031 227); /* #DAF3FF */
+  --ds-s-line: oklch(90% 0.063 227); /* #B2E7FF */
+  --ds-s-ink: oklch(34% 0.066 227); /* #003E52 */
+  --ds-s-accent: oklch(52% 0.1 227); /* #027495 */
+}
+[data-ds-section="reseaux-sociaux"],
+.ds-app:has([data-ds-ambient][data-ds-section="reseaux-sociaux"]) {
+  /* Aurore */
+  --ds-s-from: oklch(64.6% 0.146 240.3); /* #0E97DD */
+  --ds-s-via: oklch(60% 0.16 277); /* #6A73DD */
+  --ds-s-to: oklch(62% 0.17 295); /* #8F6CE0 */
+  --ds-s-deep-from: oklch(55% 0.127 240.3); /* #0079B4 */
+  --ds-s-deep-via: oklch(53% 0.17 277); /* #575BCB */
+  --ds-s-deep-to: oklch(55% 0.19 295); /* #7D51D2 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.012 277); /* #F4F6FF */
+  --ds-s-tint-2: oklch(95% 0.024 277); /* #EAEDFF */
+  --ds-s-line: oklch(90% 0.049 277); /* #D5DCFF */
+  --ds-s-ink: oklch(34% 0.1 277); /* #2C306A */
+  --ds-s-accent: oklch(52% 0.17 277); /* #5458C8 */
+}
+[data-ds-section="fiche-google"],
+.ds-app:has([data-ds-ambient][data-ds-section="fiche-google"]) {
+  /* Rivage */
+  --ds-s-from: oklch(64.5% 0.114 185); /* #00A497 */
+  --ds-s-via: oklch(62.3% 0.107 205); /* #0099A5 (milieu) */
+  --ds-s-to: oklch(60% 0.114 225); /* #008EB3 */
+  --ds-s-deep-from: oklch(55% 0.097 185); /* #008479 */
+  --ds-s-deep-via: oklch(52% 0.09 206.4); /* #007783 (milieu) */
+  --ds-s-deep-to: oklch(49% 0.096 228); /* #006A8B */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.02 205); /* #E8FBFD */
+  --ds-s-tint-2: oklch(95% 0.04 205); /* #D1F7FB */
+  --ds-s-line: oklch(90% 0.07 205); /* #A6ECF4 */
+  --ds-s-ink: oklch(34% 0.058 205); /* #004046 */
+  --ds-s-accent: oklch(52% 0.089 205); /* #007781 */
+}
+[data-ds-section="google-ads"],
+.ds-app:has([data-ds-ambient][data-ds-section="google-ads"]) {
+  /* Cobalt */
+  --ds-s-from: oklch(57% 0.17 258); /* #2D74D9 */
+  --ds-s-via: oklch(53.5% 0.168 266.5); /* #4064CD (milieu) */
+  --ds-s-to: oklch(50% 0.17 275); /* #4B53C2 */
+  --ds-s-deep-from: oklch(47% 0.16 260); /* #1C55B2 */
+  --ds-s-deep-via: oklch(43.5% 0.153 267.7); /* #2D47A4 (milieu) */
+  --ds-s-deep-to: oklch(40% 0.15 276); /* #363896 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.012 262); /* #F2F7FF */
+  --ds-s-tint-2: oklch(95% 0.024 262); /* #E6EFFF */
+  --ds-s-line: oklch(90% 0.048 262); /* #CDDFFF */
+  --ds-s-ink: oklch(34% 0.1 262); /* #19356B */
+  --ds-s-accent: oklch(52% 0.17 262); /* #2E62C9 */
+}
+[data-ds-section="meta-ads"],
+.ds-app:has([data-ds-ambient][data-ds-section="meta-ads"]) {
+  /* Iris */
+  --ds-s-from: oklch(57.5% 0.17 277); /* #6269DB */
+  --ds-s-via: oklch(55.8% 0.178 286.5); /* #705CD5 (milieu) */
+  --ds-s-to: oklch(54% 0.19 295); /* #7A4ECF */
+  --ds-s-deep-from: oklch(48% 0.17 277); /* #4A4CBA */
+  --ds-s-deep-via: oklch(46% 0.173 286.3); /* #553FB1 (milieu) */
+  --ds-s-deep-to: oklch(44% 0.18 295); /* #5E31A9 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.012 290); /* #F6F6FF */
+  --ds-s-tint-2: oklch(95% 0.025 290); /* #EEECFF */
+  --ds-s-line: oklch(90% 0.051 290); /* #DDD9FE */
+  --ds-s-ink: oklch(34% 0.1 290); /* #392C67 */
+  --ds-s-accent: oklch(52% 0.17 290); /* #6B50C2 */
+}
+[data-ds-section="academie"],
+.ds-app:has([data-ds-ambient][data-ds-section="academie"]) {
+  /* Glacier */
+  --ds-s-from: oklch(78% 0.12 200); /* #3ACED6 */
+  --ds-s-via: oklch(75% 0.118 219.8); /* #40BFE1 (milieu) */
+  --ds-s-to: oklch(72% 0.13 238); /* #46AFEC */
+  --ds-s-deep-from: oklch(88% 0.09 195); /* #8CEBEA */
+  --ds-s-deep-via: oklch(86% 0.085 215.7); /* #8DE0F5 (milieu) */
+  --ds-s-deep-to: oklch(84% 0.092 236); /* #8ED4FF */
+  --ds-s-on: var(--color-ds-brand-950);
+  --ds-s-on-deep: var(--color-ds-brand-950);
+  --ds-s-tint: oklch(97.5% 0.019 215); /* #E9FAFF */
+  --ds-s-tint-2: oklch(95% 0.039 215); /* #D2F6FF */
+  --ds-s-line: oklch(90% 0.07 215); /* #A8EBFB */
+  --ds-s-ink: oklch(34% 0.06 215); /* #003F4B */
+  --ds-s-accent: oklch(52% 0.092 215); /* #00768A */
+}
+[data-ds-section="compte"],
+.ds-app:has([data-ds-ambient][data-ds-section="compte"]) {
+  /* Ardoise */
+  --ds-s-from: oklch(50% 0.04 250); /* #52657A */
+  --ds-s-via: oklch(43% 0.042 252.6); /* #3F5167 (milieu) */
+  --ds-s-to: oklch(36% 0.045 255); /* #2D3E55 */
+  --ds-s-deep-from: oklch(44% 0.04 250); /* #425468 */
+  --ds-s-deep-via: oklch(37% 0.042 252.6); /* #2F4156 (milieu) */
+  --ds-s-deep-to: oklch(30% 0.045 255); /* #1E2F44 */
+  --ds-s-on: #fff;
+  --ds-s-on-deep: #fff;
+  --ds-s-tint: oklch(97.5% 0.006 250); /* #F4F7FB */
+  --ds-s-tint-2: oklch(95% 0.012 250); /* #E9EFF6 */
+  --ds-s-line: oklch(90% 0.02 250); /* #D4DFEB */
+  --ds-s-ink: oklch(30% 0.04 250); /* #1E2F41 */
+  --ds-s-accent: oklch(45% 0.04 250); /* #44576B */
+}
+
+/* ── 3. Utilitaires ────────────────────────────────────────────────────────── */
+@utility bg-ds-section-gradient {
+  background-image: linear-gradient(135deg, var(--ds-s-from), var(--ds-s-via), var(--ds-s-to));
+}
+@utility bg-ds-section-gradient-deep {
+  background-image: linear-gradient(135deg, var(--ds-s-deep-from), var(--ds-s-deep-via), var(--ds-s-deep-to));
+}
+@utility bg-ds-section-soft {
+  background-image: linear-gradient(135deg, var(--ds-s-tint-2), var(--ds-s-tint) 58%, #fff);
+}
+/* Action principale : toujours le bleu de marque, quelle que soit la section */
+@utility bg-ds-brand-gradient {
+  background-image: linear-gradient(135deg, oklch(55% 0.127 240.3), oklch(51% 0.141 252.4), oklch(47% 0.16 262));
+}
+/* Texte en dégradé (grands titres, chiffres) : deux arrêts ≥ 4,5:1 sur blanc et sur teinte */
+@utility text-ds-gradient {
+  background-image: linear-gradient(100deg, var(--ds-s-ink), var(--ds-s-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  @media (forced-colors: active) {
+    background-image: none;
+    color: CanvasText;
+  }
+}
+@utility shadow-ds-glow {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.28),
+    0 10px 20px -10px color-mix(in oklab, var(--ds-s-to) 80%, transparent);
+}
+@utility shadow-ds-brand-glow {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 10px 22px -10px oklch(47% 0.16 262 / 0.75);
+}
+/* Anneau de focus : 2 px, décalé de 2 px, ≥ 3:1 sur blanc et sur le fond de page */
+@utility ds-focus {
+  &:focus-visible {
+    outline: 2px solid var(--color-ds-brand-600);
+    outline-offset: 2px;
+  }
+}
+@utility ds-focus-inverse {
+  &:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+}
+/* Chiffres alignés (tableaux, axes, dates) ; les grands chiffres isolés restent proportionnels */
+@utility ds-tnum {
+  font-variant-numeric: tabular-nums;
+}
+/* Entrée d'un bloc : montée de 12 px, fondu seul en mouvement réduit. `--ds-i` décale (40 ms par rang, 5 rangs au plus) */
+@utility ds-rise {
+  animation: ds-fade var(--transition-duration-ds-base) ease-out backwards;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ds-rise var(--transition-duration-ds-enter) var(--ease-ds-out) backwards;
+    animation-delay: calc(min(var(--ds-i, 0), 5) * 40ms);
+  }
+}
+@utility ds-fade-in {
+  animation: ds-fade var(--transition-duration-ds-base) ease-out backwards;
+}
+/* Apparition avec léger rebond (coche, pastille) */
+@utility ds-pop {
+  animation: ds-fade var(--transition-duration-ds-base) ease-out backwards;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ds-pop 320ms var(--ease-ds-spring) backwards;
+    animation-delay: var(--ds-delay, 0ms);
+  }
+}
+/* Pression : l'élément s'enfonce de 3 % */
+@utility ds-press {
+  @media (prefers-reduced-motion: no-preference) {
+    transition: transform var(--transition-duration-ds-press) var(--ease-ds-out);
+    &:active {
+      transform: scale(0.97);
+    }
+  }
+}
+/* Carte cliquable : se soulève au survol (l'ombre forte vit sur un pseudo-élément dont on n'anime que l'opacité) */
+@utility ds-lift {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: var(--shadow-ds-pop);
+    opacity: 0;
+    transition: opacity var(--transition-duration-ds-base) ease-out;
+    pointer-events: none;
+  }
+  @media (hover: hover) {
+    &:hover::after {
+      opacity: 1;
+    }
+  }
+  &:focus-visible::after {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    transition: transform var(--transition-duration-ds-base) var(--ease-ds-out);
+    @media (hover: hover) {
+      &:hover {
+        transform: translateY(-3px);
+      }
+    }
+    &:active {
+      transform: translateY(0) scale(0.985);
+      transition-duration: var(--transition-duration-ds-press);
+    }
+  }
+}
+/* Indicateur de chargement : seule boucle admise */
+@utility ds-spin {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ds-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes ds-rise {
+  from {
+    opacity: 0.01;
+    transform: translateY(12px);
+  }
+}
+@keyframes ds-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ds-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes ds-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ds-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes ds-odo {
+  from {
+    translate: -50% 0;
+  }
+}
+@keyframes ds-wipe-a {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes ds-wipe-b {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes ds-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+}
+@keyframes ds-fill {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes ds-ripple {
+  from {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+@keyframes ds-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* Là où la nouvelle coquille est montée — et là seulement — le fond partagé de
+   packages/ui (hors couche, `background-attachment: fixed`) est aplati, et la place
+   des barres collantes est réservée pour que l'élément focalisé reste visible. */
+body:has(.ds-app) {
+  background: var(--color-ds-ink-50);
+}
+html:has(.ds-app) {
+  scroll-padding-top: 5rem;
+  scroll-padding-bottom: 6.5rem;
+}
+
+/* ── 4. Composants (couche `components` : un utilitaire Tailwind peut toujours les surcharger) ── */
+@layer components {
+  /* Coquille : fond teinté et halos statiques aux couleurs de la section de la page.
+     Calque fixe dédié — ni `background-attachment: fixed`, ni flou. */
+  .ds-app {
+    position: relative;
+    isolation: isolate;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background-color: var(--color-ds-ink-50);
+    color: var(--color-ds-ink-900);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .ds-app::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(62rem 30rem at 96% -9rem, color-mix(in oklab, var(--ds-s-from) 17%, transparent), transparent 68%),
+      radial-gradient(44rem 24rem at 34% -8rem, color-mix(in oklab, var(--ds-s-to) 12%, transparent), transparent 64%),
+      radial-gradient(54rem 30rem at 70% 112%, color-mix(in oklab, var(--color-ds-violet-500) 8%, transparent), transparent 66%);
+  }
+  .ds-app ::selection {
+    background-color: var(--color-ds-brand-200);
+    color: var(--color-ds-brand-950);
+  }
+  /* Mot-marque : même dessin que `.brand-word`, sans le reflet en boucle */
+  .ds-brand-word {
+    font-family: "Comfortaa", ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background-image: linear-gradient(100deg, var(--color-ds-brand-800), var(--color-ds-brand-600) 45%, var(--color-ds-blue-700));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  @media (forced-colors: active) {
+    .ds-brand-word {
+      background-image: none;
+      color: CanvasText;
+    }
+  }
+
+  /* Lien d'évitement */
+  .ds-skip {
+    position: absolute;
+    left: 1rem;
+    top: 0.75rem;
+    z-index: 60;
+    transform: translateY(-300%);
+    border-radius: 9999px;
+    background: var(--color-ds-brand-950);
+    padding: 0.625rem 1rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .ds-skip:focus {
+    transform: none;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+
+  /* Cascade d'entrée des blocs d'une page : 40 ms par bloc, 5 rangs au plus,
+     soit 200 ms + 280 ms = 480 ms au total. `backwards` : rien ne reste transformé
+     (une modale sans portail resterait sinon prisonnière de son ancêtre). */
+  .ds-stagger > * {
+    animation: ds-fade var(--transition-duration-ds-base) ease-out backwards;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-stagger > * {
+      animation: ds-rise var(--transition-duration-ds-enter) var(--ease-ds-out) backwards;
+      animation-delay: calc(min(var(--ds-i, 0), 5) * 40ms);
+    }
+    .ds-stagger > :nth-child(2) {
+      --ds-i: 1;
+    }
+    .ds-stagger > :nth-child(3) {
+      --ds-i: 2;
+    }
+    .ds-stagger > :nth-child(4) {
+      --ds-i: 3;
+    }
+    .ds-stagger > :nth-child(5) {
+      --ds-i: 4;
+    }
+    .ds-stagger > :nth-child(n + 6) {
+      --ds-i: 5;
+    }
+  }
+
+  /* Décor des bandeaux : halos statiques, jamais sous un texte qu'ils éclairciraient */
+  .ds-band-art {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(24rem 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 30%, transparent), transparent 70%),
+      radial-gradient(18rem 12rem at 78% 125%, color-mix(in oklab, var(--ds-s-to) 24%, transparent), transparent 70%);
+  }
+  /* Sur un dégradé profond, les halos ne font que foncer ou déplacer la teinte (L ≤ 0,55) :
+     le texte blanc garde ≥ 4,5:1 partout. */
+  .ds-band-art-deep {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(30rem 20rem at 100% -10%, oklch(55% 0.097 185 / 0.75), transparent 68%),
+      radial-gradient(26rem 18rem at 8% 130%, oklch(50% 0.19 295 / 0.7), transparent 70%),
+      radial-gradient(18rem 12rem at 55% -30%, oklch(47% 0.16 262 / 0.55), transparent 70%);
+  }
+
+  /* Squelette de chargement : bloc teinté, reflet qui passe (translation seule) */
+  .ds-skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.625rem;
+    background-color: var(--color-ds-ink-200);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.75), transparent);
+      animation: ds-shimmer 1.5s linear infinite;
+    }
+  }
+
+  /* Chiffre animé : chaque chiffre est une bande 0-9 qui roule jusqu'à sa valeur.
+     Rendu serveur, sans script ; la valeur lue par les lecteurs d'écran est à côté. */
+  .ds-odo {
+    display: inline-flex;
+    align-items: flex-start;
+    white-space: nowrap;
+    line-height: var(--ds-odo-lh, 1.1);
+    user-select: none;
+  }
+  .ds-odo > * {
+    display: block;
+    height: calc(var(--ds-odo-lh, 1.1) * 1em);
+  }
+  .ds-odo-col {
+    position: relative;
+    overflow-x: visible;
+    overflow-y: clip;
+  }
+  .ds-odo-ghost {
+    visibility: hidden;
+  }
+  .ds-odo-strip {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    translate: -50% calc(var(--ds-d, 0) * var(--ds-odo-lh, 1.1) * -1em);
+  }
+  .ds-odo-strip > span {
+    display: block;
+    height: calc(var(--ds-odo-lh, 1.1) * 1em);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-odo-strip {
+      animation: ds-odo 800ms var(--ease-ds-out) backwards;
+      animation-delay: calc(var(--ds-odo-delay, 160ms) + var(--ds-i, 0) * 60ms);
+    }
+  }
+
+  /* Révélation de gauche à droite d'un graphique : deux translations opposées (aucune peinture) */
+  .ds-wipe {
+    display: block;
+    overflow: hidden;
+  }
+  .ds-wipe > *,
+  .ds-wipe > * > * {
+    display: block;
+    height: 100%;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-wipe > * {
+      animation: ds-wipe-a 700ms var(--ease-ds-out) backwards;
+      animation-delay: var(--ds-delay, 180ms);
+    }
+    .ds-wipe > * > * {
+      animation: ds-wipe-b 700ms var(--ease-ds-out) backwards;
+      animation-delay: var(--ds-delay, 180ms);
+    }
+  }
+
+  /* Barre de progression : la jauge est translatée, pas redimensionnée */
+  .ds-progress {
+    position: relative;
+    overflow: hidden;
+    border-radius: 9999px;
+    background-color: var(--ds-progress-track, var(--ds-s-tint-2));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ds-s-line) 60%, transparent);
+  }
+  .ds-progress-fill {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: linear-gradient(90deg, var(--ds-s-from), var(--ds-s-via), var(--ds-s-to));
+    transform: translateX(calc(var(--ds-p, 0) * 100% - 100%));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-progress-fill {
+      transition: transform 500ms var(--ease-ds-out);
+      animation: ds-fill 700ms var(--ease-ds-out) backwards;
+      animation-delay: var(--ds-delay, 200ms);
+    }
+    /* Travail en cours : un reflet parcourt la jauge (indicateur de chargement) */
+    .ds-progress-busy .ds-progress-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+      animation: ds-shimmer 1.6s linear infinite;
+    }
+  }
+
+  /* Anneau de progression : un anneau en dégradé, découvert par deux caches qui tournent */
+  .ds-ring {
+    position: relative;
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: var(--ds-ring-size, 4rem);
+    aspect-ratio: 1;
+  }
+  .ds-ring-disc {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: 50%;
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--ds-ring-w, 7px) - 0.5px), #000 calc(100% - var(--ds-ring-w, 7px)));
+    mask: radial-gradient(farthest-side, transparent calc(100% - var(--ds-ring-w, 7px) - 0.5px), #000 calc(100% - var(--ds-ring-w, 7px)));
+  }
+  .ds-ring-fill {
+    position: absolute;
+    inset: 0;
+    background-image: conic-gradient(from 0deg, var(--ds-s-from), var(--ds-s-to));
+  }
+  .ds-ring-half {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+  }
+  .ds-ring-half-r {
+    left: 50%;
+    width: 50%;
+  }
+  .ds-ring-half-l {
+    left: 0;
+    width: calc(50% + 0.5px);
+  }
+  .ds-ring-cover {
+    position: absolute;
+    inset: 0;
+    background-color: var(--ds-ring-track, var(--ds-s-tint-2));
+  }
+  .ds-ring-half-r > .ds-ring-cover {
+    transform-origin: 0 50%;
+    transform: rotate(calc(min(var(--ds-p, 0), 0.5) * 360deg));
+  }
+  .ds-ring-half-l > .ds-ring-cover {
+    transform-origin: calc(100% - 0.5px) 50%;
+    transform: rotate(calc(max(var(--ds-p, 0) - 0.5, 0) * 360deg));
+  }
+  .ds-ring-cap {
+    position: absolute;
+    inset: 0;
+  }
+  .ds-ring-cap::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: var(--ds-ring-w, 7px);
+    height: var(--ds-ring-w, 7px);
+    margin-left: calc(var(--ds-ring-w, 7px) / -2);
+    border-radius: 50%;
+    background-color: var(--ds-s-from);
+  }
+  .ds-ring-cap-end {
+    transform: rotate(calc(var(--ds-p, 0) * 360deg));
+  }
+  .ds-ring-cap-end::before {
+    background-color: color-mix(in oklab, var(--ds-s-to) calc(var(--ds-p, 0) * 100%), var(--ds-s-from));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-ring-half-r > .ds-ring-cover {
+      animation: ds-sweep var(--ds-ring-t1, 0ms) linear backwards;
+      animation-delay: var(--ds-delay, 250ms);
+    }
+    .ds-ring-half-l > .ds-ring-cover {
+      animation: ds-sweep var(--ds-ring-t2, 0ms) linear backwards;
+      animation-delay: calc(var(--ds-delay, 250ms) + var(--ds-ring-t1, 0ms));
+    }
+    .ds-ring-cap-end {
+      animation: ds-sweep calc(var(--ds-ring-t1, 0ms) + var(--ds-ring-t2, 0ms)) linear backwards;
+      animation-delay: var(--ds-delay, 250ms);
+    }
+  }
+
+  /* Navigation latérale : la pastille de fond glisse d'une entrée à l'autre */
+  .ds-nav-indicator {
+    position: absolute;
+    top: 0;
+    right: 0.75rem;
+    left: 0.75rem;
+    height: var(--ds-ind-h, 2.75rem);
+    border-radius: var(--radius-ds-sm);
+    background-image: linear-gradient(90deg, var(--ds-s-tint-2), var(--ds-s-tint));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ds-s-line) 75%, transparent);
+    opacity: 0;
+    transform: translateY(var(--ds-ind-y, 0px));
+    pointer-events: none;
+  }
+  .ds-nav-indicator::before {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    left: -0.75rem;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background-image: linear-gradient(180deg, var(--ds-s-from), var(--ds-s-to));
+  }
+  [data-ds-ready] > .ds-nav-indicator[data-ds-on] {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-ds-ready] > .ds-nav-indicator {
+      transition: transform var(--transition-duration-ds-move) var(--ease-ds-move);
+    }
+  }
+  /* Sans script (ou avant la première mesure), l'entrée active porte elle-même son fond */
+  .ds-nav-item {
+    position: relative;
+    isolation: isolate;
+  }
+  .ds-nav-item::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-color: var(--ds-s-tint);
+    opacity: 0;
+  }
+  @media (hover: hover) {
+    .ds-nav-item:hover::before {
+      opacity: 1;
+    }
+  }
+  .ds-nav-item[aria-current="page"]::before {
+    background-color: var(--ds-s-tint-2);
+    opacity: 1;
+  }
+  [data-ds-ready] .ds-nav-item[aria-current="page"]::before {
+    opacity: 0;
+  }
+
+  /* Onglets : le trait en dégradé glisse et s'étire (translation + échelle) */
+  .ds-tabs-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 1px;
+    height: 3px;
+    background-image: linear-gradient(90deg, var(--ds-s-from), var(--ds-s-to));
+    opacity: 0;
+    transform: translateX(var(--ds-tab-x, 0px)) scaleX(var(--ds-tab-w, 0));
+    transform-origin: 0 50%;
+    pointer-events: none;
+  }
+  [data-ds-ready] > .ds-tabs-indicator {
+    opacity: 1;
+  }
+  .ds-tab[aria-selected="true"]::after,
+  .ds-tab[aria-current="page"]::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background-image: linear-gradient(90deg, var(--ds-s-from), var(--ds-s-to));
+  }
+  [data-ds-ready] > .ds-tab::after {
+    display: none;
+  }
+  /* Le libellé réserve la largeur de sa graisse active : pas de saut à la sélection */
+  .ds-tab-label {
+    display: inline-flex;
+    flex-direction: column;
+  }
+  .ds-tab-label::after {
+    content: attr(data-label);
+    height: 0;
+    overflow: hidden;
+    font-weight: 600;
+    visibility: hidden;
+  }
+  /* Sélecteur à segments : colonnes égales, la pastille blanche se translate d'un rang */
+  .ds-segmented-indicator {
+    position: absolute;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    left: 0.25rem;
+    width: calc((100% - 0.5rem) / var(--ds-n, 1));
+    border-radius: 9999px;
+    background-color: #fff;
+    box-shadow: 0 1px 2px oklch(36% 0.08 245 / 0.12), 0 4px 10px -4px oklch(36% 0.08 245 / 0.25);
+    transform: translateX(calc(var(--ds-i, 0) * 100%));
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-ds-ready] > .ds-tabs-indicator,
+    .ds-segmented-indicator {
+      transition: transform var(--transition-duration-ds-move) var(--ease-ds-move);
+    }
+  }
+  .ds-tabs-scroll {
+    scrollbar-width: none;
+  }
+  .ds-tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Barre basse (mobile) : la pastille en dégradé glisse ; les pictogrammes blancs
+     qu'elle contient sont translatés à l'inverse, donc immobiles à l'écran. */
+  .ds-bottom-pill {
+    position: absolute;
+    top: 0.375rem;
+    left: 0;
+    width: calc(100% / var(--ds-n, 5));
+    height: 2rem;
+    overflow: hidden;
+    background-image: linear-gradient(135deg, var(--ds-s-from), var(--ds-s-via), var(--ds-s-to));
+    color: var(--ds-s-on);
+    clip-path: inset(0 calc(50% - 1.75rem) round 1rem);
+    transform: translateX(calc(var(--ds-i, 0) * 100%));
+    pointer-events: none;
+  }
+  .ds-bottom-pill > * {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    width: calc(var(--ds-n, 5) * 100%);
+    height: 100%;
+    grid-template-columns: repeat(var(--ds-n, 5), minmax(0, 1fr));
+    place-items: center;
+    transform: translateX(calc(var(--ds-i, 0) * -100% / var(--ds-n, 5)));
+  }
+  .ds-bottom-pill[data-ds-off] {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-bottom-pill,
+    .ds-bottom-pill > * {
+      transition: transform var(--transition-duration-ds-move) var(--ease-ds-move);
+    }
+  }
+
+  /* Feuille « Plus » (mobile) : <dialog> natif, ancré en bas */
+  .ds-sheet {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 86vh;
+    max-height: 86dvh;
+    margin: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 1.75rem 1.75rem 0 0;
+    background: #fff;
+    padding: 0;
+    color: var(--color-ds-ink-900);
+    box-shadow: var(--shadow-ds-pop);
+  }
+  .ds-sheet::backdrop {
+    background-color: oklch(28.5% 0.062 240.3 / 0.5);
+  }
+  .ds-sheet[open] {
+    animation: ds-fade var(--transition-duration-ds-base) ease-out;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-sheet[open] {
+      animation: ds-sheet-in var(--transition-duration-ds-enter) var(--ease-ds-enter);
+    }
+    .ds-sheet[open]::backdrop {
+      animation: ds-fade var(--transition-duration-ds-base) ease-out;
+    }
+  }
+  html:has(.ds-sheet[open]) {
+    overflow: hidden;
+  }
+
+  /* Réussite : la coche surgit, une onde chaude s'élargit une fois */
+  .ds-success-ripple {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 2px var(--color-ds-sun-400);
+    opacity: 0;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ds-success-ripple {
+      animation: ds-ripple 700ms var(--ease-ds-out) 120ms backwards;
+    }
+  }
+}

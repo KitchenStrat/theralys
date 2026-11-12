@@ -2,7 +2,8 @@
  * Google Ads (studio) — services de données partagés entre le studio
  * (server actions) et les scripts : contexte du site (métier, ville,
  * spécialités, contact, suivi des conversions, fiche reliée et dernier audit,
- * benchmark, mots-clés suivis, pages d'atterrissage), analyse complète
+ * benchmark, mots-clés suivis, pages d'atterrissage — lus sur le site du
+ * client quand il est la référence, cf. `external-site.ts`), analyse complète
  * (idées DataForSEO → sélection → prévision → diagnostic → plan IA),
  * régénération du plan avec instructions, quotas mensuels.
  *
@@ -36,16 +37,22 @@ import {
   GOOGLE_ADS_INSTRUCTIONS_MAX,
   GOOGLE_ADS_MATCH_TYPES,
   GOOGLE_ADS_PLAN_REGENERATIONS_PER_MONTH,
+  activeExternalSite,
   benchmarkFrom,
   buildAdsSeeds,
   cleanSocialInstructions,
   diagnoseGoogleAds,
+  externalLandingPages,
+  externalLandingPath,
+  externalSpecialties,
   hasConversionLabels,
+  hostedMotifPath,
   isMockPlaceId,
   selectAdsKeywords,
   suggestBidUsd,
   summarizeForecast,
   usageMonthKey,
+  type ExternalSiteTags,
   type GoogleAdsDiagnostic,
   type GoogleAdsDiagnosticInput,
   type GoogleAdsForecast,
@@ -56,6 +63,7 @@ import {
   type GoogleAdsPlan,
   type GoogleAdsPlanInput,
   type PageSections,
+  type SiteSocialLinks,
 } from "@theralys/shared";
 import {
   googleAdsAnalyses,
@@ -70,12 +78,14 @@ import {
   sites,
   type Database,
   type GoogleProfileAudit,
+  type Page,
   type Prospect,
   type Site,
 } from "@theralys/db";
 import { createGoogleAdsPlanner, resolveProfession } from "@theralys/ai";
 import { DataForSeoError } from "@theralys/providers/dataforseo";
 import { adsBidForRequest, createAdsDataProvider, type AdsDataProvider } from "@theralys/providers/dataforseo/ads";
+import { loadExternalReference, type ExternalReference } from "./external-site";
 import { loadGoogleBrief } from "./google-brief";
 import { googleBudget, hasRealGoogleProvider, type DbExecutor } from "./google-profile";
 import { withApiUsage } from "@theralys/shared/usage-runtime";
@@ -124,27 +134,65 @@ export type GoogleAdsUsage = {
   planRegenRemaining: number;
 };
 
-/** Données du site utiles au diagnostic et au plan (sans les lignes brutes : testable sans base). */
+/**
+ * Données du site utiles au diagnostic et au plan (sans les lignes brutes :
+ * testable sans base). Quand le site du client est la référence
+ * (`externalSite`), spécialités, téléphone, pages d'atterrissage et suivi
+ * viennent de ce site ; le reste est inchangé.
+ */
 export type GoogleAdsContextData = {
   profession: string;
   city: string;
-  /** Titres des pages de spécialité en ligne */
+  /** Titres des pages de spécialité en ligne ; site du client : titres de ses spécialités */
   specialties: string[];
   bookingUrl: string | null;
-  /** Téléphone affiché par le site (section Contact de l'accueil) */
+  /** Téléphone affiché par le site (section Contact de l'accueil) ; site du client : numéro de son profil, sinon premier numéro relevé dans ses pages */
   phone: string | null;
-  tracking: { googleAdsId: string | null; hasConversionLabels: boolean };
+  /**
+   * Suivi réglé dans le studio (le site hébergé charge la balise) ; site du
+   * client : balises repérées dans ses pages à la dernière lecture —
+   * `googleTagManagerId` n'existe que là, et les libellés de conversion n'y
+   * sont jamais connus.
+   */
+  tracking: { googleAdsId: string | null; hasConversionLabels: boolean; googleTagManagerId?: string | null };
   profile: GoogleAdsDiagnosticInput["profile"];
   benchmark: GoogleAdsDiagnosticInput["benchmark"];
   /** Mots-clés suivis actifs (Fiche Google) */
   trackedKeywords: string[];
-  /** Accueil « / » puis spécialités « /<slug> » */
+  /**
+   * Accueil « / » puis pages de spécialité, en chemins relatifs à l'adresse
+   * de référence : « /motifs/<slug> » sur le site hébergé, chemin réel de la
+   * page sur le site du client.
+   */
   landingPages: GoogleAdsLandingPage[];
-  /** Pages de spécialité en ligne */
+  /** Pages de spécialité en ligne ; site du client : spécialités qui ont leur page sur ce site */
   motifPages: number;
+  /** Le site du client est la référence (absent : site hébergé) */
+  externalSite?: boolean;
 };
 
 export type GoogleAdsContext = GoogleAdsContextData & { site: Site; prospect: Prospect | null };
+
+/** Lecture de la référence « site du client » (`loadExternalReference`), remplaçable dans les tests. */
+export type AdsReferenceLoader = (db: Database, site: Pick<Site, "id" | "theme">) => Promise<ExternalReference | null>;
+
+/** Ce que Google Ads et Meta Ads lisent du site du client quand il est la référence. */
+export type ExternalAdsSite = {
+  /** Titres de ses spécialités, avec ou sans page dédiée */
+  specialties: string[];
+  /** Numéro du profil (lu puis corrigé par le praticien), sinon premier numéro relevé dans les pages */
+  phone: string | null;
+  /** Adresse postale du profil, sinon celle des données structurées */
+  address: string | null;
+  /** Accueil puis pages de spécialité réelles du site, en chemins relatifs à son adresse */
+  landingPages: GoogleAdsLandingPage[];
+  /** Spécialités qui ont leur page sur le site */
+  motifPages: number;
+  /** Balises et outils repérés dans les pages à la dernière lecture */
+  tags: ExternalSiteTags;
+  /** Réseaux sociaux du profil, complétés par les liens relevés dans les pages */
+  social: SiteSocialLinks;
+};
 
 // ─── Logique pure (testée sans base) ─────────────────────────────────────────
 
@@ -253,12 +301,64 @@ export function onlineMotifPages<T extends MotifPageRow>(rows: T[], site: Pick<S
   return site.type === "demo" ? enabled : enabled.slice(0, motifPagesAllowance(site.plan));
 }
 
-/** Pages d'atterrissage possibles : accueil puis spécialités. */
+/**
+ * Pages d'atterrissage possibles sur le site hébergé : accueil puis pages de
+ * spécialité, sous « /motifs/<slug> » comme les sert le site public
+ * (« /<slug> » seul mène à la page introuvable).
+ */
 export function landingPagesFrom(motifs: { slug: string; title: string }[]): GoogleAdsLandingPage[] {
   return [
     { path: "/", title: "Accueil", kind: "home" },
-    ...motifs.map((m): GoogleAdsLandingPage => ({ path: `/${m.slug}`, title: m.title, kind: "motif" })),
+    ...motifs.map((m): GoogleAdsLandingPage => ({ path: hostedMotifPath(m.slug), title: m.title, kind: "motif", slug: m.slug })),
   ];
+}
+
+/** Premier texte non vide d'une liste, espaces repliés ; null sinon. */
+function firstText(...values: (string | null | undefined)[]): string | null {
+  for (const value of values) {
+    const text = value?.replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+  return null;
+}
+
+/**
+ * Ce que les outils publicitaires lisent du site du client (fonction pure) :
+ * spécialités du profil, téléphone et adresse (profil, sinon faits relevés
+ * dans les pages), pages d'atterrissage réelles (`externalLandingPages`,
+ * chacune reliée à sa spécialité), balises repérées, réseaux sociaux (profil,
+ * complétés par les liens relevés).
+ */
+export function externalAdsSite(reference: ExternalReference): ExternalAdsSite {
+  const { setting, profile, facts } = reference;
+  // Spécialité de chaque page (la première, comme `externalLandingPages` pour le titre) : c'est elle qui relie la page au brief
+  const slugByPath = new Map<string, string>();
+  for (const specialty of profile.specialties) {
+    const path = specialty.url ? externalLandingPath(setting.url, specialty.url) : null;
+    if (path !== null && !slugByPath.has(path)) slugByPath.set(path, specialty.slug);
+  }
+  const landingPages = externalLandingPages(profile, setting.url).map((page): GoogleAdsLandingPage => {
+    const slug = page.kind === "motif" ? slugByPath.get(page.path) : undefined;
+    return slug ? { ...page, slug } : { ...page };
+  });
+  return {
+    specialties: externalSpecialties(profile).map((specialty) => specialty.title),
+    phone: firstText(profile.contact.phone, ...facts.phones),
+    address: firstText(profile.contact.address, facts.address),
+    landingPages,
+    motifPages: landingPages.filter((page) => page.kind === "motif").length,
+    tags: facts.tags,
+    social: { ...facts.social, ...profile.social },
+  };
+}
+
+/**
+ * Référence « site du client » d'un site, ou `null` (site hébergé). Le
+ * réglage porté par le site est lu d'abord : sans site du client actif,
+ * aucune requête de plus, le contexte reste celui du site hébergé.
+ */
+export async function adsReferenceOf(db: Database, site: Pick<Site, "id" | "theme">, load: AdsReferenceLoader = loadExternalReference): Promise<ExternalReference | null> {
+  return activeExternalSite(site.theme) ? load(db, site) : null;
 }
 
 /**
@@ -287,7 +387,12 @@ export function profileFrom(
   };
 }
 
-/** Entrée du diagnostic déterministe à partir du contexte et des résultats de l'analyse. */
+/**
+ * Entrée du diagnostic déterministe à partir du contexte et des résultats de
+ * l'analyse. Site du client : le drapeau `externalSite` et Google Tag Manager
+ * repéré accompagnent l'entrée, pour que les points soient évalués et
+ * formulés pour un site que le produit n'héberge pas.
+ */
 export function diagnosticInputFrom(
   ctx: GoogleAdsContextData,
   keywords: GoogleAdsKeywordSet | null,
@@ -305,6 +410,7 @@ export function diagnosticInputFrom(
     benchmark: ctx.benchmark,
     keywords,
     forecast,
+    ...(ctx.externalSite ? { externalSite: true, hasTagManager: Boolean(ctx.tracking.googleTagManagerId) } : {}),
   };
 }
 
@@ -415,22 +521,39 @@ export async function getGoogleAdsUsage(db: DbExecutor, siteId: string, now = ne
   return adsUsageFromCounts(await adsUsageCounts(db, siteId, now));
 }
 
+/** Pages du site hébergé lues par les contextes Google Ads et Meta Ads (accueil et spécialités). */
+export type AdsSitePage = Pick<Page, "type" | "slug" | "title" | "sections" | "position">;
+
 /**
  * Contexte Google Ads d'un site : métier et ville du prospect (sinon le nom
  * du site), spécialités = titres des pages de spécialité en ligne, lien de
  * réservation, téléphone affiché, suivi (AW-… et libellés de conversion),
  * fiche reliée + dernier audit, benchmark du dernier relevé terminé,
- * mots-clés suivis actifs, pages d'atterrissage. Lève si le site n'existe pas.
+ * mots-clés suivis actifs, pages d'atterrissage. Quand le site du client est
+ * la référence (`adsReferenceOf`), spécialités, téléphone, pages
+ * d'atterrissage et suivi viennent de ce site (`externalAdsSite`) et les
+ * pages du site hébergé ne sont pas lues ; le reste est inchangé. Lève si le
+ * site n'existe pas. `deps.loadReference` remplace la lecture de la
+ * référence dans les tests.
  */
-export async function loadGoogleAdsContext(db: Database, siteId: string, env: NodeJS.ProcessEnv = process.env): Promise<GoogleAdsContext> {
+export async function loadGoogleAdsContext(
+  db: Database,
+  siteId: string,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: { loadReference?: AdsReferenceLoader } = {},
+): Promise<GoogleAdsContext> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) throw new Error(`Site introuvable : ${siteId}`);
+  const reference = await adsReferenceOf(db, site, deps.loadReference);
+  const external = reference ? externalAdsSite(reference) : null;
   const [prospect, sitePages, audit, scan, keywords] = await Promise.all([
     site.prospectId ? db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) }) : Promise.resolve(undefined),
-    db.query.pages.findMany({
-      where: and(eq(pages.siteId, siteId), inArray(pages.type, ["home", "motif"])),
-      columns: { type: true, slug: true, title: true, sections: true, position: true },
-    }),
+    external
+      ? Promise.resolve<AdsSitePage[]>([])
+      : db.query.pages.findMany({
+          where: and(eq(pages.siteId, siteId), inArray(pages.type, ["home", "motif"])),
+          columns: { type: true, slug: true, title: true, sections: true, position: true },
+        }),
     db.query.googleProfileAudits.findFirst({
       where: eq(googleProfileAudits.siteId, siteId),
       orderBy: [desc(googleProfileAudits.createdAt)],
@@ -457,18 +580,22 @@ export async function loadGoogleAdsContext(db: Database, siteId: string, env: No
     prospect: prospect ?? null,
     profession: prospect?.profession.trim() || resolveProfession(site.name).practitionerLabel.feminin,
     city: prospect?.city.trim() ?? "",
-    specialties: motifs.map((m) => m.title),
+    specialties: external ? external.specialties : motifs.map((m) => m.title),
     bookingUrl: site.bookingUrl,
-    phone: phoneFromSections(home?.sections),
-    tracking: {
-      googleAdsId: tracking?.googleAdsId?.trim() || null,
-      hasConversionLabels: hasConversionLabels(tracking?.googleAdsConversions),
-    },
+    phone: external ? external.phone : phoneFromSections(home?.sections),
+    // Site du client : ce que la lecture a repéré dans ses pages ; les identifiants saisis dans le studio n'agissent que sur le site hébergé
+    tracking: external
+      ? { googleAdsId: external.tags.googleAdsId?.trim() || null, googleTagManagerId: external.tags.googleTagManagerId?.trim() || null, hasConversionLabels: false }
+      : {
+          googleAdsId: tracking?.googleAdsId?.trim() || null,
+          hasConversionLabels: hasConversionLabels(tracking?.googleAdsConversions),
+        },
     profile: profileFrom(prospect ?? null, audit ?? null, hasRealGoogleProvider(env)),
     benchmark: bench ? { medianRating: bench.medianRating, medianVotes: bench.medianVotes } : null,
     trackedKeywords: keywords.map((k) => k.keyword),
-    landingPages: landingPagesFrom(motifs),
-    motifPages: motifs.length,
+    landingPages: external ? external.landingPages : landingPagesFrom(motifs),
+    motifPages: external ? external.motifPages : motifs.length,
+    ...(external ? { externalSite: true } : {}),
   };
 }
 
@@ -484,7 +611,8 @@ type AdsStart = AdsStartDecision | { kind: "started"; analysisId: string; usageI
  * conservés) → `suggestBidUsd` → prévision sur le cœur (échec toléré) →
  * `diagnoseGoogleAds` → plan IA (`createGoogleAdsPlanner`, brief du site) →
  * ligne `done` avec le coût réel. Toute erreur → ligne `error`, coût réel
- * conservé dans `google_usage`.
+ * conservé dans `google_usage`. `opts.loadReference` et `opts.loadBrief`
+ * remplacent les lectures du site du client et du brief dans les tests.
  */
 export function runGoogleAdsAnalysis(...args: Parameters<typeof runGoogleAdsAnalysisAttributed>): ReturnType<typeof runGoogleAdsAnalysisAttributed> {
   // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
@@ -494,13 +622,13 @@ export function runGoogleAdsAnalysis(...args: Parameters<typeof runGoogleAdsAnal
 async function runGoogleAdsAnalysisAttributed(
   db: Database,
   siteId: string,
-  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv } = {},
+  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; loadReference?: AdsReferenceLoader; loadBrief?: typeof loadGoogleBrief } = {},
 ): Promise<AdsAnalysisOutcome> {
   const now = opts.now ?? new Date();
   const env = opts.env ?? process.env;
   let ctx: GoogleAdsContext;
   try {
-    ctx = await loadGoogleAdsContext(db, siteId, env);
+    ctx = await loadGoogleAdsContext(db, siteId, env, { loadReference: opts.loadReference });
   } catch (err) {
     console.error(`[google-ads] contexte du site ${siteId} indisponible :`, err);
     return { status: "error", analysisId: null, message: adsErrorMessage(err) };
@@ -615,7 +743,7 @@ async function runGoogleAdsAnalysisAttributed(
     let plan: GoogleAdsPlan | null = null;
     let planError: unknown = null;
     try {
-      const { brief } = await loadGoogleBrief(db, siteId, now);
+      const { brief } = await (opts.loadBrief ?? loadGoogleBrief)(db, siteId, now);
       const planInput: GoogleAdsPlanInput = {
         diagnostic,
         keywords: keywordSet,
@@ -678,7 +806,8 @@ async function runGoogleAdsAnalysisAttributed(
  * refusé sans appel IA), verrou `<siteId>:google-ads-plan`, quota
  * GOOGLE_ADS_PLAN_REGENERATIONS_PER_MONTH vérifié avant l'appel IA puis
  * recompté dans la transaction qui inscrit `google_usage` kind `ads_plan`
- * (coût 0) et enregistre le plan.
+ * (coût 0) et enregistre le plan. Les pages d'atterrissage sont celles du
+ * moment (site du client s'il est devenu la référence depuis l'analyse).
  */
 export function regenerateGoogleAdsPlan(...args: Parameters<typeof regenerateGoogleAdsPlanAttributed>): ReturnType<typeof regenerateGoogleAdsPlanAttributed> {
   // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
@@ -688,7 +817,7 @@ export function regenerateGoogleAdsPlan(...args: Parameters<typeof regenerateGoo
 async function regenerateGoogleAdsPlanAttributed(
   db: Database,
   siteId: string,
-  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv },
+  opts: { instructions?: string; now?: Date; env?: NodeJS.ProcessEnv; loadReference?: AdsReferenceLoader; loadBrief?: typeof loadGoogleBrief },
 ): Promise<AdsPlanOutcome> {
   const now = opts.now ?? new Date();
   const env = opts.env ?? process.env;
@@ -720,7 +849,7 @@ async function regenerateGoogleAdsPlanAttributed(
 
     try {
       const instructions = cleanAdsInstructions(opts.instructions);
-      const [ctx, { brief }] = await Promise.all([loadGoogleAdsContext(db, siteId, env), loadGoogleBrief(db, siteId, now)]);
+      const [ctx, { brief }] = await Promise.all([loadGoogleAdsContext(db, siteId, env, { loadReference: opts.loadReference }), (opts.loadBrief ?? loadGoogleBrief)(db, siteId, now)]);
       const planner = createGoogleAdsPlanner(env);
       const plan = await planner.plan(brief, {
         diagnostic,

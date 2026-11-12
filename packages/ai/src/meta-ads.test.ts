@@ -20,6 +20,7 @@ import {
   type MetaAdsPlanInput,
   type SocialSiteBrief,
 } from "@theralys/shared";
+import { externalSitePromptNote } from "./google-ads";
 import { checkEthicalComplianceDeep } from "./guardrails";
 import {
   META_ADS_MILESTONE_HORIZONS,
@@ -28,6 +29,7 @@ import {
   checkMetaCompliance,
   createMetaAdsPlanner,
   defaultMetaMilestones,
+  defaultMetaTips,
   detectMarketAngles,
   finalizeMetaCreatives,
   finalizeMetaMarketInsights,
@@ -147,12 +149,20 @@ function market(records: MetaAdRecord[] = ADS): MetaAdsMarket {
 
 const LANDING_PAGES: MetaAdsGenerationInput["landingPages"] = [
   { path: "/", title: "Accueil", kind: "home" },
-  { path: "/gestion-du-stress", title: "Gestion du stress", kind: "motif" },
-  { path: "/sommeil", title: "Sommeil et récupération", kind: "motif" },
+  { path: "/motifs/gestion-du-stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+  { path: "/motifs/sommeil", title: "Sommeil et récupération", kind: "motif", slug: "sommeil" },
 ];
 const PATHS = LANDING_PAGES.map((p) => p.path);
 
-function input(overrides: Partial<MetaAdsGenerationInput> = {}, opts: { pixel?: boolean; booking?: boolean; withMarket?: boolean } = {}): MetaAdsGenerationInput {
+/** Site du client : pages réelles (chemins sans rapport avec l'identifiant de la spécialité), reliées au brief par `slug`. */
+const EXTERNAL_LANDING_PAGES: MetaAdsGenerationInput["landingPages"] = [
+  { path: "/", title: "Accueil", kind: "home" },
+  { path: "/accompagnements/stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+  { path: "/Sommeil?lang=fr", title: "Sommeil et récupération", kind: "motif", slug: "sommeil" },
+];
+const EXTERNAL_PATHS = EXTERNAL_LANDING_PAGES.map((p) => p.path);
+
+function input(overrides: Partial<MetaAdsGenerationInput> = {}, opts: { pixel?: boolean; booking?: boolean; withMarket?: boolean; external?: boolean } = {}): MetaAdsGenerationInput {
   const m = opts.withMarket === false ? null : market();
   const diagnostic = diagnoseMetaAds(
     {
@@ -168,13 +178,14 @@ function input(overrides: Partial<MetaAdsGenerationInput> = {}, opts: { pixel?: 
       motifPages: 2,
       profile: { linked: true, rating: 4.9, votes: 27 },
       market: m,
+      ...(opts.external ? { externalSite: true } : {}),
     },
     NOW,
   );
-  return { diagnostic, market: m, landingPages: LANDING_PAGES, ...overrides };
+  return { diagnostic, market: m, landingPages: opts.external ? EXTERNAL_LANDING_PAGES : LANDING_PAGES, ...overrides };
 }
 
-function planInput(overrides: Partial<MetaAdsPlanInput> = {}, opts: { pixel?: boolean; booking?: boolean } = {}): MetaAdsPlanInput {
+function planInput(overrides: Partial<MetaAdsPlanInput> = {}, opts: { pixel?: boolean; booking?: boolean; external?: boolean } = {}): MetaAdsPlanInput {
   const base = input({}, opts);
   const b = brief();
   const creatives = finalizeMetaCreatives(mockMetaCreatives(b, base), base, b, "mock", NOW);
@@ -331,7 +342,12 @@ describe("prompts", () => {
     expect(user).toContain("SYNTHÈSE DE LA VEILLE (annonces des concurrents");
     expect(user).toContain("- p1 : about (portrait), portrait, photo du praticien ou du cabinet — Portrait de Claire au cabinet");
     expect(user).toContain("- p2 : hero (ambiance / cabinet), landscape, illustration");
-    expect(user).toContain('- "/sommeil" — Sommeil et récupération (spécialité)');
+    expect(user).toContain('- "/motifs/sommeil" — Sommeil et récupération (spécialité)');
+    // Chaque page de spécialité porte son chemin d'atterrissage réel, jamais un identifiant dont le modèle tirerait un chemin
+    expect(user).toContain('"page":"/motifs/gestion-du-stress"');
+    expect(user).not.toContain('"slug"');
+    expect(user).toContain("à recopier à l'identique");
+    expect(user).not.toContain("SITE DU PRATICIEN : c'est son propre site");
     expect(user).toContain(`${META_CREATIVES_MIN} à ${META_CREATIVES_MAX} annonces statiques, chacune sur un ANGLE DIFFÉRENT`);
     expect(user).toContain("privilégie réassurance, pédagogie, avis (la fiche le permet), ancrage local");
     expect(user).toContain(`"primaryText" : texte principal ≤ ${META_ADS_TEXT.primaryMax}`);
@@ -406,7 +422,7 @@ describe("finalizeMetaCreatives", () => {
     expect(set.creatives.map((c) => c.id)).toEqual(["c1", "c2", "c3", "c4"]);
     expect(set.creatives.map((c) => c.angle)).toEqual(["reassurance", "education", "temoignage", "local"]);
     expect(set.creatives.map((c) => c.photoId)).toEqual(["p1", "p3", "p1", "p2"]);
-    expect(set.creatives.map((c) => c.landingPath)).toEqual(["/", "/gestion-du-stress", "/", "/"]);
+    expect(set.creatives.map((c) => c.landingPath)).toEqual(["/", "/motifs/gestion-du-stress", "/", "/"]);
     expect(set.creatives.every((c) => c.template === "photo-titre")).toBe(true);
     expect(set.creatives.every((c) => c.cta === "BOOK_NOW" || c.cta === "LEARN_MORE")).toBe(true);
     for (const c of set.creatives) expect(c.altText.length).toBeGreaterThan(10);
@@ -463,7 +479,7 @@ describe("finalizeMetaCreatives", () => {
     expect(second!.angle).toBe("education");
     expect(second!.primaryText).not.toMatch(/souffrez/);
     expect(second!.primaryText).toContain("Comment se passe une séance de la sophrologie ?");
-    expect(second!.landingPath).toBe("/gestion-du-stress");
+    expect(second!.landingPath).toBe("/motifs/gestion-du-stress");
     expect(second!.photoId).toBe("p3");
     expect(second!.cta).toBe("BOOK_NOW");
     expect(second!.template).toBe("photo-titre");
@@ -472,9 +488,11 @@ describe("finalizeMetaCreatives", () => {
     expect(third!.angle).toBe("temoignage");
     expect(third!.headline).toBe("Note 4,9/5 sur Google");
     expect(third!.hook).not.toMatch(/avant|garanti/i);
-    // Angle déjà pris (temoignage) → local ; page connue malgré la casse et la barre finale
+    // Angle déjà pris (temoignage) → local ; page reconnue malgré l'ancien chemin « /<slug> », la casse et la barre finale
     expect(fourth!.angle).toBe("local");
-    expect(fourth!.landingPath).toBe("/sommeil");
+    expect(fourth!.landingPath).toBe("/motifs/sommeil");
+    // Tout chemin retenu est exactement celui d'une page actuelle
+    for (const c of set.creatives) expect(PATHS).toContain(c.landingPath);
     // Photo null acceptée, texte alternatif écrit par le code sans photo
     expect(fifth!.angle).toBe("decouverte");
     expect(fifth!.photoId).toBeNull();
@@ -814,7 +832,7 @@ describe("mocks", () => {
     expect(e!.hook).toBe("Gestion du stress");
     expect(e!.headline).toBe("Gestion du stress à Albi");
     expect(e!.cta).toBe("LEARN_MORE");
-    expect(e!.landingPath).toBe("/gestion-du-stress");
+    expect(e!.landingPath).toBe("/motifs/gestion-du-stress");
     expect(e!.primaryText).toContain("autour de la gestion du stress");
     expect(t!.hook).toBe("Note 4,9/5 sur Google");
     expect(t!.primaryText).toContain("27 personnes ont laissé un avis sur Google, avec une note de 4,9/5.");
@@ -855,7 +873,7 @@ describe("mocks", () => {
     const i = input();
     const featured = mockMetaCreatives(b, { ...i, instructions: "Mettre en avant le sommeil" });
     expect(featured.creatives[0]!.angle).toBe("education");
-    expect(featured.creatives[0]!.landingPath).toBe("/sommeil");
+    expect(featured.creatives[0]!.landingPath).toBe("/motifs/sommeil");
     expect(featured.creatives[0]!.hook).toBe("Sommeil et récupération");
     expect(featured.creatives[0]!.primaryText).toContain("autour du sommeil et de la récupération");
     expect(featured.notes.some((n) => n.includes("« Sommeil et récupération » porte la créa pédagogique"))).toBe(true);
@@ -986,6 +1004,110 @@ describe("mocks", () => {
     expect(insights.formats).toContain("Facebook");
     expect(insights.warnings.some((w) => /dépression|traitent/.test(w))).toBe(false);
     expect(checkEthicalComplianceDeep(insights).ok).toBe(true);
+  });
+});
+
+// ─── Site du client ──────────────────────────────────────────────────────────
+
+describe("site du client (référence des outils)", () => {
+  const externalBrief = (overrides: Partial<SocialSiteBrief> = {}) => brief({ domain: "www.cabinet-dupont.fr", siteName: "Cabinet Dupont", ...overrides });
+
+  it("prompts : domaine et pages réelles du site du client, page de chaque spécialité, note « site non hébergé » ; la veille ne présente aucun chemin", () => {
+    const b = externalBrief();
+    const i = input({}, { external: true });
+    const user = metaCreativesUserPrompt(b, i);
+    expect(user).toContain('"domaine":"www.cabinet-dupont.fr"');
+    expect(user).not.toContain("harmony-web.fr");
+    expect(user).toContain('- "/accompagnements/stress" — Gestion du stress (spécialité)');
+    expect(user).toContain('- "/Sommeil?lang=fr" — Sommeil et récupération (spécialité)');
+    expect(user).toContain('{"titre":"Gestion du stress","page":"/accompagnements/stress"');
+    expect(user).not.toMatch(/\/motifs\//);
+    expect(user).not.toContain('"slug"');
+    const note = externalSitePromptNote("Le Pixel Meta et le bandeau cookies");
+    expect(user).toContain(note);
+    expect(user.indexOf(note)).toBeGreaterThan(user.indexOf("PRÉPARATION DU CABINET"));
+    expect(user.indexOf(note)).toBeLessThan(user.indexOf("BUDGET CONSEILLÉ"));
+    expect(metaVideoUserPrompt(b, i)).toContain(note);
+    // Une spécialité sans page sur le site : pas de chemin à inventer
+    expect(metaCreativesUserPrompt(b, input({ landingPages: EXTERNAL_LANDING_PAGES.slice(0, 2) }, { external: true }))).toContain('{"titre":"Sommeil et récupération","page":null');
+    // Synthèse de la veille : pas de pages d'atterrissage en jeu, donc ni chemin ni identifiant
+    const marketPrompt = metaMarketUserPrompt(b, market());
+    expect(marketPrompt).toContain('"domaine":"www.cabinet-dupont.fr"');
+    expect(marketPrompt).not.toContain('"page"');
+    expect(marketPrompt).not.toContain('"slug"');
+  });
+
+  it("prompt du plan sans Pixel : il s'installe sur le site du praticien, pas dans l'onglet du studio (qui n'agit que sur le site hébergé)", () => {
+    const external = metaPlanUserPrompt(externalBrief(), planInput({}, { external: true }));
+    expect(external).toContain("\"rationale\" qui demande d'installer le Pixel d'abord (sur le site du praticien, dit « votre site ») puis de passer la campagne en conversions.");
+    expect(external).toContain("- c2 : Pédagogie – Gestion du stress (angle education, page /accompagnements/stress)");
+    expect(external).toContain('- "/accompagnements/stress" — Gestion du stress (spécialité)');
+    // La seule mention de l'onglet est l'interdiction de la note
+    expect(external.match(/Paramétrage & suivi/g)).toHaveLength(1);
+    const hosted = metaPlanUserPrompt(brief(), planInput());
+    expect(hosted).toContain("\"rationale\" qui demande d'installer le Pixel d'abord (onglet Paramétrage & suivi) puis de passer la campagne en conversions.");
+    expect(hosted).not.toContain("SITE DU PRATICIEN : c'est son propre site");
+  });
+
+  it("créas : pages réelles du site du client, photo de la spécialité retrouvée par son identifiant ; chemin du site hébergé → page de la même spécialité, inconnu → accueil", () => {
+    const b = externalBrief();
+    const i = input({}, { external: true });
+    const set = finalizeMetaCreatives(mockMetaCreatives(b, i), i, b, "mock", NOW);
+    expect(set.creatives.map((c) => c.angle)).toEqual(["reassurance", "education", "temoignage", "local"]);
+    expect(set.creatives.map((c) => c.landingPath)).toEqual(["/", "/accompagnements/stress", "/", "/"]);
+    // La créa pédagogique garde la photo de la page « Gestion du stress » du brief, bien que son chemin n'ait rien de l'identifiant
+    expect(set.creatives.map((c) => c.photoId)).toEqual(["p1", "p3", "p1", "p2"]);
+    expect(metaCreativeIssues(set, EXTERNAL_PATHS)).toEqual([]);
+    const raw = mockMetaCreatives(b, i);
+    const [r, e, t, l] = raw.creatives;
+    const model: MetaCreativesOutput = {
+      ...raw,
+      creatives: [{ ...r!, landingPath: "/motifs/sommeil" }, { ...e!, landingPath: "/accompagnements/STRESS/" }, { ...t!, landingPath: "/tarifs" }, { ...l!, landingPath: "/sommeil?lang=fr" }],
+    };
+    const fixed = finalizeMetaCreatives(model, i, b, "anthropic", NOW);
+    expect(fixed.creatives.map((c) => c.landingPath)).toEqual(["/Sommeil?lang=fr", "/accompagnements/stress", "/", "/Sommeil?lang=fr"]);
+    for (const c of fixed.creatives) expect(EXTERNAL_PATHS).toContain(c.landingPath);
+    // Instruction « mettre en avant » : la page réelle de la spécialité
+    const featured = mockMetaCreatives(b, { ...i, instructions: "Mettre en avant le sommeil" });
+    expect(featured.creatives[0]).toMatchObject({ angle: "education", landingPath: "/Sommeil?lang=fr" });
+  });
+
+  it("plan : sans Pixel, il s'installe sur le site ; ni suffixe « ?src=meta » ni repère sur le bloc Résultats, que le studio ne peut pas alimenter depuis ce site", () => {
+    const b = externalBrief();
+    const p = planInput({}, { external: true });
+    const plan = finalizeMetaPlan(mockMetaPlan(b, p), p, "mock", NOW);
+    expect(metaPlanIssues(plan, false)).toEqual([]);
+    expect(plan.objective.type).toBe("traffic");
+    expect(plan.objective.rationale).toContain("Le Pixel n'est pas installé : installez-le d'abord sur votre site, vérifiez un événement Schedule de test");
+    expect("landingSuffix" in plan.campaign).toBe(false);
+    expect(plan.tips).not.toContain(META_LANDING_TIP);
+    expect(plan.tips.some((t) => t.includes(META_ADS_LANDING_SUFFIX))).toBe(false);
+    expect(plan.tips.length).toBeGreaterThanOrEqual(3);
+    expect(plan.tips.length).toBeLessThanOrEqual(6);
+    expect(defaultMetaMilestones(p)[2]!.kpis).toEqual(["Coût par contact en baisse par rapport au premier mois", "Fréquence ≤ 3 par personne"]);
+    expect(JSON.stringify(plan)).not.toMatch(/Paramétrage|bloc Résultats|Harmony|éditeur/);
+    expect(JSON.stringify(defaultMetaTips(p))).not.toMatch(/Paramétrage|bloc Résultats|Harmony|éditeur/);
+    // Un conseil du modèle sur le suffixe est écarté lui aussi
+    const withSuffix = finalizeMetaPlan({ ...mockMetaPlan(b, p), tips: ["Ajoutez ?src=meta à la fin de chaque adresse de destination.", "Répondez vite aux messages reçus sous vos annonces."] }, p, "anthropic", NOW);
+    expect(withSuffix.tips.some((t) => t.includes(META_ADS_LANDING_SUFFIX))).toBe(false);
+    // Avec le Pixel repéré : conversions, justification d'origine
+    const withPixel = planInput({}, { external: true, pixel: true });
+    expect(finalizeMetaPlan(mockMetaPlan(b, withPixel), withPixel, "mock", NOW).objective).toMatchObject({ type: "conversions_site", pixelEvent: "Schedule" });
+    // Site hébergé : textes et suffixe d'origine
+    const hosted = planInput();
+    const hostedPlan = finalizeMetaPlan(mockMetaPlan(brief(), hosted), hosted, "mock", NOW);
+    expect(hostedPlan.objective.rationale).toContain("installez-le d'abord (onglet Paramétrage & suivi, identifiant du Pixel), vérifiez un événement Schedule de test");
+    expect(hostedPlan.campaign.landingSuffix).toBe(META_ADS_LANDING_SUFFIX);
+    expect(hostedPlan.tips.at(-1)).toBe(META_LANDING_TIP);
+    expect(defaultMetaMilestones(hosted)[2]!.kpis).toContain("Part des contacts venus de Meta dans le bloc Résultats du studio");
+  });
+
+  it("note sur les photos : elles s'ajoutent dans le studio (dans l'éditeur pour un site hébergé)", () => {
+    const noPhotos = { photos: [] };
+    const external = mockMetaCreatives(externalBrief(noPhotos), input({}, { external: true }));
+    expect(external.notes).toContain("Ajoutez des photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.");
+    const hosted = mockMetaCreatives(brief(noPhotos), input());
+    expect(hosted.notes).toContain("Ajoutez des photos de vous et du cabinet dans l'éditeur : sur Meta, le visuel fait l'essentiel du résultat.");
   });
 });
 

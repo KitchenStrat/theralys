@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   CONSENT_COOKIE,
@@ -11,6 +11,7 @@ import { analyticsEvents, getDb, sites } from "@theralys/db";
 import { eq, sql } from "drizzle-orm";
 import { isInvalidEnumError, isMissingColumnError } from "@/lib/pg-errors";
 import { ownHostsFor, resolveTrackSource } from "@/lib/track-source";
+import { anonymousVisitorId, isBotUserAgent } from "@/lib/visitor";
 
 export const dynamic = "force-dynamic";
 
@@ -30,23 +31,10 @@ export const dynamic = "force-dynamic";
  * - Déploiement avant migration : colonne `source` absente (0004) → événement
  *   enregistré sans provenance ; valeur `call_click` absente de l'enum (0005)
  *   → `{ ok: true, ignored: "schema" }`, jamais de 500.
+ *
+ * La reconnaissance des robots et l'identifiant anonyme vivent dans
+ * `lib/visitor.ts`, partagés avec la mesure du site du client (`/api/m`).
  */
-const BOT_UA = /bot|crawl|spider|slurp|lighthouse|headless|prerender|vercel-screenshot|monitor/i;
-
-function anonymousVisitorId(request: NextRequest, siteId: string): string {
-  const day = new Date().toISOString().slice(0, 10);
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    "0.0.0.0";
-  const userAgent = request.headers.get("user-agent") ?? "";
-  const salt = process.env.AUTH_SECRET ?? "harmony-analytics";
-  return `anon-${createHash("sha256")
-    .update(`${salt}:${day}:${ip}:${userAgent}:${siteId}`)
-    .digest("hex")
-    .slice(0, 32)}`;
-}
-
 export async function POST(request: NextRequest) {
   let payload;
   try {
@@ -56,7 +44,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Les robots (crawlers, aperçus, sondes) ne comptent ni en visiteurs ni en clics
-  if (BOT_UA.test(request.headers.get("user-agent") ?? "")) {
+  if (isBotUserAgent(request.headers.get("user-agent"))) {
     return NextResponse.json({ ok: true, ignored: "bot" });
   }
 
@@ -78,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
   }
   if (!visitorId) {
-    visitorId = anonymousVisitorId(request, site.id);
+    visitorId = anonymousVisitorId(request.headers, site.id);
   }
 
   const source = resolveTrackSource(payload, ownHostsFor(request.headers.get("host"), site));
