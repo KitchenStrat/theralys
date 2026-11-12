@@ -192,6 +192,11 @@ describe("collectLinks", () => {
     expect(performance.now() - start).toBeLessThan(5_000);
     // Le lien placé après vingt mille liens vers un autre site n'est pas examiné : une vraie page n'en compte pas tant
     expect(paths(links)).toEqual(["/avant"]);
+    // Balise base démesurée : ignorée, les liens sont résolus par rapport à la page
+    const based = `<base href="/${"x".repeat(1_000_000)}/">${`<a href="tarifs">Tarifs</a>`.repeat(4_000)}`;
+    const again = performance.now();
+    expect(paths(collectLinks(loadDocument(based), `${ORIGIN}/fr/`, ROOT))[0]).toBe("/fr/tarifs");
+    expect(performance.now() - again).toBeLessThan(3_000);
   });
 });
 

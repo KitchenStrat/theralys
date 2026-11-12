@@ -232,7 +232,8 @@ export function collectLinks($: CheerioAPI, pageUrl: string, scope: SiteScope): 
   const base = $("base[href]").first().attr("href");
   let baseUrl = pageUrl;
   try {
-    if (base) baseUrl = new URL(base, pageUrl).href;
+    // Une base démesurée serait recopiée dans chaque adresse résolue : elle est ignorée
+    if (base && base.length <= HREF_MAX) baseUrl = new URL(base, pageUrl).href;
   } catch {
     baseUrl = pageUrl;
   }

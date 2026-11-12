@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROOT_WRAPPER, type DomElement, type DomNode, closestElement, eachText, firstDescendant, hasClass, isElement, isTextNode, isWithin, loadMarkup, textOf, walkTree } from "./dom";
-import { MARKUP_LIMITS, MarkupTooComplexError } from "./markup-guard";
+import { MARKUP_LIMITS, MarkupTooComplexError, measureMarkup } from "./markup-guard";
 
 const first = ($: ReturnType<typeof loadMarkup>, selector: string): DomElement => {
   const element = $(selector).get(0);
@@ -19,6 +19,10 @@ describe("loadMarkup — entités", () => {
     expect($("a").attr("href")).toBe("/rdv?a=1&b=2&copy=3");
     // Le texte décodé reste du texte : aucune balise n'en naît
     expect($("b").length).toBe(0);
+    // Un seul décodage : une entité écrite en toutes lettres le reste
+    const escaped = loadMarkup(`<p title="&amp;amp; &amp;#233;">&amp;eacute; &amp;lt;b&amp;gt;</p>`);
+    expect(escaped("p").text()).toBe("&eacute; &lt;b&gt;");
+    expect(escaped("p").attr("title")).toBe("&amp; &#233;");
   });
 
   it("contenu brut (script, style, zone de texte) et commentaires : laissés tels quels", () => {
@@ -40,13 +44,23 @@ describe("loadMarkup — entités", () => {
   });
 
   it("une suite d'entités fabriquée ne change pas le découpage du document", () => {
-    // Avec le décodeur de l'analyseur, « &Mu"; » peut avaler le guillemet : la suite du document serait découpée autrement que prévu
-    const $ = loadMarkup(`<a title="&Mu";"><!-- "> <div><div><div> --></a><p>&gt></p><i title='&apos'>x</i>`);
-    expect($("div").length).toBe(0);
-    expect($("a").attr("title")).toBe("&Mu");
+    // Avec le décodeur d'entités de l'analyseur (entities 7.0.1), « &Mu"G » avale le guillemet : l'attribut court alors jusqu'au
+    // guillemet suivant, le commentaire n'en est plus un, et les cinquante balises qu'il cachait à la mesure sont bel et bien ouvertes.
+    const inAttribute = `<a title="&Mu"G><!-- "> ${"<div>".repeat(50)} -->`;
+    // Même effet dans le texte : « &Zcy », un caractère de contrôle, et le chevron du commentaire est avalé.
+    const inText = `<p>&Zcy${String.fromCharCode(0x1a)}<!-- G ${"<div>".repeat(50)} -->`;
+    for (const trap of [inAttribute, inText]) {
+      const $ = loadMarkup(trap);
+      expect($("div").length, trap.slice(0, 20)).toBe(0);
+      expect($("*").length).toBe(1);
+      // Le garde-fou a mesuré exactement ce que l'analyseur a produit
+      expect(measureMarkup(trap)).toEqual({ depth: 1, nodes: 2 });
+    }
+    expect(loadMarkup(inAttribute)("a").attr("title")).toBe("&Mu");
+    const $ = loadMarkup(`<p>&gt></p><i title='&apos'>x</i><b title="&Mu";">y</b>`);
     expect($("p").text()).toBe(">>");
     expect($("i").attr("title")).toBe("&apos");
-    expect($("*").length).toBe(3);
+    expect($("b").attr("title")).toBe("&Mu");
   });
 });
 

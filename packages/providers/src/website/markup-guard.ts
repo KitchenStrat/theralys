@@ -17,9 +17,16 @@
  * de l'analyseur (`Tokenizer`) et de sa gestion de la pile (`Parser`),
  * particularités comprises : une réécriture « dans l'esprit » sous-estimerait
  * certains documents et laisserait passer un piège (ainsi `<tmp>`, que
- * l'analyseur traite comme une balise à contenu brut). Les entités (`&amp;`)
- * sont ignorées : elles ne consomment jamais de caractère de structure. Un
- * test compare la mesure à ce que produit réellement l'analyseur sur des
+ * l'analyseur traite comme une balise à contenu brut).
+ *
+ * Elle ne vaut que pour une analyse faite SANS décodage des entités
+ * (`decodeEntities: false`, voir dom.ts) : le décodeur d'entités de
+ * l'analyseur peut avaler des caractères de structure sur une suite
+ * fabriquée, et le document serait alors découpé autrement que mesuré ici.
+ * Les entités sont donc ignorées par la mesure comme par l'analyse, et
+ * décodées ensuite (entities.ts).
+ *
+ * Un test compare la mesure à ce que produit réellement l'analyseur sur des
  * milliers de documents tirés au hasard ; il échouera si l'analyseur change
  * de règles, et il faudra alors reporter le changement ici.
  */

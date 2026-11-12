@@ -8,6 +8,7 @@ import {
   MAX_HEADER_BYTES,
   PRODUCTION_POLICY,
   SafeFetchError,
+  URL_MAX,
   buildBlockList,
   checkUrl,
   createFetchAgent,
@@ -148,6 +149,14 @@ describe("checkUrl — politique de production", () => {
     expect(checkUrl(new URL("https://mon-cabinet.fr"), PRODUCTION_POLICY).href).toBe("https://mon-cabinet.fr/");
     // Nom international : forme ASCII (punycode), la seule utilisée ensuite
     expect(checkUrl("https://cabinet-été.fr/", PRODUCTION_POLICY).hostname).toBe("xn--cabinet-t-i4ab.fr");
+  });
+
+  it("adresse démesurée : refusée (2 048 caractères au plus)", () => {
+    expect(URL_MAX).toBe(2_048);
+    const base = "https://www.mon-cabinet.fr/page?x=";
+    expect(codeFor(`${base}${"a".repeat(URL_MAX - base.length)}`)).toBe("ok");
+    expect(codeFor(`${base}${"a".repeat(URL_MAX - base.length + 1)}`)).toBe("bad_url");
+    expect(codeFor(`https://www.mon-cabinet.fr/${"a".repeat(100_000)}`)).toBe("bad_url");
   });
 
   it("autre protocole que https : refusé", () => {
@@ -411,6 +420,8 @@ describe("safeFetch — redirections", () => {
       ["gopher://cabinet-test.fr/", "bad_scheme"],
       ["http://praticien:secret@www.cabinet-test.fr/", "credentials"],
       ["http://[", "bad_redirect"],
+      [`/${"a".repeat(3_000)}`, "bad_redirect"],
+      [`http://www.cabinet-test.fr/${"a".repeat(3_000)}`, "bad_redirect"],
     ];
     for (const [location, code] of cases) {
       const server = await serve(redirecting(location));

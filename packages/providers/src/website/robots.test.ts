@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EXTERNAL_BOT_NAME } from "@theralys/shared";
-import { MAX_CRAWL_DELAY_MS, ROBOTS_ABSENT, ROBOTS_UNAVAILABLE, parseRobots, robotsFromResponse } from "./robots";
+import robotsParser from "robots-parser";
+import { MAX_CRAWL_DELAY_MS, ROBOTS_ABSENT, ROBOTS_MAX_BYTES, ROBOTS_UNAVAILABLE, ROBOTS_URL_MAX, parseRobots, robotsFromResponse } from "./robots";
 
 const ORIGIN = "https://www.mon-cabinet.fr";
 const rules = (body: string) => parseRobots(`${ORIGIN}/robots.txt`, body);
@@ -96,6 +97,107 @@ describe("parseRobots — règles pour notre robot (RFC 9309)", () => {
     const html = "<!DOCTYPE html><html><head><title>Page introuvable</title></head><body><h1>Oups</h1><p>Disallow: tout ? Non.</p></body></html>";
     expect(allowed(html, "/")).toBe(true);
     expect(allowed(html, "/tarifs")).toBe(true);
+  });
+});
+
+describe("parseRobots — tri des groupes avant l'analyse", () => {
+  const US = EXTERNAL_BOT_NAME;
+
+  it("délimitation des groupes : une ligne User-agent qui suit une autre directive ouvre un nouveau groupe", () => {
+    // Une directive inconnue entre deux lignes User-agent sépare deux groupes : la règle ne vaut que pour le second
+    expect(allowed(`User-agent: ${US}\nFoo: bar\nUser-agent: AutreRobot\nDisallow: /\n`, "/")).toBe(true);
+    expect(allowed(`User-agent: AutreRobot\nFoo: bar\nUser-agent: ${US}\nDisallow: /\n`, "/")).toBe(false);
+    // Lignes vides, commentaires et lignes sans « : » ne séparent rien
+    expect(allowed(`User-agent: AutreRobot\n\n# commentaire\nligne sans deux-points\nUser-agent: ${US}\nDisallow: /prive\n`, "/prive")).toBe(false);
+    // Un plan de site entre l'en-tête du groupe et ses règles ne détache pas les règles du groupe
+    const split = `User-agent: *\nSitemap: ${ORIGIN}/sitemap.xml\nDisallow: /prive\n`;
+    expect(allowed(split, "/prive")).toBe(false);
+    expect(rules(split).sitemaps).toEqual([`${ORIGIN}/sitemap.xml`]);
+    // Un groupe à notre nom sans aucune règle ne nous soustrait pas au groupe « * »
+    expect(allowed(`User-agent: ${US}\nUser-agent: AutreRobot\n\nUser-agent: *\nDisallow: /\n`, "/")).toBe(false);
+    expect(allowed(`User-agent: ${US}\nFoo: bar\nUser-agent: *\nDisallow: /\n`, "/")).toBe(false);
+    // … alors qu'un groupe à notre nom avec une règle, même vide, le fait
+    expect(allowed(`User-agent: ${US}\nDisallow:\n\nUser-agent: *\nDisallow: /\n`, "/")).toBe(true);
+    // Numéro de version, casse et espaces du nom
+    expect(allowed(`user-agent:   ${US.toUpperCase()}/2.1  \ndisallow: /\n`, "/")).toBe(false);
+    expect(allowed(`User-agent: ${US}Bis\nDisallow: /\n`, "/")).toBe(true);
+  });
+
+  it("même verdict que l'analyseur seul, sur des fichiers tirés au hasard", () => {
+    // Générateur pseudo-aléatoire déterministe (mulberry32)
+    const random = (seed: number): (() => number) => {
+      let a = seed >>> 0;
+      return () => {
+        a = (a + 0x6d2b79f5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const LINES = [`User-agent: ${US}`, `user-agent: ${US.toLowerCase()}/1.0`, "User-agent: *", "User-agent: AutreRobot", "User-agent:", "Disallow: /", "Disallow: /prive", "Disallow: /a*b$", "Disallow:", "Allow: /prive/ok", "Allow: /", "Crawl-delay: 1", "Crawl-delay: x", `Sitemap: ${ORIGIN}/s.xml`, "Host: www.mon-cabinet.fr", "Foo: bar", "", "# commentaire", "sans deux-points", ": sans clé", "Disallow: /c # fin", "  Allow :  /d  "];
+    const PATHS = ["/", "/prive", "/prive/ok", "/a-xx-b", "/c", "/d", "/autre"];
+    for (let seed = 1; seed <= 1_500; seed++) {
+      const next = random(seed);
+      const body = Array.from({ length: 1 + Math.floor(next() * 14) }, () => LINES[Math.floor(next() * LINES.length)]!).join(next() < 0.5 ? "\n" : "\r\n");
+      const reference = robotsParser(`${ORIGIN}/robots.txt`, body);
+      const ours = rules(body);
+      for (const path of PATHS) expect(ours.isAllowed(`${ORIGIN}${path}`), `graine ${seed}, ${path}\n${body}`).toBe(reference.isAllowed(`${ORIGIN}${path}`, US) === true);
+      const delay = reference.getCrawlDelay(US);
+      expect(ours.crawlDelayMs, `graine ${seed}\n${body}`).toBe(typeof delay === "number" && Number.isFinite(delay) && delay > 0 ? Math.min(Math.round(delay * 1000), MAX_CRAWL_DELAY_MS) : null);
+      expect(ours.sitemaps).toEqual(reference.getSitemaps().slice(0, 10));
+    }
+  });
+});
+
+describe("parseRobots — fichiers piégés", () => {
+  const timed = <T>(run: () => T): { value: T; ms: number } => {
+    const start = performance.now();
+    const value = run();
+    return { value, ms: performance.now() - start };
+  };
+
+  it("des milliers de robots nommés devant des milliers de règles : analysé sans multiplier les règles", () => {
+    // L'analyseur seul recopierait chaque règle pour chaque ligne User-agent du groupe : des centaines de millions d'objets
+    const body = `${"User-agent: *\n".repeat(12_000)}${"User-agent: Robot\n".repeat(4_000)}${"Disallow: /prive\n".repeat(12_000)}`;
+    expect(body.length).toBeLessThan(ROBOTS_MAX_BYTES);
+    const { value, ms } = timed(() => rules(body));
+    expect(value.isAllowed(`${ORIGIN}/prive/x`)).toBe(false);
+    expect(value.isAllowed(`${ORIGIN}/public`)).toBe(true);
+    expect(ms).toBeLessThan(3_000);
+  });
+
+  it("règles truffées de jokers et adresse démesurée : l'adresse est tenue pour interdite, sans calcul", () => {
+    const pattern = `Disallow: /${"*a".repeat(250_000)}\n`;
+    const { value, ms } = timed(() => {
+      const parsed = rules(`User-agent: *\n${pattern}`);
+      return { short: parsed.isAllowed(`${ORIGIN}/${"a".repeat(150)}`), long: parsed.isAllowed(`${ORIGIN}/${"a".repeat(1_500)}`), huge: parsed.isAllowed(`${ORIGIN}/${"a".repeat(60_000)}`) };
+    });
+    // Un demi-mégaoctet de règles : seules les adresses courtes y sont confrontées
+    expect(value).toEqual({ short: true, long: false, huge: false });
+    expect(ms).toBeLessThan(5_000);
+  });
+
+  it("fichier ordinaire : toute adresse jusqu'à 2 048 caractères est confrontée aux règles ; au-delà, interdite", () => {
+    expect(ROBOTS_URL_MAX).toBe(2_048);
+    const parsed = rules("User-agent: *\nDisallow: /prive\n");
+    const base = `${ORIGIN}/page?x=`;
+    expect(parsed.isAllowed(`${base}${"a".repeat(ROBOTS_URL_MAX - base.length)}`)).toBe(true);
+    expect(parsed.isAllowed(`${base}${"a".repeat(ROBOTS_URL_MAX - base.length + 1)}`)).toBe(false);
+    expect(rules("").isAllowed(`${base}${"a".repeat(5_000)}`)).toBe(false);
+  });
+
+  it("fichier fait de lignes sans fin, de plans de site ou de bruit : analysé en un passage", () => {
+    const bodies = [`User-agent: *\nDisallow: /${"x".repeat(500_000)}`, `Sitemap: ${ORIGIN}/s.xml\n`.repeat(12_000), `${":".repeat(500_000)}`, "\r".repeat(500_000), `User-agent: *\n${"Disallow: /a\nAllow: /a\n".repeat(20_000)}`];
+    for (const body of bodies) {
+      const { value, ms } = timed(() => {
+        const parsed = rules(body);
+        return { parsed, allowed: parsed.isAllowed(`${ORIGIN}/a/b/c`) };
+      });
+      expect(typeof value.allowed).toBe("boolean");
+      expect(value.parsed.sitemaps.length).toBeLessThanOrEqual(10);
+      expect(ms, body.slice(0, 30)).toBeLessThan(3_000);
+    }
   });
 });
 

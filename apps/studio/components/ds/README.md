@@ -4,7 +4,7 @@ Le socle du nouveau studio : jetons, composants, coquille. Il est livré en **la
 
 - Jetons et CSS : `app/globals.css`, à partir du bandeau « DESIGN SYSTEM DU STUDIO ».
 - Composants : ce dossier. Un seul import : `import { … } from "@/components/ds"`.
-- Démonstration, hors production (404 en production) : `/apercu-design` (fondations et composants), `/apercu-design/accueil` (futur Accueil), `/apercu-design/section/<clé>` (page de section type, pour les huit autres sections).
+- Démonstration, hors production (404 en production) : `/apercu-design` (fondations et composants), `/apercu-design/accueil` (futur Accueil), `/apercu-design/section/<clé>` (page de section type, pour les huit autres sections). Ces deux compositions sont les modèles à recopier : `app/apercu-design/accueil/page.tsx` et `app/apercu-design/_components/section-body.tsx`.
 
 La direction : **un ciel vivant**. Une famille de bleus voisins, du turquoise au violet, un dégradé par section, un seul accent chaud. Lisible d'abord (corps en 16 px, AA partout), du relief sans verre dépoli, un mouvement bref qui répond à un geste.
 
@@ -150,7 +150,9 @@ Calculés (WCAG 2.x, après arrondi 8 bits ; pour un dégradé, le point le plus
 | Infobulle de graphique : blanc sur `ink-900` | 17,80 | 4,5 |
 | Séries `chart-1…4`, `chart-muted` sur blanc | 4,78 · 4,12 · 5,19 · 3,45 · 3,34 | 3 |
 
-Mesurés sur le rendu (chaque texte visible des pages d'aperçu contre les pixels peints dessous, à 390, 768, 1 024 et 1 440 px) : **__MESURE_TEXTES__**. Bandeaux à décor, au pixel le plus défavorable de toute la zone de contenu : **__MESURE_BANDEAUX__**.
+Mesurés sur le rendu (chaque texte visible des pages d'aperçu contre les pixels réellement peints dessous, à 390, 768, 1 024 et 1 440 px) : **4 571 textes, aucun sous son seuil**. Minimums rencontrés : 4,72:1 en texte courant (`ink-500` sur blanc), 4,78:1 pour du blanc sur un aplat, 3,32:1 en grand texte (blanc ≥ 24 px sur dégradé vif). Hors mesure : 16 textes de contrôles inactifs et 40 textes en dégradé (mot-marque, `text-ds-gradient`), dont les arrêts figurent au tableau.
+
+Bandeaux à décor, au pixel le plus défavorable de toute la zone de contenu — pas seulement sous le texte en place : bandeau doux (40 mesures) : encre de section 7,09 · `ink-700` 6,23 · `ink-600` 4,56 · `brand-800` 4,96 ; bandeau profond (8 mesures) : blanc 4,76 ; en-tête `vivid` de l'Académie : encre 7,97.
 
 ## 6. Mise en page
 

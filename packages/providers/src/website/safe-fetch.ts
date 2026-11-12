@@ -261,6 +261,13 @@ export function isPublicAddress(address: string): boolean {
 
 // ─── Adresse web ─────────────────────────────────────────────────────────────
 
+/**
+ * Longueur d'adresse admise. Une adresse de page tient en quelques dizaines
+ * de caractères ; une adresse de dizaines de kilo-octets (une redirection
+ * peut en porter une) ne sert qu'à faire travailler ce qui la lit.
+ */
+export const URL_MAX = 2_048;
+
 /** Suffixes de noms locaux ou réservés : jamais un site public. */
 const RESERVED_SUFFIXES = [".localhost", ".local", ".internal", ".intranet", ".lan", ".home", ".corp", ".arpa", ".onion", ".test", ".invalid", ".example", ".alt"];
 
@@ -274,9 +281,11 @@ const RESERVED_SUFFIXES = [".localhost", ".local", ".internal", ".intranet", ".l
 export function checkUrl(input: string | URL, policy: NetworkPolicy): URL {
   let url: URL;
   try {
-    url = new URL(String(input));
-  } catch {
-    throw new SafeFetchError("bad_url", "adresse illisible");
+    const text = String(input);
+    if (text.length > URL_MAX) throw new RangeError("adresse trop longue");
+    url = new URL(text);
+  } catch (err) {
+    throw new SafeFetchError("bad_url", err instanceof RangeError ? "adresse trop longue" : "adresse illisible");
   }
   if (!policy.protocols.includes(url.protocol)) throw new SafeFetchError("bad_scheme", "protocole refusé");
   if (url.username !== "" || url.password !== "") throw new SafeFetchError("credentials", "identifiants dans l'adresse");
@@ -469,9 +478,10 @@ export async function safeFetch(input: string | URL, options: SafeFetchOptions):
     if (redirects >= maxRedirects) throw new SafeFetchError("too_many_redirects", "trop de redirections");
     let next: URL;
     try {
+      if (hop.redirect.length > URL_MAX) throw new RangeError("adresse trop longue");
       next = new URL(hop.redirect, url);
     } catch {
-      throw new SafeFetchError("bad_redirect", "redirection illisible");
+      throw new SafeFetchError("bad_redirect", "redirection illisible ou vers une adresse démesurée");
     }
     next = checkUrl(next, options.policy);
     if (url.protocol === "https:" && next.protocol !== "https:") throw new SafeFetchError("bad_scheme", "redirection vers une adresse non chiffrée");

@@ -3,12 +3,14 @@
  * ou d'une valeur d'attribut. Module pur.
  *
  * Pourquoi un décodeur à nous, alors que l'analyseur HTML sait décoder : son
- * décodeur (entities 7) peut, sur une suite fabriquée (`&Mu";`), avaler des
- * caractères de structure — un guillemet, un chevron. L'analyseur ne découpe
- * alors plus le document comme le prévoit le garde-fou (markup-guard), qui
- * cesse d'être fiable. Les documents sont donc analysés sans décodage, puis
- * décodés ici, texte par texte : une erreur de décodage ne peut plus changer
- * que les caractères d'un texte, jamais la structure du document.
+ * décodeur (entities 7.0.1) avale, sur une suite fabriquée, des caractères de
+ * structure — `<a title="&Mu"G>` y perd son guillemet fermant, et la suite du
+ * document est prise pour la valeur de l'attribut. L'analyseur ne découpe
+ * alors plus le document comme le prévoit le garde-fou (markup-guard), et
+ * celui-ci laisserait passer un document piégé. Les documents sont donc
+ * analysés sans décodage, puis décodés ici, texte par texte : une erreur de
+ * décodage ne peut plus changer que les caractères d'un texte, jamais la
+ * structure du document.
  *
  * Couverture : entités numériques (avec la table Windows-1252 pour 128 à
  * 159, comme les navigateurs), entités nommées de HTML 4 (Latin-1, grec,

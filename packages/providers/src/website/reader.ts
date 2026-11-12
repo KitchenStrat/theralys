@@ -17,6 +17,10 @@
  * ou changer d'identité quand le site le refuse (défi anti-robots, 403, 429)
  * — dans ce cas la lecture s'arrête et le praticien colle son texte.
  *
+ * Une page n'est analysée que si elle est d'une complexité raisonnable (voir
+ * dom.ts) : une page d'accueil fabriquée pour épuiser l'analyseur donne
+ * l'échec `too_large`, une page intérieure est simplement écartée.
+ *
  * `read()` ne lève jamais : tout échec est une issue `ok: false`.
  */
 

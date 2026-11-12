@@ -364,7 +364,8 @@ export function extractPage($: CheerioAPI, pageUrl: string): ExtractedPage {
       },
       (node) => dropped.has(node),
     );
-    return Math.max(0, total - 1);
+    // Une espace sépare deux textes : la dernière, comptée en trop, est retirée — sauf si la borne a arrêté le compte
+    return total > cap ? total : Math.max(0, total - 1);
   };
 
   // 1. Ce qui n'est pas du texte de page, puis ce qu'un visiteur ne voit pas

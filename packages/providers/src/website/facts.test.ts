@@ -451,6 +451,76 @@ describe("balises, outil de création, couleur", () => {
   });
 });
 
+describe("pages piégées", () => {
+  const timed = <T>(run: () => T): { value: T; ms: number } => {
+    const start = performance.now();
+    const value = run();
+    return { value, ms: performance.now() - start };
+  };
+
+  it("données structurées démesurées : listes, entités et blocs lus en nombre borné", () => {
+    const business = { "@type": "LocalBusiness", name: "Cabinet", telephone: Array.from({ length: 2_000 }, (_, i) => `04 72 00 ${String(i % 100).padStart(2, "0")} ${String(Math.floor(i / 100)).padStart(2, "0")}`), sameAs: Array.from({ length: 2_000 }, (_, i) => `https://www.instagram.com/compte${i}/`) };
+    const crowd = { "@graph": Array.from({ length: 200 }, (_, i) => ({ "@type": "Person", name: `Personne ${i}` })) };
+    const html = `${jsonLd(business)}${jsonLd(crowd).repeat(100)}`;
+    const { value, ms } = timed(() => {
+      const page = pageFacts(html);
+      return { page, site: mergeSiteFacts([page]) };
+    });
+    expect(value.page.entities).toHaveLength(20);
+    expect(value.page.entities[0]!.phones).toHaveLength(50);
+    expect(value.page.entities[0]!.links).toHaveLength(50);
+    expect(value.site.phones).toHaveLength(3);
+    expect(value.site.social).toEqual({ instagram: "https://www.instagram.com/compte0" });
+    expect(ms).toBeLessThan(3_000);
+  });
+
+  it("valeurs démesurées dans les données structurées : ignorées ou bornées, sans attente", () => {
+    const long = "x".repeat(10_000);
+    const html = jsonLd({ "@type": "LocalBusiness", name: `Cabinet ${long}`, description: `<p>${"mot ".repeat(5_000)}</p>`, telephone: long, email: `${long}@a.fr`, sameAs: [`https://www.instagram.com/${long}`], openingHours: [`Mo ${" ".repeat(10_000)}9:00-12:00`, `${"Mo,".repeat(5_000)}Tu 9:00-12:00`], address: { streetAddress: long, postalCode: "69006", addressLocality: "Lyon" } });
+    expect(html.length).toBeLessThan(200_000);
+    const { value, ms } = timed(() => siteFacts(html));
+    expect(value.name!.length).toBeLessThanOrEqual(120);
+    expect(value.description!.length).toBeLessThanOrEqual(320);
+    expect(value.phones).toEqual([]);
+    expect(value.emails).toEqual([]);
+    expect(value.social).toEqual({});
+    expect(value.address!.length).toBeLessThanOrEqual(160);
+    expect(value.hours).toEqual([{ label: "Lundi et mardi", value: "9h – 12h" }]);
+    expect(ms).toBeLessThan(3_000);
+  });
+
+  it("bloc JSON-LD de plus de 200 000 caractères : ignoré ; au-delà de cinquante blocs : ignorés", () => {
+    const big = jsonLd({ "@type": "LocalBusiness", name: "Trop gros", description: "x".repeat(200_000) });
+    expect(readJsonLd(loadDocument(big), SITE).entities).toEqual([]);
+    const blocks = `${jsonLd({ "@type": "WebPage" }).repeat(50)}${jsonLd({ "@type": "LocalBusiness", name: "Cinquante et unième" })}`;
+    expect(readJsonLd(loadDocument(blocks), SITE).entities).toEqual([]);
+    expect(readJsonLd(loadDocument(blocks.replace(jsonLd({ "@type": "WebPage" }), "")), SITE).entities).toHaveLength(1);
+  });
+
+  it("des dizaines de milliers de liens : examinés en nombre borné, les coordonnées du début de page sont relevées", () => {
+    const head = `<a href="tel:+33472000000">Appeler</a><a href="mailto:contact@mon-cabinet.fr">Écrire</a><a href="https://www.doctolib.fr/osteopathe/lyon/test">Prendre rendez-vous</a>`;
+    const flood = `<a href="https://www.instagram.com/p/abc/">Publication</a><a href="tel:+33400000000">x</a><a href="https://calendly.com/x/y">rdv</a>`.repeat(20_000);
+    const late = `<a href="mailto:tard@mon-cabinet.fr">Trop tard</a>`;
+    const { value, ms } = timed(() => pageFacts(`${head}${flood}${late}`));
+    expect(value.phones.length).toBeLessThanOrEqual(50);
+    expect(value.phones[0]).toBe("04 72 00 00 00");
+    expect(value.emails).toEqual(["contact@mon-cabinet.fr"]);
+    expect(value.bookingLinks.length).toBeLessThanOrEqual(50);
+    expect(value.bookingLinks[0]).toEqual({ url: "https://www.doctolib.fr/osteopathe/lyon/test", platform: "doctolib" });
+    expect(ms).toBeLessThan(5_000);
+  });
+
+  it("adresses démesurées, cadres sans nombre, scripts en ligne sans fin : ignorés ou bornés", () => {
+    const html = `<a href="tel:${"0".repeat(5_000)}">x</a><a href="https://www.doctolib.fr/${"a".repeat(5_000)}">Prendre rendez-vous</a><a href="https://www.doctolib.fr/osteopathe/lyon/test" aria-label="${"mot ".repeat(50_000)}"></a>${`<iframe src="https://calendly.com/cabinet/seance"></iframe>`.repeat(5_000)}<script>${"var a = 1; ".repeat(200_000)}tarteaucitron.init()</script>`;
+    const { value, ms } = timed(() => pageFacts(html));
+    expect(value.phones).toEqual([]);
+    expect(value.bookingLinks.map((link) => link.platform)).toEqual(["doctolib", ...Array.from({ length: 49 }, () => "calendly")]);
+    // Le bandeau de consentement n'est cherché qu'au début d'un script en ligne
+    expect(value.tags.consentBanner).toBeUndefined();
+    expect(ms).toBeLessThan(5_000);
+  });
+});
+
 describe("mergeSiteFacts", () => {
   it("aucune page, ou pages sans rien : les faits vides du contrat", () => {
     expect(mergeSiteFacts([])).toEqual(EMPTY_EXTERNAL_FACTS);
