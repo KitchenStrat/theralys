@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
-import { Button, Card } from "@theralys/ui";
+import { RotateCcw, TriangleAlert } from "lucide-react";
+import { Button, Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 
 /**
  * Frontière d'erreur du segment : une lecture ou un rendu qui échoue affiche
@@ -14,18 +14,27 @@ export default function MetaAdsError({ error, reset }: { error: Error & { digest
   }, [error]);
 
   return (
-    <div>
-      <h1 className="text-4xl font-bold">Meta Ads</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Cette section est momentanément indisponible.</p>
-        <p className="mt-1 text-sm">Réessayez dans un instant : votre analyse, vos annonces et votre plan de campagne ne sont pas perdus.</p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={reset}>Réessayer</Button>
-          <Link href="/" className="text-sm font-medium text-primary-600 hover:underline">
-            Retour à l&apos;accueil
-          </Link>
-        </div>
+    <Stagger className="space-y-6" data-ds-section="meta-ads">
+      <PageHeader section="meta-ads" />
+      <Card padding="none">
+        <EmptyState
+          as="h2"
+          icon={TriangleAlert}
+          title="Cette section est momentanément indisponible."
+          action={
+            <Button onClick={reset} icon={<RotateCcw size={18} aria-hidden />}>
+              Réessayer
+            </Button>
+          }
+          secondary={
+            <LinkButton href="/" variant="quiet">
+              Retour à l&apos;accueil
+            </LinkButton>
+          }
+        >
+          Réessayez dans un instant : votre analyse, vos annonces et votre plan de campagne ne sont pas perdus.
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

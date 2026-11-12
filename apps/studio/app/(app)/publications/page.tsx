@@ -1,8 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
+import { ArrowRight, Lock } from "lucide-react";
 import { blogArticles, editorialCalendarEntries, getDb, hasBlog, PLANS } from "@theralys/db";
 import { loadExternalReference } from "@theralys/jobs";
 import { activeExternalSite, externalSpecialties, isHostedSiteHidden } from "@theralys/shared";
-import { Card } from "@theralys/ui";
+import { Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { parseMonthParam } from "@/lib/calendar";
 import { getBlogSettings, getEditablePages, getMonthItems, getSite, type CalendarItem } from "@/lib/data";
@@ -20,17 +21,25 @@ export default async function PublicationsPage({ searchParams }: Props) {
 
   if (!hasBlog(site.plan)) {
     return (
-      <div>
-        <h1 className="text-4xl font-bold">Publications</h1>
-        <Card className="mt-6 p-10 text-center text-ink-500">
-          <p className="font-medium text-ink-700">Le blog automatisé n&apos;est pas inclus dans votre formule</p>
-          <p className="mt-1 text-sm">
-            Passez à la formule <strong>Scale</strong> (208 articles/an, 6 pages de
-            spécialités dédiées, suivi et recherche de mots-clés, Académie, contenus réseaux
-            sociaux) pour activer votre blog SEO.
-          </p>
+      <Stagger className="space-y-6">
+        <PageHeader section="publications" />
+        <Card padding="none">
+          <EmptyState
+            icon={Lock}
+            as="h2"
+            title="Le blog automatisé n'est pas inclus dans votre formule"
+            action={
+              <LinkButton href="/compte" iconRight={<ArrowRight size={18} aria-hidden />}>
+                Voir ma formule
+              </LinkButton>
+            }
+          >
+            Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> (208 articles/an, 6 pages de
+            spécialités dédiées, suivi et recherche de mots-clés, Académie, contenus réseaux sociaux) pour activer votre blog
+            et son référencement sur Google.
+          </EmptyState>
         </Card>
-      </div>
+      </Stagger>
     );
   }
 

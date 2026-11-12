@@ -1,6 +1,9 @@
 "use client";
 
+import { clsx } from "clsx";
+import { ExternalLink, Info, TriangleAlert } from "lucide-react";
 import { useState } from "react";
+import { InlineSuccess } from "@/components/ds";
 import { articleCopy, articleImageFileName, type ArticleCopy } from "@/lib/social/article-copy";
 
 /**
@@ -127,26 +130,42 @@ export function useArticleExport(loadSource: () => Promise<{ title: string; cont
   return { copy, copying, copied, saveImage, savingImage, notice };
 }
 
-const NOTICE_TONES: Record<ArticleExportNotice["tone"], string> = {
-  success: "text-success-500",
-  info: "text-ink-700",
-  error: "text-danger-500",
-};
-
-/** Résultat de la dernière action (copie, téléchargement), annoncé aux lecteurs d'écran. */
+/**
+ * Résultat de la dernière action (copie, téléchargement), annoncé aux lecteurs
+ * d'écran : une réussite surgit avec sa coche, une information ou un refus
+ * portent leur pictogramme — jamais la couleur seule.
+ */
 export function ArticleExportMessage({ notice, className }: { notice: ArticleExportNotice | null; className?: string }) {
   if (!notice) return null;
+  if (notice.tone === "success") {
+    return <InlineSuccess className={className}>{notice.text}</InlineSuccess>;
+  }
+  const error = notice.tone === "error";
+  const Icon = error ? TriangleAlert : Info;
   return (
-    <p className={`text-sm ${NOTICE_TONES[notice.tone]} ${className ?? ""}`} role={notice.tone === "error" ? "alert" : "status"}>
-      {notice.text}
-      {notice.openImageUrl ? (
-        <>
-          {" "}
-          <a href={notice.openImageUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:underline">
-            Ouvrir l&apos;image ↗<span className="sr-only"> (nouvel onglet)</span>
-          </a>
-        </>
-      ) : null}
+    <p
+      className={clsx("flex items-start gap-2 text-ds-body", error ? "font-medium text-ds-danger-700" : "text-ds-ink-700", className)}
+      role={error ? "alert" : "status"}
+    >
+      <Icon size={18} aria-hidden className="mt-0.5 shrink-0" />
+      <span className="min-w-0">
+        {notice.text}
+        {notice.openImageUrl ? (
+          <>
+            {" "}
+            <a
+              href={notice.openImageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded font-semibold text-ds-brand-700 underline underline-offset-2 ds-focus"
+            >
+              Ouvrir l&apos;image
+              <ExternalLink size={14} aria-hidden />
+              <span className="sr-only"> (nouvel onglet)</span>
+            </a>
+          </>
+        ) : null}
+      </span>
     </p>
   );
 }

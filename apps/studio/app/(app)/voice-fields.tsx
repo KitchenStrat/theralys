@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { clsx } from "clsx";
+import { Check, Quote } from "lucide-react";
 import { Segmented } from "@theralys/ui";
 
 /**
@@ -69,11 +70,18 @@ export function voicePreview(v: VoiceValue): string {
   }
 }
 
-/** Ligne d'un assistant : libellé à gauche, contrôle à droite. */
+/**
+ * Sélecteur à segments partagé, à la taille du design system : segments de
+ * 36 px, 44 px au doigt, et la couleur de la section pour le segment actif.
+ */
+export const SEGMENTED_SIZE =
+  "max-w-full [&>button]:min-h-9 [&>button]:aria-pressed:font-semibold [&>button]:aria-pressed:text-ds-section-ink pointer-coarse:[&>button]:min-h-11";
+
+/** Ligne d'un assistant : libellé à gauche, contrôle à droite (dessous quand la place manque). */
 export function WizardRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-ink-700">{label}</p>
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <p className="text-ds-body font-medium text-ds-ink-800">{label}</p>
       {children}
     </div>
   );
@@ -82,12 +90,15 @@ export function WizardRow({ label, children }: { label: string; children: ReactN
 /**
  * Contrôles de la voix (« Qui écrit ? », « Accord », « Vos lecteurs », « Ton »)
  * et encart « Aperçu » — rendus dans le conteneur `space-y-5` de l'appelant.
+ * Les couleurs suivent la section englobante (blog ou réseaux sociaux).
  */
 export function VoiceFields({ value, onChange }: { value: VoiceValue; onChange: (value: VoiceValue) => void }) {
   return (
     <>
       <WizardRow label="Qui écrit ?">
         <Segmented
+          aria-label="Qui écrit ?"
+          className={SEGMENTED_SIZE}
           options={[
             { value: "nous", label: "Nous" },
             { value: "je", label: "Je" },
@@ -99,6 +110,8 @@ export function VoiceFields({ value, onChange }: { value: VoiceValue; onChange: 
       </WizardRow>
       <WizardRow label="Accord">
         <Segmented
+          aria-label="Accord"
+          className={SEGMENTED_SIZE}
           options={[
             { value: "feminin", label: "Féminin" },
             { value: "masculin", label: "Masculin" },
@@ -109,6 +122,8 @@ export function VoiceFields({ value, onChange }: { value: VoiceValue; onChange: 
       </WizardRow>
       <WizardRow label="Vos lecteurs">
         <Segmented
+          aria-label="Vos lecteurs"
+          className={SEGMENTED_SIZE}
           options={[
             { value: "vous", label: "Vous" },
             { value: "tu", label: "Tu" },
@@ -118,28 +133,36 @@ export function VoiceFields({ value, onChange }: { value: VoiceValue; onChange: 
         />
       </WizardRow>
       <WizardRow label="Ton">
-        <div className="flex flex-wrap justify-end gap-2">
-          {TONES.map((tone) => (
-            <button
-              key={tone.value}
-              type="button"
-              aria-pressed={value.voiceTone === tone.value}
-              onClick={() => onChange({ ...value, voiceTone: tone.value })}
-              className={clsx(
-                "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                value.voiceTone === tone.value
-                  ? "border-primary-400 bg-primary-50 font-medium text-primary-600"
-                  : "border-cream-300 text-ink-700 hover:border-ink-300",
-              )}
-            >
-              {tone.label}
-            </button>
-          ))}
+        <div role="group" aria-label="Ton" className="flex flex-wrap gap-2 sm:justify-end">
+          {TONES.map((tone) => {
+            const selected = value.voiceTone === tone.value;
+            return (
+              <button
+                key={tone.value}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => onChange({ ...value, voiceTone: tone.value })}
+                className={clsx(
+                  "inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 text-ds-body ds-focus ds-press pointer-coarse:min-h-11",
+                  selected
+                    ? "bg-ds-section-tint-2 font-semibold text-ds-section-ink inset-ring-2 inset-ring-ds-section-accent"
+                    : "bg-white font-medium text-ds-ink-700 inset-ring inset-ring-ds-ink-300 hover:bg-ds-ink-50",
+                )}
+              >
+                {/* Le ton choisi porte une coche : jamais la couleur seule */}
+                {selected ? <Check size={16} strokeWidth={2.5} aria-hidden className="text-ds-section-accent ds-pop" /> : null}
+                {tone.label}
+              </button>
+            );
+          })}
         </div>
       </WizardRow>
-      <div className="rounded-2xl bg-primary-50/60 p-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-primary-600">Aperçu</p>
-        <p className="mt-2 font-serif italic leading-relaxed text-ink-900">{voicePreview(value)}</p>
+      <div className="rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70 sm:p-5">
+        <p className="flex items-center gap-2 text-ds-meta font-semibold text-ds-section-accent">
+          <Quote size={16} aria-hidden />
+          Aperçu
+        </p>
+        <p className="mt-2 text-base/7 text-ds-ink-900 text-pretty">{voicePreview(value)}</p>
       </div>
     </>
   );

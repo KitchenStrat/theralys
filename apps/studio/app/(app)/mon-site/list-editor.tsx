@@ -1,7 +1,8 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
-import { Button } from "@theralys/ui";
+import { Button } from "@/components/ds";
 import { frenchSpacing } from "@/lib/external-site/format";
 
 let uidCount = 0;
@@ -78,16 +79,16 @@ export function ListEditor<T extends { uid: string }>({
 
   return (
     <fieldset className="min-w-0" disabled={disabled}>
-      <legend className="text-sm font-semibold text-ink-900">{legend}</legend>
-      {hint ? <p className="mt-0.5 text-xs text-ink-500">{frenchSpacing(hint)}</p> : null}
+      <legend className="text-ds-body font-semibold text-ds-ink-900">{legend}</legend>
+      {hint ? <p className="mt-0.5 text-ds-meta text-ds-ink-600">{frenchSpacing(hint)}</p> : null}
       {items.length > 0 ? (
         <ul className="mt-2 space-y-3">
           {items.map((item, index) => (
             <li key={item.uid}>
-              <div role="group" aria-label={itemLabel(index)} className="rounded-2xl border border-cream-300 bg-cream-50 p-3 sm:p-4">
+              <div role="group" aria-label={itemLabel(index)} className="rounded-ds-md bg-white p-3 ring-1 ring-ds-ink-200 sm:p-4">
                 {showItemLabel ? (
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <p aria-hidden className="text-sm font-semibold text-ink-900">
+                    <p aria-hidden className="text-ds-body font-semibold text-ds-section-ink">
                       {itemLabel(index)}
                     </p>
                     <RemoveButton label={itemLabel(index)} onClick={() => remove(item.uid)} />
@@ -104,13 +105,13 @@ export function ListEditor<T extends { uid: string }>({
           ))}
         </ul>
       ) : null}
-      <div className="mt-2">
+      <div className="mt-3">
         {items.length < max ? (
-          <Button id={addId} type="button" variant="secondary" size="sm" onClick={add}>
-            <span aria-hidden>+</span> {addLabel}
+          <Button id={addId} type="button" variant="secondary" size="sm" icon={<Plus size={16} aria-hidden />} onClick={add}>
+            {addLabel}
           </Button>
         ) : (
-          <p className="text-xs text-ink-700">{maxLabel}</p>
+          <p className="text-ds-meta text-ds-ink-600">{maxLabel}</p>
         )}
       </div>
     </fieldset>
@@ -119,7 +120,7 @@ export function ListEditor<T extends { uid: string }>({
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={onClick} aria-label={`Retirer : ${label}`}>
+    <Button type="button" variant="quiet" size="sm" icon={<Trash2 size={16} aria-hidden />} onClick={onClick} aria-label={`Retirer : ${label}`}>
       Retirer
     </Button>
   );

@@ -3,15 +3,42 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode, type RefObject } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, FieldHint, Input, Modal, Spinner } from "@theralys/ui";
+import {
+  CalendarCheck,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Copy,
+  Download,
+  ExternalLink,
+  FileArchive,
+  FileText,
+  MousePointerClick,
+  Phone,
+  RotateCw,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { FieldHint, Input, Modal } from "@theralys/ui";
 import { GOOGLE_POST_CTAS, GOOGLE_POST_IMAGE, GOOGLE_POST_INSTRUCTIONS_MAX } from "@theralys/shared";
+import { AiBadge, Badge, Button, InlineSuccess, Skeleton, buttonClasses } from "@/components/ds";
 import { formatDayFr } from "@/lib/calendar";
 import { isRelativeAddress } from "@/lib/google/post-cta";
 import type { GoogleCalendarItem } from "@/lib/google/posts";
 import { archiveGooglePost, markGooglePostPublished, regenerateGooglePost, rescheduleGooglePost } from "./actions";
+import { PostStatusPill, type PostStatusKind } from "./post-status";
+import { ErrorNote } from "./shared";
 
 /** Page de gestion de la fiche (publication d'un post) : lien fixe, jamais une URL venue des données. */
 const GOOGLE_BUSINESS_URL = "https://business.google.com/";
+
+const CTA_ICON: Partial<Record<GoogleCalendarItem["cta"]["type"], LucideIcon>> = {
+  BOOK: CalendarCheck,
+  CALL: Phone,
+  LEARN_MORE: MousePointerClick,
+};
 
 function ctaLabel(type: GoogleCalendarItem["cta"]["type"]): string {
   return GOOGLE_POST_CTAS.find((c) => c.id === type)?.label ?? type;
@@ -105,13 +132,13 @@ function PostModalBody({
   // (`deliveredGoogleCta`) ; par précaution, une adresse relative — chemin du studio d'un ancien post — n'est jamais affichée
   const ctaAddress = isRelativeAddress(item.cta.url) ? null : item.cta.url;
 
-  const statusBadge = published
-    ? { tone: "success" as const, label: `Publié le ${formatDayFr(item.publishedAt ?? item.date)}` }
+  const statusBadge: { kind: PostStatusKind; label: string } = published
+    ? { kind: "publie", label: `Publié le ${formatDayFr(item.publishedAt ?? item.date)}` }
     : item.downloadedAt
-      ? { tone: "info" as const, label: `Téléchargé le ${formatDayFr(item.downloadedAt)}` }
+      ? { kind: "telecharge", label: `Téléchargé le ${formatDayFr(item.downloadedAt)}` }
       : downloaded
-        ? { tone: "info" as const, label: "Téléchargé" }
-        : { tone: "info" as const, label: `À publier — prévu le ${formatDayFr(item.date)}` };
+        ? { kind: "telecharge", label: "Téléchargé" }
+        : { kind: "a-publier", label: `À publier — prévu le ${formatDayFr(item.date)}` };
 
   async function copy(text: string, what: "text" | "alt") {
     try {
@@ -142,28 +169,45 @@ function PostModalBody({
   }
 
   const download = (kind: "image" | "text" | "all") => `/api/google-posts/${item.id}/download?kind=${kind}`;
+  const CtaIcon = CTA_ICON[item.cta.type];
+  const rowButton =
+    "flex min-h-11 w-full items-center justify-between gap-3 rounded-ds-sm text-left text-ds-body font-semibold ds-focus";
 
   return (
     <Modal open onClose={onClose} title={item.topic} size="xl">
-      <div className="-mx-6 -mt-5 bg-gradient-to-br from-primary-50 via-cream-50 to-primary-100 px-6 py-4">
+      <div className="-mx-6 -mt-5 bg-ds-section-soft px-6 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
-          {item.source === "request" ? <Badge tone="primary">✦ Sur mesure</Badge> : null}
+          <PostStatusPill kind={statusBadge.kind}>{statusBadge.label}</PostStatusPill>
+          {item.source === "request" ? (
+            <Badge tone="neutral" icon={Sparkles}>
+              Sur mesure
+            </Badge>
+          ) : null}
         </div>
-        <p className="mt-2 text-sm text-ink-500">Post Google · visuel 4:3 ({GOOGLE_POST_IMAGE.w}×{GOOGLE_POST_IMAGE.h}) · texte et bouton d&apos;action</p>
-        {item.note ? <p className="mt-3 rounded-xl bg-warning-100 px-4 py-3 text-sm text-ink-900">{item.note}</p> : null}
+        <p className="mt-2 text-ds-body text-ds-ink-700">
+          Post Google · visuel 4:3 ({GOOGLE_POST_IMAGE.w}×{GOOGLE_POST_IMAGE.h}) · texte et bouton d&apos;action
+        </p>
+        {item.note ? (
+          <p className="mt-3 flex items-start gap-2.5 rounded-ds-sm bg-ds-warning-100 px-4 py-3 text-ds-body text-ds-warning-900">
+            <TriangleAlert size={18} aria-hidden className="mt-0.5 shrink-0" />
+            <span className="min-w-0">{item.note}</span>
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
         <section aria-label="Aperçu" className="min-w-0">
-          <div className="relative aspect-[4/3] w-full max-w-[600px] overflow-hidden rounded-2xl bg-cream-200">
+          <div className="relative aspect-[4/3] w-full max-w-[600px] overflow-hidden rounded-ds-md bg-ds-ink-100 ring-1 ring-ds-ink-200">
             {loading ? (
-              <div className="absolute inset-0 flex animate-pulse items-center justify-center text-sm text-ink-500">Préparation du visuel…</div>
+              <div className="absolute inset-0">
+                <Skeleton className="absolute inset-0 rounded-none" />
+                <span className="absolute inset-0 grid place-items-center text-ds-body font-medium text-ds-ink-700">Préparation du visuel…</span>
+              </div>
             ) : null}
             {failed ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-sm text-ink-700">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center text-ds-body text-ds-ink-700">
                 Le visuel n&apos;a pas pu être généré.
-                <Button variant="secondary" size="sm" onClick={() => setRetry((r) => r + 1)}>
+                <Button variant="secondary" size="sm" icon={<RotateCw size={16} aria-hidden />} onClick={() => setRetry((r) => r + 1)}>
                   Réessayer
                 </Button>
               </div>
@@ -176,25 +220,32 @@ function PostModalBody({
                 height={405}
                 onLoad={() => setLoadedUrl(previewUrl)}
                 onError={() => setErrorUrl(previewUrl)}
-                className={clsx("h-full w-full object-cover transition-opacity", loading ? "opacity-0" : "opacity-100")}
+                className={clsx("relative h-full w-full object-cover transition-opacity duration-ds-base", loading ? "opacity-0" : "opacity-100")}
               />
             )}
           </div>
 
-          <div className="mt-4">
-            <h3 className="text-sm font-semibold text-ink-900">Bouton d&apos;action</h3>
+          <div className="mt-5">
+            <h3 className="text-ds-body font-semibold text-ds-ink-900">Bouton d&apos;action</h3>
             {item.cta.type === "NONE" ? (
-              <p className="mt-1 text-sm text-ink-700">Sans bouton.</p>
+              <p className="mt-1.5 text-ds-body text-ds-ink-700">Sans bouton.</p>
             ) : (
-              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-700">
-                <Badge tone="primary">{ctaLabel(item.cta.type)}</Badge>
+              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-ds-body text-ds-ink-700">
+                <Badge tone="section" icon={CtaIcon}>
+                  {ctaLabel(item.cta.type)}
+                </Badge>
                 {ctaHref ? (
-                  <a href={ctaHref} target="_blank" rel="noopener noreferrer" className="truncate text-primary-600 hover:underline">
+                  <a
+                    href={ctaHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 truncate rounded-ds-sm font-medium text-ds-brand-700 underline ds-focus"
+                  >
                     {ctaHref}
                     <span className="sr-only"> (nouvel onglet)</span>
                   </a>
                 ) : (
-                  <span className="truncate">{ctaAddress ?? "—"}</span>
+                  <span className="min-w-0 truncate">{ctaAddress ?? "—"}</span>
                 )}
               </p>
             )}
@@ -202,24 +253,30 @@ function PostModalBody({
           </div>
         </section>
 
-        <section aria-label="Prêt à publier" className="min-w-0 space-y-5">
+        <section aria-label="Prêt à publier" className="min-w-0 space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-ink-900">Texte du post</h3>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <h3 className="text-ds-body font-semibold text-ds-ink-900">Texte du post</h3>
+              <AiBadge />
+            </div>
             <textarea
               readOnly
               value={item.summary}
               aria-label="Texte du post"
-              className="mt-1 h-40 w-full resize-none rounded-xl border border-cream-300 bg-cream-50 px-3 py-2 text-sm text-ink-900"
+              className="mt-2 block h-44 w-full resize-none rounded-ds-sm border border-ds-ink-450 bg-ds-ink-50 px-3.5 py-3 text-base text-ds-ink-900"
             />
-            <Button className="mt-2 w-full" variant="secondary" onClick={() => copy(item.summary, "text")}>
-              {copied === "text" ? "✓ Texte copié !" : "Copier le texte"}
-            </Button>
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button variant="secondary" icon={<Copy size={18} aria-hidden />} onClick={() => copy(item.summary, "text")}>
+                Copier le texte
+              </Button>
+              {copied === "text" ? <InlineSuccess>Texte copié !</InlineSuccess> : null}
+            </div>
             {!published ? (
-              <div className="mt-4 rounded-2xl border border-cream-200 bg-cream-50 p-3">
-                <label htmlFor={`instructions-${item.id}`} className="block text-sm font-semibold text-ink-900">
+              <div className="mt-4 rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200">
+                <label htmlFor={`instructions-${item.id}`} className="block text-ds-body font-semibold text-ds-ink-900">
                   Instructions pour régénérer ce post
                 </label>
-                <p className="mt-0.5 text-xs text-ink-500">
+                <p className="mt-1 text-ds-meta text-ds-ink-600">
                   Facultatif : ce que vous voulez changer (angle, ton, longueur, élément à mentionner). Le sujet, la date et la couleur sont conservés.
                 </p>
                 <textarea
@@ -230,70 +287,75 @@ function PostModalBody({
                   rows={3}
                   disabled={regenerating}
                   placeholder="Ex. : mentionnez la respiration holotropique, un ton plus direct, texte plus court."
-                  className="mt-2 w-full rounded-xl border border-cream-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="mt-2.5 block w-full rounded-ds-sm border border-ds-ink-450 bg-white px-3.5 py-2.5 text-ds-body text-ds-ink-900 placeholder:text-ds-ink-600"
                 />
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-ink-500">
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-ds-meta text-ds-ink-600">
                     {instructions.length} / {GOOGLE_POST_INSTRUCTIONS_MAX} · {remaining} régénération{remaining > 1 ? "s" : ""} restante{remaining > 1 ? "s" : ""} ce mois-ci
                   </p>
                   <Button
                     variant="secondary"
                     size="sm"
                     onClick={regenerate}
-                    disabled={regenerating || pending || remaining <= 0}
+                    loading={regenerating}
+                    disabled={pending || remaining <= 0}
                     title={remaining <= 0 ? "Quota mensuel de régénérations atteint" : undefined}
+                    icon={<Sparkles size={16} aria-hidden />}
                   >
-                    {regenerating ? (
-                      <>
-                        <Spinner /> Rédaction…
-                      </>
-                    ) : (
-                      "✦ Régénérer"
-                    )}
+                    {regenerating ? "Rédaction…" : "Régénérer"}
                   </Button>
                 </div>
-                {regenMessage ? (
-                  <p className="mt-2 text-sm text-success-500" role="status">
-                    {regenMessage}
-                  </p>
-                ) : null}
+                {regenMessage ? <InlineSuccess className="mt-3">{regenMessage}</InlineSuccess> : null}
               </div>
             ) : null}
-            <details className="mt-2 text-sm">
-              <summary className="cursor-pointer text-ink-700">Texte alternatif du visuel</summary>
-              <p className="mt-1 rounded-xl bg-cream-50 px-3 py-2 text-ink-700">{item.altText}</p>
-              <Button variant="ghost" size="sm" className="mt-1" onClick={() => copy(item.altText, "alt")}>
-                {copied === "alt" ? "✓ Copié !" : "Copier"}
-              </Button>
+            <details className="group/alt mt-3 text-ds-body">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-ds-sm font-medium text-ds-brand-800 ds-focus [&::-webkit-details-marker]:hidden">
+                <ChevronRight size={16} aria-hidden className="shrink-0 group-open/alt:rotate-90" />
+                Texte alternatif du visuel
+              </summary>
+              <p className="mt-1 rounded-ds-sm bg-ds-ink-50 px-3.5 py-2.5 text-ds-ink-700 ring-1 ring-ds-ink-200">{item.altText}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Button variant="quiet" size="sm" icon={<Copy size={16} aria-hidden />} onClick={() => copy(item.altText, "alt")}>
+                  Copier
+                </Button>
+                {copied === "alt" ? <InlineSuccess>Copié !</InlineSuccess> : null}
+              </div>
             </details>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-ink-900">Télécharger</h3>
-            <div className="mt-2 flex flex-col gap-2">
-              <DownloadLink href={download("image")} onClick={onDownload}>
+            <h3 className="text-ds-body font-semibold text-ds-ink-900">Télécharger</h3>
+            <div className="mt-2.5 flex flex-col gap-2">
+              <DownloadLink href={download("image")} onClick={onDownload} icon={<Download size={18} aria-hidden />}>
                 Télécharger le visuel (JPG 4:3)
               </DownloadLink>
               <div className="flex flex-wrap gap-2">
-                <DownloadLink href={download("text")} onClick={onDownload} variant="ghost">
+                <DownloadLink href={download("text")} onClick={onDownload} variant="quiet" icon={<FileText size={16} aria-hidden />}>
                   Texte (.txt)
                 </DownloadLink>
-                <DownloadLink href={download("all")} onClick={onDownload} variant="ghost">
+                <DownloadLink href={download("all")} onClick={onDownload} variant="quiet" icon={<FileArchive size={16} aria-hidden />}>
                   Tout en un ZIP
                 </DownloadLink>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl bg-primary-50/60 p-4 text-sm text-ink-700">
-            <h3 className="font-semibold text-ink-900">Publier sur Google</h3>
-            <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <div className="rounded-ds-md bg-ds-section-tint p-4 text-ds-body text-ds-ink-700 ring-1 ring-ds-section-line/60">
+            <h3 className="font-semibold text-ds-section-ink">Publier sur Google</h3>
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 marker:font-semibold marker:text-ds-section-accent">
               <li>
                 Ouvrez votre fiche :{" "}
-                <a href={GOOGLE_BUSINESS_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-primary-600 hover:underline">
-                  business.google.com ↗<span className="sr-only"> (nouvel onglet)</span>
+                <a
+                  href={GOOGLE_BUSINESS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-ds-sm font-semibold text-ds-brand-700 underline ds-focus"
+                >
+                  business.google.com
+                  <ExternalLink size={14} aria-hidden />
+                  <span className="sr-only"> (nouvel onglet)</span>
                 </a>{" "}
-                → « Ajouter une nouveauté »
+                puis « Ajouter une nouveauté »
               </li>
               <li>Ajoutez le visuel téléchargé, collez le texte et choisissez le bouton d&apos;action</li>
               <li>Publiez, puis revenez ici marquer le post comme publié</li>
@@ -302,7 +364,7 @@ function PostModalBody({
 
           {item.sourceRefs.length > 0 ? (
             <div>
-              <h3 className="text-sm font-semibold text-ink-900">D&apos;après votre site :</h3>
+              <h3 className="text-ds-body font-semibold text-ds-ink-900">D&apos;après votre site :</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {item.sourceRefs.map((ref) => (
                   <SourceBadge key={ref.id} href={ref.href} label={ref.label} />
@@ -311,27 +373,36 @@ function PostModalBody({
             </div>
           ) : null}
 
-          <div ref={actionsRef} className="divide-y divide-cream-200 border-t border-cream-200">
-            <div className="flex items-center justify-between gap-3 py-3 text-sm">
+          <div ref={actionsRef} className="divide-y divide-ds-ink-200 border-t border-ds-ink-200">
+            <div className="flex items-center justify-between gap-3 py-3 text-ds-body">
               {published ? (
                 <>
-                  <span className="font-medium text-success-500">Publié le {formatDayFr(item.publishedAt ?? item.date)}</span>
-                  <Button variant="ghost" size="sm" disabled={pending} data-focus="unpublish" onClick={() => run(() => markGooglePostPublished(item.id, false))}>
+                  <span className="inline-flex items-center gap-2 font-semibold text-ds-success-700">
+                    <Check size={18} aria-hidden />
+                    Publié le {formatDayFr(item.publishedAt ?? item.date)}
+                  </span>
+                  <Button variant="quiet" size="sm" disabled={pending} data-focus="unpublish" onClick={() => run(() => markGooglePostPublished(item.id, false))}>
                     Annuler
                   </Button>
                 </>
               ) : (
-                <Button className="w-full" disabled={pending} data-focus="publish" onClick={() => run(() => markGooglePostPublished(item.id, true))}>
-                  {pending ? <Spinner className="text-white" /> : null} Marquer comme publié
+                <Button
+                  className="w-full"
+                  loading={pending}
+                  data-focus="publish"
+                  icon={<Check size={18} aria-hidden />}
+                  onClick={() => run(() => markGooglePostPublished(item.id, true))}
+                >
+                  Marquer comme publié
                 </Button>
               )}
             </div>
 
             {!published ? (
-              <div className="py-3 text-sm">
+              <div className="py-1.5 text-ds-body">
                 {dateOpen ? (
                   <form
-                    className="flex flex-wrap items-center gap-2"
+                    className="flex flex-wrap items-center gap-2 py-1.5"
                     onSubmit={(e) => {
                       e.preventDefault();
                       run(
@@ -347,13 +418,13 @@ function PostModalBody({
                       value={newDate}
                       min={todayIso}
                       onChange={(e) => setNewDate(e.target.value)}
-                      className="w-auto"
+                      className="min-h-11 w-auto!"
                       required
                     />
-                    <Button type="submit" size="sm" disabled={pending}>
-                      {pending ? <Spinner className="text-white" /> : null} Enregistrer
+                    <Button type="submit" variant="secondary" size="sm" loading={pending}>
+                      Enregistrer
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setDateOpen(false)}>
+                    <Button type="button" variant="quiet" size="sm" onClick={() => setDateOpen(false)}>
                       Annuler
                     </Button>
                   </form>
@@ -362,22 +433,22 @@ function PostModalBody({
                     type="button"
                     data-focus="change-date"
                     onClick={() => setDateOpen(true)}
-                    className="flex w-full items-center justify-between text-left font-medium hover:text-primary-600"
+                    className={clsx(rowButton, "text-ds-ink-900 hover:text-ds-brand-700")}
                   >
-                    Changer la date <span aria-hidden>📅</span>
+                    Changer la date <CalendarDays size={18} aria-hidden className="shrink-0 text-ds-ink-500" />
                   </button>
                 )}
               </div>
             ) : null}
 
-            <div className="py-3 text-sm">
+            <div className="py-1.5 text-ds-body">
               {confirmRemove ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-ink-700">Retirer ? Il disparaîtra du calendrier.</span>
-                  <Button variant="danger" size="sm" disabled={pending} onClick={() => run(() => archiveGooglePost(item.id), onClose)}>
-                    {pending ? <Spinner className="text-white" /> : null} Retirer
+                <div className="flex flex-wrap items-center gap-2 py-1.5">
+                  <span className="text-ds-ink-700">Retirer ? Il disparaîtra du calendrier.</span>
+                  <Button variant="danger" size="sm" loading={pending} onClick={() => run(() => archiveGooglePost(item.id), onClose)}>
+                    Retirer
                   </Button>
-                  <Button variant="ghost" size="sm" data-focus="keep" onClick={() => setConfirmRemove(false)}>
+                  <Button variant="quiet" size="sm" data-focus="keep" onClick={() => setConfirmRemove(false)}>
                     Garder
                   </Button>
                 </div>
@@ -386,19 +457,15 @@ function PostModalBody({
                   type="button"
                   data-focus="remove"
                   onClick={() => setConfirmRemove(true)}
-                  className="flex w-full items-center justify-between text-left font-medium text-ink-700 hover:text-danger-500"
+                  className={clsx(rowButton, "text-ds-ink-700 hover:text-ds-danger-700")}
                 >
-                  Retirer ce post <span aria-hidden>✕</span>
+                  Retirer ce post <Trash2 size={18} aria-hidden className="shrink-0 text-ds-ink-500" />
                 </button>
               )}
             </div>
           </div>
 
-          {error ? (
-            <p className="text-sm text-danger-500" role="alert">
-              {error}
-            </p>
-          ) : null}
+          {error ? <ErrorNote>{error}</ErrorNote> : null}
         </section>
       </div>
     </Modal>
@@ -415,26 +482,56 @@ function useFocusAfterToggle<T>(value: T, root: RefObject<HTMLElement | null>, t
   }, [value, root, targetFor]);
 }
 
-const LINK_VARIANTS = {
-  primary: "bg-primary-500 text-white hover:bg-primary-600 shadow-sm px-4 py-2",
-  ghost: "text-ink-700 hover:bg-cream-200 px-3 py-1.5",
-} as const;
-
-function DownloadLink({ href, onClick, variant = "primary", children }: { href: string; onClick: () => void; variant?: keyof typeof LINK_VARIANTS; children: ReactNode }) {
+/**
+ * Lien de téléchargement à l'apparence d'un bouton du design system. Un vrai
+ * `<a download>` (pas `LinkButton`, qui passerait par le routeur) : l'adresse
+ * rend un fichier, pas une page.
+ */
+function DownloadLink({
+  href,
+  onClick,
+  variant = "secondary",
+  icon,
+  children,
+}: {
+  href: string;
+  onClick: () => void;
+  variant?: "secondary" | "quiet";
+  icon: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <a href={href} download onClick={onClick} className={clsx("inline-flex items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors", LINK_VARIANTS[variant])}>
-      {children}
+    <a
+      href={href}
+      download
+      onClick={onClick}
+      className={buttonClasses(
+        variant,
+        variant === "secondary" ? "md" : "sm",
+        variant === "secondary" ? "w-full hover:bg-ds-brand-50" : "hover:bg-ds-brand-100",
+      )}
+    >
+      {icon}
+      <span>{children}</span>
     </a>
   );
 }
 
 function SourceBadge({ href, label }: { href?: string; label: string }) {
   const safe = safeHref(href ?? null);
-  if (!safe) return <Badge tone="neutral">{label}</Badge>;
+  if (!safe) {
+    return (
+      <Badge tone="neutral" className="max-w-full">
+        <span className="min-w-0 truncate">{label}</span>
+      </Badge>
+    );
+  }
   return (
-    <a href={safe} target="_blank" rel="noopener noreferrer">
-      <Badge tone="neutral" className="hover:bg-cream-300">
-        {label} ↗<span className="sr-only"> (nouvel onglet)</span>
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="max-w-full min-w-0 rounded-full ds-focus">
+      <Badge tone="neutral" className="max-w-full hover:bg-ds-ink-200">
+        <span className="min-w-0 truncate">{label}</span>
+        <ExternalLink size={13} aria-hidden className="shrink-0" />
+        <span className="sr-only"> (nouvel onglet)</span>
       </Badge>
     </a>
   );

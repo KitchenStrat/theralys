@@ -1,10 +1,25 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, Card, Spinner } from "@theralys/ui";
+import {
+  ArrowRight,
+  CircleCheck,
+  Hourglass,
+  ListChecks,
+  MousePointerClick,
+  OctagonAlert,
+  PhoneCall,
+  Play,
+  RefreshCw,
+  ScanSearch,
+  Search,
+  SlidersHorizontal,
+  Wallet,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import {
   GOOGLE_ADS_ANALYSES_PER_MONTH,
   GOOGLE_ADS_CORE_MAX,
@@ -18,34 +33,78 @@ import {
   type GoogleAdsVerdict,
 } from "@theralys/shared";
 import type { GoogleBudget } from "@theralys/jobs";
+import {
+  AnimatedNumber,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  IconBadge,
+  InlineSuccess,
+  KpiTile,
+  LinkButton,
+  ProgressBar,
+  ProgressRing,
+  StepProgress,
+  useStepTimeline,
+  type BadgeTone,
+  type TimedStep,
+} from "@/components/ds";
 import { formatDayFr } from "@/lib/calendar";
 import { adsCheckLink } from "@/lib/google-ads/checks";
 import type { GoogleAdsAnalysisView, GoogleAdsUsage } from "@/lib/google-ads/data";
 import { MON_SITE_HREF } from "@/lib/google-ads/external-tracking";
 import { launchAdsAnalysis } from "./actions";
 import type { AdsSiteInfo } from "./ads-client";
+import { CheckBadge, CheckMark, Figure, FigureList, FinePrint, Notice, TEXT_LINK } from "./ads-ui";
 import type { AdsTab } from "./tabs";
 
 const usd = (value: number) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
 const eur = (value: number, digits = 0) =>
   `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 const num = (value: number) => value.toLocaleString("fr-FR");
+const TWO_DECIMALS: Intl.NumberFormatOptions = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 
 const ANALYSIS_FAILED_FALLBACK = "L'analyse a échoué : réessayez dans un instant.";
 /** Analyse lancée ailleurs (autre onglet, autre session) : la page se relit à cet intervalle jusqu'à la fin */
 const RUNNING_REFRESH_MS = 10_000;
 
-/** Couleurs et libellés du verdict — jetons du thème (`packages/ui/src/styles.css`). */
-const VERDICT: Record<GoogleAdsVerdict, { color: string; tone: "success" | "warning" | "danger"; label: string }> = {
-  go: { color: "var(--color-success-500)", tone: "success", label: "Feu vert" },
-  go_with_prerequisites: { color: "var(--color-warning-500)", tone: "warning", label: "Feu vert après réglages" },
-  wait: { color: "var(--color-danger-500)", tone: "danger", label: "Pas encore" },
+/**
+ * Ce que fait l'analyse, dans l'ordre, avec la durée habituelle de chaque
+ * étape : le service ne remonte pas son avancement, l'attente le montre donc
+ * d'après ces durées (la dernière étape ne se termine qu'à la vraie fin).
+ */
+const ANALYSIS_STEPS: readonly TimedStep[] = [
+  {
+    label: "Recherche des mots-clés",
+    seconds: 12,
+    details: [
+      "Idées de recherches autour de votre métier et de votre ville",
+      "Recherches par mois et coût par clic de chaque expression",
+      "Tri : les expressions hors sujet sont écartées",
+    ],
+  },
+  { label: "Prévision de trafic", seconds: 10, details: ["Clics et coût attendus sur vos expressions principales"] },
+  { label: "Diagnostic", seconds: 6, details: ["Fiche Google, prise de rendez-vous, téléphone, avis", "Calcul du budget conseillé"] },
+  {
+    label: "Plan d'action",
+    seconds: 32,
+    details: ["Structure de la campagne", "Groupes d'annonces et mots-clés", "Rédaction des annonces", "Jalons à 7, 30, 60 et 90 jours"],
+  },
+];
+
+/** Libellé, ton et pictogramme du verdict : jamais la couleur seule. */
+const VERDICT: Record<GoogleAdsVerdict, { tone: BadgeTone; icon: LucideIcon; label: string }> = {
+  go: { tone: "success", icon: CircleCheck, label: "Feu vert" },
+  go_with_prerequisites: { tone: "warning", icon: SlidersHorizontal, label: "Feu vert après réglages" },
+  wait: { tone: "danger", icon: Hourglass, label: "Pas encore" },
 };
 
-const STATUS: Record<GoogleAdsReadinessStatus, { glyph: string; label: string; className: string }> = {
-  ok: { glyph: "✓", label: "OK", className: "bg-success-100 text-success-500" },
-  todo: { glyph: "!", label: "À faire", className: "bg-warning-100 text-warning-500" },
-  unknown: { glyph: "–", label: "Inconnu", className: "bg-cream-200 text-ink-500" },
+/** Les trois états d'un point de préparation, dits en un mot à côté de leur pictogramme. */
+const STATUS_LABEL: Record<GoogleAdsReadinessStatus, string> = {
+  ok: "Acquis",
+  todo: "À régler",
+  unknown: "À vérifier",
 };
 
 const STATUS_ORDER: Record<GoogleAdsReadinessStatus, number> = { todo: 0, unknown: 1, ok: 2 };
@@ -81,12 +140,29 @@ export function DiagnosticTab({
   const canLaunch = usage.analysesRemaining > 0 && budget.remainingUsd >= analysisCostUsd;
   const diagnostic = current?.diagnostic ?? null;
 
-  // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin
+  /*
+   * Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin.
+   *
+   * Un seul minuteur à la fois : il n'est posé que lorsque `runningElsewhere` devient vrai, et retiré dès
+   * qu'il redevient faux (analyse terminée ou en erreur, ou lancement repris ici) comme au démontage de
+   * l'onglet. Il ne dépend de rien d'autre : la relecture passe par une référence, si bien qu'un `router`
+   * ou une fonction qui changeraient d'identité d'un rendu à l'autre ne le relancent jamais (le compte à
+   * rebours de 10 s n'est pas remis à zéro par un rendu). Un tic est sauté tant que la relecture précédente
+   * n'est pas appliquée : sur un serveur lent, les relectures ne s'empilent pas non plus dans la file du routeur.
+   */
+  const [refreshing, startRefresh] = useTransition();
+  const refreshRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    refreshRef.current = () => {
+      if (refreshing) return;
+      startRefresh(() => router.refresh());
+    };
+  }, [refreshing, router]);
   useEffect(() => {
     if (!runningElsewhere) return;
-    const timer = setInterval(() => router.refresh(), RUNNING_REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [runningElsewhere, router]);
+    const timer = window.setInterval(() => refreshRef.current(), RUNNING_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [runningElsewhere]);
 
   function launch() {
     setError(null);
@@ -110,172 +186,335 @@ export function DiagnosticTab({
 
   const subject = [site.profession, site.city].filter(Boolean).join(" à ") || "votre cabinet";
 
+  const launcher = (
+    <AnalysisCard
+      subject={subject}
+      current={current}
+      latest={latest}
+      usage={usage}
+      budget={budget}
+      analysisCostUsd={analysisCostUsd}
+      pending={pending}
+      runningElsewhere={runningElsewhere}
+      running={running}
+      canLaunch={canLaunch}
+      error={error}
+      message={message}
+      onLaunch={launch}
+      onSelectTab={onSelectTab}
+    />
+  );
+
+  if (!diagnostic) {
+    return (
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Pitch subject={subject} />
+        {/* Sur petit écran, le bouton passe avant l'explication : l'action reste à portée de pouce */}
+        <div className="max-xl:order-first">{launcher}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-xl font-semibold">Analyse de la demande</h2>
-            <p className="mt-1 text-sm text-ink-500">
-              Harmony interroge les données Google Ads (recherches mensuelles, coûts par clic, concurrence) pour{" "}
-              <strong className="text-ink-700">{subject}</strong>, puis vérifie que votre cabinet est prêt à investir.
-            </p>
-            {current ? <p className="mt-1 text-xs text-ink-500">Dernière analyse le {formatDayFr(current.createdAt, "day")}.</p> : null}
-          </div>
-          <Button onClick={launch} disabled={running || !canLaunch} title={!canLaunch ? "Quota ou budget du mois atteint" : undefined}>
-            {running ? (
-              <>
-                <Spinner className="text-white" /> Analyse en cours…
-              </>
-            ) : current ? (
-              "Actualiser l'analyse"
-            ) : (
-              "Lancer l'analyse"
-            )}
-          </Button>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <VerdictCard diagnostic={diagnostic} hasPlan={Boolean(current?.plan)} onSelectTab={onSelectTab} />
+        {launcher}
+      </div>
+      <KeyFigures demand={diagnostic.demand} budget={diagnostic.budget} />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <ChecksCard checks={diagnostic.checks} externalSite={diagnostic.externalSite === true} onSelectTab={onSelectTab} />
+        <div className="space-y-6">
+          <DemandCard demand={diagnostic.demand} onSelectTab={onSelectTab} />
+          <BudgetCard budget={diagnostic.budget} forecast={current?.forecast ?? null} />
         </div>
-        <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">
-          Analyses restantes ce mois-ci :{" "}
-          <strong className="text-ink-700">
-            {usage.analysesRemaining} sur {GOOGLE_ADS_ANALYSES_PER_MONTH}
-          </strong>{" "}
-          · Budget restant : <strong className="text-ink-700">{usd(budget.remainingUsd)}</strong> sur {usd(budget.budgetUsd)} · Une analyse ≈{" "}
-          {usd(analysisCostUsd)}, comprise dans votre formule.
-        </p>
-        {/* Région vivante permanente : les messages d'attente y apparaissent et sont annoncés */}
-        <div aria-live="polite">
-          {pending ? (
-            <p className="mt-3 flex items-center gap-2 text-sm text-ink-700">
-              <Spinner /> Analyse en cours, jusqu&apos;à une minute : recherche des mots-clés, prévision, diagnostic puis plan d&apos;action…
-            </p>
-          ) : null}
-          {runningElsewhere ? (
-            <p className="mt-3 flex items-center gap-2 text-sm text-ink-700">
-              <Spinner /> Une analyse est en cours : les résultats s&apos;afficheront dans un instant.
-            </p>
-          ) : null}
-        </div>
-        {latest?.status === "error" && !error ? (
-          <p className="mt-3 text-sm text-danger-500" role="alert">
-            {latest.error?.trim() ? `La dernière analyse a échoué : ${latest.error.trim()}` : ANALYSIS_FAILED_FALLBACK}
-            {current ? " — les résultats affichés sont ceux de l'analyse précédente." : ""}
-          </p>
-        ) : null}
-        {current && !current.plan && !pending ? (
-          <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">
-            {current.error?.trim() ? current.error.trim() : "Le plan d'action n'a pas pu être généré."} Mots-clés et diagnostic sont là :{" "}
-            <button type="button" onClick={() => onSelectTab("plan")} className="font-medium text-primary-700 underline">
-              générer le plan d&apos;action →
-            </button>
-          </p>
-        ) : null}
-        {error ? (
-          <p className="mt-3 text-sm text-danger-500" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p className="mt-3 text-sm text-success-500" role="status">
-            {message}
-          </p>
-        ) : null}
-      </Card>
-
-      {!diagnostic ? (
-        <EmptyState subject={subject} />
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <div className="space-y-6">
-            <VerdictCard diagnostic={diagnostic} />
-            <DemandCard demand={diagnostic.demand} onSelectTab={onSelectTab} />
-            <BudgetCard budget={diagnostic.budget} forecast={current?.forecast ?? null} />
-          </div>
-          <ChecksCard checks={diagnostic.checks} externalSite={diagnostic.externalSite === true} onSelectTab={onSelectTab} />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function EmptyState({ subject }: { subject: string }) {
+/**
+ * Lancement de l'analyse : ce qu'elle fait et pour qui, le bouton, ce qu'il
+ * reste du quota du mois, puis l'attente (étapes nommées) et l'issue.
+ */
+function AnalysisCard({
+  subject,
+  current,
+  latest,
+  usage,
+  budget,
+  analysisCostUsd,
+  pending,
+  runningElsewhere,
+  running,
+  canLaunch,
+  error,
+  message,
+  onLaunch,
+  onSelectTab,
+}: {
+  subject: string;
+  current: GoogleAdsAnalysisView | null;
+  latest: GoogleAdsAnalysisView | null;
+  usage: GoogleAdsUsage;
+  budget: GoogleBudget;
+  analysisCostUsd: number;
+  pending: boolean;
+  runningElsewhere: boolean;
+  running: boolean;
+  canLaunch: boolean;
+  error: string | null;
+  message: string | null;
+  onLaunch: () => void;
+  onSelectTab: (tab: AdsTab) => void;
+}) {
+  // « Analyse terminée : diagnostic, mots-clés et plan d'action mis à jour. » → le fait en gras, sa précision dessous
+  const [messageHead, ...messageRest] = (message ?? "").split(" : ");
+  const messageDetail = messageRest.join(" : ");
   return (
-    <Card className="p-8">
-      <h2 className="text-xl font-semibold">Google Ads est-il pertinent pour {subject} ?</h2>
-      <p className="mt-2 text-sm text-ink-700">
-        Avant de dépenser le moindre euro, l&apos;analyse répond à trois questions :
-      </p>
-      <ol className="mt-4 grid gap-4 sm:grid-cols-3">
-        {[
-          ["Y a-t-il une demande ?", "Combien de personnes cherchent votre métier dans votre ville chaque mois, et à quel coût par clic."],
-          ["Êtes-vous prêt ?", "Fiche Google reliée, prise de rendez-vous, téléphone, avis : ce qui transforme un clic en patient."],
-          ["Quel budget ?", "Un budget mensuel conseillé, avec les clics et les prises de contact attendus."],
-        ].map(([title, text], i) => (
-          <li key={title} className="rounded-2xl bg-cream-50 p-4">
-            <p className="font-semibold text-ink-900">
-              <span className="mr-2 text-primary-600">{i + 1}.</span>
-              {title}
-            </p>
-            <p className="mt-1 text-sm text-ink-700">{text}</p>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-4 text-sm text-ink-500">
-        Vous obtenez aussi vos mots-clés à cibler et un plan d&apos;action complet (campagne, annonces, budget). Rien n&apos;est
-        publié à votre place : vous paramétrez votre compte Google Ads en suivant le tuto de l&apos;onglet Paramétrage &amp; suivi.
-      </p>
-    </Card>
-  );
-}
+    <Card className="flex flex-col">
+      <CardHeader
+        icon={ScanSearch}
+        title="Analyse de la demande"
+        description={
+          <>
+            Harmony interroge les données Google Ads (recherches mensuelles, coûts par clic, concurrence) pour{" "}
+            <strong className="font-semibold text-ds-ink-800">{subject}</strong>, puis vérifie que votre cabinet est prêt à investir.
+          </>
+        }
+      />
 
-function VerdictCard({ diagnostic }: { diagnostic: GoogleAdsDiagnostic }) {
-  const verdict = VERDICT[diagnostic.verdict];
-  return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold">Verdict</h2>
-      <div className="mt-4 flex flex-wrap items-center gap-6">
-        <ScoreGauge score={diagnostic.score} color={verdict.color} />
-        <div className="min-w-0 flex-1">
-          <Badge tone={verdict.tone}>{verdict.label}</Badge>
-          <p className="mt-2 text-lg font-semibold text-ink-900">{diagnostic.headline}</p>
-        </div>
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button
+          onClick={onLaunch}
+          loading={running}
+          disabled={!canLaunch}
+          title={!canLaunch ? "Quota ou budget du mois atteint" : undefined}
+          icon={current ? <RefreshCw size={18} aria-hidden /> : <Play size={18} aria-hidden />}
+        >
+          {running ? "Analyse en cours…" : current ? "Actualiser l'analyse" : "Lancer l'analyse"}
+        </Button>
+        {current ? <p className="text-ds-body text-ds-ink-600">Dernière analyse le {formatDayFr(current.createdAt, "day")}.</p> : null}
       </div>
-      <p className="mt-4 text-sm text-ink-700">{diagnostic.summary}</p>
-      {diagnostic.prerequisites.length > 0 ? (
-        <p className="mt-3 text-xs text-ink-500">
-          À régler : {diagnostic.prerequisites.join(" · ")}
-        </p>
+
+      {/* Région vivante permanente : l'attente y est annoncée une fois ; le bloc d'étapes annonce ensuite chaque changement */}
+      <p aria-live="polite" className="sr-only">
+        {pending
+          ? "Analyse en cours, jusqu'à une minute : recherche des mots-clés, prévision, diagnostic puis plan d'action…"
+          : runningElsewhere
+            ? "Une analyse est en cours : les résultats s'afficheront dans un instant."
+            : ""}
+      </p>
+
+      {running ? (
+        <AnalysisProgress launchedHere={pending} subject={subject} />
+      ) : (
+        // `mt-auto` : à côté du verdict, la carte s'étire à sa hauteur et le quota reste au pied
+        <div className="mt-auto pt-5">
+          <ProgressBar
+            size="sm"
+            value={usage.analysesRemaining}
+            max={GOOGLE_ADS_ANALYSES_PER_MONTH}
+            label={
+              <>
+                Analyses restantes ce mois-ci :{" "}
+                <strong className="font-semibold text-ds-ink-900">
+                  {usage.analysesRemaining} sur {GOOGLE_ADS_ANALYSES_PER_MONTH}
+                </strong>
+              </>
+            }
+            valueText={`${usage.analysesRemaining} sur ${GOOGLE_ADS_ANALYSES_PER_MONTH}`}
+            hideValueText
+          />
+          <FinePrint className="mt-2.5">
+            Budget restant : <strong className="font-semibold text-ds-ink-800">{usd(budget.remainingUsd)}</strong> sur {usd(budget.budgetUsd)} · Une analyse ≈{" "}
+            {usd(analysisCostUsd)}, comprise dans votre formule.
+          </FinePrint>
+          {!canLaunch ? (
+            <Notice className="mt-3">Quota ou budget du mois atteint : vous pourrez relancer l&apos;analyse le mois prochain.</Notice>
+          ) : null}
+        </div>
+      )}
+
+      {latest?.status === "error" && !error ? (
+        <Notice tone="danger" role="alert" className="mt-4">
+          {latest.error?.trim() ? `La dernière analyse a échoué : ${latest.error.trim()}` : ANALYSIS_FAILED_FALLBACK}
+          {current ? " — les résultats affichés sont ceux de l'analyse précédente." : ""}
+        </Notice>
+      ) : null}
+      {current && !current.plan && !pending ? (
+        <Notice tone="warning" icon={Wrench} className="mt-4">
+          {current.error?.trim() ? current.error.trim() : "Le plan d'action n'a pas pu être généré."} Mots-clés et diagnostic sont là :{" "}
+          <button type="button" onClick={() => onSelectTab("plan")} className={TEXT_LINK}>
+            générer le plan d&apos;action
+          </button>
+        </Notice>
+      ) : null}
+      {error ? (
+        <Notice tone="danger" role="alert" className="mt-4">
+          {error}
+        </Notice>
+      ) : null}
+      {message ? (
+        <InlineSuccess className="mt-4" detail={messageDetail ? `${messageDetail.charAt(0).toUpperCase()}${messageDetail.slice(1)}` : undefined}>
+          {messageDetail ? messageHead : message}
+        </InlineSuccess>
       ) : null}
     </Card>
   );
 }
 
-/** Jauge SVG du score (0..100), sans bibliothèque : cercle de fond + arc coloré selon le verdict. */
-export function ScoreGauge({ score, color }: { score: number; color: string }) {
-  const radius = 52;
-  const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(100, score));
-  const dash = (clamped / 100) * circumference;
+/**
+ * Attente de l'analyse : les étapes défilent d'après leurs durées habituelles.
+ * Lancée d'ici, le temps écoulé est affiché ; lancée ailleurs, on ne sait pas
+ * depuis quand elle tourne — pas de chronomètre inventé, la page se relit seule.
+ */
+function AnalysisProgress({ launchedHere, subject }: { launchedHere: boolean; subject: string }) {
+  const { current, elapsed, inStep } = useStepTimeline(ANALYSIS_STEPS, true);
+  const details = ANALYSIS_STEPS[current]?.details ?? [];
+  const detail = details.length > 0 ? details[Math.min(details.length - 1, Math.floor(inStep / 3))] : undefined;
   return (
-    <svg width="136" height="136" viewBox="0 0 136 136" role="img" aria-label={`Préparation ${clamped} sur 100`} className="shrink-0">
-      <circle cx="68" cy="68" r={radius} fill="none" stroke="var(--color-cream-200)" strokeWidth="12" />
-      <circle
-        cx="68"
-        cy="68"
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth="12"
-        strokeLinecap="round"
-        strokeDasharray={`${dash} ${circumference - dash}`}
-        transform="rotate(-90 68 68)"
+    <div className="mt-5 rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200">
+      <StepProgress
+        icon={Search}
+        title={launchedHere ? `Nous étudions la demande pour ${subject}` : "Une analyse est en cours"}
+        steps={ANALYSIS_STEPS}
+        current={current}
+        estimate="jusqu'à une minute"
+        elapsed={launchedHere ? Math.floor(elapsed) : undefined}
+        detail={detail}
+        hint={
+          launchedHere
+            ? "Vous pouvez changer d'onglet : les résultats s'afficheront ici dès la fin de l'analyse."
+            : "Elle a été lancée depuis un autre onglet ou un autre appareil : les résultats s'afficheront dans un instant, sans rien toucher."
+        }
       />
-      <text x="68" y="64" textAnchor="middle" fontSize="34" fontWeight="700" fill="var(--color-ink-900)">
-        {clamped}
-      </text>
-      <text x="68" y="88" textAnchor="middle" fontSize="13" fontWeight="600" fill="var(--color-ink-500)">
-        / 100
-      </text>
-    </svg>
+    </div>
+  );
+}
+
+/** Avant la première analyse : ce qu'elle apporte, en trois questions. */
+function Pitch({ subject }: { subject: string }) {
+  const questions: { icon: LucideIcon; title: string; text: string }[] = [
+    { icon: Search, title: "Y a-t-il une demande ?", text: "Combien de personnes cherchent votre métier dans votre ville chaque mois, et à quel coût par clic." },
+    { icon: ListChecks, title: "Êtes-vous prêt ?", text: "Fiche Google reliée, prise de rendez-vous, téléphone, avis : ce qui transforme un clic en patient." },
+    { icon: Wallet, title: "Quel budget ?", text: "Un budget mensuel conseillé, avec les clics et les prises de contact attendus." },
+  ];
+  return (
+    <Card variant="tinted" padding="lg">
+      <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">Google Ads est-il pertinent pour {subject} ?</h2>
+      <p className="mt-2 text-base text-ds-ink-700">Avant de dépenser le moindre euro, l&apos;analyse répond à trois questions :</p>
+      <ol className="mt-5 grid gap-3 md:grid-cols-3">
+        {questions.map((question, i) => (
+          <li key={question.title} className="rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5">
+            <IconBadge icon={question.icon} size="sm" />
+            <p className="mt-3 text-base font-semibold text-ds-ink-900">
+              <span className="mr-1.5 text-ds-section-accent ds-tnum">{i + 1}.</span>
+              {question.title}
+            </p>
+            <p className="mt-1 text-ds-body text-ds-ink-700">{question.text}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-5 text-ds-body text-ds-ink-700">
+        Vous obtenez aussi vos mots-clés à cibler et un plan d&apos;action complet (campagne, annonces, budget). Rien n&apos;est publié à
+        votre place : vous paramétrez votre compte Google Ads en suivant le pas-à-pas de l&apos;onglet Paramétrage &amp; suivi.
+      </p>
+    </Card>
+  );
+}
+
+function VerdictCard({ diagnostic, hasPlan, onSelectTab }: { diagnostic: GoogleAdsDiagnostic; hasPlan: boolean; onSelectTab: (tab: AdsTab) => void }) {
+  const verdict = VERDICT[diagnostic.verdict];
+  const score = Math.max(0, Math.min(100, diagnostic.score));
+  return (
+    <Card variant="tinted" className="flex flex-col">
+      <h2 className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7">Verdict</h2>
+      <div className="mt-4 flex flex-wrap items-center gap-x-7 gap-y-5">
+        {/* Anneau à la couleur de la section, sur piste blanche : le verdict, lui, est dit par le badge (pictogramme et mot) */}
+        <ProgressRing value={score} max={100} label={`Préparation ${score} sur 100`} size={152} thickness={14} className="[--ds-ring-track:white]">
+          <span className="block font-ds-display text-5xl/none font-extrabold text-ds-section-ink">
+            <AnimatedNumber value={score} />
+          </span>
+          <span className="mt-1.5 block text-ds-meta font-semibold text-ds-ink-600">sur 100</span>
+        </ProgressRing>
+        <div className="min-w-0 flex-[1_1_17rem]">
+          <Badge tone={verdict.tone} icon={verdict.icon}>
+            {verdict.label}
+          </Badge>
+          <p className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
+        </div>
+      </div>
+      <p className="mt-5 text-base text-ds-ink-700 text-pretty">{diagnostic.summary}</p>
+      {diagnostic.prerequisites.length > 0 || hasPlan ? (
+        // Pied de carte : ce qu'il reste à régler à gauche, la suite (le plan) à droite
+        <div className="mt-auto flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pt-5">
+          {diagnostic.prerequisites.length > 0 ? (
+            <div className="min-w-0 flex-[1_1_16rem]">
+              <p className="text-ds-body font-semibold text-ds-ink-800">À régler :</p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {diagnostic.prerequisites.map((label) => (
+                  <li key={label} className="max-w-full">
+                    {/* `!` : le badge du design system interdit le retour à la ligne ; un libellé long doit pouvoir se replier à 320 px */}
+                    <Badge tone="warning" icon={Wrench} className="max-w-full rounded-ds-sm! text-left whitespace-normal!">
+                      {label}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {hasPlan ? (
+            <Button type="button" variant="secondary" iconRight={<ArrowRight size={18} aria-hidden />} onClick={() => onSelectTab("plan")}>
+              Voir le plan d&apos;action
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Les quatre chiffres qui résument l'analyse : la demande, le coût, le budget, ce qu'on peut en attendre. */
+function KeyFigures({ demand, budget }: { demand: GoogleAdsDemand; budget: GoogleAdsBudgetEstimate }) {
+  const core = Math.min(demand.keywordsCount, GOOGLE_ADS_CORE_MAX);
+  const cpcRange =
+    demand.cpcMinEur === null || demand.cpcMaxEur === null || demand.cpcMinEur === demand.cpcMaxEur
+      ? "estimation Google Ads"
+      : `de ${eur(demand.cpcMinEur, 2)} à ${eur(demand.cpcMaxEur, 2)}`;
+  const hasCpc = demand.cpcMedianEur !== null;
+  return (
+    <section aria-labelledby="ads-key-figures">
+      <h2 id="ads-key-figures" className="sr-only">
+        Les chiffres clés de votre analyse
+      </h2>
+      <div className={clsx("grid grid-cols-2 gap-3 sm:gap-4", hasCpc ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
+        <KpiTile
+          icon={Search}
+          label="Recherches par mois"
+          caption={`${core} expression${core > 1 ? "s" : ""} principale${core > 1 ? "s" : ""}`}
+          value={demand.coreMonthlySearches}
+        />
+        {demand.cpcMedianEur !== null ? (
+          <KpiTile icon={MousePointerClick} label="Coût par clic (médiane)" caption={cpcRange} value={demand.cpcMedianEur} format={TWO_DECIMALS} suffix=" €" />
+        ) : null}
+        <KpiTile
+          icon={Wallet}
+          label="Budget conseillé par mois"
+          caption={`${eur(budget.monthlyMinEur)} au minimum`}
+          value={budget.monthlyRecommendedEur}
+          suffix=" €"
+        />
+        <KpiTile
+          icon={PhoneCall}
+          label="Contacts attendus par mois"
+          caption="rendez-vous, appels, e-mails"
+          prefix={`${num(budget.contactsMin)} – `}
+          value={budget.contactsMax}
+          className={hasCpc ? undefined : "max-xl:col-span-2"}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -286,21 +525,23 @@ function DemandCard({ demand, onSelectTab }: { demand: GoogleAdsDemand; onSelect
       : demand.cpcMinEur === demand.cpcMaxEur
         ? eur(demand.cpcMinEur, 2)
         : `${eur(demand.cpcMinEur, 2)} – ${eur(demand.cpcMaxEur, 2)}`;
+  const core = Math.min(demand.keywordsCount, GOOGLE_ADS_CORE_MAX);
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold">Demande</h2>
-      <p className="mt-1 text-sm text-ink-500">
-        Ce que tapent vos futurs patients sur Google, d&apos;après les données Google Ads.
-      </p>
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <Stat label="Recherches / mois" value={num(demand.coreMonthlySearches)} hint={`sur vos ${Math.min(demand.keywordsCount, GOOGLE_ADS_CORE_MAX)} expressions principales`} />
-        <Stat label="Toutes expressions" value={num(demand.totalMonthlySearches)} hint={`${demand.keywordsCount} mot${demand.keywordsCount > 1 ? "s" : ""}-clé${demand.keywordsCount > 1 ? "s" : ""} retenu${demand.keywordsCount > 1 ? "s" : ""}`} />
-        <Stat label="Coût par clic" value={cpc} hint={demand.cpcMedianEur !== null ? `médiane ${eur(demand.cpcMedianEur, 2)}` : "estimation Google Ads"} />
-        <Stat label="Concurrence" value={demand.competition ? capitalize(demand.competition) : "—"} hint="entre annonceurs, sur le cœur" />
-      </dl>
-      <button type="button" onClick={() => onSelectTab("mots-cles")} className="mt-4 text-sm font-medium text-primary-600 hover:underline">
-        Voir les mots-clés à cibler →
-      </button>
+    <Card>
+      <CardHeader icon={Search} title="Demande" description="Ce que tapent vos futurs patients sur Google, d'après les données Google Ads." />
+      <FigureList className="mt-4">
+        <Figure label="Recherches / mois" value={num(demand.coreMonthlySearches)} hint={`sur vos ${core} expressions principales`} />
+        <Figure
+          label="Toutes expressions"
+          value={num(demand.totalMonthlySearches)}
+          hint={`${demand.keywordsCount} mot${demand.keywordsCount > 1 ? "s" : ""}-clé${demand.keywordsCount > 1 ? "s" : ""} retenu${demand.keywordsCount > 1 ? "s" : ""}`}
+        />
+        <Figure label="Coût par clic" value={cpc} hint={demand.cpcMedianEur !== null ? `médiane ${eur(demand.cpcMedianEur, 2)}` : "estimation Google Ads"} />
+        <Figure label="Concurrence" value={demand.competition ? capitalize(demand.competition) : "—"} hint="entre annonceurs, sur le cœur" />
+      </FigureList>
+      <Button type="button" variant="secondary" size="sm" className="mt-4" iconRight={<ArrowRight size={16} aria-hidden />} onClick={() => onSelectTab("mots-cles")}>
+        Voir les mots-clés à cibler
+      </Button>
     </Card>
   );
 }
@@ -313,19 +554,16 @@ const BASIS_LABEL: Record<GoogleAdsBudgetEstimate["basis"], (cpc: string) => str
 
 function BudgetCard({ budget, forecast }: { budget: GoogleAdsBudgetEstimate; forecast: GoogleAdsForecast | null }) {
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold">Budget</h2>
-      <p className="mt-1 text-sm text-ink-500">Ce qu&apos;il faut prévoir pour que la campagne ait un sens.</p>
-      <dl className="mt-4 grid grid-cols-3 gap-3">
-        <Stat label="Minimum" value={eur(budget.monthlyMinEur)} hint="par mois" />
-        <Stat label="Conseillé" value={eur(budget.monthlyRecommendedEur)} hint="par mois" highlight />
-        <Stat label="Par jour" value={eur(budget.dailyRecommendedEur, 2)} hint="budget quotidien" />
-      </dl>
-      <dl className="mt-3 grid grid-cols-2 gap-3">
-        <Stat label="Clics attendus" value={`${num(budget.clicksMin)} – ${num(budget.clicksMax)}`} hint="par mois" />
-        <Stat label="Prises de contact" value={`${num(budget.contactsMin)} – ${num(budget.contactsMax)}`} hint="rendez-vous, appels, e-mails" />
-      </dl>
-      <p className="mt-3 text-xs text-ink-500">{BASIS_LABEL[budget.basis](eur(budget.cpcEur, 2))}</p>
+    <Card>
+      <CardHeader icon={Wallet} title="Budget" description="Ce qu'il faut prévoir pour que la campagne ait un sens." />
+      <FigureList className="mt-4">
+        <Figure label="Minimum" value={eur(budget.monthlyMinEur)} hint="par mois" />
+        <Figure label="Conseillé" value={eur(budget.monthlyRecommendedEur)} hint="par mois" highlight />
+        <Figure label="Par jour" value={eur(budget.dailyRecommendedEur, 2)} hint="budget quotidien" />
+        <Figure label="Clics attendus" value={`${num(budget.clicksMin)} – ${num(budget.clicksMax)}`} hint="par mois" />
+        <Figure label="Prises de contact" value={`${num(budget.contactsMin)} – ${num(budget.contactsMax)}`} hint="rendez-vous, appels, e-mails" />
+      </FigureList>
+      <FinePrint className="mt-4">{BASIS_LABEL[budget.basis](eur(budget.cpcEur, 2))}</FinePrint>
       {forecast ? <ForecastNote forecast={forecast} /> : null}
     </Card>
   );
@@ -340,13 +578,13 @@ function ForecastNote({ forecast }: { forecast: GoogleAdsForecast }) {
   const cost = usdToEur(forecast.totalCostUsd);
   const bid = usdToEur(forecast.bidUsd);
   return (
-    <p className="mt-2 text-xs text-ink-500">
+    <FinePrint className="mt-2">
       Prévision Google Ads pour le mois prochain, sur l&apos;ensemble des mots-clés cœur : environ {num(forecast.totalClicks)} clic
       {forecast.totalClicks > 1 ? "s" : ""}
       {cost !== null ? ` pour ${eur(cost)}` : ""}
       {bid !== null ? `, avec une enchère maximale de ${eur(bid, 2)} par clic` : ""}
       {forecast.source === "mock" ? " (données de démonstration)" : ""}.
-    </p>
+    </FinePrint>
   );
 }
 
@@ -362,15 +600,22 @@ function ChecksCard({
 }) {
   const sorted = sortChecks(checks);
   const todo = checks.filter((c) => c.status === "todo");
+  const acquired = checks.filter((c) => c.status === "ok").length;
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold">Êtes-vous prêt ?</h2>
-      <p className="mt-1 text-sm text-ink-500">
-        {todo.length === 0
-          ? "Tous les points sont au vert : chaque clic payé a une chance de devenir un patient."
-          : `${todo.length} point${todo.length > 1 ? "s" : ""} à régler avant (ou juste après) le lancement — les bloquants d'abord.`}
-      </p>
-      <ul className="mt-3 divide-y divide-cream-200" aria-label="Points de préparation">
+    <Card>
+      <CardHeader
+        icon={ListChecks}
+        title="Êtes-vous prêt ?"
+        description={
+          todo.length === 0
+            ? "Tous les points sont au vert : chaque clic payé a une chance de devenir un patient."
+            : `${todo.length} point${todo.length > 1 ? "s" : ""} à régler avant (ou juste après) le lancement — les bloquants d'abord.`
+        }
+      />
+      {checks.length > 0 ? (
+        <ProgressBar className="mt-5" value={acquired} max={checks.length} label="Points acquis" valueText={`${acquired} sur ${checks.length}`} />
+      ) : null}
+      <ul className="mt-4 space-y-2" aria-label="Points de préparation">
         {sorted.map((check) => (
           <CheckRow key={check.id} check={check} externalSite={externalSite} onSelectTab={onSelectTab} />
         ))}
@@ -380,55 +625,56 @@ function ChecksCard({
 }
 
 function CheckRow({ check, externalSite, onSelectTab }: { check: GoogleAdsReadinessCheck; externalSite: boolean; onSelectTab: (tab: AdsTab) => void }) {
-  const status = STATUS[check.status];
   const link = check.status === "ok" ? null : adsCheckLink(check.id, externalSite);
-  const linkClass = "text-xs font-medium text-primary-600 hover:underline";
+  const arrow = <ArrowRight size={16} aria-hidden />;
   return (
-    <li className="flex items-start gap-3 py-3">
-      <span aria-hidden className={clsx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold", status.className)}>
-        {status.glyph}
-      </span>
+    <li
+      className={clsx(
+        "flex items-start gap-3.5 rounded-ds-md px-3.5 py-3",
+        check.status === "todo" ? "bg-ds-warning-100/60 ring-1 ring-ds-warning-500/35" : check.status === "unknown" ? "bg-ds-ink-50 ring-1 ring-ds-ink-200" : "",
+      )}
+    >
+      <CheckMark state={check.status} className="mt-0.5" />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="font-medium text-ink-900">
-            <span className="sr-only">{status.label} — </span>
-            {check.label}
-          </p>
-          {check.critical && check.status !== "ok" ? <Badge tone="danger">Bloquant</Badge> : null}
+        {/* Petit écran : le statut passe toujours sous le libellé (jamais tantôt à droite, tantôt dessous) */}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <p className="text-base font-semibold text-ds-ink-900 max-sm:basis-full">{check.label}</p>
+          <span className="flex flex-wrap items-center gap-1.5">
+            {check.critical && check.status !== "ok" ? (
+              <Badge tone="danger" icon={OctagonAlert}>
+                Bloquant
+              </Badge>
+            ) : null}
+            <CheckBadge state={check.status}>{STATUS_LABEL[check.status]}</CheckBadge>
+          </span>
         </div>
-        <p className="text-sm text-ink-700">{check.detail}</p>
-        {link === "fiche" ? (
-          <Link href="/fiche-google" className={linkClass}>
-            Ouvrir Fiche Google →
-          </Link>
-        ) : null}
-        {link === "editor" ? (
-          <Link href="/editor" className={linkClass}>
-            Modifier mon site →
-          </Link>
-        ) : null}
-        {link === "site" ? (
-          <Link href={MON_SITE_HREF} className={linkClass}>
-            Ouvrir Mon site →
-          </Link>
-        ) : null}
-        {link === "tab" ? (
-          <button type="button" onClick={() => onSelectTab("parametrage")} className={linkClass}>
-            Ouvrir Paramétrage &amp; suivi →
-          </button>
+        <p className="mt-0.5 text-ds-body text-ds-ink-700">{check.detail}</p>
+        {link ? (
+          <div className="mt-2.5">
+            {link === "fiche" ? (
+              <LinkButton href="/fiche-google" variant="secondary" size="sm" iconRight={arrow}>
+                Ouvrir Fiche Google
+              </LinkButton>
+            ) : null}
+            {link === "editor" ? (
+              <LinkButton href="/editor" variant="secondary" size="sm" iconRight={arrow}>
+                Modifier mon site
+              </LinkButton>
+            ) : null}
+            {link === "site" ? (
+              <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" iconRight={arrow}>
+                Ouvrir Mon site
+              </LinkButton>
+            ) : null}
+            {link === "tab" ? (
+              <Button type="button" variant="secondary" size="sm" iconRight={arrow} onClick={() => onSelectTab("parametrage")}>
+                Ouvrir Paramétrage &amp; suivi
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </li>
-  );
-}
-
-function Stat({ label, value, hint, highlight = false }: { label: string; value: string; hint: string; highlight?: boolean }) {
-  return (
-    <div className={clsx("rounded-2xl p-3", highlight ? "bg-primary-50" : "bg-cream-50")}>
-      <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className={clsx("font-semibold", value.length > 9 ? "text-base" : "text-xl", highlight ? "text-primary-800" : "text-ink-900")}>{value}</dd>
-      <dd className="text-[11px] text-ink-500">{hint}</dd>
-    </div>
   );
 }
 

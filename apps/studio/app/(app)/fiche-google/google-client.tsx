@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useState, type MouseEvent } from "react";
 import { clsx } from "clsx";
+import { ClipboardCheck, MapPinned, Megaphone, Star, type LucideIcon, type LucideProps } from "lucide-react";
+import { Badge, PageHeader, SECTIONS, Stagger, TabPanel, Tabs, type TabItem } from "@/components/ds";
 import type { GoogleProfileData } from "@/lib/google/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import { AuditTab } from "./audit-tab";
@@ -9,8 +11,27 @@ import { LinkCard } from "./link-card";
 import { PostsTab } from "./posts-tab";
 import { ProfileCard } from "./profile-card";
 import { ReviewsTab } from "./reviews-tab";
-import { GOOGLE_TABS, tabHref, type GoogleTab } from "./tabs";
+import { focusLinkSearch } from "./shared";
+import { GOOGLE_TABS, isGoogleTab, tabHref, type GoogleTab } from "./tabs";
 import { VisibilityTab } from "./visibility-tab";
+
+/** Préfixe des identifiants d'onglets et de panneaux (`fiche-google-tab-audit`, `fiche-google-panel-audit`…). */
+const ID_BASE = "fiche-google";
+
+/** Pictogramme d'onglet affiché à partir de 640 px : en dessous, les quatre libellés tiennent sur une ligne. */
+function fromSmallScreens(Icon: LucideIcon): LucideIcon {
+  const Wrapped = forwardRef<SVGSVGElement, Omit<LucideProps, "ref">>(function TabIcon(props, ref) {
+    return <Icon ref={ref} {...props} className={clsx(props.className, "max-sm:hidden")} />;
+  });
+  return Wrapped;
+}
+
+const TAB_ICONS: Record<GoogleTab, LucideIcon> = {
+  audit: fromSmallScreens(ClipboardCheck),
+  visibilite: fromSmallScreens(MapPinned),
+  avis: fromSmallScreens(Star),
+  posts: fromSmallScreens(Megaphone),
+};
 
 export function GoogleClient({
   initialTab,
@@ -34,6 +55,7 @@ export function GoogleClient({
   /** Message de la liaison de fiche, affiché sur la carte de la fiche une fois reliée */
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const monthParam = `${calendar.year}-${String(calendar.month).padStart(2, "0")}`;
+  const linked = Boolean(data.linked);
 
   function select(next: GoogleTab) {
     setTab(next);
@@ -41,104 +63,107 @@ export function GoogleClient({
     window.history.replaceState(null, "", tabHref(next, next === "posts" ? monthParam : undefined));
   }
 
+  /**
+   * Les onglets sont de vrais liens `?onglet=` (ouverture dans un nouvel onglet,
+   * copie de l'adresse, navigation sans script). Un clic simple — ou les flèches
+   * du clavier, qui cliquent l'onglet — bascule ici, côté client : intercepté en
+   * phase de capture, le lien ne déclenche alors aucune navigation.
+   */
+  function onTabClickCapture(event: MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = (event.target as Element).closest<HTMLAnchorElement>('a[role="tab"]');
+    const id = link?.id.slice(`${ID_BASE}-tab-`.length);
+    if (!isGoogleTab(id)) return;
+    event.preventDefault();
+    select(id);
+  }
+
+  const tabs: TabItem<GoogleTab>[] = GOOGLE_TABS.map((t) => ({
+    id: t.id,
+    label: t.label,
+    icon: TAB_ICONS[t.id],
+    href: tabHref(t.id, t.id === "posts" ? monthParam : undefined),
+    badge:
+      t.id === "avis" && data.reviewsSummary.unanalyzed > 0 ? (
+        <Badge tone="section" className="px-2 py-0.5">
+          {data.reviewsSummary.unanalyzed}
+          <span className="sr-only"> avis à analyser</span>
+        </Badge>
+      ) : undefined,
+  }));
+
   return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold">Fiche Google</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            Audit, visibilité locale, avis et posts de votre fiche d&apos;établissement — Harmony
-            prépare, vous publiez sur Google.
-          </p>
+    <Stagger className="space-y-6" data-ds-section="fiche-google">
+      <PageHeader
+        section="fiche-google"
+        purpose={`${SECTIONS["fiche-google"].purpose} Harmony prépare, vous publiez sur Google.`}
+      />
+
+      {data.linked ? (
+        <ProfileCard linked={data.linked} latestAudit={data.latestAudit} notice={linkNotice} />
+      ) : (
+        <LinkCard siteName={siteName} onLinked={setLinkNotice} />
+      )}
+
+      <div className="space-y-6">
+        <div onClickCapture={onTabClickCapture}>
+          <Tabs
+            idBase={ID_BASE}
+            label="Sections de la fiche Google"
+            tabs={tabs}
+            value={tab}
+            onChange={select}
+            className="max-sm:gap-0"
+          />
         </div>
+
+        <TabPanel key={tab} idBase={ID_BASE} tab={tab}>
+          {tab === "audit" ? (
+            <AuditTab linked={linked} latestAudit={data.latestAudit} history={data.history} onLinkRequest={focusLinkSearch} />
+          ) : null}
+          {tab === "visibilite" ? (
+            <VisibilityTab
+              linked={linked}
+              keywords={data.keywords}
+              scanUsage={data.scanUsage}
+              budget={data.budget}
+              own={{
+                name: data.latestAudit?.snapshot.title ?? data.linked?.name ?? siteName,
+                rating: data.latestAudit?.snapshot.rating ?? data.linked?.rating ?? null,
+                votes: data.latestAudit?.snapshot.votes ?? data.linked?.reviewCount ?? null,
+                photos: data.latestAudit?.snapshot.totalPhotos ?? null,
+              }}
+              searchVisibility={data.searchVisibility}
+              onLinkRequest={focusLinkSearch}
+            />
+          ) : null}
+          {tab === "avis" ? (
+            <ReviewsTab
+              reviews={data.reviews}
+              totalCount={data.reviewsTotal}
+              summary={data.reviewsSummary}
+              replyRemaining={data.replyRemaining}
+              replyTone={data.replyTone}
+              placeId={data.linked?.placeId ?? null}
+              onLinkRequest={focusLinkSearch}
+            />
+          ) : null}
+          {tab === "posts" ? (
+            <PostsTab
+              year={calendar.year}
+              month={calendar.month}
+              items={data.posts.items}
+              state={data.posts.state}
+              usage={data.postUsage}
+              swatches={swatches}
+              siteName={siteName}
+              todayIso={todayIso}
+              requestDates={requestDates}
+              regenRemaining={data.regenRemaining}
+            />
+          ) : null}
+        </TabPanel>
       </div>
-
-      <div className="mt-6">
-        {data.linked ? (
-          <ProfileCard linked={data.linked} latestAudit={data.latestAudit} notice={linkNotice} />
-        ) : (
-          <LinkCard siteName={siteName} onLinked={setLinkNotice} />
-        )}
-      </div>
-
-      <nav aria-label="Sections de la fiche Google" className="mt-8 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <ul className="flex gap-1 border-b border-cream-200">
-          {GOOGLE_TABS.map((t) => {
-            const active = t.id === tab;
-            return (
-              <li key={t.id}>
-                <a
-                  href={tabHref(t.id, t.id === "posts" ? monthParam : undefined)}
-                  aria-current={active ? "page" : undefined}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    select(t.id);
-                  }}
-                  className={clsx(
-                    "-mb-px inline-block whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors",
-                    active
-                      ? "border-primary-500 text-primary-700"
-                      : "border-transparent text-ink-500 hover:border-cream-300 hover:text-ink-900",
-                  )}
-                >
-                  {t.label}
-                  {t.id === "avis" && data.reviewsSummary.unanalyzed > 0 ? (
-                    <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-[11px] text-primary-700">
-                      {data.reviewsSummary.unanalyzed}
-                      <span className="sr-only"> avis à analyser</span>
-                    </span>
-                  ) : null}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <section className="mt-6" aria-label={GOOGLE_TABS.find((t) => t.id === tab)?.label}>
-        {tab === "audit" ? (
-          <AuditTab linked={Boolean(data.linked)} latestAudit={data.latestAudit} history={data.history} />
-        ) : null}
-        {tab === "visibilite" ? (
-          <VisibilityTab
-            linked={Boolean(data.linked)}
-            keywords={data.keywords}
-            scanUsage={data.scanUsage}
-            budget={data.budget}
-            own={{
-              name: data.latestAudit?.snapshot.title ?? data.linked?.name ?? siteName,
-              rating: data.latestAudit?.snapshot.rating ?? data.linked?.rating ?? null,
-              votes: data.latestAudit?.snapshot.votes ?? data.linked?.reviewCount ?? null,
-              photos: data.latestAudit?.snapshot.totalPhotos ?? null,
-            }}
-            searchVisibility={data.searchVisibility}
-          />
-        ) : null}
-        {tab === "avis" ? (
-          <ReviewsTab
-            reviews={data.reviews}
-            totalCount={data.reviewsTotal}
-            summary={data.reviewsSummary}
-            replyRemaining={data.replyRemaining}
-            replyTone={data.replyTone}
-            placeId={data.linked?.placeId ?? null}
-          />
-        ) : null}
-        {tab === "posts" ? (
-          <PostsTab
-            year={calendar.year}
-            month={calendar.month}
-            items={data.posts.items}
-            state={data.posts.state}
-            usage={data.postUsage}
-            swatches={swatches}
-            siteName={siteName}
-            todayIso={todayIso}
-            requestDates={requestDates}
-            regenRemaining={data.regenRemaining}
-          />
-        ) : null}
-      </section>
-    </div>
+    </Stagger>
   );
 }

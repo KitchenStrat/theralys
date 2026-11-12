@@ -1,10 +1,18 @@
+import { ArrowRight, GraduationCap, HeartHandshake, Lock, MessageCircle, Search, type LucideIcon } from "lucide-react";
 import { hasAcademy } from "@theralys/db";
-import { Card } from "@theralys/ui";
+import { Card, EmptyState, IconBadge, LinkButton, PageHeader, Stagger, StatusPill } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { getSite } from "@/lib/data";
 
 export const metadata = { title: "Académie" };
 export const dynamic = "force-dynamic";
+
+/** Les trois thèmes annoncés pour les formations — rien de plus n'est promis ici. */
+const THEMES: { label: string; icon: LucideIcon }[] = [
+  { label: "Visibilité", icon: Search },
+  { label: "Fidélisation", icon: HeartHandshake },
+  { label: "Communication", icon: MessageCircle },
+];
 
 export default async function AcademyPage() {
   const session = await requireClient();
@@ -14,38 +22,64 @@ export default async function AcademyPage() {
 
   if (!access) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-4xl font-bold">Académie</h1>
-        <Card className="p-10 text-center text-ink-500">
-          <span aria-hidden className="text-4xl">
-            🎓
-          </span>
-          <p className="mt-4 font-medium text-ink-700">
-            L&apos;Académie n&apos;est pas incluse dans votre formule
-          </p>
-          <p className="mx-auto mt-1 max-w-md text-sm">
-            Passez à la formule <strong>Scale</strong> pour accéder aux formations —
-            visibilité, fidélisation, communication — en plus du blog SEO et des outils de
-            mots-clés.
-          </p>
+      <Stagger className="space-y-6">
+        <PageHeader section="academie" />
+        <Card padding="none">
+          <EmptyState
+            icon={Lock}
+            as="h2"
+            title="L'Académie n'est pas incluse dans votre formule"
+            action={
+              <LinkButton href="/compte" iconRight={<ArrowRight size={18} aria-hidden />}>
+                Voir ma formule
+              </LinkButton>
+            }
+          >
+            Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour accéder aux formations —
+            visibilité, fidélisation, communication — en plus du blog et des outils de mots-clés.
+          </EmptyState>
         </Card>
-      </div>
+      </Stagger>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-4xl font-bold">Académie</h1>
-      <Card className="p-12 text-center">
-        <span aria-hidden className="text-4xl">
-          🎓
-        </span>
-        <p className="mt-4 text-lg font-semibold text-ink-900">En construction</p>
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-500">
-          Des formations complètes pour développer votre cabinet — visibilité,
-          fidélisation, communication — arrivent bientôt dans cet espace.
-        </p>
+    <Stagger className="space-y-6">
+      <PageHeader section="academie" />
+
+      <Card padding="none">
+        <EmptyState
+          icon={GraduationCap}
+          as="h2"
+          title="Vos formations se préparent"
+          secondary={
+            <LinkButton href="/" variant="secondary" iconRight={<ArrowRight size={18} aria-hidden />}>
+              Retour à l&apos;accueil
+            </LinkButton>
+          }
+        >
+          Des formations pour développer votre cabinet arrivent dans cet espace. Vous n&apos;avez rien à faire : elles
+          apparaîtront ici dès qu&apos;elles seront prêtes.
+        </EmptyState>
       </Card>
-    </div>
+
+      <section aria-labelledby="academie-programme">
+        <h2 id="academie-programme" className="font-ds-display text-xl/7 font-bold text-ds-ink-900">
+          Au programme
+        </h2>
+        <p className="mt-1 text-ds-body text-ds-ink-600">Trois thèmes pour développer votre cabinet.</p>
+        <ul className="mt-4 grid gap-4 sm:grid-cols-3">
+          {THEMES.map((theme) => (
+            <Card as="li" key={theme.label} className="flex items-center gap-3.5 p-4 sm:flex-col sm:items-start sm:p-5">
+              <IconBadge icon={theme.icon} size="md" />
+              <div className="min-w-0">
+                <h3 className="font-ds-display text-lg/7 font-bold text-ds-ink-900">{theme.label}</h3>
+                <StatusPill status="en-cours" className="mt-1.5" />
+              </div>
+            </Card>
+          ))}
+        </ul>
+      </section>
+    </Stagger>
   );
 }

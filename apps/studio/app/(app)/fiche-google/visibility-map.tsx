@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { clsx } from "clsx";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { rankTone, type GoogleGridPoint, type GoogleScanGrid } from "@theralys/shared";
@@ -12,6 +13,16 @@ const ATTRIBUTION = "© OpenStreetMap contributors";
 const HEAT_PANE = "vm-heat";
 /** Décalage d'apparition par anneau autour du cabinet (ms) : une onde qui part du centre. */
 const RING_DELAY_MS = 110;
+
+/**
+ * Boutons de zoom de Leaflet aux formes du studio : rayon et ombre des cartes, encre du design system, et
+ * 44 px au doigt. La feuille de Leaflet est hors couche : seules des déclarations `!important` la dépassent.
+ */
+const ZOOM_CONTROL = clsx(
+  "[&_.leaflet-bar]:overflow-hidden [&_.leaflet-bar]:rounded-ds-sm! [&_.leaflet-bar]:border-0! [&_.leaflet-bar]:shadow-ds-card!",
+  "[&_.leaflet-bar_a]:size-9! [&_.leaflet-bar_a]:rounded-none! [&_.leaflet-bar_a]:leading-9! [&_.leaflet-bar_a]:text-ds-ink-800!",
+  "pointer-coarse:[&_.leaflet-bar_a]:size-11! pointer-coarse:[&_.leaflet-bar_a]:leading-11!",
+);
 
 /** Taille de référence de la pastille (px, espacement ≥ 64 px) selon le ton du rang : le pack local domine, les absents s'effacent. */
 const SIZE: Record<ReturnType<typeof rankTone>, number> = { top: 36, good: 31, weak: 27, none: 22 };
@@ -160,7 +171,11 @@ export function VisibilityMap({ grid, points, keyword }: { grid: GoogleScanGrid;
       ref={container}
       role="region"
       aria-label={`Carte de visibilité pour « ${keyword} » : ${grid.rows * grid.cols} emplacements sur ${grid.radiusKm} km autour du cabinet`}
-      className="vm-map h-[360px] w-full overflow-hidden rounded-2xl border border-cream-200 bg-cream-100 sm:h-[460px]"
+      className={clsx(
+        // `isolate` : les calques de Leaflet (z-index jusqu'à 1000) restent sous les barres collantes et les fenêtres du studio
+        "vm-map isolate h-[360px] w-full overflow-hidden rounded-ds-md bg-ds-ink-100 ring-1 ring-ds-ink-300 sm:h-[460px]",
+        ZOOM_CONTROL,
+      )}
     />
   );
 }

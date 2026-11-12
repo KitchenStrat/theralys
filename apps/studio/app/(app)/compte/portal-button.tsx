@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Button } from "@theralys/ui";
+import { ExternalLink, Info } from "lucide-react";
+import { Button } from "@/components/ds";
 import { openBillingPortal } from "./actions";
 
 export function PortalButton() {
@@ -11,9 +12,8 @@ export function PortalButton() {
   return (
     <div>
       <Button
-        variant="secondary"
-        size="sm"
-        disabled={busy}
+        loading={busy}
+        iconRight={<ExternalLink size={18} aria-hidden />}
         onClick={() =>
           startTransition(async () => {
             const { url } = await openBillingPortal();
@@ -27,7 +27,15 @@ export function PortalButton() {
       >
         Gérer ma facturation
       </Button>
-      {note ? <p className="mt-2 text-xs text-ink-500">{note}</p> : null}
+      <p className="mt-2 text-ds-meta text-ds-ink-600">
+        Le portail s&apos;ouvre sur une page de paiement sécurisée ; vous revenez ici ensuite.
+      </p>
+      {note ? (
+        <p role="status" className="mt-3 flex items-start gap-2 rounded-ds-sm bg-ds-ink-100 px-3.5 py-2.5 text-ds-body text-ds-ink-700">
+          <Info size={18} aria-hidden className="mt-0.5 shrink-0" />
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }

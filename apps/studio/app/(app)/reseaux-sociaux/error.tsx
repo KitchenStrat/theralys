@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
-import { Button, Card } from "@theralys/ui";
+import { RotateCcw, TriangleAlert } from "lucide-react";
+import { Button, Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 
 /**
  * Frontière d'erreur du segment : une lecture ou un rendu qui échoue affiche
@@ -20,20 +20,27 @@ export default function SocialError({
   }, [error]);
 
   return (
-    <div>
-      <h1 className="text-4xl font-bold">Réseaux sociaux</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Cette section est momentanément indisponible.</p>
-        <p className="mt-1 text-sm">
+    <Stagger className="space-y-6">
+      <PageHeader section="reseaux-sociaux" />
+      <Card padding="none">
+        <EmptyState
+          icon={TriangleAlert}
+          title="Cette section est momentanément indisponible."
+          as="h2"
+          action={
+            <Button icon={<RotateCcw size={18} aria-hidden />} onClick={reset}>
+              Réessayer
+            </Button>
+          }
+          secondary={
+            <LinkButton href="/" variant="quiet">
+              Retour à l&apos;accueil
+            </LinkButton>
+          }
+        >
           Réessayez dans un instant : vos contenus et votre calendrier ne sont pas perdus.
-        </p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={reset}>Réessayer</Button>
-          <Link href="/" className="text-sm font-medium text-primary-600 hover:underline">
-            Retour à l&apos;accueil
-          </Link>
-        </div>
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

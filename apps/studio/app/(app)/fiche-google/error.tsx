@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
-import { Button, Card } from "@theralys/ui";
+import { CloudOff, RotateCw } from "lucide-react";
+import { Button, Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 
 /**
  * Frontière d'erreur du segment : une lecture ou un rendu qui échoue affiche
@@ -20,20 +20,27 @@ export default function GoogleProfileError({
   }, [error]);
 
   return (
-    <div>
-      <h1 className="text-4xl font-bold">Fiche Google</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">Cette section est momentanément indisponible.</p>
-        <p className="mt-1 text-sm">
+    <Stagger className="space-y-6" data-ds-section="fiche-google">
+      <PageHeader section="fiche-google" />
+      <Card padding="none">
+        <EmptyState
+          as="h2"
+          icon={CloudOff}
+          title="Cette section est momentanément indisponible."
+          action={
+            <Button onClick={reset} icon={<RotateCw size={18} aria-hidden />}>
+              Réessayer
+            </Button>
+          }
+          secondary={
+            <LinkButton href="/" variant="quiet">
+              Retour à l&apos;accueil
+            </LinkButton>
+          }
+        >
           Réessayez dans un instant : votre audit, vos relevés, vos avis et vos posts ne sont pas perdus.
-        </p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-          <Button onClick={reset}>Réessayer</Button>
-          <Link href="/" className="text-sm font-medium text-primary-600 hover:underline">
-            Retour à l&apos;accueil
-          </Link>
-        </div>
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

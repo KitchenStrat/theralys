@@ -4,35 +4,62 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, Card, FieldHint, Input, Label, Spinner } from "@theralys/ui";
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  CircleCheckBig,
+  Info,
+  ListChecks,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
+import { FieldHint, Input, Label } from "@theralys/ui";
 import { GOOGLE_POST_REQUESTS_PER_MONTH } from "@theralys/shared";
+import { Badge, Button, Card, CardHeader, GenerationProgress, ProgressBar, type TimedStep } from "@/components/ds";
 import { WEEKDAYS, buildMonthGrid, formatDayFr, monthLabelFr, monthNameFr, ofMonthFr, shiftMonthParam } from "@/lib/calendar";
 import type { GoogleCalendarItem, GoogleMonthState, GoogleRequestUsage } from "@/lib/google/posts";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import { planGoogleMonth, requestGooglePost } from "./actions";
 import { GooglePostModal } from "./google-post-modal";
+import { PostStatusPill, STATUS_ICON, itemLabel, statusOf, type PostStatusKind } from "./post-status";
+import { ErrorNote } from "./shared";
 import { tabHref } from "./tabs";
 
 const CHIP_MAX = 3;
 const LIST_SCROLL_FROM = 8;
 /** `?post=<id>` : lien profond vers un post du mois affiché (modale ouverte au chargement). */
 const POST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const WAITING_MESSAGES = [
-  "Lecture de votre site…",
-  "Rédaction des posts…",
-  "Mise en page dans vos couleurs…",
-  "Encore quelques secondes…",
+
+/** Préparation du mois (environ une minute) : ce qui se fait, dans l'ordre ; la dernière étape dure jusqu'à la réponse du serveur. */
+const PLAN_STEPS: TimedStep[] = [
+  { label: "Lecture de votre site", seconds: 8 },
+  { label: "Rédaction des posts", seconds: 24 },
+  { label: "Mise en page dans vos couleurs", seconds: 16, details: ["Un visuel par post", "Encore quelques secondes…"] },
+];
+/** Création d'un post sur mesure (10 à 30 secondes). */
+const REQUEST_STEPS: TimedStep[] = [
+  { label: "Lecture de votre site", seconds: 4 },
+  { label: "Rédaction du post", seconds: 10 },
+  { label: "Mise en page dans vos couleurs", seconds: 8 },
 ];
 
-/** Statut affiché : « Publié » / « Téléchargé » / « À publier ». */
-export function statusOf(item: GoogleCalendarItem): { label: string; tone: "success" | "info" } {
-  if (item.status === "published") return { label: "Publié", tone: "success" };
-  if (item.downloadedAt) return { label: "Téléchargé", tone: "info" };
-  return { label: "À publier", tone: "info" };
-}
+/** Ce que la carte « Vos posts du mois » propose, selon le mois affiché (états exclusifs). */
+type MonthMode = "past" | "too-far" | "no-slot" | "plan" | "complete" | "ready" | "ending";
 
-export function itemLabel(item: GoogleCalendarItem): string {
-  return `Post Google — ${item.topic}${item.source === "request" ? " (sur mesure)" : ""}`;
+function monthMode(state: GoogleMonthState, { isPast, isCurrent, tooFar }: { isPast: boolean; isCurrent: boolean; tooFar: boolean }): MonthMode {
+  const prepared = state.calendarCount > 0;
+  const canPlan = state.freeSlots.length > 0 && !tooFar;
+  if (isPast) return "past";
+  if (tooFar && !prepared) return "too-far";
+  if (isCurrent && state.slots.length < 1 && !prepared) return "no-slot";
+  if (canPlan && !prepared) return "plan";
+  if (canPlan) return "complete";
+  if (prepared) return "ready";
+  return "ending";
 }
 
 export function PostsTab({
@@ -92,17 +119,22 @@ export function PostsTab({
   const isPast = monthParam < todayIso.slice(0, 7);
   const isCurrent = monthParam === todayIso.slice(0, 7);
   const tooFar = `${monthParam}-01` > requestDates.max;
+  const mode = monthMode(state, { isPast, isCurrent, tooFar });
+  const monthLinkClasses =
+    "grid size-11 shrink-0 place-items-center rounded-full bg-white text-ds-brand-800 shadow-sm inset-ring inset-ring-ds-ink-300 ds-focus ds-press hover:bg-ds-brand-50";
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link href={tabHref("posts", shiftMonthParam(year, month, -1))} aria-label="Mois précédent" className="rounded-full p-2 hover:bg-cream-200">
-            ◀
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="flex items-center gap-2">
+          <Link href={tabHref("posts", shiftMonthParam(year, month, -1))} scroll={false} aria-label="Mois précédent" className={monthLinkClasses}>
+            <ChevronLeft size={20} aria-hidden />
           </Link>
-          <span className="min-w-32 text-center text-lg font-semibold capitalize">{monthLabelFr(year, month)}</span>
-          <Link href={tabHref("posts", shiftMonthParam(year, month, 1))} aria-label="Mois suivant" className="rounded-full p-2 hover:bg-cream-200">
-            ▶
+          <p className="min-w-40 text-center font-ds-display text-xl/7 font-bold capitalize text-ds-ink-900 sm:min-w-48 sm:text-2xl/8">
+            {monthLabelFr(year, month)}
+          </p>
+          <Link href={tabHref("posts", shiftMonthParam(year, month, 1))} scroll={false} aria-label="Mois suivant" className={monthLinkClasses}>
+            <ChevronRight size={20} aria-hidden />
           </Link>
         </div>
         <QuotaBadge usage={usage} />
@@ -111,23 +143,24 @@ export function PostsTab({
       {missingDeepLink ? (
         <div
           role="status"
-          className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-100 px-4 py-3 text-sm text-ink-700"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-ds-md bg-ds-ink-100 px-4 py-3 text-ds-body text-ds-ink-800"
         >
-          <span>Ce contenu n&apos;est plus dans ce mois (reporté ou retiré).</span>
-          <Button variant="ghost" size="sm" onClick={() => setMissingDeepLink(false)} aria-label="Fermer ce message">
+          <span className="flex min-w-0 items-start gap-2">
+            <Info size={18} aria-hidden className="mt-0.5 shrink-0 text-ds-ink-600" />
+            Ce contenu n&apos;est plus dans ce mois (reporté ou retiré).
+          </span>
+          <Button variant="quiet" size="sm" onClick={() => setMissingDeepLink(false)} aria-label="Fermer ce message">
             Fermer
           </Button>
         </div>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         <MonthCard
           monthParam={monthParam}
           state={state}
           items={items}
-          isPast={isPast}
-          isCurrent={isCurrent}
-          tooFar={tooFar}
+          mode={mode}
           nextMonthParam={shiftMonthParam(year, month, 1)}
           siteName={siteName}
           onSelect={(item) => setSelectedId(item.id)}
@@ -139,45 +172,68 @@ export function PostsTab({
           dates={requestDates}
           monthParam={monthParam}
           todayIso={todayIso}
+          // Un seul bouton principal par vue : celui de la préparation du mois quand elle est proposée
+          primary={mode !== "plan"}
           onCreated={(postId) => setPendingOpenId(postId)}
         />
       </div>
 
-      <div className="mt-8 grid grid-cols-7 gap-2 text-center text-xs font-semibold text-info-500">
-        {WEEKDAYS.map((d, i) => (
-          <span key={d} className={clsx(i >= 5 && "text-ink-500")}>
-            {d}
-          </span>
-        ))}
-      </div>
+      <Card className="p-3 sm:p-6">
+        <CardHeader
+          className="max-sm:px-2 max-sm:pt-2"
+          icon={CalendarDays}
+          title="Calendrier du mois"
+          description="Chaque post est placé au jour prévu pour sa publication. Ouvrez-le pour copier son texte et télécharger son visuel."
+        />
 
-      <div className="mt-2 space-y-2">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 gap-2">
-            {week.map((day, di) =>
-              day === null ? (
-                <div key={di} />
-              ) : (
-                <CalendarCell key={day} iso={day} isToday={day === todayIso} items={byDate.get(day) ?? []} onSelect={(item) => setSelectedId(item.id)} />
-              ),
-            )}
-          </div>
-        ))}
-      </div>
-
-      {isPast && items.length === 0 ? <p className="mt-4 text-sm text-ink-500">Aucun post ce mois-ci.</p> : null}
-
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 pt-4 text-xs text-ink-500">
-        <p>Harmony ne publie pas à votre place : copiez le texte, téléchargez le visuel, publiez sur Google puis marquez le post comme publié.</p>
-        <div className="flex flex-wrap items-center gap-4">
-          <LegendSwatch className="border border-dashed border-info-500" label="À publier" />
-          <LegendSwatch className="border border-solid border-info-500" label="Téléchargé" />
-          <LegendSwatch className="border border-solid border-success-500" label="Publié" />
-          <span className="inline-flex items-center gap-1">
-            <span className="font-semibold text-primary-600">✦</span> Sur mesure
-          </span>
+        <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-semibold text-ds-ink-700 sm:gap-2">
+          {WEEKDAYS.map((d, i) => (
+            <span key={d} className={clsx(i >= 5 && "font-medium text-ds-ink-600")}>
+              {d}
+            </span>
+          ))}
         </div>
-      </div>
+
+        <div className="mt-2 space-y-1 sm:space-y-2">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 gap-1 sm:gap-2">
+              {week.map((day, di) =>
+                day === null ? (
+                  <div key={di} />
+                ) : (
+                  <CalendarCell key={day} iso={day} isToday={day === todayIso} items={byDate.get(day) ?? []} onSelect={(item) => setSelectedId(item.id)} />
+                ),
+              )}
+            </div>
+          ))}
+        </div>
+
+        {isPast && items.length === 0 ? <p className="mt-4 px-2 text-ds-body text-ds-ink-600">Aucun post ce mois-ci.</p> : null}
+
+        <div className="mt-5 flex flex-wrap items-start justify-between gap-x-6 gap-y-4 border-t border-ds-ink-200 px-2 pt-4 sm:px-0">
+          <p className="flex min-w-0 flex-[1_1_22rem] items-start gap-2 text-ds-body text-ds-ink-700">
+            <Info size={18} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+            Harmony ne publie pas à votre place : copiez le texte, téléchargez le visuel, publiez sur Google puis marquez le post
+            comme publié.
+          </p>
+          <ul className="flex flex-wrap items-center gap-2" aria-label="Légende du calendrier">
+            <li>
+              <PostStatusPill kind="a-publier" />
+            </li>
+            <li>
+              <PostStatusPill kind="telecharge" />
+            </li>
+            <li>
+              <PostStatusPill kind="publie" />
+            </li>
+            <li>
+              <Badge tone="neutral" icon={Sparkles}>
+                Sur mesure
+              </Badge>
+            </li>
+          </ul>
+        </div>
+      </Card>
 
       <GooglePostModal item={selected} todayIso={todayIso} regenRemaining={regenRemaining} onClose={() => setSelectedId(null)} />
     </div>
@@ -185,9 +241,15 @@ export function PostsTab({
 }
 
 function QuotaBadge({ usage }: { usage: GoogleRequestUsage }) {
-  if (usage.remaining === 0) return <Badge tone="danger">Quota atteint</Badge>;
+  if (usage.remaining === 0) {
+    return (
+      <Badge tone="danger" icon={CircleAlert}>
+        Quota atteint
+      </Badge>
+    );
+  }
   return (
-    <Badge tone={usage.remaining <= 3 ? "warning" : "primary"}>
+    <Badge tone={usage.remaining <= 3 ? "warning" : "section"} icon={usage.remaining <= 3 ? TriangleAlert : Sparkles}>
       {usage.remaining} post{usage.remaining > 1 ? "s" : ""} sur mesure restant{usage.remaining > 1 ? "s" : ""}
     </Badge>
   );
@@ -206,9 +268,7 @@ function MonthCard({
   monthParam,
   state,
   items,
-  isPast,
-  isCurrent,
-  tooFar,
+  mode,
   nextMonthParam,
   siteName,
   onSelect,
@@ -216,9 +276,7 @@ function MonthCard({
   monthParam: string;
   state: GoogleMonthState;
   items: GoogleCalendarItem[];
-  isPast: boolean;
-  isCurrent: boolean;
-  tooFar: boolean;
+  mode: MonthMode;
   nextMonthParam: string;
   siteName: string;
   onSelect: (item: GoogleCalendarItem) => void;
@@ -226,14 +284,6 @@ function MonthCard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [waitIndex, setWaitIndex] = useState(0);
-
-  useEffect(() => {
-    if (!pending) return;
-    setWaitIndex(0);
-    const id = setInterval(() => setWaitIndex((i) => (i + 1) % WAITING_MESSAGES.length), 8000);
-    return () => clearInterval(id);
-  }, [pending]);
 
   function plan() {
     setError(null);
@@ -248,90 +298,112 @@ function MonthCard({
   }
 
   const free = state.freeSlots.length;
-  const prepared = state.calendarCount > 0;
-  const canPlan = free > 0 && !tooFar;
+  const total = state.published + state.toPublish;
   const nextMonthLink = (
-    <Link href={tabHref("posts", nextMonthParam)} className="font-medium text-primary-600 hover:underline">
-      préparez plutôt le mois prochain →
+    <Link
+      href={tabHref("posts", nextMonthParam)}
+      scroll={false}
+      className="inline-flex items-center gap-1 rounded-ds-sm font-semibold text-ds-brand-700 underline ds-focus"
+    >
+      préparez plutôt le mois prochain
+      <ArrowRight size={15} aria-hidden />
     </Link>
   );
   let body: ReactNode;
 
-  if (isPast) {
-    body = <p className="mt-2 text-sm text-ink-500">Historique de vos posts.</p>;
-  } else if (tooFar && !prepared) {
-    body = <p className="mt-2 text-sm text-ink-700">Ce mois est encore loin — vous pourrez le préparer 4 mois à l&apos;avance.</p>;
-  } else if (isCurrent && state.slots.length < 1 && !prepared) {
-    body = <p className="mt-2 text-sm text-ink-700">Plus de mardi à venir ce mois-ci — {nextMonthLink}</p>;
-  } else if (canPlan && !prepared) {
+  if (mode === "past") {
+    body = <p className="mt-4 text-ds-body text-ds-ink-600">Historique de vos posts.</p>;
+  } else if (mode === "too-far") {
+    body = <p className="mt-4 text-ds-body text-ds-ink-700">Ce mois est encore loin — vous pourrez le préparer 4 mois à l&apos;avance.</p>;
+  } else if (mode === "no-slot") {
+    body = <p className="mt-4 text-ds-body text-ds-ink-700">Plus de mardi à venir ce mois-ci — {nextMonthLink}</p>;
+  } else if (mode === "plan") {
     body = (
-      <>
-        <p className="mt-2 font-medium text-ink-900">Préparez vos posts Google en un clic</p>
-        <p className="mt-1 text-sm text-ink-500">
+      <div className="mt-4 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/60 sm:p-5">
+        <p className="text-base font-semibold text-ds-section-ink">Préparez vos posts Google en un clic</p>
+        <p className="mt-1 text-ds-body text-ds-ink-700">
           Un post par semaine, le mardi : Harmony lit votre site et prépare {plural(free, "post")} avec visuel 4:3, texte et
           bouton d&apos;action. Vous n&apos;avez plus qu&apos;à les publier sur votre fiche.
         </p>
         <div className="mt-4">
-          <Button onClick={plan} disabled={pending}>
-            {pending ? <Spinner className="text-white" /> : null} Préparer mes posts du mois
+          <Button onClick={plan} loading={pending} icon={<Sparkles size={18} aria-hidden />}>
+            Préparer mes posts du mois
           </Button>
-          <FieldHint>Environ une minute.</FieldHint>
+          {pending ? null : <FieldHint>Environ une minute.</FieldHint>}
         </div>
-      </>
+      </div>
     );
-  } else if (canPlan) {
+  } else if (mode === "complete") {
     body = (
       <>
-        <p className="mt-2 text-sm text-ink-700">
+        <p className="mt-4 text-ds-body text-ds-ink-700">
           {plural(state.calendarCount, "post")} déjà prêt{state.calendarCount > 1 ? "s" : ""} · {progressLine(state)}
         </p>
-        <div className="mt-4">
-          <Button variant="secondary" onClick={plan} disabled={pending}>
-            {pending ? <Spinner /> : null} Compléter le mois ({plural(free, "post")} manquant{free > 1 ? "s" : ""})
+        <div className="mt-3">
+          <Button variant="secondary" onClick={plan} loading={pending} icon={<Sparkles size={18} aria-hidden />}>
+            Compléter le mois ({plural(free, "post")} manquant{free > 1 ? "s" : ""})
           </Button>
         </div>
       </>
     );
-  } else if (prepared) {
+  } else if (mode === "ready") {
     body = (
-      <>
-        <p className="mt-2 font-medium text-ink-900">
-          Votre mois est prêt : {plural(state.calendarCount, "post")}
-          {state.requestCount > 0 ? ` + ${state.requestCount} sur mesure` : ""}
+      <div className="mt-4 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/60">
+        <p className="flex items-start gap-2 text-base font-semibold text-ds-section-ink">
+          <CircleCheckBig size={20} aria-hidden className="mt-0.5 shrink-0 text-ds-success-700" />
+          <span>
+            Votre mois est prêt : {plural(state.calendarCount, "post")}
+            {state.requestCount > 0 ? ` + ${state.requestCount} sur mesure` : ""}
+          </span>
         </p>
-        <p className="mt-1 text-sm text-ink-500">{progressLine(state)}</p>
-      </>
+        <ProgressBar
+          className="mt-3 [--ds-progress-track:white]"
+          size="sm"
+          label={progressLine(state)}
+          value={state.published}
+          max={Math.max(1, total)}
+          valueText={`${state.published} sur ${total}`}
+          hideValueText
+        />
+      </div>
     );
   } else {
-    body = <p className="mt-2 text-sm text-ink-700">Ce mois touche à sa fin — {nextMonthLink}</p>;
+    body = <p className="mt-4 text-ds-body text-ds-ink-700">Ce mois touche à sa fin — {nextMonthLink}</p>;
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold">Vos posts du mois</h2>
-      <p className="text-xs text-ink-500">{siteName}</p>
+    <Card>
+      <CardHeader icon={ListChecks} title="Vos posts du mois" description={siteName} />
       {body}
       {pending ? (
-        <p className="mt-3 text-sm text-ink-700" aria-live="polite">
-          {WAITING_MESSAGES[waitIndex]} <span className="text-ink-500">Ne fermez pas la page.</span>
-        </p>
+        <div className="mt-4 rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200 sm:p-5">
+          <GenerationProgress
+            icon={Sparkles}
+            title="Nous préparons vos posts du mois"
+            steps={PLAN_STEPS}
+            running
+            estimate="environ une minute"
+            hint="Ne fermez pas la page."
+          />
+        </div>
       ) : null}
-      {error ? (
-        <p className="mt-3 text-sm text-danger-500" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ErrorNote className="mt-4">{error}</ErrorNote> : null}
       <MonthList items={items} onSelect={onSelect} />
     </Card>
   );
 }
+
+const SHORT_MONTH = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" });
 
 function MonthList({ items, onSelect }: { items: GoogleCalendarItem[]; onSelect: (item: GoogleCalendarItem) => void }) {
   if (items.length === 0) return null;
   return (
     <ul
       aria-label="Posts du mois"
-      className={clsx("mt-4 divide-y divide-cream-200 border-t border-cream-200 text-sm", items.length > LIST_SCROLL_FROM && "max-h-72 overflow-y-auto pr-1")}
+      className={clsx(
+        "mt-5 divide-y divide-ds-ink-200 border-t border-ds-ink-200",
+        items.length > LIST_SCROLL_FROM && "max-h-[26rem] overflow-y-auto pr-1",
+      )}
     >
       {items.map((item) => {
         const status = statusOf(item);
@@ -341,21 +413,35 @@ function MonthList({ items, onSelect }: { items: GoogleCalendarItem[]; onSelect:
               type="button"
               onClick={() => onSelect(item)}
               aria-label={`${formatDayFr(item.date, "day")} — ${itemLabel(item)} — ${status.label}`}
-              className="flex w-full min-w-0 items-center gap-2.5 py-2 text-left hover:text-primary-600"
+              className="group/post flex w-full min-w-0 items-center gap-3 rounded-ds-sm py-3 text-left ds-focus-inset"
             >
-              <span className="w-12 shrink-0 text-xs text-ink-500">{formatDayFr(item.date)}</span>
-              <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink-900/15" style={{ backgroundColor: item.accentColor }} />
-              <span className="min-w-0 flex-1 truncate font-medium text-ink-900">
-                {item.source === "request" ? (
-                  <span className="text-primary-600" aria-hidden>
-                    ✦{" "}
-                  </span>
-                ) : null}
-                {item.topic}
+              <span className="grid size-12 shrink-0 place-items-center rounded-ds-sm bg-ds-section-tint-2 text-ds-section-ink">
+                <span className="text-center leading-none">
+                  <span className="block text-lg/none font-bold ds-tnum">{Number(item.date.slice(8, 10))}</span>
+                  <span className="mt-1 block text-xs/none font-medium">{SHORT_MONTH.format(new Date(`${item.date}T00:00:00Z`))}</span>
+                </span>
               </span>
-              <Badge tone={status.tone} className="shrink-0">
-                {status.label}
-              </Badge>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-full ring-1 ring-ds-ink-900/15 ring-inset"
+                    style={{ backgroundColor: item.accentColor }}
+                  />
+                  <span className="min-w-0 truncate text-base font-semibold text-ds-ink-900 group-hover/post:text-ds-brand-700">
+                    {item.topic}
+                  </span>
+                </span>
+                <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <PostStatusPill kind={status.kind} />
+                  {item.source === "request" ? (
+                    <Badge tone="neutral" icon={Sparkles}>
+                      Sur mesure
+                    </Badge>
+                  ) : null}
+                </span>
+              </span>
+              <ChevronRight size={18} aria-hidden className="shrink-0 text-ds-ink-400" />
             </button>
           </li>
         );
@@ -373,6 +459,7 @@ function RequestBar({
   dates,
   monthParam,
   todayIso,
+  primary,
   onCreated,
 }: {
   swatches: SocialSwatch[];
@@ -380,6 +467,8 @@ function RequestBar({
   dates: { default: string; min: string; max: string };
   monthParam: string;
   todayIso: string;
+  /** Le bouton « Créer ce post » est-il l'action principale de la vue ? */
+  primary: boolean;
   onCreated: (postId: string) => void;
 }) {
   const router = useRouter();
@@ -416,19 +505,20 @@ function RequestBar({
   }
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
-          ✦
-        </span>
-        <h2 className="text-xl font-semibold">Demander un post sur mesure</h2>
-      </div>
-      <p className="mt-1 text-sm text-ink-500">Une actualité, une spécialité, une info pratique : Harmony prépare le post à partir de votre site.</p>
+    <Card>
+      <CardHeader
+        icon={Sparkles}
+        title="Demander un post sur mesure"
+        description="Une actualité, une spécialité, une info pratique : Harmony prépare le post à partir de votre site."
+      />
 
       {exhausted ? (
-        <p className="mt-4 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
-          Vous avez utilisé vos {GOOGLE_POST_REQUESTS_PER_MONTH} posts sur mesure {ofMonthFr(todayIso)}. Ils se renouvellent le 1er{" "}
-          {monthNameFr(usage.resetsOn)}. Vos posts du calendrier restent disponibles.
+        <p className="mt-4 flex items-start gap-2.5 rounded-ds-md bg-ds-warning-100 px-4 py-3 text-ds-body text-ds-warning-900">
+          <TriangleAlert size={18} aria-hidden className="mt-0.5 shrink-0" />
+          <span>
+            Vous avez utilisé vos {GOOGLE_POST_REQUESTS_PER_MONTH} posts sur mesure {ofMonthFr(todayIso)}. Ils se renouvellent le 1er{" "}
+            {monthNameFr(usage.resetsOn)}. Vos posts du calendrier restent disponibles.
+          </span>
         </p>
       ) : null}
 
@@ -444,6 +534,7 @@ function RequestBar({
             required
             minLength={3}
             disabled={disabled}
+            className="min-h-11"
           />
           <FieldHint>Plus c&apos;est précis, mieux c&apos;est.</FieldHint>
         </div>
@@ -461,8 +552,9 @@ function RequestBar({
             disabled={disabled}
             aria-invalid={dateOutOfRange || undefined}
             aria-describedby="google-post-date-hint"
+            className="min-h-11"
           />
-          <p id="google-post-date-hint" className={clsx("mt-1 text-xs", dateOutOfRange ? "text-danger-500" : "text-ink-500")}>
+          <p id="google-post-date-hint" className={clsx("mt-1 text-xs", dateOutOfRange ? "font-medium text-ds-danger-700" : "text-ds-ink-600")}>
             {dateOutOfRange
               ? `Choisissez une date entre le ${formatDayFr(dates.min, "day")} et le ${formatDayFr(dates.max, "day")}.`
               : "Vous pourrez le changer ensuite."}
@@ -471,8 +563,8 @@ function RequestBar({
 
         <div>
           <fieldset disabled={disabled}>
-            <legend className="mb-1 block text-sm font-medium text-ink-700">Couleur dominante</legend>
-            <div className="flex flex-wrap items-center gap-2">
+            <legend className="mb-1 block text-sm font-medium text-ds-ink-700">Couleur dominante</legend>
+            <div className="flex flex-wrap items-center gap-2.5">
               <ColorOption label="Automatique" value="auto" checked={choice === "auto"} onSelect={() => setChoice("auto")} hatched />
               {swatches.map((swatch) => (
                 <ColorOption
@@ -488,8 +580,8 @@ function RequestBar({
             </div>
           </fieldset>
           {choice === "other" ? (
-            <div className="mt-2 flex items-center gap-2">
-              <Label htmlFor="google-post-color-custom" className="mb-0">
+            <div className="mt-3 flex items-center gap-2.5">
+              <Label htmlFor="google-post-color-custom" className="mb-0!">
                 Couleur personnalisée
               </Label>
               <input
@@ -498,39 +590,53 @@ function RequestBar({
                 value={customHex}
                 onChange={(e) => setCustomHex(e.target.value)}
                 disabled={disabled}
-                className="h-8 w-12 cursor-pointer rounded-lg border border-ink-300 bg-white p-0.5"
+                className="h-9 w-14 cursor-pointer rounded-ds-sm border border-ds-ink-450 bg-white p-0.5 pointer-coarse:h-11"
               />
             </div>
           ) : null}
         </div>
 
-        <div className="sm:col-span-2 flex flex-wrap items-center gap-4">
-          <Button type="submit" disabled={disabled || dateOutOfRange || topic.trim().length < 3}>
-            {pending ? (
-              <>
-                <Spinner className="text-white" /> Création en cours… (10 à 30 secondes)
-              </>
-            ) : (
-              "Créer ce post"
-            )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-2">
+          <Button
+            type="submit"
+            variant={primary ? "primary" : "secondary"}
+            loading={pending}
+            disabled={disabled || dateOutOfRange || topic.trim().length < 3}
+            icon={<Sparkles size={18} aria-hidden />}
+          >
+            {pending ? "Création en cours…" : "Créer ce post"}
           </Button>
           {!exhausted ? (
-            <p className="text-sm text-ink-500">
-              Il vous reste <strong>{usage.remaining}</strong> post{usage.remaining > 1 ? "s" : ""} sur mesure ce mois-ci.
+            <p className="text-ds-body text-ds-ink-600">
+              Il vous reste <strong className="font-semibold text-ds-ink-900">{usage.remaining}</strong> post
+              {usage.remaining > 1 ? "s" : ""} sur mesure ce mois-ci.
             </p>
           ) : null}
         </div>
 
-        {error ? (
-          <p className="sm:col-span-2 text-sm text-danger-500" role="alert">
-            {error}
-          </p>
+        {pending ? (
+          <div className="rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200 sm:col-span-2 sm:p-5">
+            <GenerationProgress
+              icon={Sparkles}
+              title="Nous préparons votre post"
+              steps={REQUEST_STEPS}
+              running
+              estimate="10 à 30 secondes"
+              hint="Il s'ouvrira dès qu'il sera prêt."
+            />
+          </div>
         ) : null}
+        {error ? <ErrorNote className="sm:col-span-2">{error}</ErrorNote> : null}
         {created && created.date.slice(0, 7) !== monthParam ? (
-          <p className="sm:col-span-2 text-sm text-ink-700">
+          <p className="text-ds-body text-ds-ink-700 sm:col-span-2">
             Votre post est prêt.{" "}
-            <Link href={tabHref("posts", created.date.slice(0, 7))} className="font-medium text-primary-600 hover:underline">
-              Voir le {formatDayFr(created.date, "day")} →
+            <Link
+              href={tabHref("posts", created.date.slice(0, 7))}
+              scroll={false}
+              className="inline-flex items-center gap-1 rounded-ds-sm font-semibold text-ds-brand-700 underline ds-focus"
+            >
+              Voir le {formatDayFr(created.date, "day")}
+              <ArrowRight size={15} aria-hidden />
             </Link>
           </p>
         ) : null}
@@ -561,16 +667,28 @@ function ColorOption({
     <label
       title={label}
       className={clsx(
-        "relative flex cursor-pointer items-center justify-center rounded-full border border-cream-300 transition-shadow",
+        "relative flex cursor-pointer items-center justify-center rounded-full inset-ring inset-ring-ds-ink-900/20",
         "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50",
-        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-primary-500",
-        text ? "h-8 px-3 text-sm font-medium text-ink-700" : "h-8 w-8",
-        checked && "ring-2 ring-primary-400 ring-offset-1",
+        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ds-brand-600",
+        text ? "min-h-9 bg-white px-3.5 text-ds-body font-medium text-ds-ink-800 pointer-coarse:min-h-11" : "size-9 pointer-coarse:size-11",
+        checked && "ring-2 ring-ds-brand-600 ring-offset-2",
       )}
-      style={hex ? { backgroundColor: hex } : hatched ? { backgroundImage: "repeating-linear-gradient(135deg, #d3e3ef 0 3px, #ffffff 3px 7px)" } : undefined}
+      style={
+        hex
+          ? { backgroundColor: hex }
+          : hatched
+            ? { backgroundImage: "repeating-linear-gradient(135deg, var(--color-ds-ink-300) 0 3px, #ffffff 3px 7px)" }
+            : undefined
+      }
     >
       <input type="radio" name="google-post-color" value={value} checked={checked} onChange={onSelect} className="sr-only" />
       {text ? label : <span className="sr-only">{label}</span>}
+      {/* Le choix se lit aussi sans la couleur de l'anneau : une coche au coin de la pastille */}
+      {checked ? (
+        <span aria-hidden className="absolute -top-1 -right-1 grid size-4 place-items-center rounded-full bg-ds-brand-600 text-white ring-2 ring-white">
+          <Check size={10} strokeWidth={3.5} />
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -589,7 +707,7 @@ function CalendarCell({
   const dayNumber = Number(iso.slice(8, 10));
   if (items.length === 0) {
     return (
-      <div className="min-h-24 rounded-2xl border border-cream-300 bg-cream-50 p-1.5 text-sm text-ink-500 sm:p-2">
+      <div className="min-h-24 rounded-ds-sm bg-ds-ink-50 p-0.5 ring-1 ring-ds-ink-200 sm:p-2">
         <DayNumber value={dayNumber} isToday={isToday} />
       </div>
     );
@@ -597,25 +715,28 @@ function CalendarCell({
   const shown = items.slice(0, CHIP_MAX);
   const more = items.length - shown.length;
   return (
-    <div className="min-h-24 rounded-2xl border border-cream-300 bg-white p-1.5 sm:p-2">
+    <div className="min-h-24 rounded-ds-sm bg-white p-0.5 ring-1 ring-ds-section-line sm:p-2">
       <DayNumber value={dayNumber} isToday={isToday} />
-      <div className="mt-1 space-y-1">
+      <div className="mt-0.5 space-y-1 sm:mt-1">
         {shown.map((item) => (
           <Chip key={item.id} item={item} onClick={() => onSelect(item)} />
         ))}
-        {more > 0 ? <p className="px-1 text-xs text-ink-500">+{more}</p> : null}
+        {more > 0 ? <p className="px-1 text-xs text-ds-ink-600">+{more}</p> : null}
       </div>
     </div>
   );
 }
 
-function chipBorder(item: GoogleCalendarItem): string {
-  if (item.status === "published") return "border border-solid border-success-500";
-  if (item.downloadedAt) return "border border-solid border-info-500";
-  return "border border-dashed border-info-500";
-}
+/** Fond et encre de la pastille du calendrier selon le statut — doublés de l'icône du statut. */
+const CHIP_TONE: Record<PostStatusKind, string> = {
+  publie: "bg-ds-success-100 text-ds-success-900",
+  telecharge: "bg-ds-section-tint-2 text-ds-section-ink",
+  "a-publier": "bg-white text-ds-ink-900 inset-ring inset-ring-ds-ink-300",
+};
 
 function Chip({ item, onClick }: { item: GoogleCalendarItem; onClick: () => void }) {
+  const { kind } = statusOf(item);
+  const Icon = STATUS_ICON[kind];
   return (
     <button
       type="button"
@@ -623,18 +744,17 @@ function Chip({ item, onClick }: { item: GoogleCalendarItem; onClick: () => void
       title={item.topic}
       aria-label={itemLabel(item)}
       className={clsx(
-        "flex w-full min-w-0 flex-col items-center gap-0.5 rounded-lg px-0.5 py-1 text-left text-xs leading-snug hover:bg-cream-100",
-        "min-h-9 sm:min-h-0 sm:flex-row sm:items-start sm:gap-1.5 sm:px-1.5",
-        chipBorder(item),
+        "flex min-h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border-l-4 px-0.5 py-1 text-left text-xs/4 shadow-sm ds-focus pointer-coarse:min-h-11",
+        "sm:items-start sm:justify-start sm:px-1.5 sm:py-1.5",
+        CHIP_TONE[kind],
       )}
+      // Liseré à la couleur dominante du visuel du post
+      style={{ borderLeftColor: item.accentColor }}
     >
-      <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-ink-900/15 sm:mt-1" style={{ backgroundColor: item.accentColor }} />
-      <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-cream-200 text-[10px] font-bold text-info-500">
-        G
-      </span>
+      <Icon size={14} strokeWidth={2.5} aria-hidden className="shrink-0 sm:mt-px" />
       <span aria-hidden className="hidden min-w-0 flex-1 sm:block">
-        <span className="line-clamp-2 font-medium text-ink-900">
-          {item.source === "request" ? <span className="text-primary-600">✦ </span> : null}
+        <span className="line-clamp-2 font-medium">
+          {item.source === "request" ? <Sparkles size={11} aria-hidden className="mr-1 inline-block align-[-1px]" /> : null}
           {item.topic}
         </span>
       </span>
@@ -644,16 +764,14 @@ function Chip({ item, onClick }: { item: GoogleCalendarItem; onClick: () => void
 
 function DayNumber({ value, isToday }: { value: number; isToday: boolean }) {
   return (
-    <span className={clsx("inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold", isToday ? "bg-primary-500 text-white" : "text-ink-700")}>
+    <span
+      className={clsx(
+        "m-0.5 inline-grid size-6 place-items-center rounded-full text-xs font-semibold ds-tnum sm:m-0",
+        isToday ? "bg-ds-brand-600 text-white" : "text-ds-ink-700",
+      )}
+    >
       {value}
-    </span>
-  );
-}
-
-function LegendSwatch({ className, label }: { className: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={clsx("inline-block h-3 w-6 rounded", className)} /> {label}
+      {isToday ? <span className="sr-only"> (aujourd&apos;hui)</span> : null}
     </span>
   );
 }

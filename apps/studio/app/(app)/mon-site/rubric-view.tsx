@@ -1,3 +1,4 @@
+import { Check, Clock, Info, Mail, MapPin, Phone, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ExternalSiteProfile } from "@theralys/shared";
 import { SOCIAL_NETWORKS, bookingDisplay, type RubricId } from "@/lib/external-site/rubrics";
@@ -13,8 +14,8 @@ import { TEXT_LINK } from "./styles";
 function Sub({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-ink-700">{label}</p>
-      <div className="mt-1">{children}</div>
+      <p className="text-ds-meta font-semibold text-ds-ink-600">{label}</p>
+      <div className="mt-1.5">{children}</div>
     </div>
   );
 }
@@ -36,20 +37,39 @@ const Paragraphs = ({ items }: { items: readonly string[] }) => (
   </div>
 );
 
+/** Tuile d'une liste (spécialité, info pratique) : un fond à peine teinté la détache de ses voisines. */
+const TILE = "rounded-ds-sm bg-ds-ink-50 px-4 py-3 ring-1 ring-ds-ink-200";
+
+/** Une coordonnée : son pictogramme, son intitulé et sa valeur. */
+function ContactItem({ icon: Icon, label, className, children }: { icon: LucideIcon; label: string; className?: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="flex items-center gap-2 text-ds-meta font-semibold text-ds-ink-600">
+        <Icon size={16} aria-hidden className="shrink-0 text-ds-section-accent" />
+        {label}
+      </dt>
+      <dd className={`mt-0.5 pl-6 text-ds-ink-900 ${className ?? ""}`}>{children}</dd>
+    </div>
+  );
+}
+
 export function RubricView({ rubric, profile }: { rubric: RubricId; profile: ExternalSiteProfile }) {
   switch (rubric) {
     case "presentation":
       return (
         <div className="space-y-4">
-          {profile.headline !== "" ? <p className="text-lg font-semibold text-ink-900">{profile.headline}</p> : null}
+          {profile.headline !== "" ? <p className="font-ds-display text-xl/7 font-bold text-ds-section-ink">{profile.headline}</p> : null}
           {profile.intro.length > 0 ? <Paragraphs items={profile.intro} /> : null}
           {profile.highlights.length > 0 ? (
             <Sub label="Points forts">
-              <ul className="list-disc space-y-1 pl-5">
+              <ul className="space-y-1.5">
                 {profile.highlights.map((item, index) => (
-                  <li key={index}>
-                    <span className="font-medium text-ink-900">{item.title}</span>
-                    {item.text ? `\u00a0: ${item.text}` : ""}
+                  <li key={index} className="flex items-start gap-2.5">
+                    <Check size={18} strokeWidth={2.5} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
+                    <span>
+                      <span className="font-semibold text-ds-ink-900">{item.title}</span>
+                      {item.text ? `\u00a0: ${item.text}` : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -59,13 +79,13 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       );
     case "specialties":
       return (
-        <ul className="space-y-3">
+        <ul className="grid gap-3">
           {profile.specialties.map((specialty) => (
-            <li key={specialty.slug}>
-              <p className="font-semibold text-ink-900">{specialty.title}</p>
-              {specialty.excerpt !== "" ? <p>{specialty.excerpt}</p> : null}
+            <li key={specialty.slug} className={TILE}>
+              <p className="font-semibold text-ds-ink-900">{specialty.title}</p>
+              {specialty.excerpt !== "" ? <p className="mt-0.5 text-ds-body">{specialty.excerpt}</p> : null}
               {specialty.url ? (
-                <p className="text-sm">
+                <p className="mt-1.5 text-ds-meta text-ds-ink-600">
                   Page de votre site&nbsp;: <ExternalLink href={specialty.url}>{siteAddressLabel(specialty.url)}</ExternalLink>
                 </p>
               ) : null}
@@ -79,9 +99,12 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
           {profile.about.paragraphs.length > 0 ? <Paragraphs items={profile.about.paragraphs} /> : null}
           {profile.about.credentials.length > 0 ? (
             <Sub label="Diplômes et formations">
-              <ul className="list-disc space-y-1 pl-5">
+              <ul className="space-y-1.5">
                 {profile.about.credentials.map((line, index) => (
-                  <li key={index}>{line}</li>
+                  <li key={index} className="flex items-start gap-2.5">
+                    <Check size={18} strokeWidth={2.5} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
+                    <span>{line}</span>
+                  </li>
                 ))}
               </ul>
             </Sub>
@@ -90,21 +113,21 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       );
     case "practical":
       return (
-        <dl className="space-y-2">
+        <dl className="grid gap-3">
           {profile.practical.map((item, index) => (
-            <div key={index}>
-              <dt className="font-medium text-ink-900">{item.title}</dt>
-              <dd>{item.text}</dd>
+            <div key={index} className={TILE}>
+              <dt className="font-semibold text-ds-ink-900">{item.title}</dt>
+              <dd className="mt-0.5 text-ds-body">{item.text}</dd>
             </div>
           ))}
         </dl>
       );
     case "process":
       return (
-        <ol className="list-decimal space-y-2 pl-5">
+        <ol className="list-decimal space-y-2 pl-5 marker:font-bold marker:text-ds-section-accent">
           {profile.process.map((step, index) => (
-            <li key={index}>
-              <span className="font-medium text-ink-900">{step.title}</span>&nbsp;: {step.description}
+            <li key={index} className="pl-1">
+              <span className="font-semibold text-ds-ink-900">{step.title}</span>&nbsp;: {step.description}
             </li>
           ))}
         </ol>
@@ -113,9 +136,9 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       return (
         <dl className="space-y-3">
           {profile.faq.map((item, index) => (
-            <div key={index}>
-              <dt className="font-medium text-ink-900">{item.question}</dt>
-              <dd>{item.answer}</dd>
+            <div key={index} className={TILE}>
+              <dt className="font-semibold text-ds-ink-900">{item.question}</dt>
+              <dd className="mt-0.5 text-ds-body">{item.answer}</dd>
             </div>
           ))}
         </dl>
@@ -123,44 +146,37 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
     case "contact": {
       const { address, phone, email, hours, note } = profile.contact;
       return (
-        <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+        <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
           {address ? (
-            <div>
-              <dt className="font-medium text-ink-900">Adresse</dt>
-              <dd>{address}</dd>
-            </div>
+            <ContactItem icon={MapPin} label="Adresse">
+              {address}
+            </ContactItem>
           ) : null}
           {phone ? (
-            <div>
-              <dt className="font-medium text-ink-900">Téléphone</dt>
-              <dd>{phone}</dd>
-            </div>
+            <ContactItem icon={Phone} label="Téléphone">
+              {phone}
+            </ContactItem>
           ) : null}
           {email ? (
-            <div>
-              <dt className="font-medium text-ink-900">Adresse e-mail</dt>
-              <dd className="wrap-anywhere">{email}</dd>
-            </div>
+            <ContactItem icon={Mail} label="Adresse e-mail" className="wrap-anywhere">
+              {email}
+            </ContactItem>
           ) : null}
           {hours.length > 0 ? (
-            <div>
-              <dt className="font-medium text-ink-900">Horaires</dt>
-              <dd>
-                <ul>
-                  {hours.map((line, index) => (
-                    <li key={index}>
-                      {line.label}&nbsp;: {line.value}
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
+            <ContactItem icon={Clock} label="Horaires">
+              <ul>
+                {hours.map((line, index) => (
+                  <li key={index}>
+                    {line.label}&nbsp;: {line.value}
+                  </li>
+                ))}
+              </ul>
+            </ContactItem>
           ) : null}
           {note ? (
-            <div>
-              <dt className="font-medium text-ink-900">Précision</dt>
-              <dd>{note}</dd>
-            </div>
+            <ContactItem icon={Info} label="Précision">
+              {note}
+            </ContactItem>
           ) : null}
         </dl>
       );
@@ -170,7 +186,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
       if (!booking) return null;
       return booking.kind === "phone" ? (
         <p>
-          Par téléphone, au <span className="font-medium text-ink-900">{booking.number}</span>.
+          Par téléphone, au <span className="font-semibold text-ds-ink-900">{booking.number}</span>.
         </p>
       ) : (
         <p>
@@ -184,7 +200,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
         <ul className="space-y-1.5">
           {SOCIAL_NETWORKS.filter((network) => profile.social[network.key]).map((network) => (
             <li key={network.key}>
-              <span className="font-medium text-ink-900">{network.label}&nbsp;:</span> <ExternalLink href={profile.social[network.key] ?? ""}>{siteAddressLabel(profile.social[network.key] ?? "")}</ExternalLink>
+              <span className="font-semibold text-ds-ink-900">{network.label}&nbsp;:</span> <ExternalLink href={profile.social[network.key] ?? ""}>{siteAddressLabel(profile.social[network.key] ?? "")}</ExternalLink>
             </li>
           ))}
         </ul>

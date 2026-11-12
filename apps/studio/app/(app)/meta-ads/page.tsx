@@ -1,6 +1,8 @@
+import { Hourglass, Lock, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { hasMetaAds } from "@theralys/db";
 import { activeExternalSite } from "@theralys/shared";
-import { Card } from "@theralys/ui";
+import { Card, EmptyState, LinkButton, PageHeader, SECTIONS, Stagger } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { getProspect, getSite, siteUrl } from "@/lib/data";
 import { getMetaAdsData, type MetaAdsData } from "@/lib/meta-ads/data";
@@ -22,7 +24,11 @@ export default async function MetaAdsPage({ searchParams }: Props) {
   // Les démos présentent l'offre complète ; les clients suivent leur formule (Scale)
   if (site.type !== "demo" && !hasMetaAds(site.plan)) {
     return (
-      <Fallback title="La section Meta Ads n'est pas incluse dans votre formule">
+      <Fallback
+        icon={Lock}
+        title="La section Meta Ads n'est pas incluse dans votre formule"
+        action={<LinkButton href={SECTIONS.compte.href}>Voir ma formule</LinkButton>}
+      >
         Passez à la formule <strong>Scale</strong> pour savoir si Facebook et Instagram sont pertinents pour votre cabinet,
         suivre les annonces des praticiens autour de vous, obtenir vos annonces prêtes à publier (visuels, textes, plan vidéo),
         un plan de campagne complet et{" "}
@@ -47,7 +53,7 @@ export default async function MetaAdsPage({ searchParams }: Props) {
     if (!isMissingSchemaError(err)) throw err;
     console.error("[meta-ads] schéma absent — migration 0006 non appliquée ?", err);
     return (
-      <Fallback title="Cette section est en cours d'activation, revenez dans quelques minutes.">
+      <Fallback icon={Hourglass} title="Cette section est en cours d'activation, revenez dans quelques minutes.">
         Le diagnostic, la veille du marché, vos annonces, le plan de campagne et le suivi seront disponibles dès l&apos;activation.
       </Fallback>
     );
@@ -68,14 +74,16 @@ export default async function MetaAdsPage({ searchParams }: Props) {
   );
 }
 
-function Fallback({ title, children }: { title: string; children: React.ReactNode }) {
+/** Section indisponible (formule, activation en cours) : l'en-tête de la section, puis ce qui manque et ce qui apparaîtra. */
+function Fallback({ icon, title, action, children }: { icon: LucideIcon; title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <div>
-      <h1 className="text-4xl font-bold">Meta Ads</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">{title}</p>
-        <p className="mt-1 text-sm">{children}</p>
+    <Stagger className="space-y-6" data-ds-section="meta-ads">
+      <PageHeader section="meta-ads" />
+      <Card padding="none">
+        <EmptyState as="h2" icon={icon} title={title} action={action}>
+          {children}
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

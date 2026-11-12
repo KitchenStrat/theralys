@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { MetaAdsAnalysisView, MetaAdsUsageView } from "@/lib/meta-ads/data";
 import { launchMetaAnalysis } from "./actions";
 
@@ -19,6 +19,12 @@ export type AnalysisLaunch = {
   canLaunch: boolean;
   error: string | null;
   message: string | null;
+  /**
+   * Heure du dernier lancement parti de cette page (`Date.now()`), `null` avant
+   * tout lancement : point de départ du chronomètre de l'attente, le même quel
+   * que soit l'onglet d'où elle est suivie.
+   */
+  startedAt: number | null;
   launch: () => void;
 };
 
@@ -32,20 +38,31 @@ export function useAnalysisLaunch({ latest, usage }: { latest: MetaAdsAnalysisVi
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const runningElsewhere = latest?.status === "running" && !pending;
   const running = pending || latest?.status === "running";
   const canLaunch = usage.analysesRemaining > 0;
 
-  // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin
+  // La relecture passe par une référence : l'intervalle ci-dessous ne dépend alors que de `runningElsewhere`,
+  // jamais de l'identité de `router` (stable aujourd'hui, mais c'est un détail du cadre applicatif).
+  const refresh = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    refresh.current = () => router.refresh();
+  }, [router]);
+
+  // Analyse en cours lancée ailleurs : rien ne la rafraîchirait sinon — relecture périodique jusqu'à la fin.
+  // Un seul intervalle à la fois : posé quand l'analyse passe « en cours ailleurs », retiré dès qu'elle ne
+  // l'est plus (fin, erreur, lancement d'ici) et au démontage ; un nouveau rendu ne le relance pas.
   useEffect(() => {
     if (!runningElsewhere) return;
-    const timer = setInterval(() => router.refresh(), RUNNING_REFRESH_MS);
+    const timer = setInterval(() => refresh.current(), RUNNING_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [runningElsewhere, router]);
+  }, [runningElsewhere]);
 
   function launch() {
     setError(null);
     setMessage(null);
+    setStartedAt(Date.now());
     startTransition(async () => {
       const result = await launchMetaAnalysis();
       if (result.error) {
@@ -60,5 +77,5 @@ export function useAnalysisLaunch({ latest, usage }: { latest: MetaAdsAnalysisVi
     });
   }
 
-  return { pending, running, runningElsewhere, canLaunch, error, message, launch };
+  return { pending, running, runningElsewhere, canLaunch, error, message, startedAt, launch };
 }

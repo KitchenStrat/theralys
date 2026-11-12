@@ -1,8 +1,9 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useEffect, useId, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
-import { Button, Spinner } from "@theralys/ui";
 import type { ExternalSiteProfile } from "@theralys/shared";
+import { Button } from "@/components/ds";
 import {
   FIELD_MAX,
   LIST_MAX,
@@ -109,16 +110,24 @@ function FormShell<R extends RubricId>({
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} noValidate aria-label={`Modifier la rubrique ${title}`} className="mt-4 space-y-5" data-testid={`rubric-${rubric}-form`}>
+    <form
+      ref={formRef}
+      onSubmit={onSubmit}
+      noValidate
+      aria-label={`Modifier la rubrique ${title}`}
+      // Encadré teinté : la rubrique en cours de modification se détache des autres
+      className="mt-4 space-y-5 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70 sm:p-5"
+      data-testid={`rubric-${rubric}-form`}
+    >
       {/* Champs figés pendant l'enregistrement ; `role="none"` : ce regroupement technique n'est pas annoncé comme un groupe */}
       <fieldset role="none" disabled={pending} className="min-w-0 space-y-5">
         {children({ fid: (key) => `${formId}-${key}`, draft, change, errors })}
       </fieldset>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending} data-testid={`rubric-${rubric}-save`}>
-          {pending ? <Spinner className="text-white" /> : null} Enregistrer
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" loading={pending} icon={<Check size={18} aria-hidden />} data-testid={`rubric-${rubric}-save`}>
+          Enregistrer
         </Button>
-        <Button type="button" variant="ghost" disabled={pending} onClick={() => onClose(false)} data-testid={`rubric-${rubric}-cancel`}>
+        <Button type="button" variant="quiet" disabled={pending} onClick={() => onClose(false)} data-testid={`rubric-${rubric}-cancel`}>
           Annuler
         </Button>
       </div>

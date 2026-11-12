@@ -1,264 +1,424 @@
 "use client";
 
 import { clsx } from "clsx";
-import { Badge, Card } from "@theralys/ui";
+import {
+  Camera,
+  Check,
+  ChevronUp,
+  ChevronsUp,
+  CircleAlert,
+  CircleCheckBig,
+  ClipboardCheck,
+  Clock,
+  ListChecks,
+  MessageSquareText,
+  Minus,
+  Repeat,
+  Search,
+  Star,
+  ThumbsUp,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  Trophy,
+  Users,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import type { GoogleActionItem, GoogleAudit, GoogleAuditCheck, GoogleCheckStatus } from "@theralys/shared";
+import {
+  AnimatedNumber,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  ProgressBar,
+  ProgressRing,
+  Sparkline,
+  type BadgeTone,
+} from "@/components/ds";
 import { formatDayFr } from "@/lib/calendar";
 import type { GoogleAuditView, GoogleScoreHistoryPoint } from "@/lib/google/data";
 
-const GRADE_LABEL: Record<GoogleAudit["grade"], string> = {
-  A: "Excellente fiche",
-  B: "Bonne fiche",
-  C: "Fiche à renforcer",
-  D: "Fiche à compléter",
+/** Mention du score : en mots, avec une icône — la couleur de l'anneau reste celle de la section. */
+const GRADE: Record<GoogleAudit["grade"], { label: string; tone: BadgeTone; icon: LucideIcon }> = {
+  A: { label: "Excellente fiche", tone: "success", icon: Trophy },
+  B: { label: "Bonne fiche", tone: "brand", icon: ThumbsUp },
+  C: { label: "Fiche à renforcer", tone: "warning", icon: CircleAlert },
+  D: { label: "Fiche à compléter", tone: "danger", icon: TriangleAlert },
 };
 
-/** Couleurs du score (anneau, mention) par grade — jetons du thème (`packages/ui/src/styles.css`). */
-const GRADE_COLOR: Record<GoogleAudit["grade"], string> = {
-  A: "var(--color-success-500)",
-  B: "var(--color-primary-500)",
-  C: "var(--color-warning-500)",
-  D: "var(--color-danger-500)",
+const STATUS: Record<GoogleCheckStatus, { label: string; tone: BadgeTone; icon: LucideIcon; dot: string }> = {
+  ok: { label: "OK", tone: "success", icon: Check, dot: "bg-ds-success-600 text-white" },
+  warn: { label: "À améliorer", tone: "warning", icon: TriangleAlert, dot: "bg-ds-warning-100 text-ds-warning-700" },
+  missing: { label: "Manquant", tone: "danger", icon: X, dot: "bg-ds-danger-100 text-ds-danger-700" },
+  unknown: { label: "Non disponible", tone: "neutral", icon: Minus, dot: "bg-ds-ink-100 text-ds-ink-600" },
 };
 
-const STATUS: Record<GoogleCheckStatus, { glyph: string; label: string; className: string }> = {
-  ok: { glyph: "✓", label: "OK", className: "bg-success-100 text-success-500" },
-  warn: { glyph: "!", label: "À améliorer", className: "bg-warning-100 text-warning-500" },
-  missing: { glyph: "✕", label: "Manquant", className: "bg-danger-100 text-danger-500" },
-  unknown: { glyph: "–", label: "Non disponible", className: "bg-cream-200 text-ink-500" },
+const IMPACT: Record<GoogleActionItem["impact"], { tone: BadgeTone; icon: LucideIcon }> = {
+  fort: { tone: "warning", icon: ChevronsUp },
+  moyen: { tone: "brand", icon: ChevronUp },
+  faible: { tone: "neutral", icon: Minus },
 };
 
-const IMPACT_TONE: Record<GoogleActionItem["impact"], "primary" | "info" | "neutral"> = {
-  fort: "primary",
-  moyen: "info",
-  faible: "neutral",
-};
+/** Ordre des contrôles à reprendre : ce qui manque d'abord, puis ce qui se joue sur le plus de points. */
+const SEVERITY: Record<GoogleCheckStatus, number> = { missing: 0, warn: 1, unknown: 2, ok: 3 };
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count > 1 ? many : one}`;
+}
 
 export function AuditTab({
   linked,
   latestAudit,
   history,
+  onLinkRequest,
 }: {
   linked: boolean;
   latestAudit: GoogleAuditView | null;
   history: GoogleScoreHistoryPoint[];
+  /** Fiche non reliée : ramène au champ de recherche de l'écran d'accueil */
+  onLinkRequest?: () => void;
 }) {
   if (!latestAudit) {
     return (
-      <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">
-          {linked ? "Votre fiche n'a pas encore été auditée." : "Reliez votre fiche Google pour obtenir son audit."}
-        </p>
-        <p className="mt-1 text-sm">
+      <Card padding="none">
+        <EmptyState
+          as="h2"
+          icon={ClipboardCheck}
+          title={linked ? "Votre fiche n'a pas encore été auditée." : "Reliez votre fiche Google pour obtenir son audit."}
+          action={
+            !linked && onLinkRequest ? (
+              <Button variant="secondary" icon={<Search size={18} aria-hidden />} onClick={onLinkRequest}>
+                Retrouver ma fiche
+              </Button>
+            ) : undefined
+          }
+        >
           {linked
             ? "Cliquez sur « Actualiser » ci-dessus : Harmony lit votre fiche et calcule un score sur 100 avec un plan d'action."
             : "Score sur 100, contrôles détaillés et plan d'action priorisé, sans rien publier à votre place."}
-        </p>
+        </EmptyState>
       </Card>
     );
   }
 
   const { audit } = latestAudit;
   const known = audit.checks.filter((c) => c.status !== "unknown");
-  const okCount = known.filter((c) => c.status === "ok").length;
+  const okChecks = audit.checks.filter((c) => c.status === "ok");
+  const okCount = okChecks.length;
+  const toFix = audit.checks
+    .filter((c) => c.status === "warn" || c.status === "missing")
+    .sort((a, b) => SEVERITY[a.status] - SEVERITY[b.status] || b.maxPoints - b.points - (a.maxPoints - a.points));
+  const unknown = audit.checks.filter((c) => c.status === "unknown");
+  const grade = GRADE[audit.grade];
+  const score = Math.max(0, Math.min(100, audit.score));
+  const hasBenchmark = Boolean(audit.benchmark && audit.benchmark.competitors.length > 0);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <div className="space-y-6">
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold">Score de votre fiche</h2>
-          <div className="mt-4 flex flex-wrap items-center gap-6">
-            <ScoreRing score={audit.score} grade={audit.grade} />
-            <div className="min-w-0">
-              <p className="text-lg font-semibold" style={{ color: GRADE_COLOR[audit.grade] }}>
-                {GRADE_LABEL[audit.grade]}
+    <div className="space-y-6">
+      <div className={clsx("grid gap-6", hasBenchmark && "xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
+        <Card variant="tinted" className="flex flex-col gap-5">
+          <div className="grid flex-1 items-center gap-x-8 gap-y-5 md:grid-cols-[auto_minmax(0,1fr)]">
+            <ProgressRing
+              value={score}
+              label={`Score ${score} sur 100, grade ${audit.grade}`}
+              valueText={`${score} sur 100`}
+              size={164}
+              thickness={14}
+              className="mx-auto [--ds-ring-track:white] md:mx-0"
+            >
+              <span className="block font-ds-display text-[3.25rem]/none font-extrabold tracking-tight text-ds-section-ink">
+                <AnimatedNumber value={score} />
+              </span>
+              <span className="mt-1 block text-ds-meta font-medium text-ds-ink-600">sur 100</span>
+            </ProgressRing>
+            <div className="min-w-0 max-md:text-center">
+              <h2 className="text-ds-body font-semibold text-ds-section-accent">
+                Score de votre fiche
+              </h2>
+              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 max-md:justify-center">
+                <span className="font-ds-display text-2xl/8 font-bold text-ds-section-ink sm:text-[1.75rem]/9">{grade.label}</span>
+                <Badge tone={grade.tone} icon={grade.icon}>
+                  Grade {audit.grade}
+                </Badge>
               </p>
-              <p className="mt-1 text-sm text-ink-700">
+              <p className="mt-2 text-base text-ds-ink-700">
                 {okCount} contrôle{okCount > 1 ? "s" : ""} sur {known.length} au vert ·{" "}
                 {audit.actions.length} action{audit.actions.length > 1 ? "s" : ""} proposée{audit.actions.length > 1 ? "s" : ""}
               </p>
-              <p className="mt-1 text-xs text-ink-500">Calculé le {formatDayFr(latestAudit.createdAt, "day")}.</p>
+              <ProgressBar
+                className="mt-3 max-w-sm [--ds-progress-track:white] max-md:mx-auto"
+                size="sm"
+                value={okCount}
+                max={Math.max(1, known.length)}
+                ariaLabel="Contrôles au vert"
+                valueText={`${okCount} sur ${known.length}`}
+                hideValueText
+              />
+              <p className="mt-3 text-ds-meta text-ds-ink-600">Calculé le {formatDayFr(latestAudit.createdAt, "day")}.</p>
             </div>
           </div>
-          {audit.benchmark && audit.benchmark.competitors.length > 0 ? (
-            <BenchmarkNote audit={audit} snapshot={latestAudit.snapshot} />
-          ) : null}
           <ScoreHistory history={history} />
         </Card>
 
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold">Contrôles</h2>
-          <ul className="mt-3 divide-y divide-cream-200" aria-label="Contrôles de la fiche">
-            {audit.checks.map((check) => (
-              <CheckRow key={check.id} check={check} />
-            ))}
-          </ul>
-        </Card>
+        {hasBenchmark ? <BenchmarkCard audit={audit} snapshot={latestAudit.snapshot} /> : null}
       </div>
 
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold">Plan d&apos;action</h2>
-        {audit.actions.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-500">Rien à signaler : votre fiche est complète. Continuez à collecter des avis.</p>
-        ) : (
-          <>
-            <p className="mt-1 text-sm text-ink-500">
-              Dans l&apos;ordre d&apos;impact : commencez par le haut, chaque action se fait depuis votre fiche Google.
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <Card>
+          <CardHeader
+            icon={ListChecks}
+            title="Plan d'action"
+            description={
+              audit.actions.length === 0
+                ? undefined
+                : "Dans l'ordre d'impact : commencez par le haut, chaque action se fait depuis votre fiche Google."
+            }
+            action={
+              audit.actions.length > 0 ? (
+                <Badge tone="section">{plural(audit.actions.length, "action", "actions")}</Badge>
+              ) : undefined
+            }
+          />
+          {audit.actions.length === 0 ? (
+            <p className="mt-5 flex items-start gap-3 rounded-ds-md bg-ds-success-100 p-4 text-base font-medium text-ds-success-900">
+              <CircleCheckBig size={22} aria-hidden className="mt-0.5 shrink-0" />
+              Rien à signaler : votre fiche est complète. Continuez à collecter des avis.
             </p>
-            <ol className="mt-4 space-y-4" aria-label="Actions à mener">
+          ) : (
+            <ol className="mt-5 space-y-3.5" aria-label="Actions à mener">
               {audit.actions.map((action, index) => (
-                <li key={action.id} className="rounded-2xl border border-cream-200 bg-cream-50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h3 className="font-semibold text-ink-900">
-                      <span className="mr-2 text-ink-500">{index + 1}.</span>
-                      {action.title}
-                    </h3>
-                    <span className="flex shrink-0 gap-1.5">
-                      <Badge tone={IMPACT_TONE[action.impact]}>Impact {action.impact}</Badge>
-                      <Badge tone="neutral">{action.effort}</Badge>
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-ink-700">{action.why}</p>
-                  <p className="mt-2 text-sm text-ink-900">
-                    <span className="font-medium">Comment : </span>
-                    {action.how}
-                  </p>
-                </li>
+                <ActionItem key={action.id} action={action} index={index} />
               ))}
             </ol>
-          </>
-        )}
-      </Card>
+          )}
+        </Card>
+
+        <ul className="space-y-6" aria-label="Contrôles de la fiche">
+          {okChecks.length > 0 ? (
+            <Card as="li">
+              <CardHeader
+                icon={ThumbsUp}
+                title="Ce qui va bien"
+                description={`${plural(okChecks.length, "contrôle", "contrôles")} au vert : rien à faire ici.`}
+              />
+              <ul className="mt-4 divide-y divide-ds-ink-200" aria-label="Ce qui va bien">
+                {okChecks.map((check) => (
+                  <CheckRow key={check.id} check={check} />
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+          {toFix.length > 0 ? (
+            <Card as="li">
+              <CardHeader
+                icon={Wrench}
+                title="À reprendre"
+                description={`${plural(toFix.length, "contrôle", "contrôles")} où votre fiche perd des points.`}
+              />
+              <ul className="mt-4 divide-y divide-ds-ink-200" aria-label="À reprendre">
+                {toFix.map((check) => (
+                  <CheckRow key={check.id} check={check} />
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+          {unknown.length > 0 ? (
+            <Card as="li">
+              <CardHeader
+                icon={Minus}
+                title="Non mesuré pour l'instant"
+                description="Ces contrôles ne comptent pas dans votre score tant que l'information manque."
+              />
+              <ul className="mt-4 divide-y divide-ds-ink-200" aria-label="Non mesuré pour l'instant">
+                {unknown.map((check) => (
+                  <CheckRow key={check.id} check={check} />
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+        </ul>
+      </div>
     </div>
   );
 }
 
-/** Anneau SVG du score (0..100), sans bibliothèque : cercle de fond + arc coloré selon le grade. */
-export function ScoreRing({ score, grade }: { score: number; grade: GoogleAudit["grade"] }) {
-  const radius = 52;
-  const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(100, score));
-  const dash = (clamped / 100) * circumference;
+function ActionItem({ action, index }: { action: GoogleActionItem; index: number }) {
+  const impact = IMPACT[action.impact];
   return (
-    <svg
-      width="136"
-      height="136"
-      viewBox="0 0 136 136"
-      role="img"
-      aria-label={`Score ${clamped} sur 100, grade ${grade}`}
-      className="shrink-0"
-    >
-      <circle cx="68" cy="68" r={radius} fill="none" stroke="var(--color-cream-200)" strokeWidth="12" />
-      <circle
-        cx="68"
-        cy="68"
-        r={radius}
-        fill="none"
-        stroke={GRADE_COLOR[grade]}
-        strokeWidth="12"
-        strokeLinecap="round"
-        strokeDasharray={`${dash} ${circumference - dash}`}
-        transform="rotate(-90 68 68)"
-      />
-      <text x="68" y="64" textAnchor="middle" fontSize="34" fontWeight="700" fill="var(--color-ink-900)">
-        {clamped}
-      </text>
-      <text x="68" y="88" textAnchor="middle" fontSize="14" fontWeight="600" fill={GRADE_COLOR[grade]}>
-        Grade {grade}
-      </text>
-    </svg>
-  );
-}
-
-function CheckRow({ check }: { check: GoogleAuditCheck }) {
-  const status = STATUS[check.status];
-  return (
-    <li className="flex items-start gap-3 py-3">
-      <span
-        aria-hidden
-        className={clsx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold", status.className)}
-      >
-        {status.glyph}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-medium text-ink-900">{check.label}</p>
-          <span className="text-xs text-ink-500">
-            <span className="sr-only">{status.label} — </span>
-            {check.status === "unknown" ? "hors score" : `${check.points}/${check.maxPoints} pts`}
-          </span>
-        </div>
-        <p className="text-sm text-ink-700">{check.detail}</p>
+    <li className="rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200 sm:p-5">
+      <div className="flex flex-wrap items-start gap-x-3.5 gap-y-2.5">
+        <span
+          aria-hidden
+          className={clsx(
+            "grid size-9 shrink-0 place-items-center rounded-full text-ds-body font-bold ds-tnum",
+            // La première action est le point de départ : pastille en dégradé profond (blanc lisible dessus)
+            index === 0
+              ? "bg-ds-section-gradient-deep text-ds-section-on-deep shadow-ds-glow"
+              : "bg-ds-section-tint-2 text-ds-section-ink",
+          )}
+        >
+          {index + 1}
+        </span>
+        <h3 className="min-w-0 flex-[1_1_12rem] pt-1.5 text-base/6 font-semibold text-ds-ink-900">{action.title}</h3>
+        <span className="flex shrink-0 flex-wrap gap-1.5 sm:pt-1">
+          <Badge tone={impact.tone} icon={impact.icon}>
+            Impact {action.impact}
+          </Badge>
+          <Badge tone="neutral" icon={action.effort === "continu" ? Repeat : Clock}>
+            {action.effort === "continu" ? "En continu" : action.effort}
+          </Badge>
+        </span>
+      </div>
+      {/* Sous le titre ; à partir de 640 px, aligné sur lui (largeur de la pastille + espace) */}
+      <div className="mt-2.5 sm:pl-[3.125rem]">
+        <p className="text-ds-body text-ds-ink-700">{action.why}</p>
+        <p className="mt-3 rounded-ds-sm bg-white px-3.5 py-2.5 text-ds-body text-ds-ink-900 ring-1 ring-ds-ink-200">
+          <span className="font-semibold">Comment faire : </span>
+          {action.how}
+        </p>
       </div>
     </li>
   );
 }
 
-function BenchmarkNote({ audit, snapshot }: { audit: GoogleAudit; snapshot: GoogleAuditView["snapshot"] }) {
-  const b = audit.benchmark!;
-  const compare = (own: number | null, median: number | null, unit: string) => {
-    if (median === null) return null;
-    const ownText = own === null ? "—" : own.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
-    return `${ownText} ${unit} (médiane des concurrents : ${median.toLocaleString("fr-FR", { maximumFractionDigits: 1 })})`;
-  };
-  const lines = [
-    compare(snapshot.votes, b.medianVotes, "avis"),
-    compare(snapshot.rating, b.medianRating, "de note"),
-    compare(snapshot.totalPhotos, b.medianPhotos, "photos"),
-  ].filter((l): l is string => l !== null);
-  if (lines.length === 0) return null;
+function CheckRow({ check }: { check: GoogleAuditCheck }) {
+  const status = STATUS[check.status];
+  const Icon = status.icon;
+  const points = check.status === "unknown" ? "hors score" : `${check.points}/${check.maxPoints} pts`;
   return (
-    <div className="mt-4 rounded-2xl bg-primary-50/60 p-4 text-sm text-ink-700">
-      <p className="font-medium text-ink-900">
-        Comparé aux {b.competitors.length} cabinets du podium local
-      </p>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5">
-        {lines.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-    </div>
+    <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+      <span aria-hidden className={clsx("mt-0.5 grid size-7 shrink-0 place-items-center rounded-full", status.dot)}>
+        <Icon size={15} strokeWidth={2.75} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <p className="text-base font-semibold text-ds-ink-900">{check.label}</p>
+          <span className="text-ds-meta text-ds-ink-600 ds-tnum">
+            <span className="sr-only">{status.label} — </span>
+            {points}
+          </span>
+        </div>
+        <p className="text-ds-body text-ds-ink-600">{check.detail}</p>
+        {check.status === "warn" || check.status === "missing" ? (
+          // Le mot est déjà lu avec les points : la pastille le montre à l'œil
+          <Badge tone={status.tone} icon={status.icon} className="mt-2" aria-hidden>
+            {status.label}
+          </Badge>
+        ) : null}
+      </div>
+    </li>
   );
 }
 
-/** Historique des scores : courbe SVG (derniers audits) + liste compacte. */
+/** Votre fiche face à la médiane des cabinets du podium : le chiffre, un mot, une jauge. */
+function BenchmarkCard({ audit, snapshot }: { audit: GoogleAudit; snapshot: GoogleAuditView["snapshot"] }) {
+  const b = audit.benchmark!;
+  const rows = [
+    { id: "votes", icon: MessageSquareText, label: "Avis", own: snapshot.votes, median: b.medianVotes },
+    { id: "rating", icon: Star, label: "Note", own: snapshot.rating, median: b.medianRating },
+    { id: "photos", icon: Camera, label: "Photos", own: snapshot.totalPhotos, median: b.medianPhotos },
+  ].filter((row): row is typeof row & { median: number } => row.median !== null);
+  if (rows.length === 0) return null;
+  const fr = (value: number) => value.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return (
+    <Card>
+      <CardHeader
+        icon={Users}
+        title={`Comparé aux ${b.competitors.length} cabinets du podium local`}
+        description="Les cabinets que Google Maps affiche le plus souvent dans ses 3 premiers résultats autour de vous."
+      />
+      <ul className="mt-5 space-y-4">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          const position =
+            row.own === null
+              ? null
+              : row.own > row.median
+                ? { label: "Au-dessus", tone: "success" as const, icon: TrendingUp }
+                : row.own < row.median
+                  ? { label: "En dessous", tone: "warning" as const, icon: TrendingDown }
+                  : { label: "Au niveau", tone: "neutral" as const, icon: Minus };
+          return (
+            <li key={row.id}>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <p className="flex items-center gap-2 text-ds-body font-semibold text-ds-ink-800">
+                  <Icon size={16} aria-hidden className="text-ds-section-accent" />
+                  {row.label}
+                </p>
+                {position ? (
+                  <Badge tone={position.tone} icon={position.icon}>
+                    {position.label}
+                  </Badge>
+                ) : null}
+              </div>
+              <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-ds-meta text-ds-ink-600">
+                <span className="font-ds-display text-2xl/8 font-bold text-ds-ink-900">{row.own === null ? "—" : fr(row.own)}</span>
+                <span>(médiane des concurrents : {fr(row.median)})</span>
+              </p>
+              <ProgressBar
+                className="mt-1.5"
+                size="sm"
+                value={row.own ?? 0}
+                max={Math.max(row.own ?? 0, row.median, 1)}
+                ariaLabel={`${row.label} : votre fiche par rapport à la médiane des concurrents`}
+                valueText={`${row.own === null ? "inconnu" : fr(row.own)}, médiane des concurrents : ${fr(row.median)}`}
+                hideValueText
+              />
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+/** Historique des scores : mini-courbe (derniers audits) + liste compacte. */
 function ScoreHistory({ history }: { history: GoogleScoreHistoryPoint[] }) {
   if (history.length < 2) {
-    return <p className="mt-4 text-xs text-ink-500">L&apos;historique du score se construit au fil des synchronisations.</p>;
+    return (
+      <p className="rounded-ds-md bg-white px-4 py-3 text-ds-meta text-ds-ink-600 ring-1 ring-ds-section-line/70 max-md:text-center">
+        L&apos;historique du score se construit au fil des synchronisations.
+      </p>
+    );
   }
-  const width = 280;
-  const height = 60;
-  const step = width / (history.length - 1);
-  const y = (score: number) => height - 4 - (Math.max(0, Math.min(100, score)) / 100) * (height - 8);
-  const path = history.map((p, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
   const last = history[history.length - 1]!;
   const first = history[0]!;
   const delta = last.score - first.score;
+  const DeltaIcon = delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
   return (
-    <div className="mt-4">
-      <h3 className="text-sm font-semibold text-ink-900">Historique du score</h3>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="mt-2 h-16 w-full max-w-xs"
-        role="img"
-        aria-label={`Score de ${first.score} le ${formatDayFr(first.createdAt)} à ${last.score} le ${formatDayFr(last.createdAt)}`}
-      >
-        <path d={path} fill="none" stroke="var(--color-primary-500)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-        {history.map((p, i) => (
-          <circle key={p.id} cx={i * step} cy={y(p.score)} r="3" fill="var(--color-primary-500)" />
-        ))}
-      </svg>
-      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-500" aria-label="Derniers audits">
-        {history.slice(-6).map((p) => (
-          <li key={p.id}>
-            {formatDayFr(p.createdAt)} · <strong className="text-ink-700">{p.score}</strong>
+    <div className="rounded-ds-md bg-white p-4 ring-1 ring-ds-section-line/70">
+      <div className="grid items-center gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="min-w-0">
+          <h3 className="text-ds-body font-semibold text-ds-ink-900">Historique du score</h3>
+          <Sparkline
+            className="mt-2"
+            height={52}
+            data={history.map((p) => p.score)}
+            label={`Score de ${first.score} le ${formatDayFr(first.createdAt)} à ${last.score} le ${formatDayFr(last.createdAt)}`}
+          />
+        </div>
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-ds-meta text-ds-ink-600" aria-label="Derniers audits">
+          {history.slice(-6).map((p) => (
+            <li key={p.id}>
+              {formatDayFr(p.createdAt)} · <strong className="font-semibold text-ds-ink-900 ds-tnum">{p.score}</strong>
+            </li>
+          ))}
+          <li
+            className={clsx(
+              "inline-flex w-full items-center gap-1.5 font-semibold",
+              delta > 0 ? "text-ds-success-700" : delta < 0 ? "text-ds-danger-700" : "text-ds-ink-700",
+            )}
+          >
+            <DeltaIcon size={15} aria-hidden />
+            {delta >= 0 ? "+" : ""}
+            {delta} depuis le premier audit
           </li>
-        ))}
-        <li className={clsx("font-medium", delta >= 0 ? "text-success-500" : "text-danger-500")}>
-          {delta >= 0 ? "+" : ""}
-          {delta} depuis le premier audit
-        </li>
-      </ul>
+        </ul>
+      </div>
     </div>
   );
 }

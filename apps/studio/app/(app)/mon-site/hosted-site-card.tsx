@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { Card } from "@theralys/ui";
+import { CircleCheck, ExternalLink, Eye, EyeOff, LayoutTemplate, PenLine, type LucideIcon } from "lucide-react";
+import { Badge, Card, IconBadge, LinkButton, type BadgeTone } from "@/components/ds";
 import { frenchSpacing, siteAddressLabel } from "@/lib/external-site/format";
-import { PILL_PRIMARY, PILL_SECONDARY } from "./styles";
+import { BADGE_WRAP, CARD_TITLE } from "./styles";
 
 /**
  * « Votre site Harmony » : le site inclus dans la formule, avec les accès
@@ -19,27 +19,43 @@ const ROLE_TEXT: Record<HostedSiteRole, string> = {
   visible: "Il reste en ligne à cette adresse et vous pouvez toujours le modifier. Comme vous l'avez demandé, il reste aussi visible sur Google.",
 };
 
-export function HostedSiteCard({ url, role }: { url: string; role: HostedSiteRole }) {
+/** Sa place du moment, en un mot et une icône (la phrase en dessous la détaille). */
+const ROLE_BADGE: Record<HostedSiteRole, { tone: BadgeTone; icon: LucideIcon; label: string }> = {
+  reference: { tone: "success", icon: CircleCheck, label: "Utilisé par vos outils" },
+  hidden: { tone: "neutral", icon: EyeOff, label: "Masqué des moteurs de recherche" },
+  visible: { tone: "brand", icon: Eye, label: "En ligne, visible sur Google" },
+};
+
+export function HostedSiteCard({ url, role, className }: { url: string; role: HostedSiteRole; className?: string }) {
+  const badge = ROLE_BADGE[role];
   return (
-    <section aria-labelledby="hosted-site-title" data-testid="hosted-site-card" data-role={role}>
-      <Card className="p-6 md:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-          <div className="min-w-0 max-w-xl">
-            <h2 id="hosted-site-title" className="text-xl font-semibold">
-              Votre site Harmony
-            </h2>
-            <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="hosted-site-url">
-              {siteAddressLabel(url)}
-            </p>
-            <p className="mt-2 text-base text-ink-700">{frenchSpacing(ROLE_TEXT[role])}</p>
+    <section aria-labelledby="hosted-site-title" className={className} data-testid="hosted-site-card" data-role={role}>
+      <Card padding="lg" className="h-full">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-5">
+          <div className="flex min-w-0 flex-[1_1_20rem] items-start gap-3.5">
+            <IconBadge icon={LayoutTemplate} tone="soft" size="md" />
+            <div className="min-w-0 max-w-xl">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <h2 id="hosted-site-title" className={CARD_TITLE}>
+                  Votre site Harmony
+                </h2>
+                <Badge tone={badge.tone} icon={badge.icon} className={BADGE_WRAP}>
+                  {badge.label}
+                </Badge>
+              </div>
+              <p className="mt-1 wrap-anywhere text-base font-semibold text-ds-ink-900" data-testid="hosted-site-url">
+                {siteAddressLabel(url)}
+              </p>
+              <p className="mt-1.5 text-base text-ds-ink-700">{frenchSpacing(ROLE_TEXT[role])}</p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Link href="/editor" className={role === "reference" ? PILL_PRIMARY : PILL_SECONDARY} data-testid="hosted-site-edit">
-              <span aria-hidden>✎</span> Éditer mon site Harmony
-            </Link>
-            <a href={url} target="_blank" rel="noopener noreferrer" className={PILL_SECONDARY} data-testid="hosted-site-view">
-              <span aria-hidden>↗</span> Voir<span className="sr-only"> mon site Harmony (nouvel onglet)</span>
-            </a>
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            <LinkButton href="/editor" variant="secondary" icon={<PenLine size={18} aria-hidden />} data-testid="hosted-site-edit">
+              Éditer mon site Harmony
+            </LinkButton>
+            <LinkButton href={url} external variant="quiet" icon={<ExternalLink size={18} aria-hidden />} data-testid="hosted-site-view">
+              Voir<span className="sr-only"> mon site Harmony</span>
+            </LinkButton>
           </div>
         </div>
       </Card>

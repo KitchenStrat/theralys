@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Button, Card, Spinner } from "@theralys/ui";
+import { FlaskConical, Link2, MapPin, RefreshCw, Store } from "lucide-react";
+import { Badge, Button, Card, IconBadge, InlineSuccess } from "@/components/ds";
 import type { GoogleAuditView, GoogleLinkedProfile } from "@/lib/google/data";
 import { refreshGoogleProfile } from "./actions";
-import { GoogleGlyph } from "./link-card";
+import { ErrorNote, WaitNote } from "./shared";
 import { Stars } from "./stars";
 
 /** « Synchronisée le 26 octobre 2026 à 09:12 ». */
@@ -46,21 +47,43 @@ export function ProfileCard({
   const rating = latestAudit?.snapshot.rating ?? linked.rating;
   const votes = latestAudit?.snapshot.votes ?? linked.reviewCount;
   const address = latestAudit?.snapshot.address ?? linked.address;
+  const hasRating = rating !== null && rating !== undefined;
+  // Fiche lue par le fournisseur de démonstration (sites de démo) : on le dit
+  const demoData = latestAudit?.snapshot.source === "mock";
 
   return (
-    <Card className="p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <GoogleGlyph />
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 flex-[1_1_20rem] items-start gap-4">
+          <IconBadge icon={Store} tone="soft" size="lg" className="max-sm:hidden" />
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold">{latestAudit?.snapshot.title ?? linked.name}</h2>
-            {address ? <p className="text-sm text-ink-500">{address}</p> : null}
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-700">
-              {rating !== null && rating !== undefined ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <h2 className="font-ds-display text-xl/7 font-bold text-ds-ink-900 text-balance sm:text-2xl/8">
+                {latestAudit?.snapshot.title ?? linked.name}
+              </h2>
+              <Badge tone="success" icon={Link2}>
+                Fiche reliée
+              </Badge>
+              {demoData ? (
+                <Badge tone="neutral" icon={FlaskConical}>
+                  Données de démonstration
+                </Badge>
+              ) : null}
+            </div>
+            {address ? (
+              <p className="mt-1 flex items-start gap-1.5 text-ds-body text-ds-ink-600">
+                <MapPin size={16} aria-hidden className="mt-1 shrink-0" />
+                {address}
+              </p>
+            ) : null}
+            <p className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-ds-body text-ds-ink-700">
+              {hasRating ? (
                 <>
-                  <Stars rating={rating} />
+                  <Stars rating={rating} size="md" />
                   <span>
-                    <strong>{rating.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}</strong>
+                    <strong className="text-base font-bold text-ds-ink-900">
+                      {rating.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}
+                    </strong>
                     {votes !== null && votes !== undefined ? ` · ${votes} avis` : ""}
                   </span>
                 </>
@@ -70,30 +93,18 @@ export function ProfileCard({
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
-          <Button variant="secondary" size="sm" onClick={refresh} disabled={pending}>
-            {pending ? <Spinner /> : null} Actualiser
+        <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
+          <Button variant="secondary" size="sm" onClick={refresh} loading={pending} icon={<RefreshCw size={16} aria-hidden />}>
+            Actualiser
           </Button>
-          <p className="text-xs text-ink-500">
+          <p className="text-ds-meta text-ds-ink-600">
             {latestAudit ? `Synchronisée le ${formatSyncDate(latestAudit.snapshot.fetchedAt)}` : "Jamais synchronisée"}
           </p>
         </div>
       </div>
-      {pending ? (
-        <p className="mt-3 text-sm text-ink-700" aria-live="polite">
-          Lecture de votre fiche et recalcul de l&apos;audit… quelques secondes.
-        </p>
-      ) : null}
-      {message ? (
-        <p className="mt-3 text-sm text-success-500" role="status">
-          {message}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="mt-3 text-sm text-danger-500" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {pending ? <WaitNote className="mt-4">Lecture de votre fiche et recalcul de l&apos;audit… quelques secondes.</WaitNote> : null}
+      {message ? <InlineSuccess className="mt-4">{message}</InlineSuccess> : null}
+      {error ? <ErrorNote className="mt-4">{error}</ErrorNote> : null}
     </Card>
   );
 }

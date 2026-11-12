@@ -1,14 +1,29 @@
 "use client";
 
+import { Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@theralys/ui";
+import { Button } from "@/components/ds";
+import { SuccessMark } from "./ui";
 
 /**
  * Bouton « Copier » : écrit le texte dans le presse-papiers et le confirme
  * quelques secondes. Si le navigateur refuse l'accès au presse-papiers, le
  * bouton le dit : le texte reste affiché à côté, à sélectionner à la main.
  */
-export function CopyButton({ text, label, copiedLabel = "Copié", testId }: { text: string; label: string; copiedLabel?: string; testId?: string }) {
+export function CopyButton({
+  text,
+  label,
+  copiedLabel = "Copié",
+  testId,
+  variant = "secondary",
+}: {
+  text: string;
+  label: string;
+  copiedLabel?: string;
+  testId?: string;
+  /** `primary` quand copier est la prochaine chose à faire sur l'écran */
+  variant?: "primary" | "secondary";
+}) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,21 +45,19 @@ export function CopyButton({ text, label, copiedLabel = "Copié", testId }: { te
   }
 
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
-      <Button type="button" variant="secondary" size="sm" onClick={copy} data-testid={testId}>
+    <span className="inline-flex max-w-full flex-wrap items-center gap-x-3 gap-y-2">
+      <Button type="button" variant={variant} size={variant === "primary" ? "md" : "sm"} icon={<Copy size={variant === "primary" ? 18 : 16} aria-hidden />} onClick={copy} data-testid={testId}>
         {label}
       </Button>
       {/* Région vivante permanente : la confirmation y apparaît et est annoncée */}
-      <span role="status" className="text-sm font-medium text-ink-900">
+      <span role="status" className="inline-flex items-center gap-2 text-ds-body font-semibold text-ds-success-900">
         {state === "copied" ? (
           <>
-            <span aria-hidden className="text-success-500">
-              ✓{" "}
-            </span>
+            <SuccessMark />
             {copiedLabel}
           </>
         ) : state === "failed" ? (
-          "Copie impossible\u00a0: sélectionnez le texte, puis copiez-le."
+          <span className="font-medium text-ds-ink-900">Copie impossible&nbsp;: sélectionnez le texte, puis copiez-le.</span>
         ) : null}
       </span>
     </span>

@@ -1,19 +1,23 @@
 /**
  * Classes partagées par les composants de l'écran « Mon site » (serveur et
- * navigateur) : contour de focus au clavier et liens en forme de bouton,
- * dans le style de la carte « Votre site » de l'accueil.
+ * navigateur), toutes tirées du design system du studio (`components/ds`).
  */
 
-/** Contour de focus au clavier, pour les éléments qui ne viennent pas de `@theralys/ui`. */
-export const FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600";
+/** Anneau de focus du design system, pour les éléments qui ne viennent pas d'un de ses composants (case à cocher, `<summary>`). */
+export const FOCUS_RING = "ds-focus";
 
-const PILL = `inline-flex items-center justify-center gap-1.5 rounded-full px-6 py-3 text-base transition-colors ${FOCUS_RING}`;
+/** Lien dans un texte : souligné (jamais la couleur seule), encre lisible sur blanc comme sur une teinte. */
+export const TEXT_LINK = "rounded-sm font-semibold text-ds-brand-800 underline underline-offset-2 ds-focus hover:text-ds-brand-950";
 
-/** Lien principal d'une carte. */
-export const PILL_PRIMARY = `${PILL} bg-primary-500 font-semibold text-white shadow-sm hover:bg-primary-600`;
+/** Titre d'une carte (`h2`) : mêmes mesures que le `CardHeader` du design system, qui ne sait pas porter d'identifiant. */
+export const CARD_TITLE = "font-ds-display text-lg/7 font-bold text-ds-ink-900 text-balance sm:text-xl/7";
 
-/** Lien secondaire d'une carte. */
-export const PILL_SECONDARY = `${PILL} border border-primary-200 bg-white/60 font-medium text-primary-700 hover:border-primary-300 hover:bg-primary-50`;
+/** Intertitre à l'intérieur d'une carte (`h3`). */
+export const SUB_TITLE = "font-ds-display text-base/6 font-bold text-ds-ink-900 sm:text-lg/7";
 
-/** Lien dans un texte. */
-export const TEXT_LINK = `rounded font-medium text-primary-700 underline underline-offset-2 hover:text-primary-800 ${FOCUS_RING}`;
+/**
+ * Un `Badge` du design system tient sur une ligne. Les mentions longues de cet
+ * écran (« Vos outils ne s'appuient pas encore sur ce site ») doivent pouvoir
+ * passer à la ligne sur un téléphone plutôt que de faire déborder la page.
+ */
+export const BADGE_WRAP = "whitespace-normal! rounded-2xl! text-left";

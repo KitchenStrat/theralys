@@ -1,6 +1,7 @@
+import { Clock, Lock, type LucideIcon } from "lucide-react";
 import { hasGoogleProfile } from "@theralys/db";
-import { Card } from "@theralys/ui";
 import { monthRange } from "@theralys/shared";
+import { Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { clampIsoDay, parisDay, parseMonthParam, shiftIsoDay } from "@/lib/calendar";
 import { getProspect, getSite } from "@/lib/data";
@@ -28,10 +29,14 @@ export default async function GoogleProfilePage({ searchParams }: Props) {
   // Les démos présentent l'offre complète ; les clients suivent leur formule (Scale)
   if (site.type !== "demo" && !hasGoogleProfile(site.plan)) {
     return (
-      <Fallback title="La section Fiche Google n'est pas incluse dans votre formule">
-        Passez à la formule <strong>Scale</strong> pour auditer votre fiche Google, suivre votre
-        visibilité sur Google Maps mot-clé par mot-clé, répondre à vos avis avec des réponses
-        proposées et publier chaque semaine un post Google préparé à partir de votre site.
+      <Fallback
+        icon={Lock}
+        title="La section Fiche Google n'est pas incluse dans votre formule"
+        action={<LinkButton href="/compte">Voir ma formule</LinkButton>}
+      >
+        Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour auditer votre fiche Google,
+        suivre votre visibilité sur Google Maps mot-clé par mot-clé, répondre à vos avis avec des réponses proposées et publier
+        chaque semaine un post Google préparé à partir de votre site.
       </Fallback>
     );
   }
@@ -51,7 +56,7 @@ export default async function GoogleProfilePage({ searchParams }: Props) {
     if (!isMissingSchemaError(err)) throw err;
     console.error("[google] schéma absent — migration 0003 non appliquée ?", err);
     return (
-      <Fallback title="Cette section est en cours d'activation, revenez dans quelques minutes.">
+      <Fallback icon={Clock} title="Cette section est en cours d'activation, revenez dans quelques minutes.">
         L&apos;audit de votre fiche, votre visibilité locale, vos avis et vos posts Google seront
         disponibles dès l&apos;activation.
       </Fallback>
@@ -78,14 +83,26 @@ export default async function GoogleProfilePage({ searchParams }: Props) {
   );
 }
 
-function Fallback({ title, children }: { title: string; children: React.ReactNode }) {
+/** La section sans ses données (formule sans Fiche Google, activation en cours) : l'en-tête, la raison, et quoi faire. */
+function Fallback({
+  icon,
+  title,
+  action,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <h1 className="text-4xl font-bold">Fiche Google</h1>
-      <Card className="mt-6 p-10 text-center text-ink-500">
-        <p className="font-medium text-ink-700">{title}</p>
-        <p className="mt-1 text-sm">{children}</p>
+    <Stagger className="space-y-6" data-ds-section="fiche-google">
+      <PageHeader section="fiche-google" />
+      <Card padding="none">
+        <EmptyState as="h2" icon={icon} title={title} action={action}>
+          {children}
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

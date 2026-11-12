@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Spinner } from "@theralys/ui";
+import { KeyRound, TriangleAlert } from "lucide-react";
+import { Button } from "@/components/ds";
+import { PasswordField } from "../login/password-field";
 import { setPassword } from "./actions";
 
 export function SetPasswordForm({ token }: { token: string }) {
@@ -24,40 +26,34 @@ export function SetPasswordForm({ token }: { token: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 space-y-3">
-      <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium">
-          Mot de passe
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
-        <p className="mt-1 text-xs text-ink-500">8 caractères minimum.</p>
-      </div>
-      <div>
-        <label htmlFor="confirm" className="mb-1 block text-sm font-medium">
-          Confirmez le mot de passe
-        </label>
-        <input
-          id="confirm"
-          name="confirm"
-          type="password"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-        />
-      </div>
-      {error ? <p className="text-sm text-danger-500">{error}</p> : null}
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? <Spinner className="text-white" /> : null}
-        {submitting ? "Création…" : "Créer mon mot de passe et entrer"}
+    <form onSubmit={onSubmit} className="mt-6 space-y-5">
+      <PasswordField
+        id="password"
+        name="password"
+        label="Mot de passe"
+        autoComplete="new-password"
+        minLength={8}
+        hint="8 caractères minimum."
+      />
+      <PasswordField
+        id="confirm"
+        name="confirm"
+        label="Confirmez le mot de passe"
+        autoComplete="new-password"
+        minLength={8}
+        toggleLabel="Afficher la confirmation du mot de passe"
+      />
+      {error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2.5 rounded-ds-sm bg-ds-danger-100 px-3.5 py-3 text-ds-body font-medium text-ds-danger-900"
+        >
+          <TriangleAlert size={18} aria-hidden className="mt-0.5 shrink-0" />
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" size="lg" loading={submitting} icon={<KeyRound size={20} aria-hidden />} className="w-full">
+        Créer mon mot de passe et entrer
       </Button>
     </form>
   );

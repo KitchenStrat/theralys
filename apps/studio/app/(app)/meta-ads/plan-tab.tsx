@@ -1,13 +1,34 @@
 "use client";
 
-import { Badge, Button, Card } from "@theralys/ui";
+import {
+  CalendarClock,
+  CalendarDays,
+  CircleCheck,
+  Flag,
+  FlaskConical,
+  Hourglass,
+  Image as ImageIcon,
+  Languages,
+  LayoutGrid,
+  Lightbulb,
+  Link2,
+  MapPin,
+  Megaphone,
+  Play,
+  Tag,
+  Target,
+  TriangleAlert,
+  UsersRound,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
+import { AiBadge, Badge, Button, Card, CardHeader, EmptyState, KpiTile, NBSP } from "@/components/ds";
 import type { MetaAdsCreativeSet, MetaAdsPlan, MetaAdsVideoPlan } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import { metaLandingPages, type MetaLanding } from "@/lib/meta-ads/clipboard";
 import { CopyButton } from "./copy-button";
+import { MetaLine, Notice, StepNumber, TEXT_LINK_ON_TINT } from "./parts";
 import type { MetaTab } from "./tabs";
-
-const eur = (value: number, digits = 0) => `${value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} €`;
 
 const AUDIENCE_LABELS: Record<MetaAdsPlan["adSets"][number]["audience"], string> = {
   large: "Audience large (Advantage+)",
@@ -51,18 +72,17 @@ export function PlanTab({
 }) {
   if (!plan) {
     return (
-      <Card className="p-8 text-center text-ink-500">
-        <p className="font-medium text-ink-700">{analysisReady ? "Le plan de campagne n'a pas encore été généré." : "Votre plan de campagne apparaîtra ici."}</p>
-        <p className="mt-1 text-sm">
+      <Card padding="none">
+        <EmptyState
+          as="h2"
+          icon={Target}
+          title={analysisReady ? "Le plan de campagne n'a pas encore été généré." : "Votre plan de campagne apparaîtra ici."}
+          action={<Button onClick={() => onSelectTab(analysisReady ? "annonces" : "diagnostic")}>{analysisReady ? "Aller aux annonces" : "Aller au diagnostic"}</Button>}
+        >
           {analysisReady
             ? `Générez les annonces depuis l'onglet Annonces (le plan de campagne est produit avec elles ; ${regenRemaining} génération${regenRemaining > 1 ? "s" : ""} restante${regenRemaining > 1 ? "s" : ""} ce mois-ci).`
             : "Lancez l'analyse depuis l'onglet Diagnostic : objectif (conversions mesurées par le Pixel), zone et âges, placements, ensembles de publicités avec leurs créas, budget et plan de test sur 14 jours, jalons à 7, 30 et 60 jours."}
-        </p>
-        <div className="mt-5">
-          <Button variant="secondary" onClick={() => onSelectTab(analysisReady ? "annonces" : "diagnostic")}>
-            {analysisReady ? "Aller aux annonces" : "Aller au diagnostic"}
-          </Button>
-        </div>
+        </EmptyState>
       </Card>
     );
   }
@@ -72,27 +92,29 @@ export function PlanTab({
   const pixelOutdated = plan.objective.type === "traffic" && hasPixel;
   // Pages d'atterrissage des créas sur le site de l'analyse, dédoublonnées, avec le suffixe que dit le plan (aucune si l'adresse n'est plus connue)
   const landingPages = metaLandingPages(landing, creatives?.creatives ?? []);
-  const linkClass = "font-medium text-primary-700 underline";
+  const conversions = plan.objective.type === "conversions_site";
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold">Objectif</h2>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge tone={plan.objective.type === "conversions_site" ? "success" : "warning"}>
-            {plan.objective.type === "conversions_site" ? "Conversions sur le site (Pixel)" : "Trafic — en attendant le Pixel"}
+      <Card variant="tinted">
+        <CardHeader icon={Target} title="Objectif" action={<AiBadge />} />
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Badge tone={conversions ? "success" : "warning"} icon={conversions ? CircleCheck : Hourglass}>
+            {conversions ? "Conversions sur le site (Pixel)" : "Trafic — en attendant le Pixel"}
           </Badge>
-          <span className="text-sm text-ink-700">Événement : <span className="font-medium text-ink-900">{EVENT_LABELS[plan.objective.pixelEvent]}</span></span>
+          <span className="text-ds-body text-ds-ink-700">
+            Événement : <span className="font-semibold text-ds-ink-900">{EVENT_LABELS[plan.objective.pixelEvent]}</span>
+          </span>
         </div>
-        <p className="mt-3 text-sm text-ink-700">{plan.objective.rationale}</p>
+        <p className="mt-3 text-base text-ds-ink-700">{plan.objective.rationale}</p>
         {plan.objective.type === "traffic" ? (
           // La régénération recalcule le diagnostic avec le Pixel enregistré entre-temps : le plan passe en Conversions sans nouvelle analyse
-          <p className="mt-3 rounded-xl bg-warning-100 px-4 py-2 text-sm text-ink-900">
+          <Notice tone="warning" icon={TriangleAlert} className="mt-4">
             {pixelOutdated ? (
               <>
                 {externalSite ? "Le Pixel a été repéré sur votre site :" : "Votre Pixel est désormais renseigné :"}{" "}
-                <button type="button" onClick={() => onSelectTab("annonces")} className={linkClass}>
-                  régénérez les annonces →
+                <button type="button" onClick={() => onSelectTab("annonces")} className={TEXT_LINK_ON_TINT}>
+                  régénérez les annonces
                 </button>{" "}
                 le plan passera en objectif Conversions.
               </>
@@ -100,65 +122,69 @@ export function PlanTab({
               // Site du client : rien à enregistrer dans le studio, le Pixel se pose sur ce site puis se constate à sa lecture
               <>
                 Installez le Pixel sur votre site (pas-à-pas dans{" "}
-                <button type="button" onClick={() => onSelectTab("parametrage")} className={linkClass}>
-                  Paramétrage &amp; suivi →
+                <button type="button" onClick={() => onSelectTab("parametrage")} className={TEXT_LINK_ON_TINT}>
+                  Paramétrage &amp; suivi
                 </button>
                 ), relancez la lecture de votre site depuis « Mon site », puis régénérez les annonces : le plan passera en objectif Conversions.
               </>
             ) : (
               <>
                 Enregistrez votre Pixel dans{" "}
-                <button type="button" onClick={() => onSelectTab("parametrage")} className={linkClass}>
-                  Paramétrage &amp; suivi →
+                <button type="button" onClick={() => onSelectTab("parametrage")} className={TEXT_LINK_ON_TINT}>
+                  Paramétrage &amp; suivi
                 </button>
                 , puis régénérez les annonces : le plan passera en objectif Conversions.
               </>
             )}
-          </p>
+          </Notice>
         ) : null}
-        <p className="mt-2 text-xs text-ink-500">
+        <MetaLine className="mt-4 flex flex-wrap items-center gap-x-1.5">
+          {plan.generator === "mock" ? <FlaskConical size={14} aria-hidden className="shrink-0" /> : null}
           Plan préparé le {formatDayFr(plan.generatedAt, "day")}
           {plan.generator === "mock" ? " · mode démonstration" : ""}.
-        </p>
+        </MetaLine>
       </Card>
 
-      <Card className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Campagne</h2>
-            <p className="mt-1 text-sm text-ink-500">Les réglages à reporter dans le Gestionnaire de publicités Meta.</p>
-          </div>
-          <CopyButton text={plan.campaign.name} label="Copier le nom" />
-        </div>
-        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="Nom de la campagne" value={plan.campaign.name} />
-          <Field label="Zone" value={`${plan.campaign.geo.city} + ${plan.campaign.geo.radiusKm} km`} hint={plan.campaign.geo.note} />
-          <Field label="Âges et genre" value={`${plan.campaign.ages.min} – ${plan.campaign.ages.max} ans · tous`} />
-          <Field label="Placements" value={plan.campaign.placements} />
-          <Field label="Langue" value="Français" />
-          <Field label="Calendrier de diffusion" value={plan.campaign.schedule} />
+      <Card>
+        <CardHeader
+          icon={Megaphone}
+          title="Campagne"
+          description="Les réglages à reporter dans le Gestionnaire de publicités Meta."
+          action={<CopyButton text={plan.campaign.name} label="Copier le nom" />}
+        />
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+          <Field icon={Tag} label="Nom de la campagne" value={plan.campaign.name} />
+          <Field icon={MapPin} label="Zone" value={`${plan.campaign.geo.city} + ${plan.campaign.geo.radiusKm} km`} hint={plan.campaign.geo.note} />
+          <Field icon={UsersRound} label="Âges et genre" value={`${plan.campaign.ages.min} – ${plan.campaign.ages.max} ans · tous`} />
+          <Field icon={LayoutGrid} label="Placements" value={plan.campaign.placements} />
+          <Field icon={Languages} label="Langue" value="Français" />
+          <Field icon={CalendarClock} label="Calendrier de diffusion" value={plan.campaign.schedule} />
         </dl>
       </Card>
 
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold">Ensembles de publicités</h2>
-        <p className="mt-1 text-sm text-ink-500">Une audience par ensemble, avec les annonces qui lui sont associées.</p>
-        <ul className="mt-4 grid gap-4 md:grid-cols-2" aria-label="Ensembles de publicités">
+      <Card>
+        <CardHeader icon={UsersRound} title="Ensembles de publicités" description="Une audience par ensemble, avec les annonces qui lui sont associées." />
+        <ul className="mt-5 grid gap-4 md:grid-cols-2" aria-label="Ensembles de publicités">
           {plan.adSets.map((set, i) => (
-            <li key={`${i}-${set.name}`} className="rounded-2xl border border-cream-200 bg-cream-50 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={set.audience === "retargeting" ? "info" : "primary"}>{AUDIENCE_LABELS[set.audience]}</Badge>
-                <h3 className="font-semibold text-ink-900">{set.name}</h3>
-              </div>
-              <p className="mt-2 text-sm text-ink-700">{set.details}</p>
+            <li key={`${i}-${set.name}`} className="rounded-ds-md bg-ds-section-tint p-4 inset-ring inset-ring-ds-section-line/70 sm:p-5">
+              <Badge tone={set.audience === "retargeting" ? "brand" : "section"}>{AUDIENCE_LABELS[set.audience]}</Badge>
+              <h3 className="mt-2 font-ds-display text-lg/7 font-bold text-ds-section-ink">{set.name}</h3>
+              <p className="mt-1 text-ds-body text-ds-ink-700">{set.details}</p>
               {set.creativeIds.length > 0 ? (
                 <ul className="mt-3 flex flex-wrap gap-1.5" aria-label={`Annonces de l'ensemble ${set.name}`}>
                   {set.creativeIds.map((id) => (
-                    <li key={id}>
-                      <Badge tone="neutral">
-                        {kindOf(id) === "vidéo" ? "▶ " : ""}
-                        {nameOf(id)}
-                      </Badge>
+                    <li key={id} className="max-w-full">
+                      <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-ds-meta font-medium text-ds-ink-700 inset-ring inset-ring-ds-section-line">
+                        {kindOf(id) === "vidéo" ? (
+                          <>
+                            <Play size={12} aria-hidden className="shrink-0 fill-current text-ds-section-accent" />
+                            <span className="sr-only">Vidéo : </span>
+                          </>
+                        ) : (
+                          <ImageIcon size={13} aria-hidden className="shrink-0 text-ds-section-accent" />
+                        )}
+                        <span className="truncate">{nameOf(id)}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -169,62 +195,81 @@ export function PlanTab({
       </Card>
 
       {landingPages.length > 0 ? (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold">Pages d&apos;atterrissage</h2>
-          {landing.suffix === "" ? (
-            // Aucun suffixe dans le plan (site du client) : la mesure installée sur ce site ne lit aucun paramètre d'adresse
-            <p className="mt-1 text-sm text-ink-500">
-              L&apos;URL à coller dans chaque annonce est l&apos;adresse de la page sur votre site, telle quelle, sans rien y ajouter : Harmony ne rattache
-              pas les visites de votre site à vos annonces (voir l&apos;onglet Paramétrage et suivi).
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-ink-500">
-              L&apos;URL à coller dans chaque annonce porte le suffixe <code className="rounded bg-cream-100 px-1 text-ink-900">{landing.suffix}</code> : c&apos;est
-              lui qui permet à votre site de reconnaître les visites venues de Meta et de compter les rendez-vous et appels qui en découlent (bloc
-              Résultats de l&apos;onglet Paramétrage et suivi). Les boutons Copier l&apos;ajoutent déjà.
-            </p>
-          )}
-          <ul className="mt-4 space-y-2" aria-label="Pages d'atterrissage">
+        <Card>
+          <CardHeader
+            icon={Link2}
+            title="Pages d'atterrissage"
+            description={
+              landing.suffix === "" ? (
+                // Aucun suffixe dans le plan (site du client) : la mesure installée sur ce site ne lit aucun paramètre d'adresse
+                <>
+                  L&apos;URL à coller dans chaque annonce est l&apos;adresse de la page sur votre site, telle quelle, sans rien y ajouter : Harmony ne rattache
+                  pas les visites de votre site à vos annonces (voir l&apos;onglet Paramétrage et suivi).
+                </>
+              ) : (
+                <>
+                  L&apos;URL à coller dans chaque annonce porte le suffixe{" "}
+                  <code className="rounded-md bg-ds-section-tint-2 px-1.5 py-0.5 font-mono text-[0.875em] text-ds-section-ink">{landing.suffix}</code> : c&apos;est lui
+                  qui permet à votre site de reconnaître les visites venues de Meta et de compter les rendez-vous et appels qui en découlent (bloc Résultats de
+                  l&apos;onglet Paramétrage et suivi). Les boutons Copier l&apos;ajoutent déjà.
+                </>
+              )
+            }
+          />
+          <ul className="mt-5 space-y-2" aria-label="Pages d'atterrissage">
             {landingPages.map((page) => (
-              <li key={page.url} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-cream-50 p-3">
-                <div className="min-w-0">
-                  <p className="break-all font-mono text-sm text-ink-900">{page.url.replace(/^https?:\/\//, "")}</p>
-                  <p className="text-xs text-ink-500">{page.creativeNames.join(", ")}</p>
+              <li key={page.url} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-ds-md bg-ds-ink-50 px-4 py-3 inset-ring inset-ring-ds-ink-200">
+                <div className="min-w-0 flex-[1_1_16rem]">
+                  <p className="font-mono text-ds-body break-all text-ds-ink-900">{page.url.replace(/^https?:\/\//, "")}</p>
+                  <p className="mt-0.5 text-ds-meta text-ds-ink-600">{page.creativeNames.join(", ")}</p>
                 </div>
-                <CopyButton text={page.url} label="Copier l'URL" variant="ghost" />
+                <CopyButton text={page.url} label="Copier l'URL" />
               </li>
             ))}
           </ul>
         </Card>
       ) : null}
 
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold">Budget et plan de test</h2>
-        <dl className="mt-4 grid grid-cols-2 gap-3">
-          <Field label="Budget quotidien" value={eur(plan.budget.dailyEur)} hint="au niveau de la campagne (budget Advantage+)" />
-          <Field label="Par mois" value={eur(plan.budget.monthlyEur)} hint="Meta peut dépenser jusqu'au double un jour donné, mais respecte la moyenne" />
-        </dl>
-        <p className="mt-4 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">{plan.budget.testPlan}</p>
-      </Card>
+      <section aria-labelledby="meta-plan-budget">
+        <h2 id="meta-plan-budget" className="font-ds-display text-xl/7 font-bold text-ds-ink-900">
+          Budget et plan de test
+        </h2>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4">
+          <KpiTile icon={CalendarDays} label="Budget quotidien" caption="budget Advantage+" value={plan.budget.dailyEur} suffix={`${NBSP}€`} />
+          <KpiTile icon={Wallet} label="Par mois" caption="en moyenne" value={plan.budget.monthlyEur} suffix={`${NBSP}€`} />
+        </div>
+        <Notice tone="section" icon={FlaskConical} className="mt-4">
+          <p className="text-ds-ink-900">{plan.budget.testPlan}</p>
+          <p className="mt-1">
+            Le budget quotidien se règle au niveau de la campagne (budget Advantage+). Meta peut dépenser jusqu&apos;au double un jour donné, mais respecte la
+            moyenne.
+          </p>
+        </Notice>
+      </section>
 
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold">Jalons</h2>
-        <p className="mt-1 text-sm text-ink-500">Ce qu&apos;il faut faire et mesurer, étape par étape.</p>
-        <ol className="mt-4 grid gap-4 sm:grid-cols-3" aria-label="Jalons">
+      <Card>
+        <CardHeader icon={Flag} title="Jalons" description="Ce qu'il faut faire et mesurer, étape par étape." />
+        <ol className="mt-5 grid gap-4 xl:grid-cols-3" aria-label="Jalons">
           {plan.milestones.map((m, i) => (
-            <li key={`${i}-${m.horizon}`} className="rounded-2xl border border-cream-200 bg-cream-50 p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="primary">{m.horizon}</Badge>
-                <h3 className="font-semibold text-ink-900">{m.title}</h3>
+            <li key={`${i}-${m.horizon}`} className="relative rounded-ds-md bg-ds-ink-50 p-4 inset-ring inset-ring-ds-ink-200 sm:p-5">
+              <div className="flex items-center gap-3">
+                <StepNumber>{i + 1}</StepNumber>
+                <Badge tone="sun" icon={CalendarClock}>
+                  {m.horizon}
+                </Badge>
               </div>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-700">
+              <h3 className="mt-3 font-ds-display text-lg/7 font-bold text-ds-ink-900 text-balance">{m.title}</h3>
+              <ul className="mt-2 space-y-1.5 text-ds-body text-ds-ink-700">
                 {m.actions.map((a, j) => (
-                  <li key={`${j}-${a}`}>{a}</li>
+                  <li key={`${j}-${a}`} className="flex items-start gap-2.5">
+                    <span aria-hidden className="mt-2.5 size-1.5 shrink-0 rounded-full bg-ds-section-accent" />
+                    {a}
+                  </li>
                 ))}
               </ul>
               {m.kpis.length > 0 ? (
-                <p className="mt-2 text-xs text-ink-500">
-                  <span className="font-medium text-ink-700">Indicateurs : </span>
+                <p className="mt-3 border-t border-ds-ink-200 pt-3 text-ds-meta text-ds-ink-600">
+                  <span className="font-semibold text-ds-ink-800">Indicateurs : </span>
                   {m.kpis.join(" · ")}
                 </p>
               ) : null}
@@ -234,11 +279,14 @@ export function PlanTab({
       </Card>
 
       {plan.tips.length > 0 ? (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold">Conseils</h2>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-700">
+        <Card>
+          <CardHeader icon={Lightbulb} title="Conseils" />
+          <ul className="mt-4 space-y-2.5 text-base text-ds-ink-700">
             {plan.tips.map((t, i) => (
-              <li key={`${i}-${t}`}>{t}</li>
+              <li key={`${i}-${t}`} className="flex items-start gap-3">
+                <span aria-hidden className="mt-2.5 size-1.5 shrink-0 rounded-full bg-ds-section-accent" />
+                {t}
+              </li>
             ))}
           </ul>
         </Card>
@@ -247,12 +295,15 @@ export function PlanTab({
   );
 }
 
-function Field({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Field({ icon: Icon, label, value, hint }: { icon: LucideIcon; label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-2xl bg-cream-50 p-3">
-      <dt className="text-xs text-ink-500">{label}</dt>
-      <dd className="text-sm font-medium text-ink-900">{value}</dd>
-      {hint ? <dd className="mt-1 text-[11px] text-ink-500">{hint}</dd> : null}
+    <div className="rounded-ds-md bg-ds-ink-50 px-4 py-3 inset-ring inset-ring-ds-ink-200">
+      <dt className="flex items-center gap-2 text-ds-meta font-semibold text-ds-ink-600">
+        <Icon size={16} aria-hidden className="shrink-0 text-ds-section-accent" />
+        {label}
+      </dt>
+      <dd className="mt-1 text-base font-medium text-ds-ink-900">{value}</dd>
+      {hint ? <dd className="mt-1 text-ds-meta text-ds-ink-600">{hint}</dd> : null}
     </div>
   );
 }

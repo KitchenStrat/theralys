@@ -1,8 +1,8 @@
 "use client";
 
+import { ArrowRight, ChartColumn, ExternalLink, Globe, House, RefreshCw, ScanSearch } from "lucide-react";
 import Link from "next/link";
-import { clsx } from "clsx";
-import { Card } from "@theralys/ui";
+import { Card, CardHeader, LinkButton } from "@/components/ds";
 import {
   CODE_UNREAD_NOTE,
   EXTERNAL_RESULTS,
@@ -14,6 +14,7 @@ import {
   type TrackingFinding,
   type TrackingFindingStatus,
 } from "@/lib/google-ads/external-tracking";
+import { CheckBadge, CheckMark, FinePrint, Notice, TEXT_LINK } from "./ads-ui";
 
 /**
  * Blocs de l'onglet « Paramétrage & suivi » quand les annonces mènent au site
@@ -21,15 +22,17 @@ import {
  * site qu'il n'héberge pas : à la place du formulaire de suivi, le relevé de
  * la dernière lecture du site et l'endroit où poser la balise ; à la place du
  * bloc « Résultats », où lire chaque chiffre.
+ *
+ * Les couleurs suivent la section de la page qui les affiche (Cobalt pour
+ * Google Ads, Iris pour Meta Ads) : aucune n'est fixée ici.
  */
 
-const FINDING: Record<TrackingFindingStatus, { glyph: string; label: string; className: string }> = {
-  ok: { glyph: "✓", label: "Repéré", className: "bg-success-100 text-success-500" },
-  todo: { glyph: "!", label: "Non repéré", className: "bg-warning-100 text-warning-500" },
-  unknown: { glyph: "–", label: "À vérifier", className: "bg-cream-200 text-ink-500" },
+/** Les trois états d'un constat, dits en un mot à côté de leur pictogramme. */
+const FINDING_LABEL: Record<TrackingFindingStatus, string> = {
+  ok: "Repéré",
+  todo: "Non repéré",
+  unknown: "À vérifier",
 };
-
-const linkClass = "font-medium text-primary-600 hover:underline";
 
 /**
  * Remplace le formulaire de suivi : ce que la dernière lecture du site a
@@ -54,50 +57,56 @@ export function ExternalTrackingCard({
   advice: TagInstallAdvice;
 }) {
   return (
-    <Card className="p-6" data-testid="external-tracking">
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-ink-500">{intro}</p>
+    <Card data-testid="external-tracking">
+      <CardHeader icon={ScanSearch} title={title} description={intro} />
 
-      <h3 className="mt-5 text-sm font-semibold text-ink-900">{codeRead ? "Ce que la dernière lecture de votre site a relevé" : "Ce que nous savons de votre site"}</h3>
+      <h3 className="mt-6 text-base font-semibold text-ds-ink-900">{codeRead ? "Ce que la dernière lecture de votre site a relevé" : "Ce que nous savons de votre site"}</h3>
       {codeRead ? null : (
-        <p className="mt-1 text-sm text-ink-700" data-testid="external-code-unread">
+        <Notice tone="warning" className="mt-2" data-testid="external-code-unread">
           {CODE_UNREAD_NOTE}
-        </p>
+        </Notice>
       )}
-      <ul className="mt-1 divide-y divide-cream-200" aria-label={codeRead ? "Relevé de la dernière lecture de votre site" : "Ce que nous savons de votre site"}>
-        {findings.map((finding) => {
-          const status = FINDING[finding.status];
-          return (
-            <li key={finding.id} className="flex items-start gap-3 py-3" data-testid={`external-finding-${finding.id}`} data-status={finding.status}>
-              <span aria-hidden className={clsx("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold", status.className)}>
-                {status.glyph}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-ink-900">
-                  <span className="sr-only">{status.label} — </span>
-                  {finding.label}
-                </p>
-                <p className="text-sm text-ink-700">{finding.detail}</p>
+      <ul className="mt-3 space-y-2" aria-label={codeRead ? "Relevé de la dernière lecture de votre site" : "Ce que nous savons de votre site"}>
+        {findings.map((finding) => (
+          <li
+            key={finding.id}
+            className="flex items-start gap-3.5 rounded-ds-md bg-ds-ink-50 px-3.5 py-3 ring-1 ring-ds-ink-200"
+            data-testid={`external-finding-${finding.id}`}
+            data-status={finding.status}
+          >
+            <CheckMark state={finding.status} className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              {/* Petit écran : le statut passe toujours sous le libellé */}
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                <p className="text-base font-semibold text-ds-ink-900 max-sm:basis-full">{finding.label}</p>
+                <CheckBadge state={finding.status}>{FINDING_LABEL[finding.status]}</CheckBadge>
               </div>
-            </li>
-          );
-        })}
+              <p className="mt-0.5 text-ds-body text-ds-ink-700">{finding.detail}</p>
+            </div>
+          </li>
+        ))}
       </ul>
       {codeRead ? (
-        <p className="mt-2 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
+        <Notice icon={RefreshCw} className="mt-3">
           {REREAD_REMINDER}{" "}
-          <Link href={MON_SITE_HREF} className={clsx(linkClass, "whitespace-nowrap")}>
-            Ouvrir Mon site →
+          <Link href={MON_SITE_HREF} className={`${TEXT_LINK} whitespace-nowrap`}>
+            Ouvrir Mon site
           </Link>
-        </p>
+        </Notice>
       ) : null}
 
-      <h3 className="mt-5 text-sm font-semibold text-ink-900">{adviceTitle}</h3>
-      <p className={clsx("mt-1 text-sm", advice.possible ? "text-ink-700" : "rounded-xl bg-warning-100 px-4 py-3 text-ink-900")} data-testid="external-install-advice">
-        {tagInstallIntro(advice)} {advice.text}
-      </p>
+      <h3 className="mt-6 text-base font-semibold text-ds-ink-900">{adviceTitle}</h3>
+      {advice.possible ? (
+        <p className="mt-1.5 text-base text-ds-ink-700" data-testid="external-install-advice">
+          {tagInstallIntro(advice)} {advice.text}
+        </p>
+      ) : (
+        <Notice tone="warning" className="mt-2" data-testid="external-install-advice">
+          {tagInstallIntro(advice)} {advice.text}
+        </Notice>
+      )}
 
-      {codeRead ? <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">{READING_LIMIT}</p> : null}
+      {codeRead ? <FinePrint className="mt-5 border-t border-ds-ink-200 pt-4">{READING_LIMIT}</FinePrint> : null}
     </Card>
   );
 }
@@ -120,34 +129,37 @@ export function ExternalResultsCard({
   measureSnippet: boolean;
 }) {
   return (
-    <Card className="p-6" data-testid="external-results">
-      <h2 className="text-xl font-semibold">Résultats</h2>
-      <p className="mt-1 text-sm text-ink-700">{EXTERNAL_RESULTS.reason}</p>
-      <h3 className="mt-4 text-sm font-semibold text-ink-900">Où regarder</h3>
-      <ul className="mt-2 space-y-3 text-sm text-ink-700">
-        <li className="rounded-2xl bg-cream-50 p-3">
-          <p>{account}</p>
-          <p className="mt-1">
-            <a href={accountLink.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
-              {accountLink.label} ↗<span className="sr-only"> (nouvel onglet)</span>
-            </a>
-          </p>
+    <Card data-testid="external-results">
+      <CardHeader icon={ChartColumn} title="Résultats" description={EXTERNAL_RESULTS.reason} />
+      <h3 className="mt-6 text-base font-semibold text-ds-ink-900">Où regarder</h3>
+      <ul className="mt-3 grid gap-3 md:grid-cols-2">
+        <li className="flex flex-col items-start gap-3 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
+          <span aria-hidden className="grid size-9 place-items-center rounded-[0.625rem] bg-white text-ds-section-accent shadow-sm">
+            <ChartColumn size={18} />
+          </span>
+          <p className="text-ds-body text-ds-ink-700">{account}</p>
+          <LinkButton href={accountLink.href} external variant="secondary" size="sm" className="mt-auto" iconRight={<ExternalLink size={16} aria-hidden />}>
+            {accountLink.label}
+          </LinkButton>
         </li>
-        <li className="rounded-2xl bg-cream-50 p-3">
-          <p>
+        <li className="flex flex-col items-start gap-3 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
+          <span aria-hidden className="grid size-9 place-items-center rounded-[0.625rem] bg-white text-ds-section-accent shadow-sm">
+            <House size={18} />
+          </span>
+          <p className="text-ds-body text-ds-ink-700">
             {EXTERNAL_RESULTS.site}
             {measureSnippet ? null : ` ${EXTERNAL_RESULTS.measureMissing}`}
           </p>
-          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-            <Link href="/" className={linkClass}>
-              Ouvrir l&apos;accueil →
-            </Link>
+          <div className="mt-auto flex flex-wrap gap-2">
+            <LinkButton href="/" variant="secondary" size="sm" iconRight={<ArrowRight size={16} aria-hidden />}>
+              Ouvrir l&apos;accueil
+            </LinkButton>
             {measureSnippet ? null : (
-              <Link href={MON_SITE_HREF} className={linkClass}>
-                Ouvrir Mon site →
-              </Link>
+              <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" icon={<Globe size={16} aria-hidden />}>
+                Ouvrir Mon site
+              </LinkButton>
             )}
-          </p>
+          </div>
         </li>
       </ul>
     </Card>

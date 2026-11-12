@@ -1,8 +1,9 @@
 "use client";
 
+import { ClipboardCheck } from "lucide-react";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
-import { Button, Spinner } from "@theralys/ui";
 import { EXTERNAL_SITE_LIMITS } from "@theralys/shared";
+import { Button } from "@/components/ds";
 import { submitExternalSitePaste } from "./actions";
 import { CONSENT_LABEL, CONSENT_MISSING } from "./connect-form";
 import { ActionMessage, CheckboxField, TextAreaField } from "./fields";
@@ -81,7 +82,7 @@ export function PasteForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4" data-testid="paste-form">
+    <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-5" data-testid="paste-form">
       <TextAreaField
         id={`${idPrefix}-text`}
         label="Texte de vos pages"
@@ -110,18 +111,18 @@ export function PasteForm({
         required
         testId="paste-consent"
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending} data-testid="paste-submit">
-          {pending ? <Spinner className="text-white" /> : null} Préparer mon profil avec ce texte
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" loading={pending} icon={<ClipboardCheck size={18} aria-hidden />} data-testid="paste-submit">
+          Préparer mon profil avec ce texte
         </Button>
         {onCancel ? (
-          <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
+          <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
             Annuler
           </Button>
         ) : null}
       </div>
       {/* Région vivante permanente : l'attente y est annoncée */}
-      <p role="status" className="text-sm text-ink-700">
+      <p role="status" className="text-ds-body text-ds-ink-700">
         {pending ? "Nous préparons votre profil à partir de ce texte : cela prend jusqu'à une minute. Gardez cette page ouverte." : null}
       </p>
       <ActionMessage error={failure} testId="paste-error" />

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { clsx } from "clsx";
+import { Binoculars, GalleryVerticalEnd, SlidersHorizontal, Stethoscope, Target, type LucideIcon } from "lucide-react";
+import { useState, type MouseEvent } from "react";
+import { Badge, PageHeader, Stagger, TabPanel, Tabs } from "@/components/ds";
 import { analysisSiteNotice } from "@/lib/google-ads/analysis-site";
 import { metaLandingSuffix, type MetaLanding } from "@/lib/meta-ads/clipboard";
 import type { MetaAdsData } from "@/lib/meta-ads/data";
@@ -11,7 +12,7 @@ import { DiagnosticTab } from "./diagnostic-tab";
 import { MarketTab } from "./market-tab";
 import { PlanTab } from "./plan-tab";
 import { SetupTab } from "./setup-tab";
-import { META_TABS, metaTabHref, type MetaTab } from "./tabs";
+import { META_TABS, isMetaTab, metaTabHref, type MetaTab } from "./tabs";
 import { useAnalysisLaunch } from "./use-analysis-launch";
 
 export type MetaSiteInfo = {
@@ -21,6 +22,17 @@ export type MetaSiteInfo = {
   domain: string;
   profession: string;
   city: string;
+};
+
+/** Préfixe des identifiants des onglets (`meta-ads-tab-<onglet>`) et de leur panneau. */
+const TABS_ID = "meta-ads";
+
+const TAB_ICONS: Record<MetaTab, LucideIcon> = {
+  diagnostic: Stethoscope,
+  marche: Binoculars,
+  annonces: GalleryVerticalEnd,
+  plan: Target,
+  parametrage: SlidersHorizontal,
 };
 
 export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; data: MetaAdsData; site: MetaSiteInfo }) {
@@ -33,6 +45,26 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
     // L'URL reflète l'onglet (rechargement, partage) sans re-rendu serveur
     window.history.replaceState(null, "", metaTabHref(next));
     window.scrollTo({ top: 0 });
+  }
+
+  /** Changement d'onglet demandé depuis le contenu (« Aller au diagnostic »…) : le focus suit, sur l'onglet ouvert. */
+  function jump(next: MetaTab) {
+    select(next);
+    document.getElementById(`${TABS_ID}-tab-${next}`)?.focus({ preventScroll: true });
+  }
+
+  /**
+   * Les onglets sont de vrais liens `?onglet=` (rechargement, partage, nouvel
+   * onglet du navigateur). Un clic simple change l'onglet sur place, sans
+   * relire la page : il est intercepté avant que le lien ne navigue.
+   */
+  function onTabClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[role="tab"]') : null;
+    const id = link?.id.slice(`${TABS_ID}-tab-`.length);
+    if (!link || !isMetaTab(id)) return;
+    event.preventDefault();
+    if (id !== tab) select(id);
   }
 
   const current = data.current;
@@ -49,69 +81,36 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
     currentAddress: data.externalTracking?.address,
   });
 
+  const tabs = META_TABS.map((t) => ({
+    id: t.id,
+    label: t.label,
+    href: metaTabHref(t.id),
+    icon: TAB_ICONS[t.id],
+    badge:
+      t.id === "diagnostic" && current?.diagnostic ? (
+        <Badge tone="section" className="px-2 py-0.5 ds-tnum">
+          {current.diagnostic.score}
+          <span className="sr-only"> sur 100</span>
+        </Badge>
+      ) : t.id === "annonces" && current?.creatives ? (
+        <Badge tone="section" className="px-2 py-0.5 ds-tnum">
+          {current.creatives.creatives.length}
+        </Badge>
+      ) : undefined,
+  }));
+
   return (
-    <div>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-bold">Meta Ads</h1>
-          <p className="mt-1 text-sm text-ink-500">
-            {data.externalTracking ? (
-              // Site du client : le studio n'y rattache aucune visite à une annonce, il ne promet donc pas ce suivi
-              <>
-                Facebook et Instagram sont-ils pertinents pour vous ? Diagnostic, veille des annonces autour de vous, annonces prêtes à
-                publier, plan vidéo, plan de campagne et pas-à-pas pour mesurer vos résultats sur votre site — Harmony prépare, vous
-                diffusez depuis votre compte Meta.
-              </>
-            ) : (
-              <>
-                Facebook et Instagram sont-ils pertinents pour vous ? Diagnostic, veille des annonces autour de vous, annonces prêtes à
-                publier, plan vidéo, plan de campagne et suivi des rendez-vous venus de vos annonces — Harmony prépare, vous diffusez
-                depuis votre compte Meta.
-              </>
-            )}
-          </p>
-        </div>
+    <Stagger className="space-y-6" data-ds-section="meta-ads">
+      <PageHeader section="meta-ads" />
+
+      {siteNotice ? <AnalysisSiteNotice notice={siteNotice} onRelaunch={tab === "diagnostic" ? undefined : () => jump("diagnostic")} /> : null}
+
+      <div onClickCapture={onTabClick}>
+        <Tabs idBase={TABS_ID} label="Sections Meta Ads" tabs={tabs} value={tab} />
       </div>
 
-      {siteNotice ? <AnalysisSiteNotice notice={siteNotice} onRelaunch={tab === "diagnostic" ? undefined : () => select("diagnostic")} /> : null}
-
-      <nav aria-label="Sections Meta Ads" className="mt-8 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <ul className="flex gap-1 border-b border-cream-200">
-          {META_TABS.map((t) => {
-            const active = t.id === tab;
-            return (
-              <li key={t.id}>
-                <a
-                  href={metaTabHref(t.id)}
-                  aria-current={active ? "page" : undefined}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    select(t.id);
-                  }}
-                  className={clsx(
-                    "-mb-px inline-block whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors",
-                    active ? "border-primary-500 text-primary-700" : "border-transparent text-ink-500 hover:border-cream-300 hover:text-ink-900",
-                  )}
-                >
-                  {t.label}
-                  {t.id === "diagnostic" && current?.diagnostic ? (
-                    <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-[11px] text-primary-700">
-                      {current.diagnostic.score}
-                      <span className="sr-only"> sur 100</span>
-                    </span>
-                  ) : null}
-                  {t.id === "annonces" && current?.creatives ? (
-                    <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-[11px] text-primary-700">{current.creatives.creatives.length}</span>
-                  ) : null}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <section className="mt-6" aria-label={META_TABS.find((t) => t.id === tab)?.label}>
-        {tab === "diagnostic" ? <DiagnosticTab latest={data.latest} current={current} usage={data.usage} site={site} launcher={launcher} onSelectTab={select} /> : null}
+      <TabPanel key={tab} idBase={TABS_ID} tab={tab}>
+        {tab === "diagnostic" ? <DiagnosticTab latest={data.latest} current={current} usage={data.usage} site={site} launcher={launcher} onSelectTab={jump} /> : null}
         {tab === "marche" ? (
           <MarketTab
             market={current?.market ?? null}
@@ -126,7 +125,7 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             visuals={data.visuals}
             launcher={launcher}
             analysesRemaining={data.usage.analysesRemaining}
-            onSelectTab={select}
+            onSelectTab={jump}
           />
         ) : null}
         {tab === "annonces" ? (
@@ -141,7 +140,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             regenRemaining={data.usage.regenRemaining}
             landing={landing}
             externalSite={analysisExternal}
-            onSelectTab={select}
+            siteName={site.name}
+            onSelectTab={jump}
           />
         ) : null}
         {tab === "plan" ? (
@@ -154,7 +154,7 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             regenRemaining={data.usage.regenRemaining}
             landing={landing}
             externalSite={data.externalTracking !== null}
-            onSelectTab={select}
+            onSelectTab={jump}
           />
         ) : null}
         {tab === "parametrage" ? (
@@ -169,10 +169,10 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             siteDomain={site.domain}
             landing={landing}
             externalTracking={data.externalTracking}
-            onSelectTab={select}
+            onSelectTab={jump}
           />
         ) : null}
-      </section>
-    </div>
+      </TabPanel>
+    </Stagger>
   );
 }

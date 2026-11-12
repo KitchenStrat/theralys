@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { CloudOff, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
-import { Button, Card } from "@theralys/ui";
-import { TEXT_LINK } from "./styles";
+import { Button, Card, EmptyState, LinkButton, PageHeader, Stagger } from "@/components/ds";
 
 /**
  * Frontière d'erreur du segment : une lecture ou un rendu qui échoue affiche
@@ -17,18 +16,27 @@ export default function MonSiteError({ error, reset }: { error: Error & { digest
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <h1 className="text-4xl font-bold">Mon site</h1>
-      <Card className="mt-6 p-10 text-center">
-        <p className="text-base font-medium text-ink-900">Cette section est momentanément indisponible.</p>
-        <p className="mt-1 text-sm text-ink-700">Réessayez dans un instant&nbsp;: votre site, son profil et vos corrections ne sont pas perdus.</p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
-          <Button onClick={reset}>Réessayer</Button>
-          <Link href="/" className={`text-sm ${TEXT_LINK}`}>
-            Retour à l&apos;accueil
-          </Link>
-        </div>
+    <Stagger className="space-y-6">
+      <PageHeader section="mon-site" />
+      <Card padding="none">
+        <EmptyState
+          icon={CloudOff}
+          as="h2"
+          title="Cette section est momentanément indisponible."
+          action={
+            <Button onClick={reset} icon={<RefreshCw size={18} aria-hidden />}>
+              Réessayer
+            </Button>
+          }
+          secondary={
+            <LinkButton href="/" variant="quiet">
+              Retour à l&apos;accueil
+            </LinkButton>
+          }
+        >
+          Réessayez dans un instant&nbsp;: votre site, son profil et vos corrections ne sont pas perdus.
+        </EmptyState>
       </Card>
-    </div>
+    </Stagger>
   );
 }

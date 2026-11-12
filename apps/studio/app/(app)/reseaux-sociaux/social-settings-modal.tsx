@@ -3,11 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Button, FieldHint, Modal } from "@theralys/ui";
+import { ArrowLeft, ArrowRight, CalendarCheck, Check, Info, Lightbulb, Plus } from "lucide-react";
+import { FieldHint, Modal } from "@theralys/ui";
 import { SOCIAL_INSTRUCTIONS_MAX, type SocialVoice } from "@theralys/shared";
+import { Button, ProgressBar } from "@/components/ds";
 import type { SocialSettingsView } from "@/lib/social/settings";
 import { VoiceFields, type VoiceValue } from "../voice-fields";
 import { saveSocialSettings } from "./actions";
+import { ErrorNote, ModalHeader, TEXTAREA_CLASS, TOUCH_BUTTONS_CLASS } from "./social-ui";
 
 const STEPS = [
   {
@@ -159,32 +162,31 @@ export function SocialSettingsModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Paramétrage des contenus réseaux sociaux" size="lg" plain>
-      {/* En-tête chaleureux + progression (même structure que les Paramètres du blog) */}
-      <div className="rounded-t-3xl bg-gradient-to-br from-primary-50 via-cream-50 to-primary-100 px-8 pb-6 pt-6">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-primary-600">Harmony</p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-ink-500">Étape {step + 1} sur 3</span>
-            <div className="flex gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className={clsx("h-1 w-8 rounded-full", i <= step ? "bg-primary-500" : "bg-cream-300")}
-                />
-              ))}
-            </div>
-            <button type="button" onClick={onClose} aria-label="Fermer" className="text-ink-500 hover:text-ink-900">
-              ✕
-            </button>
+      {/* En-tête : où l'on en est (étape, jauge), puis le titre de l'étape — même structure que les Paramètres du blog */}
+      <ModalHeader
+        title={current.title}
+        onClose={onClose}
+        before={
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="ds-brand-word text-lg">Harmony</p>
+            <ProgressBar
+              className="w-36"
+              size="sm"
+              value={step + 1}
+              max={STEPS.length}
+              label={<span className="text-ds-meta font-semibold text-ds-ink-700">Étape {step + 1} sur 3</span>}
+              valueText={`Étape ${step + 1} sur 3`}
+              hideValueText
+            />
           </div>
-        </div>
-        <h2 className="mt-4 font-serif text-3xl font-bold">{current.title}</h2>
-        <p className="mt-1.5 text-sm text-ink-500">{current.subtitle}</p>
-      </div>
+        }
+      >
+        <p className="mt-1.5 text-ds-body text-ds-ink-700">{current.subtitle}</p>
+      </ModalHeader>
 
-      <div className="px-8 py-6">
+      <div className="px-5 py-6 sm:px-8">
         {step === 0 ? (
-          <div className="space-y-5">
+          <div className={clsx("space-y-5", TOUCH_BUTTONS_CLASS)}>
             <VoiceFields
               value={voice}
               onChange={(next) => {
@@ -197,7 +199,7 @@ export function SocialSettingsModal({
 
         {step === 1 ? (
           <div>
-            <label htmlFor="social-instructions" className="block text-sm font-medium text-ink-700">
+            <label htmlFor="social-instructions" className="block text-ds-body font-semibold text-ds-ink-900">
               Vos consignes au générateur
             </label>
             <textarea
@@ -213,11 +215,7 @@ export function SocialSettingsModal({
                 "social-instructions-hint social-instructions-count",
                 instructionsError && "social-settings-error",
               )}
-              className={clsx(
-                "mt-1 w-full resize-y rounded-xl border bg-white px-3 py-2 text-sm leading-relaxed text-ink-900",
-                "placeholder:text-ink-500 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100",
-                instructionsError ? "border-danger-500" : "border-ink-300",
-              )}
+              className={clsx(TEXTAREA_CLASS, "mt-1.5 resize-y bg-white leading-relaxed aria-invalid:border-danger-500")}
             />
             <div className="flex items-start justify-between gap-4">
               <div id="social-instructions-hint">
@@ -226,11 +224,14 @@ export function SocialSettingsModal({
                   vocabulaire médical) ne peuvent pas être enregistrées : le mot en cause vous est indiqué.
                 </FieldHint>
               </div>
-              <p id="social-instructions-count" className="mt-1 shrink-0 text-xs tabular-nums text-ink-500">
+              <p id="social-instructions-count" className="mt-1 shrink-0 text-xs text-ds-ink-600 ds-tnum">
                 {instructions.length} / {SOCIAL_INSTRUCTIONS_MAX}
               </p>
             </div>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-primary-600">Exemples</p>
+            <p className="mt-5 flex items-center gap-1.5 text-ds-meta font-semibold text-ds-section-ink">
+              <Lightbulb size={15} aria-hidden />
+              Exemples
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {EXAMPLES.map((example) => {
                 const added = instructions.includes(example);
@@ -241,13 +242,19 @@ export function SocialSettingsModal({
                     onClick={() => addExample(example)}
                     disabled={added}
                     className={clsx(
-                      "rounded-full border px-3.5 py-1.5 text-left text-sm transition-colors",
+                      "inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-left text-sm font-medium ds-focus pointer-coarse:min-h-11",
                       added
-                        ? "cursor-default border-primary-200 bg-primary-50 text-primary-600"
-                        : "border-cream-300 text-ink-700 hover:border-ink-300",
+                        ? "cursor-default bg-ds-section-tint-2 text-ds-section-ink"
+                        : "bg-white text-ds-brand-800 inset-ring inset-ring-ds-ink-300 ds-press hover:bg-ds-brand-50",
                     )}
                   >
-                    {added ? "✓" : "+"} {example}
+                    {added ? (
+                      <Check size={15} strokeWidth={2.5} aria-hidden className="shrink-0" />
+                    ) : (
+                      <Plus size={15} strokeWidth={2.5} aria-hidden className="shrink-0" />
+                    )}
+                    {example}
+                    {added ? <span className="sr-only"> (ajoutée)</span> : null}
                   </button>
                 );
               })}
@@ -276,56 +283,65 @@ export function SocialSettingsModal({
                     title={locked ? "Choisissez au moins un jour." : undefined}
                     onClick={() => toggleDay(day.value)}
                     className={clsx(
-                      "h-11 w-14 rounded-full border text-sm font-medium transition-colors",
+                      "inline-flex h-11 min-w-[4.25rem] items-center justify-center gap-1 rounded-full px-3 text-ds-body font-semibold ds-focus",
                       on
-                        ? "border-primary-400 bg-primary-500 text-white shadow-sm"
-                        : "border-cream-300 bg-white text-ink-700 hover:border-ink-300",
-                      locked && "cursor-default",
+                        ? "bg-ds-section-gradient-deep text-ds-section-on-deep shadow-ds-glow"
+                        : "bg-white text-ds-ink-700 inset-ring inset-ring-ds-ink-300 hover:bg-ds-section-tint",
+                      locked ? "cursor-default" : "ds-press",
                     )}
                   >
+                    {on ? <Check size={15} strokeWidth={3} aria-hidden className="shrink-0" /> : null}
                     {day.label}
                   </button>
                 );
               })}
             </div>
             {lastDay ? (
-              <p id="social-days-hint" className="mt-2 text-xs text-ink-500">
+              <p id="social-days-hint" className="mt-2 text-ds-meta text-ds-ink-600">
                 Choisissez au moins un jour : ce dernier jour reste actif.
               </p>
             ) : null}
-            <p className="mt-4 text-sm text-ink-700" aria-live="polite">
-              <strong className="text-ink-900">
-                {perWeek} contenu{perWeek > 1 ? "s" : ""} par semaine
-              </strong>
-              , soit environ {perWeek * 4} par mois.
+            <p className="mt-5 flex items-start gap-2.5 text-base text-ds-ink-700" aria-live="polite">
+              <CalendarCheck size={20} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+              <span>
+                <strong className="font-semibold text-ds-ink-900">
+                  {perWeek} contenu{perWeek > 1 ? "s" : ""} par semaine
+                </strong>
+                , soit environ {perWeek * 4} par mois.
+              </span>
             </p>
-            <div className="mt-5 rounded-2xl bg-primary-50/60 px-5 py-4 text-sm leading-relaxed text-ink-700">
-              Les contenus déjà préparés ne changent pas. Vos réglages s&apos;appliquent aux prochaines
-              préparations de mois et aux demandes sur mesure.
+            <div className="mt-5 flex items-start gap-2.5 rounded-ds-md bg-ds-section-tint px-4 py-3.5 text-ds-body text-ds-ink-700 ring-1 ring-ds-section-line/70">
+              <Info size={18} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+              <span>
+                Les contenus déjà préparés ne changent pas. Vos réglages s&apos;appliquent aux prochaines
+                préparations de mois et aux demandes sur mesure.
+              </span>
             </div>
           </div>
         ) : null}
 
         {error ? (
-          <p id="social-settings-error" className="mt-4 text-sm text-danger-500" role="alert">
+          <ErrorNote id="social-settings-error" className="mt-4">
             {error.message}
-          </p>
+          </ErrorNote>
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between border-t border-cream-200 px-8 py-5">
+      <div className="flex items-center justify-between gap-3 border-t border-ds-ink-200 px-5 py-4 sm:px-8 sm:py-5">
         {step > 0 ? (
-          <button type="button" onClick={() => goTo(step - 1)} className="text-sm font-medium text-ink-700 hover:text-ink-900">
-            ← Retour
-          </button>
+          <Button variant="quiet" icon={<ArrowLeft size={18} aria-hidden />} onClick={() => goTo(step - 1)}>
+            Retour
+          </Button>
         ) : (
           <span />
         )}
         {step < 2 ? (
-          <Button onClick={() => goTo(step + 1)}>Continuer →</Button>
+          <Button iconRight={<ArrowRight size={18} aria-hidden />} onClick={() => goTo(step + 1)}>
+            Continuer
+          </Button>
         ) : (
-          <Button onClick={onSave} disabled={saving}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
+          <Button icon={<Check size={18} aria-hidden />} loading={saving} onClick={onSave}>
+            Enregistrer
           </Button>
         )}
       </div>

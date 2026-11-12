@@ -1,8 +1,9 @@
 "use client";
 
+import { ScanSearch, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
-import { Button, Spinner } from "@theralys/ui";
 import { normalizeExternalSiteUrl } from "@theralys/shared";
+import { Button } from "@/components/ds";
 import { readingHint } from "@/lib/external-site/format";
 import { connectExternalSite } from "./actions";
 import { ActionMessage, CheckboxField, TextField } from "./fields";
@@ -22,12 +23,15 @@ export function ConnectForm({
   ownHosts,
   initialUrl = "",
   onCancel,
+  submitVariant = "primary",
 }: {
   idPrefix: string;
   ownHosts: readonly string[];
   initialUrl?: string;
   /** Présent : le formulaire vient d'être ouvert par un bouton (le focus va à l'adresse) et peut être refermé */
   onCancel?: () => void;
+  /** `secondary` quand une autre action principale est déjà à l'écran (le texte à coller, après une lecture refusée) */
+  submitVariant?: "primary" | "secondary";
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [consent, setConsent] = useState(false);
@@ -74,7 +78,7 @@ export function ConnectForm({
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-4" data-testid="connect-form">
+    <form ref={formRef} onSubmit={onSubmit} noValidate className="space-y-5" data-testid="connect-form">
       <div className="max-w-md">
         <TextField
           id={`${idPrefix}-url`}
@@ -97,26 +101,34 @@ export function ConnectForm({
           testId="connect-url"
         />
       </div>
-      <CheckboxField
-        id={`${idPrefix}-consent`}
-        checked={consent}
-        onChange={(checked) => {
-          setConsent(checked);
-          if (checked) setConsentError(null);
-        }}
-        label={CONSENT_LABEL}
-        hint="Seules vos pages publiques sont lues, comme le ferait un visiteur. Rien n'est modifié sur votre site."
-        error={consentError ?? undefined}
-        disabled={pending}
-        required
-        testId="connect-consent"
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending} data-testid="connect-submit">
-          {pending ? <Spinner className="text-white" /> : null} Lire mon site
+      {/* L'autorisation de lecture, dans son encadré : ce qui est lu, et ce qui ne l'est pas */}
+      <div className="max-w-2xl rounded-ds-md bg-ds-section-tint px-4 py-3.5 ring-1 ring-ds-section-line/70">
+        <CheckboxField
+          id={`${idPrefix}-consent`}
+          checked={consent}
+          onChange={(checked) => {
+            setConsent(checked);
+            if (checked) setConsentError(null);
+          }}
+          label={CONSENT_LABEL}
+          hint={
+            <span className="flex items-start gap-1.5">
+              <ShieldCheck size={15} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+              <span>Seules vos pages publiques sont lues, comme le ferait un visiteur. Rien n&apos;est modifié sur votre site.</span>
+            </span>
+          }
+          error={consentError ?? undefined}
+          disabled={pending}
+          required
+          testId="connect-consent"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" variant={submitVariant} loading={pending} icon={<ScanSearch size={18} aria-hidden />} data-testid="connect-submit">
+          Lire mon site
         </Button>
         {onCancel ? (
-          <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
+          <Button type="button" variant="quiet" disabled={pending} onClick={onCancel}>
             Annuler
           </Button>
         ) : null}

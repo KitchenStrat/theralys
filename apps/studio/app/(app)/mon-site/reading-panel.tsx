@@ -1,19 +1,41 @@
 "use client";
 
+import { ScanSearch } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { clsx } from "clsx";
-import { Card, Spinner } from "@theralys/ui";
-
-const STEPS = ["Lecture de vos pages", "Compréhension de votre activité", "Préparation de votre profil"] as const;
+import { Card, StepProgress, useStepTimeline } from "@/components/ds";
+import { withStepAttributes } from "./step-attributes";
+import { Eyebrow } from "./ui";
 
 /**
- * Passage d'une étape à la suivante, en secondes depuis l'ouverture de
- * l'écran. Un ordre de grandeur : le serveur ne dit que « lecture en cours »,
- * la fin réelle vient de lui (la page se relit). La dernière étape n'est donc
- * jamais montrée comme terminée.
+ * Étapes de la lecture et leur durée habituelle, en secondes : la deuxième
+ * commence 15 s après l'ouverture de l'écran, la troisième à 35 s. Un ordre
+ * de grandeur : le serveur ne dit que « lecture en cours », la fin réelle
+ * vient de lui (la page se relit). La dernière étape n'est donc jamais
+ * montrée comme terminée (`useStepTimeline` s'y arrête). `details` : ce qui
+ * se fait pendant l'étape, pour montrer le travail — des gestes, pas des
+ * compteurs.
  */
-const STEP_STARTS_S = [0, 15, 35] as const;
+const STEPS = [
+  {
+    label: "Lecture de vos pages",
+    seconds: 15,
+    details: ["Nous ouvrons vos pages publiques, comme le ferait un visiteur.", "Accueil, spécialités, tarifs, contact\u00a0: nous parcourons vos pages."],
+  },
+  {
+    label: "Compréhension de votre activité",
+    seconds: 20,
+    details: ["Nous repérons vos spécialités et votre façon de travailler.", "Nous relevons vos tarifs, vos horaires et vos coordonnées."],
+  },
+  {
+    label: "Préparation de votre profil",
+    seconds: 40,
+    details: ["Nous rangeons le tout par rubrique, pour que vous puissiez le relire.", "Encore quelques instants\u00a0: votre profil arrive."],
+  },
+] as const;
+
+/** Durée d'affichage d'une précision, en secondes. */
+const DETAIL_S = 7;
 /** Au-delà, la lecture dure plus que d'habitude : l'écran le dit. */
 const LONG_AFTER_S = 75;
 /** Délai entre deux relectures de la page, jusqu'à la fin de la lecture. */
@@ -30,14 +52,18 @@ const REFRESH_LOST_MS = 45_000;
  * et l'assurance que la page peut être quittée. Monté seulement pendant une
  * lecture : dès qu'elle se termine, la page relue affiche le résultat et ce
  * composant disparaît avec ses minuteries.
+ *
+ * Le dessin est celui de `StepProgress` (design system), avancé par
+ * `useStepTimeline` ; les attributs que suivent les parcours automatisés
+ * (`reading-step-N`, `data-state`) y sont ajoutés par `withStepAttributes`.
  */
 export function ReadingPanel({ address, hasPrevious }: { address: string; /** Une lecture précédente a abouti : son profil reste en place */ hasPrevious: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [step, setStep] = useState(0);
-  const [long, setLong] = useState(false);
   const [refreshing, startRefresh] = useTransition();
   const [rescues, setRescues] = useState(0);
+  const { current: step, elapsed, inStep } = useStepTimeline(STEPS, true);
+  const long = elapsed >= LONG_AFTER_S;
 
   // La page se relit toutes les 3 secondes, une relecture à la fois : la suivante n'est programmée qu'une fois la
   // précédente arrivée. Lancées à intervalle fixe, les relectures s'empileraient dès que le serveur répond
@@ -72,56 +98,47 @@ export function ReadingPanel({ address, hasPrevious }: { address: string; /** Un
     return () => clearTimeout(timer);
   }, [refreshing, rescues, router, pathname]);
 
-  useEffect(() => {
-    const timers = [
-      ...STEP_STARTS_S.slice(1).map((seconds, index) => setTimeout(() => setStep(index + 1), seconds * 1000)),
-      setTimeout(() => setLong(true), LONG_AFTER_S * 1000),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, []);
+  const details = STEPS[step]?.details ?? [];
+  const progress = withStepAttributes(
+    // Appel direct, et non `<StepProgress />` : c'est l'arbre rendu qui reçoit les attributs des étapes
+    StepProgress({
+      as: "h2",
+      icon: ScanSearch,
+      title: (
+        <>
+          Nous lisons votre site
+          <span className="mt-0.5 block font-sans text-base font-medium tracking-normal wrap-anywhere text-ds-ink-700">{address}</span>
+        </>
+      ),
+      steps: STEPS,
+      current: step,
+      status: "running",
+      estimate: "jusqu'à une minute environ",
+      elapsed: Math.floor(elapsed),
+      detail: details[Math.min(details.length - 1, Math.floor(inStep / DETAIL_S))],
+      hint: (
+        <>
+          Vous pouvez quitter cette page&nbsp;: la lecture continue, et le résultat vous attendra ici.
+          {hasPrevious ? " En attendant, votre profil actuel et vos corrections restent en place." : ""}
+        </>
+      ),
+    }),
+    {
+      heading: "h2",
+      titleId: "reading-title",
+      listLabel: "Étapes de la lecture",
+      attributes: (index) => ({ "data-testid": `reading-step-${index + 1}`, "data-state": index < step ? "done" : index === step ? "current" : "next" }),
+    },
+  );
 
   return (
     <section aria-labelledby="reading-title" data-testid="reading-panel">
-      <Card className="p-6 md:p-7">
-        <h2 id="reading-title" className="flex items-center gap-2.5 text-xl font-semibold">
-          <Spinner /> Nous lisons votre site
-        </h2>
-        <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900">{address}</p>
-
-        <ol className="mt-5 space-y-3" aria-label="Étapes de la lecture">
-          {STEPS.map((label, index) => {
-            const state = index < step ? "done" : index === step ? "current" : "next";
-            return (
-              <li key={label} className="flex items-center gap-3" aria-current={state === "current" ? "step" : undefined} data-testid={`reading-step-${index + 1}`} data-state={state}>
-                <span
-                  aria-hidden
-                  className={clsx(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                    state === "done" && "bg-success-100 text-success-500",
-                    state === "current" && "bg-primary-500 text-white",
-                    state === "next" && "bg-cream-200 text-ink-500",
-                  )}
-                >
-                  {state === "done" ? "✓" : index + 1}
-                </span>
-                <span className={clsx("text-base", state === "next" ? "text-ink-500" : "font-medium text-ink-900")}>
-                  {label}
-                  <span className={clsx("ml-2 text-sm font-normal", state === "current" ? "text-primary-700" : "text-ink-500")}>
-                    {state === "done" ? "fait" : state === "current" ? "en cours…" : "à venir"}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-
-        <p className="mt-5 max-w-2xl text-base text-ink-700">
-          Cela prend jusqu&apos;à une minute environ. Vous pouvez quitter cette page&nbsp;: la lecture continue, et le résultat vous attendra ici.
-          {hasPrevious ? " En attendant, votre profil actuel et vos corrections restent en place." : ""}
-        </p>
-        {/* Région vivante permanente : l'avancement y est annoncé sans déplacer le focus */}
-        <p className="mt-2 text-sm text-ink-700" role="status">
-          {long ? "C'est un peu plus long que d'habitude\u00a0: la lecture continue." : <span className="sr-only">{`Étape ${step + 1} sur ${STEPS.length} : ${STEPS[step]}.`}</span>}
+      <Card padding="lg">
+        <Eyebrow>{hasPrevious ? "Nouvelle lecture de votre site" : "Étape 1 · Connecter"}</Eyebrow>
+        <div className="mt-3">{progress}</div>
+        {/* Région vivante permanente : le retard y est annoncé sans déplacer le focus (le changement d'étape l'est par `StepProgress`) */}
+        <p className="text-ds-body font-medium text-ds-ink-800 [&:not(:empty)]:mt-4" role="status">
+          {long ? "C'est un peu plus long que d'habitude\u00a0: la lecture continue." : null}
         </p>
       </Card>
     </section>
