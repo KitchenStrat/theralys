@@ -576,7 +576,7 @@
   background-image: linear-gradient(135deg, var(--ds-s-deep-from), var(--ds-s-deep-via), var(--ds-s-deep-to));
 }
 @utility bg-ds-section-soft {
-  background-image: linear-gradient(135deg, var(--ds-s-tint-2), var(--ds-s-tint) 58%, #fff);
+  background-image: linear-gradient(135deg, var(--ds-s-line) -25%, var(--ds-s-tint-2) 32%, var(--ds-s-tint) 100%);
 }
 /* Action principale : toujours le bleu de marque, quelle que soit la section */
 @utility bg-ds-brand-gradient {
@@ -1275,6 +1275,7 @@ html:has(.ds-app) {
     clip-path: inset(0 calc(50% - 1.75rem) round 1rem);
     transform: translateX(calc(var(--ds-i, 0) * 100%));
     pointer-events: none;
+    z-index: 1;
   }
   .ds-bottom-pill > * {
     position: absolute;

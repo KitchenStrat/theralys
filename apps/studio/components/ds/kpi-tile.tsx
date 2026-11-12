@@ -42,6 +42,8 @@ export type KpiTileProps = {
   className?: string;
 };
 
+const PAD = "p-4 sm:p-6";
+
 function deltaTone(delta: KpiDelta): { tone: BadgeTone; icon: LucideIcon } {
   if (delta.value === 0) return { tone: "neutral", icon: Minus };
   const up = delta.value > 0;
@@ -74,14 +76,17 @@ export function KpiTile({
     <>
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3">
         <IconBadge icon={icon} size="md" />
-        <h3 className="col-span-2 row-start-2 mt-3.5 truncate text-ds-body font-semibold text-ds-ink-800">{label}</h3>
+        {/* Tuile étroite (deux par rangée sur mobile) : le libellé passe sur deux lignes, la précision s'efface */}
+        <h3 className="col-span-2 row-start-2 mt-3.5 truncate text-ds-body font-semibold text-ds-ink-800 @max-[13rem]/kpi:line-clamp-2 @max-[13rem]/kpi:min-h-12 @max-[13rem]/kpi:whitespace-normal">
+          {label}
+        </h3>
         {caption ? (
-          <p className="col-start-2 row-start-1 justify-self-end text-right text-ds-meta text-ds-ink-600 text-balance">
+          <p className="col-start-2 row-start-1 justify-self-end text-right text-ds-meta text-ds-ink-600 text-balance @max-[13rem]/kpi:hidden">
             {caption}
           </p>
         ) : null}
       </div>
-      <p className="mt-1 text-ds-kpi font-bold text-ds-ink-900">
+      <p className="mt-1 text-ds-kpi font-bold text-ds-ink-900 @max-[13rem]/kpi:text-[1.75rem]">
         <AnimatedNumber value={value} format={format} prefix={prefix} suffix={suffix} />
       </p>
       {delta && tone ? (
@@ -98,13 +103,13 @@ export function KpiTile({
     </>
   );
   // Voile de la teinte de section en tête de tuile : l'accent de couleur, sans quitter le blanc
-  const classes = clsx("relative bg-linear-to-b from-ds-section-tint to-white to-55%", className);
+  const classes = clsx("@container/kpi relative bg-linear-to-b from-ds-section-tint to-white to-55%", className);
   return href ? (
-    <InteractiveCard href={href} section={section} padding="md" className={classes}>
+    <InteractiveCard href={href} section={section} padding="none" className={clsx(PAD, classes)}>
       {body}
     </InteractiveCard>
   ) : (
-    <Card as="article" section={section} padding="md" className={classes}>
+    <Card as="article" section={section} padding="none" className={clsx(PAD, classes)}>
       {body}
     </Card>
   );

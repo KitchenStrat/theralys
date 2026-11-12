@@ -79,7 +79,7 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
   publications: {
     key: "publications",
     label: "Publications",
-    shortLabel: "Articles",
+    shortLabel: "Publications",
     href: "/publications",
     icon: Newspaper,
     purpose: "Les articles de votre blog : nous les écrivons, vous les relisez avant publication.",

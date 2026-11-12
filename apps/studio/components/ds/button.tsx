@@ -7,7 +7,7 @@ export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger" | "inve
 export type ButtonSize = "sm" | "md" | "lg";
 
 const BASE =
-  "group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap select-none ds-press disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:pointer-events-none aria-disabled:opacity-55";
+  "group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap select-none ds-press disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:opacity-55";
 
 /** 44 px de haut par défaut ; `sm` (36 px) remonte à 44 px sur écran tactile. */
 const SIZES: Record<ButtonSize, string> = {
@@ -97,7 +97,8 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={buttonClasses(variant, size, className)}
+      // Inactif : estompé. En cours : pleine opacité, le travail se voit.
+      className={buttonClasses(variant, size, clsx(!loading && "disabled:opacity-55", loading && "cursor-progress", className))}
       {...props}
     >
       <Inner variant={variant} icon={loading ? <Spinner className="size-[1.125rem]" /> : icon} iconRight={iconRight}>

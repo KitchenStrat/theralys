@@ -293,7 +293,7 @@ export default function DesignPreviewPage() {
 
         <Block id="chiffres" title="Chiffres clés et graphiques" lead="Anatomie fixe : pastille et libellé, valeur, variation signée avec sa période, mini-courbe. Les chiffres roulent une fois à l'arrivée ; les courbes se révèlent de gauche à droite.">
           <Replay>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
               <KpiTile section="mon-site" icon={Users} label="Visiteurs du site" caption="7 derniers jours" value={1284} delta={{ value: 12, label: "en une semaine" }} trend={TRENDS.visits} />
               <KpiTile section="accueil" icon={CalendarCheck} label="Demandes de rendez-vous" caption="7 derniers jours" value={18} delta={{ value: -2, unit: "", label: "en une semaine" }} trend={TRENDS.appointments} />
               <KpiTile section="google-ads" icon={Search} label="Coût moyen d'un clic" caption="30 derniers jours" value={0.85} format={{ style: "currency", currency: "EUR" }} delta={{ value: -8, label: "en un mois", goodWhen: "down" }} />

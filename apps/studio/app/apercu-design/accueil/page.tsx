@@ -87,7 +87,7 @@ export default function HomePreviewPage() {
           <h2 id="chiffres" className="sr-only">
             Vos chiffres clés
           </h2>
-          <Stagger className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Stagger className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             <KpiTile
               section="mon-site"
               icon={Users}
