@@ -6,8 +6,10 @@ import {
   VISITOR_MAX_AGE_S,
   parseConsent,
   trackEventSchema,
+  type AnalyticsEventType,
 } from "@theralys/analytics";
-import { analyticsEvents, getDb, sites } from "@theralys/db";
+import { analyticsEvents, getDb, sites, type Database } from "@theralys/db";
+import type { AnalyticsSource } from "@theralys/shared";
 import { eq, sql } from "drizzle-orm";
 import { isInvalidEnumError, isMissingColumnError } from "@/lib/pg-errors";
 import { ownHostsFor, resolveTrackSource } from "@/lib/track-source";
@@ -28,13 +30,46 @@ export const dynamic = "force-dynamic";
  *   referrer sur le site lui-même vaut navigation interne (null). Les clics
  *   (RDV, appel) reçoivent le `src` de session mémorisé par le navigateur :
  *   provenance connue ou null, jamais « accès direct ».
- * - Déploiement avant migration : colonne `source` absente (0004) → événement
- *   enregistré sans provenance ; valeur `call_click` absente de l'enum (0005)
+ * - Déploiement avant migration : colonne `origin` absente (0009) → événement
+ *   enregistré tel quel, provenance comprise ; colonne `source` absente (0004)
+ *   → enregistré sans provenance ; valeur `call_click` absente de l'enum (0005)
  *   → `{ ok: true, ignored: "schema" }`, jamais de 500.
  *
  * La reconnaissance des robots et l'identifiant anonyme vivent dans
  * `lib/visitor.ts`, partagés avec la mesure du site du client (`/api/m`).
  */
+type TrackRow = { siteId: string; type: AnalyticsEventType; visitorId: string; path: string };
+
+/**
+ * Inscrit l'événement. Drizzle liste toutes les colonnes du schéma dans son
+ * INSERT, même sans valeur : une colonne que la base n'a pas encore reçue
+ * fait échouer la ligne entière (42703). Déployé avant une migration, on
+ * réessaie donc en SQL explicite, du schéma le plus récent au plus ancien,
+ * pour perdre le moins possible :
+ * - avant 0009 (`origin` absente) : même ligne, provenance comprise — une
+ *   visite du site hébergé n'a de toute façon pas d'origine ;
+ * - avant 0004 (`source` absente) : la page vue compte, sans provenance.
+ */
+async function insertTrackEvent(db: Database, row: TrackRow, source: AnalyticsSource | null): Promise<void> {
+  try {
+    await db.insert(analyticsEvents).values({ ...row, source });
+    return;
+  } catch (err) {
+    if (!isMissingColumnError(err)) throw err;
+  }
+  try {
+    await db.execute(
+      sql`insert into analytics_events (site_id, type, visitor_id, path, source) values (${row.siteId}, ${row.type}, ${row.visitorId}, ${row.path}, ${source})`,
+    );
+    return;
+  } catch (err) {
+    if (!isMissingColumnError(err)) throw err;
+  }
+  await db.execute(
+    sql`insert into analytics_events (site_id, type, visitor_id, path) values (${row.siteId}, ${row.type}, ${row.visitorId}, ${row.path})`,
+  );
+}
+
 export async function POST(request: NextRequest) {
   let payload;
   try {
@@ -74,16 +109,7 @@ export async function POST(request: NextRequest) {
   const row = { siteId: site.id, type: payload.type, visitorId, path: payload.path };
   let ignored: "schema" | null = null;
   try {
-    try {
-      await db.insert(analyticsEvents).values({ ...row, source });
-    } catch (err) {
-      // Déploiement avant la migration 0004 (colonne `source` absente) : la page vue compte quand même, sans provenance
-      if (!isMissingColumnError(err)) throw err;
-      // SQL explicite : drizzle liste toutes les colonnes du schéma (`source` comprise) même sans valeur
-      await db.execute(
-        sql`insert into analytics_events (site_id, type, visitor_id, path) values (${row.siteId}, ${row.type}, ${row.visitorId}, ${row.path})`,
-      );
-    }
+    await insertTrackEvent(db, row, source);
   } catch (err) {
     // Déploiement avant la migration 0005 (`call_click` absent de l'enum analytics_event_type, 22P02) : clic ignoré, sans erreur
     if (!isInvalidEnumError(err)) throw err;

@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type * as Database from "@theralys/db";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/track/route";
@@ -19,7 +21,18 @@ const db = vi.hoisted(() => ({
   site: null as { id: string; domain: string | null } | null,
   rows: [] as Record<string, unknown>[],
   lookups: 0,
+  /** Colonnes que la base simulée n'a pas encore reçues (migration non appliquée) */
+  missingColumns: [] as string[],
+  /** Valeur de `type` que l'enum de la base simulée ne connaît pas encore */
+  unknownType: null as string | null,
+  /** Requêtes SQL explicites reçues par `execute` : texte et paramètres */
+  statements: [] as { text: string; params: unknown[] }[],
+  /** Panne sans rapport avec une migration, levée par l'INSERT de drizzle (`insert`) ou par le SQL explicite (`execute`) */
+  failure: null as { on: "insert" | "execute"; error: Error } | null,
 }));
+
+/** Erreur du pilote Postgres, enveloppée par drizzle comme en production (`cause`). */
+const pgError = (code: string, message: string) => Object.assign(new Error("Failed query"), { cause: Object.assign(new Error(message), { code }) });
 
 vi.mock("@theralys/db", async (importOriginal) => ({
   ...(await importOriginal<typeof Database>()),
@@ -32,11 +45,25 @@ vi.mock("@theralys/db", async (importOriginal) => ({
         },
       },
     },
+    // Comme drizzle : l'INSERT nomme toutes les colonnes du schéma, `source` et `origin` comprises
     insert: () => ({
       values: async (row: Record<string, unknown>) => {
+        if (db.failure?.on === "insert") throw db.failure.error;
+        const missing = ["origin", "source"].find((column) => db.missingColumns.includes(column));
+        if (missing) throw pgError("42703", `column "${missing}" of relation "analytics_events" does not exist`);
+        if (row.type === db.unknownType) throw pgError("22P02", `invalid input value for enum analytics_event_type: "${String(row.type)}"`);
         db.rows.push(row);
       },
     }),
+    execute: async (statement: SQL) => {
+      if (db.failure?.on === "execute") throw db.failure.error;
+      const { sql: text, params } = new PgDialect().sqlToQuery(statement);
+      const columns = /\(([^)]*)\) values/.exec(text)?.[1]?.split(", ") ?? [];
+      const missing = columns.find((column) => db.missingColumns.includes(column));
+      if (missing) throw pgError("42703", `column "${missing}" of relation "analytics_events" does not exist`);
+      if (params[columns.indexOf("type")] === db.unknownType) throw pgError("22P02", "invalid input value for enum analytics_event_type");
+      db.statements.push({ text, params });
+    },
   }),
 }));
 
@@ -57,6 +84,10 @@ beforeEach(() => {
   db.site = { id: SITE_ID, domain: null };
   db.rows = [];
   db.lookups = 0;
+  db.missingColumns = [];
+  db.unknownType = null;
+  db.statements = [];
+  db.failure = null;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-12T10:00:00Z"));
   vi.stubEnv("AUTH_SECRET", "secret-de-test");
@@ -136,5 +167,72 @@ describe("POST /api/track — comportement inchangé", () => {
     const denied = await track({ siteId: SITE_ID, type: "pageview", path: "/" }, { cookie: "tl_consent=denied", "x-forwarded-for": "203.0.113.7" });
     expect(db.rows[2]?.visitorId).toBe(anonymous("secret-de-test", "203.0.113.7", CHROME));
     expect(denied.headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("POST /api/track — déployé avant une migration", () => {
+  const visit = { siteId: SITE_ID, type: "pageview", path: "/claire", referrer: "https://www.google.fr/" };
+  const headers = { "x-forwarded-for": "203.0.113.7" };
+  const visitor = anonymous("secret-de-test", "203.0.113.7", CHROME);
+
+  it("migration 0009 non appliquée (colonne `origin` absente) : la visite est inscrite avec sa provenance", async () => {
+    db.missingColumns = ["origin"];
+    const response = await track(visit, headers);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(db.rows).toEqual([]);
+    expect(db.statements).toEqual([
+      {
+        text: "insert into analytics_events (site_id, type, visitor_id, path, source) values ($1, $2, $3, $4, $5)",
+        params: [SITE_ID, "pageview", visitor, "/claire", "google"],
+      },
+    ]);
+  });
+
+  it("avant 0009, une annonce garde sa provenance : c'est elle qui alimente les résultats Google Ads et Meta Ads", async () => {
+    db.missingColumns = ["origin"];
+    await track({ siteId: SITE_ID, type: "pageview", path: "/claire", src: "ads" }, headers);
+    await track({ siteId: SITE_ID, type: "rdv_click", path: "/claire", src: "meta" }, headers);
+    await track({ siteId: SITE_ID, type: "pageview", path: "/claire/tarifs" }, headers);
+    expect(db.statements.map((statement) => statement.params.slice(1))).toEqual([
+      ["pageview", visitor, "/claire", "google_ads"],
+      ["rdv_click", visitor, "/claire", "meta_ads"],
+      // Navigation interne : pas de provenance, et la colonne reçoit bien NULL
+      ["pageview", visitor, "/claire/tarifs", null],
+    ]);
+  });
+
+  it("migration 0004 non appliquée (colonne `source` absente) : la visite compte quand même, sans provenance", async () => {
+    db.missingColumns = ["origin", "source"];
+    const response = await track(visit, headers);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(db.statements).toEqual([
+      { text: "insert into analytics_events (site_id, type, visitor_id, path) values ($1, $2, $3, $4)", params: [SITE_ID, "pageview", visitor, "/claire"] },
+    ]);
+  });
+
+  it("migration 0005 non appliquée (`call_click` inconnu de l'enum) : clic ignoré sans erreur, avec ou sans 0009", async () => {
+    db.unknownType = "call_click";
+    for (const missingColumns of [[], ["origin"]]) {
+      db.missingColumns = missingColumns;
+      const response = await track({ siteId: SITE_ID, type: "call_click", path: "/claire" }, headers);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true, ignored: "schema" });
+    }
+    expect(db.rows).toEqual([]);
+    expect(db.statements).toEqual([]);
+  });
+
+  it("toute autre panne de la base remonte : elle n'est jamais prise pour une migration manquante", async () => {
+    const timeout = pgError("57014", "canceling statement due to statement timeout");
+    db.failure = { on: "insert", error: timeout };
+    await expect(track(visit, headers)).rejects.toBe(timeout);
+    // Aucune seconde tentative en SQL explicite
+    expect(db.statements).toEqual([]);
+
+    db.missingColumns = ["origin"];
+    db.failure = { on: "execute", error: timeout };
+    await expect(track(visit, headers)).rejects.toBe(timeout);
+    expect(db.rows).toEqual([]);
   });
 });

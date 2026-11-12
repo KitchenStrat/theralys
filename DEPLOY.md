@@ -265,8 +265,10 @@ Paramétrage est en cours d'activation ». Appliquez-les alors sans attendre.
    La migration `0009_external_sites` crée la table `external_sites` et ajoute
    `analytics_events.origin` (section « Mon site » du studio : un praticien y
    connecte son propre site). Tant qu'elle n'est pas appliquée, rien ne casse :
-   la section affiche qu'elle est en cours d'activation, le code de mesure
-   servi est inerte et la relecture mensuelle ne fait rien.
+   la section affiche qu'elle est en cours d'activation, les visites des sites
+   hébergés restent comptées avec leur provenance, le code de mesure servi est
+   inerte et la relecture mensuelle ne fait rien (état vérifié en mode
+   production contre une base sans la migration).
 
    Une ligne par entrée du journal (`created_at` = champ `when` de
    `packages/db/drizzle/meta/_journal.json`). Fusionnez/déployez ensuite, puis
