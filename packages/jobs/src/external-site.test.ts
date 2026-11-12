@@ -1720,10 +1720,16 @@ describe("briefPagesFor", () => {
 
   it("sans site du client : les pages, l'adresse et le thème du site hébergé, tels quels et sans aucune requête", async () => {
     const handle = memoryDb({ external: [externalRow()] });
-    const source = await briefPagesFor(handle.db, site(), HOSTED, HOSTED_URL);
+    const plain = site();
+    const source = await briefPagesFor(handle.db, plain, HOSTED, HOSTED_URL);
+    // Les mêmes objets, pas des copies : rien n'est transformé en chemin
     expect(source.pages).toBe(HOSTED);
-    expect(source.theme).toBe(site().theme === source.theme ? source.theme : THEME);
+    expect(source.theme).toBe(plain.theme);
     expect(source).toEqual({ pages: HOSTED, url: HOSTED_URL, hostedUrl: HOSTED_URL, theme: THEME, reference: null });
+    expect(handle.log).toEqual([]);
+    // Réglage présent mais éteint : pareil
+    const off = site({ url: SITE_URL, active: false });
+    expect(await briefPagesFor(handle.db, off, HOSTED, HOSTED_URL)).toEqual({ pages: HOSTED, url: HOSTED_URL, hostedUrl: HOSTED_URL, theme: off.theme, reference: null });
     expect(handle.log).toEqual([]);
   });
 
