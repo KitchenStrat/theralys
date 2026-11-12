@@ -209,7 +209,7 @@ export function PlanTab({
               ) : (
                 <>
                   L&apos;URL à coller dans chaque annonce porte le suffixe{" "}
-                  <code className="rounded-md bg-ds-section-tint-2 px-1.5 py-0.5 font-mono text-[0.875em] text-ds-section-ink">{landing.suffix}</code> : c&apos;est lui
+                  <code className="rounded-md bg-ds-section-tint-2 px-1.5 py-0.5 font-mono text-[0.875em] whitespace-nowrap text-ds-section-ink">{landing.suffix}</code> : c&apos;est lui
                   qui permet à votre site de reconnaître les visites venues de Meta et de compter les rendez-vous et appels qui en découlent (bloc Résultats de
                   l&apos;onglet Paramétrage et suivi). Les boutons Copier l&apos;ajoutent déjà.
                 </>

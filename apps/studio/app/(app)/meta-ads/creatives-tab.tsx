@@ -306,7 +306,7 @@ function CreativeCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,26.25rem)_minmax(0,1fr)]">
+      <div className="mt-5 grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,28.5rem)_minmax(0,1fr)]">
         {/* L'annonce telle qu'elle se présentera dans le fil : la page, le texte, le visuel, puis le lien et son bouton */}
         <div>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">

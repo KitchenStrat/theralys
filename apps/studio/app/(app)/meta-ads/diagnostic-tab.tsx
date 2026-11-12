@@ -464,7 +464,12 @@ function AffinityCard({ affinity, profession }: { affinity: MetaAffinity; profes
         </Badge>
         {profession ? <span className="text-base font-semibold text-ds-ink-900">{profession}</span> : null}
       </div>
-      <ProgressBar className="mt-3" size="sm" value={level.rank} max={3} ariaLabel="Affinité du métier avec Meta" valueText={level.label} hideValueText />
+      {/* Trois crans : faible, moyenne, forte — le mot est dans la pastille, les crans ne font que le montrer */}
+      <div aria-hidden className="mt-3 grid max-w-48 grid-cols-3 gap-1.5">
+        {[1, 2, 3].map((rank) => (
+          <span key={rank} className={clsx("h-2 rounded-full", rank <= level.rank ? "bg-ds-section-gradient" : "bg-ds-section-tint-2 inset-ring inset-ring-ds-section-line")} />
+        ))}
+      </div>
       <p className="mt-3 text-base text-ds-ink-700">{affinity.reason}</p>
     </Card>
   );
@@ -541,16 +546,18 @@ function CheckRow({ check, externalSite, onSelectTab }: { check: MetaAdsReadines
         <StatusIcon size={20} strokeWidth={2.25} />
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
           <p className="text-base font-semibold text-ds-ink-900">{check.label}</p>
-          <Badge tone={status.tone} icon={status.icon}>
-            {status.label}
-          </Badge>
-          {check.critical && check.status !== "ok" ? (
-            <Badge tone="danger" icon={OctagonAlert}>
-              Bloquant
+          <p className="flex flex-wrap items-center gap-1.5">
+            {check.critical && check.status !== "ok" ? (
+              <Badge tone="danger" icon={OctagonAlert}>
+                Bloquant
+              </Badge>
+            ) : null}
+            <Badge tone={status.tone} icon={status.icon}>
+              {status.label}
             </Badge>
-          ) : null}
+          </p>
         </div>
         <p className="mt-0.5 text-ds-body text-ds-ink-700">{check.detail}</p>
         {link === "fiche" ? (

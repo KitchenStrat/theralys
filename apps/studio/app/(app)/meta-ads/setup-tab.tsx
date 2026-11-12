@@ -81,13 +81,13 @@ export function SetupTab({
           <AccountLink href={META_ADS_MANAGER_URL}>Ouvrir le Gestionnaire de publicités</AccountLink>
           <AccountLink href={META_EVENTS_MANAGER_URL}>Ouvrir le Gestionnaire d&apos;événements</AccountLink>
         </div>
-        <ol className="mt-5 border-t border-ds-ink-200 pt-3">
+        {/* Le fil du guide : un trait continu derrière les numéros, du premier au dernier */}
+        <ol className="relative mt-5 border-t border-ds-ink-200 pt-3 before:absolute before:top-10 before:bottom-8 before:left-[1.3125rem] before:w-0.5 before:rounded-full before:bg-ds-section-line">
           {steps.map((step, index) => (
             <TutorialStepView
               key={step.id}
               step={step}
               index={index}
-              last={index === steps.length - 1}
               creatives={creatives}
               videoPlan={videoPlan}
               plan={plan}
@@ -159,7 +159,6 @@ function ExternalLink({ href, children, className = TEXT_LINK }: { href: string;
 function TutorialStepView({
   step,
   index,
-  last,
   creatives,
   videoPlan,
   plan,
@@ -169,7 +168,6 @@ function TutorialStepView({
 }: {
   step: TutorialStep;
   index: number;
-  last: boolean;
   creatives: MetaAdsCreativeSet | null;
   videoPlan: MetaAdsVideoPlan | null;
   plan: MetaAdsPlan | null;
@@ -179,11 +177,12 @@ function TutorialStepView({
 }) {
   return (
     <li className="relative">
-      {/* Le fil du guide : il descend d'un numéro au suivant */}
-      {last ? null : <span aria-hidden className="absolute top-14 bottom-0 left-[1.3125rem] hidden w-0.5 rounded-full bg-ds-section-line sm:block" />}
       <details className="group/step" open={index === 0}>
         <summary className="flex cursor-pointer list-none items-center gap-3.5 rounded-ds-md py-2.5 pr-1 text-left ds-focus sm:gap-4 [&::-webkit-details-marker]:hidden">
-          <StepNumber size="lg">{index + 1}</StepNumber>
+          {/* Le liseré blanc interrompt le fil autour du numéro */}
+          <StepNumber size="lg" className="relative ring-4 ring-white">
+            {index + 1}
+          </StepNumber>
           <span className="min-w-0 flex-1">
             <span className="block text-base font-semibold text-ds-ink-900">{step.title}</span>
             <span className="block text-ds-body text-ds-ink-600">{step.summary}</span>
@@ -194,7 +193,7 @@ function TutorialStepView({
             className="shrink-0 text-ds-ink-500 transition-transform duration-ds-base ease-ds-out group-open/step:rotate-180 motion-reduce:transition-none"
           />
         </summary>
-        <div className="pt-1 pb-5 sm:pl-[3.75rem]">
+        <div className="relative bg-white pt-1 pb-5 sm:ml-[3.75rem]">
           <ol className="list-decimal space-y-2 pl-6 text-base text-ds-ink-700 marker:font-semibold marker:text-ds-section-accent">
             {step.items.map((item) => (
               <li key={item} className="pl-1">
@@ -419,7 +418,7 @@ function ResultsCard({ results, days, tracked }: { results: PaidResults; days: n
       </div>
       <p className="mt-1 max-w-[80ch] text-ds-body text-ds-ink-600">
         Ce que vos annonces Meta apportent réellement sur votre site, mesuré par Harmony grâce au suffixe{" "}
-        <code className="rounded-md bg-ds-ink-200 px-1.5 py-0.5 font-mono text-[0.875em] text-ds-ink-900">?src=meta</code> des annonces (sans compte publicitaire à
+        <code className="rounded-md bg-ds-ink-200 px-1.5 py-0.5 font-mono text-[0.875em] whitespace-nowrap text-ds-ink-900">?src=meta</code> des annonces (sans compte publicitaire à
         connecter).
       </p>
       {empty ? (
