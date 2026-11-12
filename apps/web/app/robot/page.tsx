@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 const USER_AGENT = "HarmonyBot/1.0 (+https://www.harmony-web.fr/robot)";
 
 const DOES = [
-  "Il lit au plus une douzaine de pages publiques, une à la fois : à la connexion du site, quand le praticien le redemande, puis environ une fois par mois pour rester à jour.",
+  "Il lit au plus une douzaine de pages publiques, à un rythme mesuré (jamais plus de deux pages à la fois) : à la connexion du site, quand le praticien le redemande, puis environ une fois par mois pour rester à jour.",
   "Il se présente toujours sous son nom, jamais comme un navigateur.",
   "Il respecte le fichier robots.txt et s'arrête dès qu'un site refuse la lecture automatique. Il ne contourne aucune protection.",
   "Il ne remplit aucun formulaire, ne se connecte à aucun espace privé et ne lit aucune page protégée.",
