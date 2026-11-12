@@ -24,7 +24,7 @@ export type StepProgressProps = {
   estimate?: string;
   /** Secondes écoulées (affichées « 0:42 ») */
   elapsed?: number;
-  /** Détail de l'étape en cours, pour montrer le travail : « Publication 3 sur 8 » */
+  /** Détail de l'étape en cours, pour montrer le travail : « Publication 3 sur 8 » si l'avancement est réel */
   detail?: ReactNode;
   /** Rassure sur l'attente : « Vous pouvez quitter cette page, le résultat vous attendra ici. » */
   hint?: ReactNode;

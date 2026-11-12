@@ -76,9 +76,9 @@ export function SetupTab({
             title="Suivi des conversions sur votre site"
             intro={
               <>
-                Vos annonces mènent à votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>). Harmony n&apos;héberge pas ce
-                site et ne peut rien y installer : la balise Google Ads et le comptage des clics s&apos;y règlent directement, par vous ou par la personne
-                qui s&apos;en occupe (étape 9 du tuto ci-dessus).
+                Vos outils s&apos;appuient sur votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>), que Harmony
+                n&apos;héberge pas : nous ne pouvons rien y installer. La balise Google Ads et le comptage des clics s&apos;y règlent directement, par vous
+                ou par la personne qui s&apos;en occupe (étape 9 du tuto ci-dessus).
               </>
             }
             findings={googleAdsFindings(externalTracking)}

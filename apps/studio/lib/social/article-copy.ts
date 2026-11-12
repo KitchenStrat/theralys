@@ -137,7 +137,8 @@ function isPortableHref(href: string): boolean {
   return /^(https?:\/\/|mailto:|tel:)/i.test(href);
 }
 
-type InlineMatch = { index: number; length: number; nodes: Inline[] };
+/** Mise en forme repérée dans une ligne ; `build` n'est appelé que pour celle qui est retenue (la plus à gauche). */
+type InlineMatch = { index: number; length: number; build: () => Inline[] };
 
 /** Première mise en forme `marker…marker` à partir de `from` dont le contenu ne commence ni ne finit par une espace. */
 function findDelimited(src: string, from: number, marker: string, wordBound: boolean): { index: number; inner: string } | null {
@@ -199,19 +200,21 @@ function parseInline(source: string, depth = 0): Inline[] {
   while (pos < src.length) {
     const candidates: InlineMatch[] = [];
     const code = firstFrom(CODE_RE, src, pos);
-    if (code) candidates.push({ index: code.index, length: code[0].length, nodes: [{ kind: "code", text: code[1]! }] });
+    if (code) candidates.push({ index: code.index, length: code[0].length, build: () => [{ kind: "code", text: code[1]! }] });
     const escaped = firstFrom(ESCAPE_RE, src, pos);
-    if (escaped) candidates.push({ index: escaped.index, length: escaped[0].length, nodes: [{ kind: "text", text: escaped[1]! }] });
+    if (escaped) candidates.push({ index: escaped.index, length: escaped[0].length, build: () => [{ kind: "text", text: escaped[1]! }] });
     // Image : seul son texte alternatif est repris (l'image de l'article se télécharge à part)
     const image = firstFrom(IMAGE_RE, src, pos);
-    if (image) candidates.push({ index: image.index, length: image[0].length, nodes: image[1] ? [{ kind: "text", text: image[1] }] : [] });
+    if (image) candidates.push({ index: image.index, length: image[0].length, build: () => (image[1] ? [{ kind: "text", text: image[1] }] : []) });
     const link = firstFrom(LINK_RE, src, pos);
     if (link) {
-      const children = nested(link[1]!);
       candidates.push({
         index: link.index,
         length: link[0].length,
-        nodes: isPortableHref(link[2]!) ? [{ kind: "link", href: link[2]!, children }] : children,
+        build: () => {
+          const children = nested(link[1]!);
+          return isPortableHref(link[2]!) ? [{ kind: "link", href: link[2]!, children }] : children;
+        },
       });
     }
     for (const [marker, kinds, wordBound] of [
@@ -223,9 +226,12 @@ function parseInline(source: string, depth = 0): Inline[] {
     ] as const) {
       const found = findDelimited(src, pos, marker, wordBound);
       if (!found) continue;
-      // « ***texte*** » : gras et italique à la fois, l'italique à l'intérieur
-      const node = [...kinds].reverse().reduce<Inline[]>((children, kind) => [{ kind, children }], nested(found.inner));
-      candidates.push({ index: found.index, length: found.inner.length + marker.length * 2, nodes: node });
+      candidates.push({
+        index: found.index,
+        length: found.inner.length + marker.length * 2,
+        // « ***texte*** » : gras et italique à la fois, l'italique à l'intérieur
+        build: () => [...kinds].reverse().reduce<Inline[]>((children, kind) => [{ kind, children }], nested(found.inner)),
+      });
     }
     // La plus à gauche ; à position égale, la première de la liste (« ** » avant « * »)
     const next = candidates.reduce<InlineMatch | null>((best, candidate) => (best === null || candidate.index < best.index ? candidate : best), null);
@@ -234,7 +240,7 @@ function parseInline(source: string, depth = 0): Inline[] {
       break;
     }
     pushText(src.slice(pos, next.index));
-    for (const node of next.nodes) {
+    for (const node of next.build()) {
       if (node.kind === "text") pushText(node.text);
       else nodes.push(node);
     }
@@ -324,6 +330,7 @@ function blockText(block: Block): string {
   }
 }
 
+/** Les deux formes d'un article remises ensemble au presse-papiers : la cible du collage prend celle qu'elle sait lire. */
 export type ArticleCopy = {
   /** Article en HTML : titre en `<h1>`, puis le corps — pour les éditeurs de site, qui gardent la mise en forme */
   html: string;

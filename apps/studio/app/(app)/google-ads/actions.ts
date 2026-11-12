@@ -32,7 +32,7 @@ const ANALYSIS_FAILED = "L'analyse a échoué — réessayez dans un instant.";
 const ANALYSIS_COUNTED = "Cette analyse est décomptée de votre quota mensuel.";
 const PLAN_MISSING = "Le plan d'action n'a pas pu être généré : ouvrez l'onglet Plan d'action pour le générer.";
 const OWN_SITE_TRACKING =
-  "Vos annonces mènent désormais à votre propre site : ce réglage n'agit que sur votre site Harmony. Suivez le pas-à-pas de cet onglet pour installer la balise sur votre site.";
+  "Vos outils s'appuient désormais sur votre propre site : ce réglage n'agit que sur votre site Harmony. Suivez le pas-à-pas de cet onglet pour installer la balise sur votre site.";
 
 /** Les démos présentent l'offre complète ; les clients suivent leur formule (Scale). */
 function adsAccess(site: { type: string; plan: PlanId }): boolean {

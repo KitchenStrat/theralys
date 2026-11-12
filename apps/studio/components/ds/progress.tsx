@@ -43,7 +43,7 @@ export function ProgressBar({
   return (
     <div data-ds-section={section} className={className}>
       {label || shownValue ? (
-        <div className="mb-2 flex items-baseline justify-between gap-3 text-ds-body">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-ds-body">
           {label ? (
             <span id={labelId} className="font-medium text-ds-ink-800">
               {label}
@@ -51,7 +51,8 @@ export function ProgressBar({
           ) : (
             <span />
           )}
-          {shownValue ? <span className="shrink-0 text-ds-ink-600">{shownValue}</span> : null}
+          {/* Sur écran étroit, la valeur passe sous le libellé plutôt que de déborder */}
+          {shownValue ? <span className="text-ds-ink-600">{shownValue}</span> : null}
         </div>
       ) : null}
       <div

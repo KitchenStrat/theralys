@@ -95,6 +95,7 @@ export function landingHref(site: Pick<AnalysisSite, "domain" | "pages">, stored
 /** Ce qui est dit à la place d'une adresse d'atterrissage qui ne peut plus être composée. */
 export const LANDING_UNAVAILABLE = "à retrouver en relançant l'analyse";
 
+/** Avertissement de section : ce qui se passe (`title`), puis quoi faire et ce qui reste affiché en attendant (`detail`). */
 export type AnalysisSiteNotice = { title: string; detail: string };
 
 /**

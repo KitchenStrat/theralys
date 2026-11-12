@@ -13,7 +13,8 @@
  * La validation des formulaires (`checkRubricDraft`) reprend les fonctions de
  * nettoyage du contrat : ce que le service écarterait sans le dire (numéro
  * illisible, lien d'un autre site, ligne incomplète) est signalé au praticien
- * avant l'envoi, sur le champ concerné.
+ * sur le champ concerné — dans le navigateur d'abord, puis par l'action
+ * d'enregistrement, dont le verdict fait foi.
  */
 
 import {
@@ -254,8 +255,12 @@ export function restoreRubric(overrides: ExternalProfileOverrides | null | undef
 export type TextDraft = { uid: string; text: string };
 /** Une ligne à deux champs (titre et texte, question et réponse, jours et horaires). */
 export type PairDraft = { uid: string; first: string; second: string };
-/** Une spécialité. `kept` : la spécialité déjà au profil, dont l'identifiant et ce qui a été lu sur sa page sont conservés. */
-export type SpecialtyDraft = { uid: string; title: string; excerpt: string; url: string; kept: ExternalSpecialty | null };
+/**
+ * Une spécialité. `slug` : identifiant de la spécialité déjà au profil (son
+ * identifiant et ce qui a été lu sur sa page sont alors conservés), `null`
+ * pour une spécialité ajoutée.
+ */
+export type SpecialtyDraft = { uid: string; slug: string | null; title: string; excerpt: string; url: string };
 
 export type RubricDrafts = {
   presentation: { headline: string; intro: TextDraft[]; highlights: PairDraft[] };
@@ -278,7 +283,7 @@ const DRAFTS: { [R in RubricId]: (profile: ExternalSiteProfile) => RubricDrafts[
     highlights: profile.highlights.map((item, index) => ({ uid: `h${index}`, first: item.title, second: item.text ?? "" })),
   }),
   specialties: (profile) => ({
-    items: profile.specialties.map((item, index) => ({ uid: `s${index}`, title: item.title, excerpt: item.excerpt, url: item.url ?? "", kept: item })),
+    items: profile.specialties.map((item, index) => ({ uid: `s${index}`, slug: item.slug, title: item.title, excerpt: item.excerpt, url: item.url ?? "" })),
   }),
   about: (profile) => ({ paragraphs: texts("p", profile.about.paragraphs), credentials: texts("c", profile.about.credentials) }),
   practical: (profile) => ({ items: profile.practical.map((item, index) => ({ uid: `e${index}`, first: item.title, second: item.text })) }),
@@ -303,12 +308,15 @@ export function rubricDraft<R extends RubricId>(rubric: R, profile: ExternalSite
 }
 
 /**
- * Issue du contrôle d'un formulaire : la valeur à envoyer (les clés de la
- * rubrique, à donner à `applyRubricCorrection`), ou les erreurs par champ.
- * Clés d'erreur : le nom du champ, précédé pour une ligne de liste du nom de
- * la liste et du repère de la ligne (`faq.e2.second`).
+ * Issue du contrôle d'un formulaire : la valeur de la rubrique (ses clés, à
+ * donner à `applyRubricCorrection`), ou les erreurs par champ. Clés
+ * d'erreur : le nom du champ, précédé pour une ligne de liste du nom de la
+ * liste et du repère de la ligne (`items.e2.second`).
  */
 export type DraftCheck = { ok: true; value: ExternalProfileOverrides } | { ok: false; errors: Record<string, string> };
+
+/** Ce dont le contrôle a besoin : l'adresse du site du praticien et son profil effectif (pour retrouver les spécialités déjà connues). */
+export type DraftContext = { siteUrl: string; profile: ExternalSiteProfile };
 
 export const DRAFT_ERRORS = {
   incomplete: "Complétez ce champ, ou retirez la ligne.",
@@ -324,18 +332,28 @@ export const DRAFT_ERRORS = {
 /** Texte sur une ligne, sans espaces superflus : ce que le nettoyage du contrat en gardera. */
 const oneLine = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-/** Adresse web saisie sans son protocole (`www.exemple.fr/page`) → avec `https://`. */
-function withScheme(value: string): string {
+/**
+ * Adresse web saisie, avec son protocole (`www.exemple.fr/page` →
+ * `https://www.exemple.fr/page`) ; `null` si elle contient une espace. Les
+ * navigateurs et le serveur ne lisent pas tous de la même façon une adresse
+ * mal formée : celles-là sont écartées ici, avant le nettoyage du contrat.
+ */
+function webAddress(value: string): string | null {
   const trimmed = value.trim();
+  if (/\s/.test(trimmed)) return null;
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed.replace(/^\/+/, "")}`;
 }
 
-/** Lien de rendez-vous saisi : un numéro de téléphone devient un lien `tel:`, une adresse web reçoit son protocole. */
-export function bookingLinkFromInput(value: string): string {
+/**
+ * Lien de rendez-vous saisi : un numéro de téléphone devient un lien `tel:`,
+ * une adresse web reçoit son protocole ; `null` pour ce qui n'est ni l'un ni
+ * l'autre.
+ */
+export function bookingLinkFromInput(value: string): string | null {
   const trimmed = value.trim();
   if (trimmed === "" || /^tel:/i.test(trimmed)) return trimmed;
   if (/^[\d\s.()+-]+$/.test(trimmed) && trimmed.replace(/\D/g, "").length >= 6) return `tel:${trimmed.replace(/[^\d+]/g, "")}`;
-  return withScheme(trimmed);
+  return webAddress(trimmed);
 }
 
 function checkTexts(list: readonly TextDraft[]): string[] {
@@ -356,35 +374,33 @@ function checkPairs(name: string, list: readonly PairDraft[], errors: Record<str
   return out;
 }
 
-const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], siteUrl: string, errors: Record<string, string>) => ExternalProfileOverrides } = {
-  presentation: (draft, _siteUrl, errors) => ({
+const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], context: DraftContext, errors: Record<string, string>) => ExternalProfileOverrides } = {
+  presentation: (draft, _context, errors) => ({
     headline: oneLine(draft.headline),
     intro: checkTexts(draft.intro),
     highlights: checkPairs("highlights", draft.highlights, errors, { secondRequired: false, firstError: DRAFT_ERRORS.highlightTitle }).map((item) =>
       item.second === "" ? { title: item.first } : { title: item.first, text: item.second },
     ),
   }),
-  specialties: (draft, siteUrl, errors) => {
+  specialties: (draft, context, errors) => {
     const specialties: ExternalSpecialty[] = [];
     for (const item of draft.items) {
       const title = oneLine(item.title);
       const excerpt = oneLine(item.excerpt);
       const typedUrl = item.url.trim();
-      if (title === "" && excerpt === "" && typedUrl === "" && item.kept === null) continue;
-      if (title === "") {
-        errors[`items.${item.uid}.title`] = DRAFT_ERRORS.specialtyTitle;
-        continue;
-      }
+      // La spécialité déjà au profil, retrouvée par son identifiant : jamais reprise de ce que le navigateur envoie
+      const kept = item.slug === null ? null : (context.profile.specialties.find((specialty) => specialty.slug === item.slug) ?? null);
+      if (title === "" && excerpt === "" && typedUrl === "" && kept === null) continue;
+      if (title === "") errors[`items.${item.uid}.title`] = DRAFT_ERRORS.specialtyTitle;
       let url: string | undefined;
       if (typedUrl !== "") {
         // Le contrat ne garde que les pages du site du client : la même règle, appliquée avant l'envoi
-        url = cleanExternalProfile({ specialties: [{ title, url: withScheme(typedUrl) }] }, siteUrl).specialties[0]?.url;
-        if (url === undefined) {
-          errors[`items.${item.uid}.url`] = DRAFT_ERRORS.specialtyUrl;
-          continue;
-        }
+        const address = webAddress(typedUrl);
+        url = address === null ? undefined : cleanExternalProfile({ specialties: [{ title: "x", url: address }] }, context.siteUrl).specialties[0]?.url;
+        if (url === undefined) errors[`items.${item.uid}.url`] = DRAFT_ERRORS.specialtyUrl;
       }
-      const kept = item.kept;
+      // Une ligne en erreur n'entre pas dans la valeur : toutes ses erreurs sont signalées ensemble
+      if (title === "" || (typedUrl !== "" && url === undefined)) continue;
       // Résumé, intertitres et questions viennent de la page de la spécialité : ils ne valent plus pour une autre page
       const page = kept !== null && (url === undefined || kept.url === undefined || url === kept.url) ? kept : null;
       specialties.push({
@@ -400,20 +416,20 @@ const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], siteUrl: string, error
     return { specialties };
   },
   about: (draft) => ({ about: { paragraphs: checkTexts(draft.paragraphs), credentials: checkTexts(draft.credentials) } }),
-  practical: (draft, _siteUrl, errors) => ({
+  practical: (draft, _context, errors) => ({
     practical: checkPairs("items", draft.items, errors, { secondRequired: true }).map((item) => ({ title: item.first, text: item.second })),
   }),
-  process: (draft, _siteUrl, errors) => ({
+  process: (draft, _context, errors) => ({
     process: checkPairs("items", draft.items, errors, { secondRequired: true }).map((item) => ({ title: item.first, description: item.second })),
   }),
-  faq: (draft, _siteUrl, errors) => ({
+  faq: (draft, _context, errors) => ({
     faq: checkPairs("items", draft.items, errors, { secondRequired: true }).map((item) => ({ question: item.first, answer: item.second })),
   }),
-  contact: (draft, siteUrl, errors) => {
+  contact: (draft, context, errors) => {
     const phone = draft.phone.trim();
     const email = draft.email.trim();
     if (phone !== "" && cleanPhone(phone) === undefined) errors.phone = DRAFT_ERRORS.phone;
-    if (email !== "" && cleanExternalProfile({ contact: { email } }, siteUrl).contact.email === undefined) errors.email = DRAFT_ERRORS.email;
+    if (email !== "" && cleanExternalProfile({ contact: { email } }, context.siteUrl).contact.email === undefined) errors.email = DRAFT_ERRORS.email;
     return {
       contact: {
         address: oneLine(draft.address),
@@ -424,19 +440,21 @@ const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], siteUrl: string, error
       },
     };
   },
-  booking: (draft, _siteUrl, errors) => {
+  booking: (draft, _context, errors) => {
     const typed = draft.link.trim();
     if (typed === "") return { bookingUrl: "" };
-    const link = cleanBookingUrl(bookingLinkFromInput(typed));
+    const address = bookingLinkFromInput(typed);
+    const link = address === null ? undefined : cleanBookingUrl(address);
     if (link === undefined) errors.link = DRAFT_ERRORS.booking;
     return { bookingUrl: link ?? "" };
   },
-  social: (draft, _siteUrl, errors) => {
+  social: (draft, _context, errors) => {
     const social: SiteSocialLinks = {};
     for (const network of SOCIAL_NETWORKS) {
       const typed = draft.links[network.key].trim();
       if (typed === "") continue;
-      const link = cleanSocialLinks({ [network.key]: withScheme(typed) })[network.key];
+      const address = webAddress(typed);
+      const link = address === null ? undefined : cleanSocialLinks({ [network.key]: address })[network.key];
       if (link === undefined) errors[`links.${network.key}`] = DRAFT_ERRORS.social(network.label, network.host);
       else social[network.key] = link;
     }
@@ -444,9 +462,14 @@ const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], siteUrl: string, error
   },
 };
 
-/** Contrôle le formulaire d'une rubrique et prépare ce qui sera envoyé. */
-export function checkRubricDraft<R extends RubricId>(rubric: R, draft: RubricDrafts[R], siteUrl: string): DraftCheck {
+/**
+ * Contrôle le formulaire d'une rubrique et prépare sa valeur. La même
+ * fonction sert deux fois : dans le navigateur, pour répondre tout de suite ;
+ * dans l'action d'enregistrement, où son verdict fait foi (même moteur que le
+ * nettoyage du service : rien de ce qui est accepté là n'est écarté ensuite).
+ */
+export function checkRubricDraft<R extends RubricId>(rubric: R, draft: RubricDrafts[R], context: DraftContext): DraftCheck {
   const errors: Record<string, string> = {};
-  const value = CHECKS[rubric](draft, siteUrl, errors);
+  const value = CHECKS[rubric](draft, context, errors);
   return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, value };
 }

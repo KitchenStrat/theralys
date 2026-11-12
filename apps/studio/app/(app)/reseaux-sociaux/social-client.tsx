@@ -156,7 +156,6 @@ export function SocialClient({
           tooFar={tooFar}
           nextMonthParam={shiftMonthParam(year, month, 1)}
           siteName={siteName}
-          ownSite={!siteLink.sourceParam}
           settings={settings}
           onOpenSettings={() => setSettingsOpen(true)}
           onSelect={openItem}
@@ -362,9 +361,8 @@ function BioLinkCard({ siteLink }: { siteLink: SocialSiteLink }) {
         </p>
       ) : (
         <p className="mt-1.5 text-xs text-ink-500">
-          Mettez ce lien dans la bio de tous vos réseaux : c&apos;est l&apos;adresse de votre site, la même partout. La
-          provenance de vos visites apparaît dans vos statistiques une fois le code de mesure installé sur votre site
-          (rubrique{" "}
+          Un seul lien pour tous vos réseaux : l&apos;adresse de votre site. La provenance des visites apparaît dans vos
+          statistiques une fois le code de mesure installé sur votre site (rubrique{" "}
           <Link href="/mon-site" className="font-medium text-primary-600 hover:underline">
             Mon site
           </Link>
@@ -409,7 +407,6 @@ function MonthCard({
   tooFar,
   nextMonthParam,
   siteName,
-  ownSite,
   settings,
   onOpenSettings,
   onSelect,
@@ -422,8 +419,6 @@ function MonthCard({
   tooFar: boolean;
   nextMonthParam: string;
   siteName: string;
-  /** Le site du client est la référence : ce qui est lu est son site, pas les pages du site hébergé */
-  ownSite: boolean;
   settings: SocialSettingsView;
   onOpenSettings: () => void;
   onSelect: (item: SocialCalendarItem) => void;
@@ -479,8 +474,8 @@ function MonthCard({
       <>
         <p className="mt-2 font-medium text-ink-900">Préparez votre mois en un clic</p>
         <p className="mt-1 text-sm text-ink-500">
-          Harmony lit votre site — vos spécialités, {ownSite ? "votre présentation" : "votre page À propos"}, vos
-          articles — et prépare {free} contenus prêts à poster, dans vos couleurs. Vous n&apos;avez plus qu&apos;à
+          Harmony lit votre site — vos spécialités, votre page À propos, vos articles — et prépare{" "}
+          {free} contenus prêts à poster, dans vos couleurs. Vous n&apos;avez plus qu&apos;à
           télécharger et coller la légende.
         </p>
         <div className="mt-4">

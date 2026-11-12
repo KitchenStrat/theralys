@@ -116,17 +116,17 @@ export const DONE_THIS_WEEK = [
 
 export const GENERATION_STEPS: TimedStep[] = [
   { label: "Lecture de votre site et de votre ton", seconds: 8 },
-  { label: "Choix des sujets du mois", seconds: 12, details: ["Sujet 3 sur 8 : le stress des fêtes", "Sujet 6 sur 8 : bien dormir en hiver"] },
+  { label: "Choix des sujets du mois", seconds: 12, details: ["Un sujet de saison : le stress des fêtes", "Un sujet de fond : bien dormir en hiver"] },
   {
     label: "Rédaction des légendes",
     seconds: 22,
     details: [
-      "Légende 2 sur 8 : « Respirer avant un rendez-vous »",
-      "Légende 4 sur 8 : « Une routine du soir en 5 minutes »",
-      "Légende 7 sur 8 : « Ce que change une séance »",
+      "« Respirer avant un rendez-vous »",
+      "« Une routine du soir en 5 minutes »",
+      "« Ce que change une séance »",
     ],
   },
-  { label: "Création des visuels", seconds: 20, details: ["Visuel 3 sur 8", "Visuel 6 sur 8"] },
+  { label: "Création des visuels", seconds: 20, details: ["Mise en page aux couleurs de votre cabinet", "Vérification des formats"] },
   { label: "Vérification finale", seconds: 8 },
 ];
 

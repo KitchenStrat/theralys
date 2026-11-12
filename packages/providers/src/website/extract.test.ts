@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXTERNAL_SITE_LIMITS } from "@theralys/shared";
+import { collectLinks, type SiteScope } from "./discover";
+import { ROOT_WRAPPER } from "./dom";
 import { documentLanguage, extractPage, isHiddenByStyle, loadDocument, metaContent, metaRefreshTarget } from "./extract";
+import { collectPageFacts } from "./facts";
+import { MARKUP_LIMITS, MarkupTooComplexError } from "./markup-guard";
+
+const SCOPE: SiteScope = { origin: "https://www.mon-cabinet.fr", basePath: "", homePath: "/" };
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const extract = (html: string, url = "https://www.mon-cabinet.fr/") => extractPage(loadDocument(html), url);
@@ -237,10 +243,128 @@ describe("extractPage — cas particuliers", () => {
     expect(extract("").text).toBe("");
   });
 
-  it("document très imbriqué : pas de débordement de pile, le texte accessible est rendu", () => {
-    const deep = `${"<div>".repeat(5_000)}fond${"</div>".repeat(5_000)}`;
-    expect(() => extract(page(`<p>Surface.</p>${deep}`))).not.toThrow();
-    expect(extract(page(`<p>Surface.</p>${deep}`)).text).toBe("Surface.");
+  it("entités : décodées dans le texte, le titre et les attributs — pas dans les scripts", () => {
+    const html = `<!doctype html><html><head><title>Ost&eacute;opathe &agrave; Lyon &#8211; S&#233;ances &amp; tarifs</title><meta name="description" content="Cabinet d&#39;ost&eacute;opathie &amp; de bien-&ecirc;tre"></head><body><h1>L&rsquo;ost&eacute;opathie, pour qui&nbsp;?</h1><p>Nourrissons &amp; adultes &lt;3 &#x1F33F; caf&eacute</p><script>var a = "&eacute;";</script></body></html>`;
+    const $ = loadDocument(html);
+    const result = extractPage($, "https://www.mon-cabinet.fr/");
+    expect(result.title).toBe("Ostéopathe à Lyon – Séances & tarifs");
+    expect(result.description).toBe("Cabinet d'ostéopathie & de bien-être");
+    expect(result.headings).toEqual(["L’ostéopathie, pour qui ?"]);
+    expect(result.text.split("\n")[1]).toBe(`Nourrissons & adultes <3 ${String.fromCodePoint(0x1f33f)} café`);
+    expect($("script").text()).toBe('var a = "&eacute;";');
+  });
+
+  it("le document n'est pas modifié : extraire deux fois rend le même texte, et tout reste interrogeable ensuite", () => {
+    const $ = loadDocument(fixture("wordpress-home.html"));
+    const before = $("*").length;
+    const first = extractPage($, "https://www.atelier-serenite-nantes.fr/");
+    expect(extractPage($, "https://www.atelier-serenite-nantes.fr/")).toEqual(first);
+    expect($("*").length).toBe(before);
+    expect($("nav a").length).toBeGreaterThan(0);
+    expect($("script[type='application/ld+json']").length).toBeGreaterThan(0);
+  });
+});
+
+describe("documents piégés", () => {
+  const timed = <T>(run: () => T): { value: T; ms: number } => {
+    const start = performance.now();
+    const value = run();
+    return { value, ms: performance.now() - start };
+  };
+
+  it("imbrication profonde mais plausible (300 niveaux) : lue", () => {
+    const deep = `${"<div>".repeat(300)}<p>Au fond.</p>${"</div>".repeat(300)}`;
+    expect(extract(page(`<p>Surface.</p>${deep}`)).text).toBe("Surface.\nAu fond.");
+  });
+
+  it("imbrication démesurée : refusée avant toute analyse, en quelques millisecondes", () => {
+    for (const levels of [401, 5_000, 200_000]) {
+      const deep = page(`<p>Surface.</p>${"<div>".repeat(levels)}fond`);
+      const { value, ms } = timed(() => {
+        try {
+          loadDocument(deep);
+          return null;
+        } catch (error) {
+          return error;
+        }
+      });
+      expect(value, `${levels} niveaux`).toBeInstanceOf(MarkupTooComplexError);
+      expect((value as MarkupTooComplexError).reason).toBe("depth");
+      expect(ms, `${levels} niveaux`).toBeLessThan(1_000);
+    }
+    // 400 niveaux sous <html><body> : c'est la borne, et elle passe
+    expect(() => loadDocument(page("<div>".repeat(MARKUP_LIMITS.depth - 2)))).not.toThrow();
+    expect(() => loadDocument(page("<div>".repeat(MARKUP_LIMITS.depth - 1)))).toThrow(MarkupTooComplexError);
+  });
+
+  it("document trop touffu (plus de 200 000 balises) : refusé", () => {
+    let error: unknown;
+    try {
+      loadDocument(page("<p>".repeat(MARKUP_LIMITS.nodes + 10)));
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(MarkupTooComplexError);
+    expect((error as MarkupTooComplexError).reason).toBe("nodes");
+  });
+
+  it("cent mille éléments masqués à la suite : écartés sans y passer des secondes", () => {
+    const hidden = `<p style="display:none">Texte masqué.</p>`.repeat(100_000);
+    const { value, ms } = timed(() => extract(page(`<h1>Titre visible</h1>${hidden}<p>Texte visible.</p>`)));
+    expect(value.text).toBe("Titre visible\nTexte visible.");
+    expect(ms).toBeLessThan(5_000);
+  });
+
+  it("bandeaux, contenus principaux et liens imbriqués par centaines autour d'un long texte : mesurés sans relire le texte à chaque niveau", () => {
+    const long = `<p>${"Un long paragraphe de contenu. ".repeat(40_000)}</p>`;
+    const nested = (open: string, close: string): string => `${open.repeat(380)}${long}${close.repeat(380)}`;
+    for (const html of [nested(`<div class="cookie-notice">`, "</div>"), nested("<main>", "</main>"), nested(`<article id="rgpd">`, "</article>")]) {
+      const { value, ms } = timed(() => extract(page(`<h1>Titre</h1>${html}`)));
+      expect(value.text.startsWith("Titre\nUn long paragraphe de contenu.")).toBe(true);
+      expect(value.text.length).toBeLessThanOrEqual(EXTERNAL_SITE_LIMITS.pageChars);
+      expect(ms).toBeLessThan(5_000);
+    }
+    // Une section de témoignages reste écartée, si profonde soit-elle
+    const { value, ms } = timed(() => extract(page(`<h1>Titre</h1>${nested(`<section id="avis-clients">`, "</section>")}`)));
+    expect(value.text).toBe("Titre");
+    expect(ms).toBeLessThan(5_000);
+  });
+
+  it("des milliers de liens imbriqués autour d'un long texte : leurs libellés sont lus sans relire le texte à chaque lien", () => {
+    const long = "Un long paragraphe de contenu. ".repeat(40_000);
+    const html = page(`${`<a href="/page">`.repeat(390)}${long}${"</a>".repeat(390)}${`<a href="/autre"><span class="menu">x</span></a>`.repeat(20_000)}`);
+    const { value, ms } = timed(() => {
+      const $ = loadDocument(html);
+      return { links: collectLinks($, "https://www.mon-cabinet.fr/", SCOPE), facts: collectPageFacts($, html, "https://www.mon-cabinet.fr/") };
+    });
+    expect(value.links.length).toBe(400);
+    expect(value.links[0]).toMatchObject({ url: "https://www.mon-cabinet.fr/page", area: "main" });
+    expect(value.links[0]!.text.length).toBeLessThanOrEqual(120);
+    expect(value.facts.bookingLinks).toEqual([]);
+    expect(ms).toBeLessThan(5_000);
+  });
+
+  it("page sans balise html ni body, faite de dizaines de milliers d'éléments à la racine : interrogée sans y passer des minutes", () => {
+    const html = `<title>Sans racine</title><h1>Titre</h1>${"<p>Un paragraphe.</p><a href='/contact'>Contact</a>".repeat(30_000)}`;
+    const { value, ms } = timed(() => {
+      const $ = loadDocument(html);
+      return { roots: $.root().children().length, wrapper: $(ROOT_WRAPPER).length, links: collectLinks($, "https://www.mon-cabinet.fr/", SCOPE).length, page: extractPage($, "https://www.mon-cabinet.fr/") };
+    });
+    expect(value.roots).toBe(1);
+    expect(value.wrapper).toBe(1);
+    expect(value.links).toBe(400);
+    expect(value.page.title).toBe("Sans racine");
+    expect(value.page.text.startsWith("Titre\nUn paragraphe.\nContact")).toBe(true);
+    expect(ms).toBeLessThan(5_000);
+    // Un document ordinaire, ou un fragment de quelques éléments, garde sa racine
+    expect(loadDocument("<title>Minimal</title><h1>Bonjour</h1><p>Un texte.</p>")(ROOT_WRAPPER).length).toBe(0);
+  });
+
+  it("balise meta de redirection démesurée : ignorée", () => {
+    const content = `0; url=/accueil${" ".repeat(50_000)}x${" ".repeat(50_000)}`;
+    const { value, ms } = timed(() => metaRefreshTarget(loadDocument(`<meta http-equiv="refresh" content="${content}">`), "https://www.mon-cabinet.fr/"));
+    expect(value).toBeNull();
+    expect(ms).toBeLessThan(1_000);
   });
 });
 

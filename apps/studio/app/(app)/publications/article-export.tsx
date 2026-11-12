@@ -63,6 +63,7 @@ export async function saveArticleImage(imageUrl: string, title: string): Promise
   }
 }
 
+/** Résultat de la dernière action, dit au praticien sous les boutons (une copie réussie ou non, une image enregistrée ou à ouvrir). */
 export type ArticleExportNotice = {
   tone: "success" | "info" | "error";
   text: string;
@@ -70,13 +71,12 @@ export type ArticleExportNotice = {
   openImageUrl?: string;
 };
 
-const COPIED_RICH = "Article copié : collez-le dans l'éditeur de votre site, la mise en forme est conservée.";
-const COPIED_PLAIN = "Article copié en texte simple : votre navigateur ne permet pas de copier la mise en forme.";
-const COPY_REFUSED = "Copie impossible — votre navigateur n'autorise pas l'accès au presse-papiers.";
+const COPIED_RICH = "Article copié avec sa mise en forme : collez-le dans l'éditeur de votre site.";
+const COPIED_PLAIN = "Article copié en texte simple : votre navigateur ne copie pas la mise en forme.";
+const COPY_REFUSED = "Copie impossible — votre navigateur refuse l'accès au presse-papiers.";
 const ARTICLE_UNAVAILABLE = "L'article n'a pas pu être chargé — réessayez dans un instant.";
 const IMAGE_SAVED = "Image téléchargée.";
-const IMAGE_BLOCKED =
-  "Cette image ne peut pas être téléchargée directement : ouvrez-la, puis enregistrez-la (clic droit, « Enregistrer l'image sous »).";
+const IMAGE_BLOCKED = "Téléchargement direct impossible : ouvrez l'image, puis enregistrez-la (clic droit, « Enregistrer l'image sous »).";
 
 /**
  * État et actions de « Copier l'article » et « Télécharger l'image ».

@@ -151,14 +151,15 @@ export default function DesignPreviewPage() {
           <Card>
             <div className="space-y-3.5">
               {RAMPS.map((ramp) => (
-                <div key={ramp.token} className="grid items-center gap-x-4 gap-y-1.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                <div key={ramp.token} className="grid grid-cols-[minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
                   <div>
                     <p className="text-ds-body font-semibold text-ds-ink-900">{ramp.name}</p>
                     <p className="text-xs text-ds-ink-600">ds-{ramp.token}</p>
                   </div>
                   <div>
                     {/* Le numéro du pas est écrit sous la pastille : aucun texte posé sur une couleur moyenne */}
-                    <div className="flex gap-1">
+                    {/* Sous 640 px, les pas se rangent par six : leurs numéros restent lisibles */}
+                    <div className="grid grid-cols-6 gap-x-1 gap-y-2 sm:flex sm:gap-1">
                       {ramp.steps.map((step) => (
                         <span key={step} className="min-w-0 flex-1 text-center">
                           <span

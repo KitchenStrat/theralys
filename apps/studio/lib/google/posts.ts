@@ -31,27 +31,33 @@ import { deliveredGoogleContent, isArticleOnline, studioArticleId, type GooglePo
 /** Horizon des demandes et des préparations de mois (jours), comme le social. */
 export const GOOGLE_HORIZON_DAYS = 120;
 
+type ArticleAddress = { id: string; slug: string; status: string; publishAt: Date | null };
+
+/** Articles du site parmi `articleIds` (l'article d'un autre site est introuvable). */
+async function readArticleAddresses(siteId: string, articleIds: string[]): Promise<ArticleAddress[]> {
+  return getDb().query.blogArticles.findMany({
+    where: and(eq(blogArticles.siteId, siteId), inArray(blogArticles.id, articleIds)),
+    columns: { id: true, slug: true, status: true, publishAt: true },
+  });
+}
+
 /**
  * Ce dont dépend le bouton d'action des posts d'un site au moment de les
  * remettre au praticien (`deliveredGoogleCta`) : les deux adresses du site,
  * son lien de rendez-vous et — seulement si l'un des `posts` cite encore un
  * article par son chemin dans le studio (posts préparés avant la correction
  * du générateur) — les articles en ligne concernés. Sans tel post, aucune
- * lecture en base.
+ * lecture en base. `readArticles` : lecture des articles, remplaçable dans
+ * les tests.
  */
 export async function loadGooglePostDelivery(
   site: Site,
   posts: readonly { content: { cta: { url: string | null } } }[],
   now: Date = new Date(),
+  readArticles: typeof readArticleAddresses = readArticleAddresses,
 ): Promise<GooglePostDelivery> {
   const articleIds = [...new Set(posts.map((post) => studioArticleId(post.content.cta.url)).filter((id): id is string => id !== null))];
-  const articles =
-    articleIds.length === 0
-      ? []
-      : await getDb().query.blogArticles.findMany({
-          where: and(eq(blogArticles.siteId, site.id), inArray(blogArticles.id, articleIds)),
-          columns: { id: true, slug: true, status: true, publishAt: true },
-        });
+  const articles = articleIds.length === 0 ? [] : await readArticles(site.id, articleIds);
   return {
     hostedUrl: siteUrl(site),
     referenceUrl: publicSiteUrl(site),
@@ -69,8 +75,9 @@ export async function loadDeliveredGoogleContent(
   site: Site,
   post: Pick<GooglePost, "status" | "content">,
   now: Date = new Date(),
+  readArticles: typeof readArticleAddresses = readArticleAddresses,
 ): Promise<GooglePostContent> {
-  return deliveredGoogleContent(post, await loadGooglePostDelivery(site, [post], now));
+  return deliveredGoogleContent(post, await loadGooglePostDelivery(site, [post], now, readArticles));
 }
 
 export type GoogleCalendarItem = {

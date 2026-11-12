@@ -11,9 +11,11 @@
  * pages de témoignages (propos de tiers, souvent sur leur santé).
  */
 
-import { load, type CheerioAPI } from "cheerio/slim";
+import type { CheerioAPI } from "cheerio/slim";
 import { bareHost, type ExternalPageKind } from "@theralys/shared";
+import { type DomElement, type DomNode, firstDescendant, hasClass, isElement, loadMarkup, textOf } from "./dom";
 import { isHiddenByStyle } from "./extract";
+import { MarkupTooComplexError } from "./markup-guard";
 import { cleanLineMax, foldText } from "./text";
 
 /** Périmètre de la lecture : le site (avec ou sans « www. ») et, si l'adresse donnée a un chemin, ce chemin et ce qu'il contient. */
@@ -178,6 +180,45 @@ export function classifyPage(url: URL, linkText: string, scope: SiteScope): Clas
 
 const LINK_TEXT_MAX = 120;
 const LINKS_MAX = 400;
+/** Liens examinés au plus par page (une vraie page en compte rarement mille), et longueur au-delà de laquelle une adresse n'en est plus une. */
+const ANCHORS_MAX = 5_000;
+const HREF_MAX = 2_048;
+/** Texte brut lu dans un lien avant nettoyage. */
+const LINK_RAW_TEXT_MAX = 2_000;
+
+/**
+ * Zone d'un élément d'après ses ancêtres : pied de page d'abord, sinon menu
+ * ou en-tête, sinon corps. Chaque élément du document n'est examiné qu'une
+ * fois, quel que soit le nombre de liens qu'il contient.
+ */
+function areaResolver(): (element: DomElement) => LinkArea {
+  const known = new Map<DomNode, LinkArea>();
+  const own = (element: DomElement): LinkArea => {
+    const role = element.attribs.role;
+    if (element.name === "footer" || role === "contentinfo") return "footer";
+    if (element.name === "nav" || element.name === "header" || role === "navigation" || role === "banner" || hasClass(element, "menu") || hasClass(element, "navbar")) return "nav";
+    return "main";
+  };
+  const merge = (inner: LinkArea, outer: LinkArea): LinkArea => (inner === "footer" || outer === "footer" ? "footer" : inner === "nav" || outer === "nav" ? "nav" : "main");
+  return (element) => {
+    // Remonte jusqu'à un ancêtre déjà classé, puis redescend en classant le chemin
+    const path: DomElement[] = [];
+    let area: LinkArea = "main";
+    for (let current: DomNode | null = element; current !== null; current = current.parent) {
+      const found = known.get(current);
+      if (found !== undefined) {
+        area = found;
+        break;
+      }
+      if (isElement(current)) path.push(current);
+    }
+    for (let index = path.length - 1; index >= 0; index--) {
+      area = merge(own(path[index]!), area);
+      known.set(path[index]!, area);
+    }
+    return area;
+  };
+}
 
 /**
  * Liens de la page vers d'autres pages du site (dans le périmètre), ramenés
@@ -195,9 +236,12 @@ export function collectLinks($: CheerioAPI, pageUrl: string, scope: SiteScope): 
   } catch {
     baseUrl = pageUrl;
   }
-  for (const element of $("a[href]").toArray()) {
+  const areaOf = areaResolver();
+  for (const element of $("a[href]").toArray().slice(0, ANCHORS_MAX)) {
     if (links.length >= LINKS_MAX) break;
-    const href = (element.attribs.href ?? "").trim();
+    const rawHref = element.attribs.href ?? "";
+    if (rawHref.length > HREF_MAX) continue;
+    const href = rawHref.trim();
     if (href === "" || href.startsWith("#") || /^(?:mailto|tel|javascript|sms|data|blob|ftp):/i.test(href)) continue;
     if (/\bnofollow\b/i.test(element.attribs.rel ?? "") || element.attribs.download !== undefined) continue;
     if (element.attribs.hidden !== undefined || isHiddenByStyle(element.attribs.style)) continue;
@@ -209,11 +253,11 @@ export function collectLinks($: CheerioAPI, pageUrl: string, scope: SiteScope): 
     }
     if ((url.protocol !== "https:" && url.protocol !== "http:") || !isInScope(url, scope)) continue;
     const target = new URL(`${url.pathname}${url.search}`, scope.origin);
-    const link = $(element);
     // Texte du lien, sinon son intitulé accessible ou le texte de remplacement de son image
-    const text = cleanLineMax(link.text(), LINK_TEXT_MAX) || cleanLineMax(element.attribs["aria-label"] || element.attribs.title || link.find("img[alt]").first().attr("alt") || "", LINK_TEXT_MAX);
-    const area: LinkArea = link.closest("footer, [role='contentinfo']").length > 0 ? "footer" : link.closest("nav, header, [role='navigation'], [role='banner'], .menu, .navbar").length > 0 ? "nav" : "main";
-    links.push({ url: target.href, text, area });
+    const text =
+      cleanLineMax(textOf(element, LINK_RAW_TEXT_MAX), LINK_TEXT_MAX) ||
+      cleanLineMax(element.attribs["aria-label"] || element.attribs.title || firstDescendant(element, (child) => child.name === "img" && child.attribs.alt !== undefined)?.attribs.alt || "", LINK_TEXT_MAX);
+    links.push({ url: target.href, text, area: areaOf(element) });
   }
   return links;
 }
@@ -225,15 +269,23 @@ const SITEMAP_ENTRIES_MAX = 500;
 /**
  * Adresses d'un plan de site XML : pages (`<url><loc>`) et plans secondaires
  * (`<sitemap><loc>` d'un index). L'analyseur ne résout aucune entité externe.
+ * Un plan trop imbriqué ou trop touffu pour être analysé sans risque ne donne
+ * aucune adresse : le plan de site n'est qu'une aide à la découverte.
  */
 export function parseSitemap(xml: string): { pages: string[]; sitemaps: string[] } {
-  const $ = load(xml, { xml: true });
+  let $: CheerioAPI;
+  try {
+    $ = loadMarkup(xml, { xml: true });
+  } catch (error) {
+    if (error instanceof MarkupTooComplexError) return { pages: [], sitemaps: [] };
+    throw error;
+  }
   const read = (selector: string): string[] =>
     $(selector)
       .toArray()
       .slice(0, SITEMAP_ENTRIES_MAX)
-      .map((element) => $(element).text().trim())
-      .filter((value) => value !== "");
+      .map((element) => textOf(element, HREF_MAX + 1).trim())
+      .filter((value) => value !== "" && value.length <= HREF_MAX);
   return { pages: read("url > loc"), sitemaps: read("sitemap > loc") };
 }
 

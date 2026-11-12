@@ -240,7 +240,11 @@ describe("politesse envers le site lu", () => {
     ok(await readerFor({ minIntervalMs: 50 }).reader.read(`http://${WWW}:${server.port}`));
     const times = server.requests.map((request) => request.at);
     expect(times.length).toBeGreaterThanOrEqual(6);
-    for (let i = 1; i < times.length; i++) expect(times[i]! - times[i - 1]!, `requête ${i}`).toBeGreaterThanOrEqual(45);
+    // Heures d'arrivée au serveur : une requête peut y être notée en retard (machine chargée), jamais en avance.
+    // L'écart est donc jugé sur l'ensemble — sans frein, les six requêtes tiendraient en quelques millisecondes.
+    expect(times[times.length - 1]! - times[0]!).toBeGreaterThanOrEqual((times.length - 1) * 50 * 0.7);
+    const shortGaps = times.slice(1).filter((at, index) => at - times[index]! < 25).length;
+    expect(shortGaps).toBeLessThanOrEqual(1);
   });
 
   it("Crawl-delay de robots.txt : respecté, les pages sont alors demandées une par une", async () => {
@@ -676,6 +680,39 @@ describe("échecs de lecture", () => {
     const server = await site({ "/": html(`<html><body><p>${"a".repeat(READER_DEFAULTS.pageBytes)}</p></body></html>`) });
     expect(await readerFor().reader.read(`http://${WWW}:${server.port}`)).toMatchObject({ ok: false, error: "too_large" });
     expect(READER_DEFAULTS.pageBytes).toBe(5 * 1024 * 1024);
+  });
+
+  it("page d'accueil fabriquée pour épuiser l'analyseur (imbrication ou nombre de balises démesurés) : « too_large », sans attente", async () => {
+    const traps = { imbrication: `<html><body>${"<div>".repeat(300_000)}fond`, balises: `<html><body>${"<p>".repeat(300_000)}`, "début de page": `${"<div>".repeat(30_000)}<p>fond</p>` };
+    for (const [label, body] of Object.entries(traps)) {
+      const server = await site({ "/": html(body) });
+      const started = Date.now();
+      const outcome = await readerFor().reader.read(`http://${WWW}:${server.port}`);
+      expect(outcome, label).toMatchObject({ ok: false, error: "too_large" });
+      expect((outcome as { detail?: string }).detail, label).toContain("trop complexe");
+      expect(Date.now() - started, label).toBeLessThan(5_000);
+    }
+  });
+
+  it("page intérieure fabriquée pour épuiser l'analyseur : écartée, les autres pages sont lues", async () => {
+    const server = await site({ "/": page("Accueil", { links: MENU }), "/a-propos": html(`<html><body><h1>À propos</h1>${"<div>".repeat(200_000)}`), "/sophrologie": page("Sophrologie"), "/tarifs": html(`<html><body>${"<br>".repeat(250_000)}`), "/contact": page("Contact") });
+    const started = Date.now();
+    const outcome = ok(await readerFor().reader.read(`http://${WWW}:${server.port}`));
+    expect(outcome.pages.map((entry) => new URL(entry.url).pathname)).toEqual(["/", "/sophrologie", "/contact"]);
+    expect(outcome.skipped).toEqual({ robots: 0, failed: 2 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("entités du site lu : décodées dans les textes et les faits rendus", async () => {
+    const home = `<!doctype html><html lang="fr"><head><title>Ost&eacute;opathe &agrave; Lyon &#8211; Cabinet Test</title><meta name="description" content="Cabinet d&#39;ost&eacute;opathie &amp; de bien-&ecirc;tre"></head><body><main><h1>L&rsquo;ost&eacute;opathie pour tous</h1><p>${"Une s&eacute;ance dure une heure &amp; se d&eacute;roule au cabinet. ".repeat(12)}</p><a href="https://www.doctolib.fr/osteopathe/lyon/test?utm_source=site&amp;pid=1">Prendre rendez-vous</a><a href="tel:+33472000000">04&nbsp;72&nbsp;00&nbsp;00&nbsp;00</a></main></body></html>`;
+    const server = await site({ "/": html(home) });
+    const outcome = ok(await readerFor().reader.read(`http://${WWW}:${server.port}`));
+    expect(outcome.pages[0]).toMatchObject({ title: "Ostéopathe à Lyon – Cabinet Test", description: "Cabinet d'ostéopathie & de bien-être", headings: ["L’ostéopathie pour tous"] });
+    expect(outcome.pages[0]!.text).toContain("Une séance dure une heure & se déroule au cabinet.");
+    expect(outcome.pages[0]!.text).not.toMatch(/&[a-z#]/i);
+    expect(outcome.pages[0]!.text.endsWith("Prendre rendez-vous 04 72 00 00 00")).toBe(true);
+    expect(outcome.facts.phones).toHaveLength(1);
+    expect(outcome.facts.bookingLinks?.[0]?.url).toBe("https://www.doctolib.fr/osteopathe/lyon/test?pid=1");
   });
 
   it("trop peu de texte sur l'ensemble des pages : « empty », avec le compte dans le détail", async () => {

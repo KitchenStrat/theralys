@@ -67,11 +67,13 @@ const PROFILE: ExternalSiteProfile = cleanExternalProfile(
 
 const base = (overrides: ExternalProfileOverrides | null = null, extracted: ExternalSiteProfile | null = PROFILE): CorrectionBase => ({ url: SITE, extracted, overrides });
 
+const CONTEXT = { siteUrl: SITE, profile: PROFILE };
+
 /** Ce que le formulaire d'une rubrique envoie quand le praticien l'ouvre et l'enregistre, après modification éventuelle du brouillon. */
 function submit<R extends RubricId>(rubric: R, profile: ExternalSiteProfile, edit: (draft: ReturnType<typeof rubricDraft<R>>) => void = () => {}): unknown {
   const draft = rubricDraft(rubric, profile);
   edit(draft);
-  const check = checkRubricDraft(rubric, draft, SITE);
+  const check = checkRubricDraft(rubric, draft, { siteUrl: SITE, profile });
   if (!check.ok) throw new Error(`brouillon refusé : ${JSON.stringify(check.errors)}`);
   return check.value;
 }
@@ -305,7 +307,7 @@ describe("applyRubricCorrection", () => {
 
   it("ce qui est produit est déjà au format du contrat : le service l'enregistre tel quel", () => {
     const value = submit("specialties", PROFILE, (draft) => {
-      draft.items.push({ uid: "n1", title: "Préparation aux examens", excerpt: "Arriver le jour venu avec tous ses moyens.", url: "", kept: null });
+      draft.items.push({ uid: "n1", slug: null, title: "Préparation aux examens", excerpt: "Arriver le jour venu avec tous ses moyens.", url: "" });
     });
     const next = applyRubricCorrection(base({ contact: { note: "" } }), "specialties", value);
     expect(cleanExternalOverrides(next, SITE)).toEqual(next);
@@ -352,14 +354,34 @@ describe("spécialités", () => {
     expect(first?.headings).toEqual(PROFILE.specialties[0]?.headings);
   });
 
+  it("une spécialité dont l'identifiant n'est plus au profil est traitée comme une nouvelle", () => {
+    const draft = rubricDraft("specialties", PROFILE);
+    draft.items[0]!.slug = "inconnue";
+    const check = checkRubricDraft("specialties", draft, CONTEXT);
+    expect(check.ok && check.value.specialties?.[0]).toEqual({ slug: "", title: "Gestion du stress", excerpt: "Relâcher le corps pour apaiser le mental.", url: `${SITE}/gestion-du-stress`, headings: [], faq: [] });
+  });
+
+  it("une adresse de page avec une espace est refusée (les navigateurs ne la lisent pas tous comme le serveur)", () => {
+    const draft = rubricDraft("specialties", PROFILE);
+    draft.items[0]!.url = "www.cabinet-exemple.fr/gestion du stress";
+    expect(checkRubricDraft("specialties", draft, CONTEXT)).toEqual({ ok: false, errors: { "items.s0.url": DRAFT_ERRORS.specialtyUrl } });
+  });
+
   it("refuse une page d'un autre site et une spécialité sans nom ; ignore une ligne ajoutée restée vide", () => {
     const draft = rubricDraft("specialties", PROFILE);
     draft.items[0]!.url = "https://www.doctolib.fr/sophrologue/albi";
     draft.items[1]!.title = "  ";
-    draft.items.push({ uid: "n1", title: "", excerpt: "", url: "", kept: null });
-    expect(checkRubricDraft("specialties", draft, SITE)).toEqual({
+    draft.items.push({ uid: "n1", slug: null, title: "", excerpt: "", url: "" });
+    // Une même ligne peut porter les deux erreurs : elles sont signalées ensemble
+    draft.items.push({ uid: "n2", slug: null, title: "", excerpt: "Sans nom", url: "https://autre-site.fr/page" });
+    expect(checkRubricDraft("specialties", draft, CONTEXT)).toEqual({
       ok: false,
-      errors: { "items.s0.url": DRAFT_ERRORS.specialtyUrl, "items.s1.title": DRAFT_ERRORS.specialtyTitle },
+      errors: {
+        "items.s0.url": DRAFT_ERRORS.specialtyUrl,
+        "items.s1.title": DRAFT_ERRORS.specialtyTitle,
+        "items.n2.title": DRAFT_ERRORS.specialtyTitle,
+        "items.n2.url": DRAFT_ERRORS.specialtyUrl,
+      },
     });
   });
 });
@@ -368,28 +390,28 @@ describe("checkRubricDraft", () => {
   it("lignes à deux champs : une ligne vide est ignorée, une ligne à moitié remplie est signalée sur le champ manquant", () => {
     const draft = rubricDraft("faq", PROFILE);
     draft.items.push({ uid: "n1", first: "", second: "" }, { uid: "n2", first: "Et en visio ?", second: " " }, { uid: "n3", first: "", second: "Oui." });
-    expect(checkRubricDraft("faq", draft, SITE)).toEqual({
+    expect(checkRubricDraft("faq", draft, CONTEXT)).toEqual({
       ok: false,
       errors: { "items.n2.second": DRAFT_ERRORS.incomplete, "items.n3.first": DRAFT_ERRORS.incomplete },
     });
     draft.items = draft.items.filter((item) => item.uid !== "n2" && item.uid !== "n3");
-    expect(checkRubricDraft("faq", draft, SITE)).toEqual({ ok: true, value: { faq: PROFILE.faq } });
+    expect(checkRubricDraft("faq", draft, CONTEXT)).toEqual({ ok: true, value: { faq: PROFILE.faq } });
   });
 
   it("points forts : le titre est exigé, la précision est facultative", () => {
     const draft = rubricDraft("presentation", PROFILE);
     draft.highlights.push({ uid: "n1", first: "", second: "Sans titre" });
-    expect(checkRubricDraft("presentation", draft, SITE)).toEqual({ ok: false, errors: { "highlights.n1.first": DRAFT_ERRORS.highlightTitle } });
+    expect(checkRubricDraft("presentation", draft, CONTEXT)).toEqual({ ok: false, errors: { "highlights.n1.first": DRAFT_ERRORS.highlightTitle } });
     draft.highlights[2]!.first = "Parking gratuit";
     draft.highlights[2]!.second = "";
-    const check = checkRubricDraft("presentation", draft, SITE);
+    const check = checkRubricDraft("presentation", draft, CONTEXT);
     expect(check.ok && check.value.highlights).toEqual([...PROFILE.highlights, { title: "Parking gratuit" }]);
   });
 
   it("paragraphes : espaces réduits, paragraphes vides retirés", () => {
     const draft = rubricDraft("about", PROFILE);
     draft.paragraphs.push({ uid: "n1", text: "   " }, { uid: "n2", text: " Deuxième\nparagraphe  " });
-    const check = checkRubricDraft("about", draft, SITE);
+    const check = checkRubricDraft("about", draft, CONTEXT);
     expect(check.ok && check.value.about?.paragraphs).toEqual([...PROFILE.about.paragraphs, "Deuxième paragraphe"]);
   });
 
@@ -398,43 +420,48 @@ describe("checkRubricDraft", () => {
     draft.phone = "appelez-moi";
     draft.email = "contact@cabinet";
     draft.hours.push({ uid: "n1", first: "Samedi", second: "" });
-    expect(checkRubricDraft("contact", draft, SITE)).toEqual({
+    expect(checkRubricDraft("contact", draft, CONTEXT)).toEqual({
       ok: false,
       errors: { phone: DRAFT_ERRORS.phone, email: DRAFT_ERRORS.email, "hours.n1.second": DRAFT_ERRORS.incomplete },
     });
     draft.phone = "";
     draft.email = "";
     draft.hours.pop();
-    const check = checkRubricDraft("contact", draft, SITE);
+    const check = checkRubricDraft("contact", draft, CONTEXT);
     expect(check.ok && check.value.contact).toMatchObject({ phone: "", email: "" });
   });
 
   it("rendez-vous : adresse sans protocole acceptée, texte libre refusé", () => {
     const draft = rubricDraft("booking", PROFILE);
     draft.link = "www.doctolib.fr/sophrologue/albi/demo";
-    expect(checkRubricDraft("booking", draft, SITE)).toEqual({ ok: true, value: { bookingUrl: "https://www.doctolib.fr/sophrologue/albi/demo" } });
-    draft.link = "par téléphone";
-    expect(checkRubricDraft("booking", draft, SITE)).toEqual({ ok: false, errors: { link: DRAFT_ERRORS.booking } });
+    expect(checkRubricDraft("booking", draft, CONTEXT)).toEqual({ ok: true, value: { bookingUrl: "https://www.doctolib.fr/sophrologue/albi/demo" } });
+    for (const link of ["par téléphone", "pas de lien", "doctolib.fr/mon cabinet", "https://"]) {
+      draft.link = link;
+      expect(checkRubricDraft("booking", draft, CONTEXT)).toEqual({ ok: false, errors: { link: DRAFT_ERRORS.booking } });
+    }
     draft.link = "06 12";
-    expect(checkRubricDraft("booking", draft, SITE)).toEqual({ ok: false, errors: { link: DRAFT_ERRORS.booking } });
+    expect(checkRubricDraft("booking", draft, CONTEXT)).toEqual({ ok: false, errors: { link: DRAFT_ERRORS.booking } });
   });
 
   it("réseaux sociaux : le lien doit mener à une page du bon réseau", () => {
     const draft = rubricDraft("social", PROFILE);
     draft.links.facebook = "facebook.com/cabinet.exemple";
     draft.links.linkedin = "https://www.instagram.com/cabinet";
+    draft.links.tiktok = "tiktok.com/@mon cabinet";
     draft.links.youtube = "https://www.youtube.com/";
-    const check = checkRubricDraft("social", draft, SITE);
+    const check = checkRubricDraft("social", draft, CONTEXT);
     expect(check).toEqual({
       ok: false,
       errors: {
         "links.linkedin": DRAFT_ERRORS.social("LinkedIn", "linkedin.com"),
+        "links.tiktok": DRAFT_ERRORS.social("TikTok", "tiktok.com"),
         "links.youtube": DRAFT_ERRORS.social("YouTube", "youtube.com"),
       },
     });
     draft.links.linkedin = "";
+    draft.links.tiktok = "";
     draft.links.youtube = "";
-    expect(checkRubricDraft("social", draft, SITE)).toEqual({
+    expect(checkRubricDraft("social", draft, CONTEXT)).toEqual({
       ok: true,
       value: { social: { instagram: "https://www.instagram.com/demo.cabinet.exemple", facebook: "https://facebook.com/cabinet.exemple" } },
     });
@@ -449,6 +476,7 @@ describe("lien de rendez-vous", () => {
     expect(bookingLinkFromInput("calendly.com/demo")).toBe("https://calendly.com/demo");
     expect(bookingLinkFromInput("https://calendly.com/demo")).toBe("https://calendly.com/demo");
     expect(bookingLinkFromInput("")).toBe("");
+    expect(bookingLinkFromInput("pas de lien")).toBeNull();
   });
 
   it("bookingDisplay : numéro à appeler, ou page avec le nom de la plateforme connue", () => {

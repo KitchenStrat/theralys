@@ -179,7 +179,7 @@ export function PlanTab({
             </p>
           ) : (
             <p className="mt-1 text-sm text-ink-500">
-              L&apos;URL à coller dans chaque annonce porte le suffixe <code className="rounded bg-cream-100 px-1 text-ink-900">?src=meta</code> : c&apos;est
+              L&apos;URL à coller dans chaque annonce porte le suffixe <code className="rounded bg-cream-100 px-1 text-ink-900">{landing.suffix}</code> : c&apos;est
               lui qui permet à votre site de reconnaître les visites venues de Meta et de compter les rendez-vous et appels qui en découlent (bloc
               Résultats de l&apos;onglet Paramétrage et suivi). Les boutons Copier l&apos;ajoutent déjà.
             </p>

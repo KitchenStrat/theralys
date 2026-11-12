@@ -16,20 +16,20 @@
  *   reste une donnée non fiable pour la suite.
  */
 
-import { load, type CheerioAPI } from "cheerio/slim";
+import type { CheerioAPI } from "cheerio/slim";
 import { EXTERNAL_SITE_LIMITS } from "@theralys/shared";
+import { type DomElement, type DomNode, closestElement, eachText, isElement, isTextNode, isWithin, loadMarkup, textOf } from "./dom";
 import { cleanLine, cleanLineMax, joinBlocks } from "./text";
 
-/** Nœud du document analysé (les types de l'analyseur ne sont pas exportés par cheerio : ils sont déduits). */
-export type DomNode = ReturnType<ReturnType<CheerioAPI["root"]>["contents"]>[number];
-export type DomElement = Extract<DomNode, { attribs: Record<string, string> }>;
+export { type DomElement, type DomNode, isElement } from "./dom";
 
-export const isElement = (node: DomNode): node is DomElement => "attribs" in node;
-const isTextNode = (node: DomNode): node is Extract<DomNode, { data: string }> => (node.type as string) === "text";
-
-/** Analyse le HTML (analyseur tolérant, sans exécution). Le document rendu est modifié par `extractPage` : relever liens et faits avant. */
+/**
+ * Analyse le HTML d'une page (analyseur tolérant, sans exécution). Lève
+ * `MarkupTooComplexError` pour un document trop imbriqué ou trop touffu
+ * (voir dom.ts). Le document rendu n'est jamais modifié par la suite.
+ */
 export function loadDocument(html: string): CheerioAPI {
-  return load(html);
+  return loadMarkup(html);
 }
 
 export type ExtractedPage = {
@@ -44,11 +44,16 @@ export type ExtractedPage = {
 };
 
 const TITLE_MAX = 200;
+/** Texte brut lu dans la balise <title> avant nettoyage (un titre démesuré n'est pas lu en entier). */
+const TITLE_RAW_MAX = 2_000;
 const DESCRIPTION_MAX = 320;
 const HEADING_MAX = 160;
 const HEADINGS_MAX = 40;
-/** Profondeur d'imbrication parcourue : au-delà, le sous-arbre est ignoré (document pathologique). */
+/** Profondeur d'imbrication parcourue : au-delà, le sous-arbre est ignoré (le garde-fou de dom.ts refuse déjà ces documents). */
 const DEPTH_MAX = 400;
+const META_REFRESH_MAX = 2_048;
+/** Longueur de texte au-delà de laquelle deux contenus principaux se valent : inutile de mesurer plus loin. */
+const MAIN_TEXT_CAP = 50_000;
 
 /** Ce qui n'est jamais du texte de la page : en-tête du document, code, médias, formulaires, navigation, encarts, fenêtres modales. */
 const NOISE = [
@@ -117,15 +122,23 @@ const NAMED_BANNER_TEXT_MAX = 1_200;
 const BLOCK_TAGS = new Set(["address", "article", "blockquote", "body", "caption", "center", "dd", "details", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "html", "legend", "li", "main", "ol", "p", "pre", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"]);
 const HEADING_TAG = /^h([1-6])$/;
 
-/** Texte brut d'un sous-arbre, sur une ligne à nettoyer (titres, cellules de tableau, mesures de longueur). */
-function inlineText(node: DomNode, depth = 0): string {
+/**
+ * Sous-arbres écartés du texte (bruit, contenu masqué, bandeaux) : leurs
+ * racines sont notées ici et les parcours les sautent. Le document n'est pas
+ * modifié — retirer un à un cent mille éléments masqués d'un document piégé
+ * coûterait le carré de leur nombre.
+ */
+type Dropped = ReadonlySet<DomNode>;
+
+/** Texte brut d'un sous-arbre, sur une ligne à nettoyer (titres, cellules de tableau). */
+function inlineText(node: DomNode, dropped: Dropped, depth = 0): string {
   if (isTextNode(node)) return node.data;
-  if (!isElement(node) || depth > DEPTH_MAX) return "";
+  if (!isElement(node) || depth > DEPTH_MAX || dropped.has(node)) return "";
   if (node.name === "br") return " ";
   let out = "";
   let previousWasElement = false;
   for (const child of node.children) {
-    const piece = inlineText(child, depth + 1);
+    const piece = inlineText(child, dropped, depth + 1);
     if (isElement(child)) {
       // Deux éléments voisins sont séparés à l'affichage (marges, cellules) : sans espace, leurs mots se colleraient
       const separated = BLOCK_TAGS.has(child.name);
@@ -140,9 +153,9 @@ function inlineText(node: DomNode, depth = 0): string {
   return out;
 }
 
-function hasBlockChild(node: DomElement, depth = 0): boolean {
+function hasBlockChild(node: DomElement, dropped: Dropped, depth = 0): boolean {
   if (depth > 6) return true;
-  return node.children.some((child) => isElement(child) && (child.name === "br" || BLOCK_TAGS.has(child.name) || hasBlockChild(child, depth + 1)));
+  return node.children.some((child) => isElement(child) && !dropped.has(child) && (child.name === "br" || BLOCK_TAGS.has(child.name) || hasBlockChild(child, dropped, depth + 1)));
 }
 
 /**
@@ -150,7 +163,7 @@ function hasBlockChild(node: DomElement, depth = 0): boolean {
  * élément de liste (préfixé « - ») ou ligne de tableau (cellules séparées
  * par « | » : les grilles de tarifs restent lisibles).
  */
-function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings: string[]; hasMainTitle: boolean } {
+function collectBlocks(roots: readonly DomNode[], dropped: Dropped): { blocks: string[]; headings: string[]; hasMainTitle: boolean } {
   const blocks: string[] = [];
   const headings: string[] = [];
   let hasMainTitle = false;
@@ -174,7 +187,7 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
       buffer += node.data;
       return;
     }
-    if (!isElement(node) || depth > DEPTH_MAX) return;
+    if (!isElement(node) || depth > DEPTH_MAX || dropped.has(node)) return;
     const tag = node.name;
     if (tag === "br" || tag === "hr") {
       flush();
@@ -185,7 +198,7 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
       flush();
       // Un titre dans un élément de liste n'est pas une puce, et le texte qui le suit non plus
       bullet = false;
-      const line = cleanLineMax(inlineText(node), HEADING_MAX);
+      const line = cleanLineMax(inlineText(node, dropped), HEADING_MAX);
       if (line === "") return;
       push(line);
       if (heading[1] === "1") hasMainTitle = true;
@@ -195,9 +208,9 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
     if (tag === "tr") {
       const cells = node.children.filter((child): child is DomElement => isElement(child) && (child.name === "td" || child.name === "th"));
       // Ligne de données : une ligne de texte. Tableau de mise en page (cellules à paragraphes) : parcours ordinaire.
-      if (cells.length > 0 && !cells.some((cell) => hasBlockChild(cell))) {
+      if (cells.length > 0 && !cells.some((cell) => hasBlockChild(cell, dropped))) {
         flush();
-        const row = cells.map((cell) => cleanLine(inlineText(cell))).filter((cell) => cell !== "");
+        const row = cells.map((cell) => cleanLine(inlineText(cell, dropped))).filter((cell) => cell !== "");
         push(row.join(" | "));
         return;
       }
@@ -267,8 +280,11 @@ export function documentLanguage($: CheerioAPI): string | undefined {
  */
 export function metaRefreshTarget($: CheerioAPI, pageUrl: string): string | null {
   for (const element of $("meta[http-equiv='refresh' i]").toArray()) {
-    if ($(element).closest("noscript").length > 0) continue;
-    const match = /^\s*(\d{1,3})\s*[;,]\s*(?:url\s*=\s*)?["']?\s*([^"'\s][^"']*?)\s*["']?\s*$/i.exec($(element).attr("content") ?? "");
+    if (!isElement(element) || closestElement(element, (ancestor) => ancestor.name === "noscript") !== null) continue;
+    const content = element.attribs.content ?? "";
+    // Valeur démesurée : pas une redirection (et l'expression ci-dessous ne doit pas s'y attarder)
+    if (content.length > META_REFRESH_MAX) continue;
+    const match = /^\s*(\d{1,3})\s*[;,]\s*(?:url\s*=\s*)?["']?\s*([^"'\s][^"']*?)\s*["']?\s*$/i.exec(content);
     if (!match || Number(match[1]) > 5) continue;
     try {
       const target = new URL(match[2]!, pageUrl);
@@ -284,75 +300,116 @@ export function metaRefreshTarget($: CheerioAPI, pageUrl: string): string | null
 }
 
 /**
- * Extrait le texte principal de la page. Modifie le document reçu (les
- * éléments écartés en sont retirés).
+ * Extrait le texte principal de la page. Le document reçu n'est pas
+ * modifié : ce qui est écarté est seulement noté, et sauté par les parcours.
  */
 export function extractPage($: CheerioAPI, pageUrl: string): ExtractedPage {
   const description = cleanLineMax(metaContent($, "description", "og:description"), DESCRIPTION_MAX);
   const language = documentLanguage($);
   // Titre du document : celui d'une image vectorielle (<svg><title>) n'en est pas un
-  const documentTitle = cleanLine(
-    $("title")
-      .filter((_, element) => $(element).closest("svg").length === 0)
-      .first()
-      .text(),
-  );
+  const titleElement = $("title")
+    .toArray()
+    .find((element) => closestElement(element, (ancestor) => ancestor.name === "svg") === null);
+  const documentTitle = titleElement ? cleanLine(textOf(titleElement, TITLE_RAW_MAX)) : "";
   const fallbackTitle = metaContent($, "og:title");
-  const lengthOf = (node: DomNode): number => cleanLine(inlineText(node)).length;
 
-  // Un nom de classe ne doit pas emporter la page : le corps, le contenu principal et ce qui porte le titre restent
-  const isStructural = (element: DomElement): boolean => ["html", "body", "main", "article"].includes(element.name) || $(element).find("main, article, h1").length > 0;
+  const dropped = new Set<DomNode>();
+  /** Écarte des éléments — jamais le document entier, quels que soient ses attributs */
+  const drop = (elements: readonly DomNode[]): void => {
+    for (const element of elements) if (isElement(element) && element.name !== "html" && element.name !== "body") dropped.add(element);
+  };
+  const isDropped = (node: DomNode): boolean => {
+    for (let current: DomNode | null = node; current !== null; current = current.parent) if (dropped.has(current)) return true;
+    return false;
+  };
+  /** Éléments qui contiennent, hors de ce qui est écarté, l'un des éléments désignés. */
+  const ancestorsOf = (selector: string): Set<DomNode> => {
+    const marked = new Set<DomNode>();
+    for (const element of $(selector).toArray()) {
+      if (isDropped(element)) continue;
+      for (let current: DomNode | null = element.parent; current !== null && !marked.has(current); current = current.parent) marked.add(current);
+    }
+    return marked;
+  };
+  const cleanLengths = new Map<DomNode, number>();
+  /**
+   * Longueur du texte gardé d'un sous-arbre, comptée jusqu'à `cap` (au-delà,
+   * peu importe de combien). Chaque texte n'est nettoyé qu'une fois, même
+   * mesuré depuis plusieurs de ses ancêtres.
+   */
+  const visibleLength = (root: DomNode, cap: number): number => {
+    let total = 0;
+    eachText(
+      root,
+      (text) => {
+        let length = cleanLengths.get(text);
+        if (length === undefined) {
+          length = cleanLine(text.data).length;
+          cleanLengths.set(text, length);
+        }
+        if (length > 0) total += length + 1;
+        return total <= cap;
+      },
+      (node) => dropped.has(node),
+    );
+    return Math.max(0, total - 1);
+  };
 
   // 1. Ce qui n'est pas du texte de page, puis ce qu'un visiteur ne voit pas
-  $(NOISE).remove();
-  $(HIDDEN_ATTRIBUTES).not("html, body").remove();
-  $("[style], [class], [id]").each((_, element) => {
-    if (element.name === "html" || element.name === "body") return;
+  drop($(NOISE).toArray());
+  drop($(HIDDEN_ATTRIBUTES).toArray());
+  // Un nom de classe ne doit pas emporter la page : le corps, le contenu principal et ce qui porte le titre restent
+  let titled = ancestorsOf("main, article, h1");
+  const isStructural = (element: DomElement): boolean => ["html", "body", "main", "article"].includes(element.name) || titled.has(element);
+  for (const element of $("[style], [class], [id]").toArray()) {
     const className = element.attribs.class ?? "";
-    if (isHiddenByStyle(element.attribs.style) || className.split(/\s+/).some((name) => HIDDEN_CLASSES.has(name.toLowerCase()))) $(element).remove();
-    else if (TESTIMONIAL_NAME.test(`${element.attribs.id ?? ""} ${className}`) && !isStructural(element)) $(element).remove();
-  });
-  $(KNOWN_COOKIE_BANNERS).not("html, body").remove();
-  $(NAMED_COOKIE_BANNERS).each((_, element) => {
-    if (!isStructural(element) && lengthOf(element) <= NAMED_BANNER_TEXT_MAX) $(element).remove();
-  });
+    if (isHiddenByStyle(element.attribs.style) || className.split(/\s+/).some((name) => HIDDEN_CLASSES.has(name.toLowerCase()))) drop([element]);
+    else if (TESTIMONIAL_NAME.test(`${element.attribs.id ?? ""} ${className}`) && !isStructural(element)) drop([element]);
+  }
+  drop($(KNOWN_COOKIE_BANNERS).toArray());
+  titled = ancestorsOf("main, article, h1");
+  for (const element of $(NAMED_COOKIE_BANNERS).toArray()) {
+    if (!isStructural(element) && visibleLength(element, NAMED_BANNER_TEXT_MAX) <= NAMED_BANNER_TEXT_MAX) drop([element]);
+  }
 
-  // 2. En-tête et pied de page du site : retirés, sauf l'en-tête qui porte le titre de la page
-  const body = $("body").first();
+  // 2. En-tête et pied de page du site : écartés, sauf l'en-tête qui porte le titre de la page
+  const body = $("body").get(0);
   // Document sans balise <body> (fragment, HTML minimal) : tout le document tient lieu de corps
-  const scopeNodes: DomNode[] = body.length > 0 ? body.toArray() : $.root().contents().toArray();
-  const scope = $(scopeNodes);
-  scope.find("footer, [role='contentinfo']").remove();
-  scope.find("header, [role='banner']").each((_, element) => {
-    const inContent = $(element).parents("main, [role='main'], article, section").length > 0;
-    if (!inContent && $(element).find("h1").length === 0) $(element).remove();
-  });
+  const scopeNodes: DomNode[] = body ? [body] : $.root().contents().toArray();
+  /** Éléments du corps désignés par le sélecteur, dans l'ordre du document. */
+  const inBody = (selector: string): DomElement[] =>
+    $(selector)
+      .toArray()
+      .filter((element): element is DomElement => isElement(element) && (body === undefined || (element !== body && isWithin(element, body))));
+  drop(inBody("footer, [role='contentinfo']"));
+  const withTitle = ancestorsOf("h1");
+  const isContentContainer = (element: DomElement): boolean => element.name === "main" || element.name === "article" || element.name === "section" || element.attribs.role === "main";
+  for (const element of inBody("header, [role='banner']")) {
+    const inContent = closestElement(element.parent, isContentContainer) !== null;
+    if (!inContent && !withTitle.has(element)) drop([element]);
+  }
 
   // 3. Contenu principal : la balise <main> quand elle porte l'essentiel du texte, sinon tout le corps
-  const scopeLength = scopeNodes.reduce((sum, node) => sum + lengthOf(node), 0);
-  const main = scope
-    .find("main, [role='main']")
-    .toArray()
-    .map((element) => ({ element, length: lengthOf(element) }))
+  const main = inBody("main, [role='main']")
+    .filter((element) => !isDropped(element))
+    .map((element) => ({ element, length: visibleLength(element, MAIN_TEXT_CAP) }))
     .sort((a, b) => b.length - a.length)[0];
-  const useMain = main !== undefined && (main.length >= 200 || main.length >= scopeLength * 0.5);
+  // Un <main> court n'est retenu que s'il porte la moitié du texte de la page : inutile alors de mesurer celle-ci au-delà de 400 caractères
+  const useMain = main !== undefined && (main.length >= 200 || main.length * 2 >= scopeNodes.reduce((sum, node) => sum + visibleLength(node, 400), 0));
   let roots = scopeNodes;
   if (useMain) {
     // Un en-tête gardé hors de <main> porte le titre et l'accroche : il précède le contenu
-    const heroes = scope
-      .find("header, [role='banner']")
-      .toArray()
-      .filter((element) => $(element).find("h1").length > 0 && $(element).closest(main.element).length === 0 && $(main.element).closest(element).length === 0);
+    const heroes = inBody("header, [role='banner']").filter((element) => withTitle.has(element) && !isDropped(element) && !isWithin(element, main.element) && !isWithin(main.element, element));
     roots = [...heroes, main.element];
   }
 
-  const collected = collectBlocks(roots);
+  const collected = collectBlocks(roots, dropped);
   let blocks = collected.blocks;
   const headings = collected.headings;
   if (useMain && !collected.hasMainTitle) {
     // Titre de page placé hors du contenu principal (bandeau de titre de certains thèmes) : repris en tête
-    const outside = scope.find("h1").first().get(0);
-    const line = outside ? cleanLineMax(inlineText(outside), HEADING_MAX) : "";
+    const outside = inBody("h1").find((element) => !isDropped(element));
+    const line = outside ? cleanLineMax(inlineText(outside, dropped), HEADING_MAX) : "";
     if (line !== "") {
       blocks = [line, ...blocks];
       if (!headings.includes(line)) headings.unshift(line);

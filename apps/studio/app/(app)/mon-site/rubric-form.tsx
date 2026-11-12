@@ -22,10 +22,10 @@ import { ListEditor, newUid } from "./list-editor";
 /**
  * Formulaire de correction d'une rubrique du profil, ouvert sur place. Le
  * brouillon part du profil effectif ; le contrôle (`checkRubricDraft`) signale
- * sur chaque champ ce que le service écarterait ; l'enregistrement envoie les
- * clés de la rubrique, les corrections complètes étant recomposées côté
- * serveur. Après un premier envoi refusé, le contrôle suit la saisie : une
- * erreur corrigée disparaît aussitôt.
+ * sur chaque champ ce que le service écarterait ; l'enregistrement envoie le
+ * formulaire, que l'action contrôle de nouveau (son verdict fait foi) avant
+ * de recomposer les corrections complètes. Après un premier envoi refusé, le
+ * contrôle suit la saisie : une erreur corrigée disparaît aussitôt.
  */
 
 type FieldsProps<R extends RubricId> = {
@@ -76,27 +76,35 @@ function FormShell<R extends RubricId>({
   function change(next: RubricDrafts[R]) {
     setDraft(next);
     if (!submitted) return;
-    const check = checkRubricDraft(rubric, next, siteUrl);
+    const check = checkRubricDraft(rubric, next, { siteUrl, profile });
     setErrors(check.ok ? {} : check.errors);
     if (check.ok) setFailure(null);
+  }
+
+  function reject(fieldErrors: Record<string, string>) {
+    setErrors(fieldErrors);
+    setFailure(FORM_INVALID);
+    setFocusRequest((count) => count + 1);
   }
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitted(true);
-    const check = checkRubricDraft(rubric, draft, siteUrl);
+    const check = checkRubricDraft(rubric, draft, { siteUrl, profile });
     if (!check.ok) {
-      setErrors(check.errors);
-      setFailure(FORM_INVALID);
-      setFocusRequest((count) => count + 1);
+      reject(check.errors);
       return;
     }
     setErrors({});
     setFailure(null);
     startTransition(async () => {
-      const result = await saveExternalCorrection({ rubric, value: check.value });
-      if (result.error) setFailure(result.error);
-      else onClose(true);
+      const result = await saveExternalCorrection({ rubric, draft });
+      // Suite marquée comme transition elle aussi : le formulaire se referme dans le même rendu que le profil relu (jamais sur l'ancien contenu)
+      startTransition(() => {
+        if (result.fieldErrors) reject(result.fieldErrors);
+        else if (result.error) setFailure(result.error);
+        else onClose(true);
+      });
     });
   }
 
@@ -160,6 +168,7 @@ function TextList({
       addLabel={addLabel}
       maxLabel={maxLabel}
       itemLabel={(index) => `${itemName} ${index + 1}`}
+      showItemLabel={false}
       blank={() => ({ uid: newUid(), text: "" })}
       fieldId={fieldId}
     >
@@ -176,6 +185,13 @@ function TextList({
 
 type PairField = { label: string; maxLength: number; placeholder?: string; optional?: boolean; rows?: number };
 
+/** Disposition des deux champs d'une ligne sur un écran large : l'un sous l'autre, côte à côte, ou côte à côte avec un second champ plus large. */
+const PAIR_LAYOUTS = {
+  stacked: "space-y-3",
+  halves: "grid gap-3 sm:grid-cols-2",
+  wideSecond: "grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]",
+} as const;
+
 function PairList({
   id,
   name,
@@ -188,6 +204,7 @@ function PairList({
   max,
   first,
   second,
+  layout = "stacked",
   addLabel,
   maxLabel,
 }: {
@@ -203,6 +220,7 @@ function PairList({
   max: number;
   first: PairField;
   second: PairField;
+  layout?: keyof typeof PAIR_LAYOUTS;
   addLabel: string;
   maxLabel: string;
 }) {
@@ -222,7 +240,7 @@ function PairList({
       fieldId={fieldId}
     >
       {(item, _index, update) => (
-        <>
+        <div className={PAIR_LAYOUTS[layout]}>
           <TextField
             id={fieldId(item)}
             label={first.label}
@@ -256,7 +274,7 @@ function PairList({
               error={errors[`${name}.${item.uid}.second`]}
             />
           )}
-        </>
+        </div>
       )}
     </ListEditor>
   );
@@ -299,6 +317,7 @@ function PresentationFields({ fid, draft, change, errors }: FieldsProps<"present
         max={LIST_MAX.highlights}
         first={{ label: "Titre", maxLength: FIELD_MAX.highlightTitle }}
         second={{ label: "Précision", maxLength: FIELD_MAX.highlightText, optional: true }}
+        layout="wideSecond"
         addLabel="Ajouter un point fort"
         maxLabel={`${LIST_MAX.highlights} points forts au plus.`}
       />
@@ -320,7 +339,7 @@ function SpecialtiesFields({ fid, draft, change, errors, siteUrl }: FieldsProps<
       addLabel="Ajouter une spécialité"
       maxLabel={`${LIST_MAX.specialties} spécialités au plus.`}
       itemLabel={(index) => `Spécialité ${index + 1}`}
-      blank={() => ({ uid: newUid(), title: "", excerpt: "", url: "", kept: null })}
+      blank={() => ({ uid: newUid(), slug: null, title: "", excerpt: "", url: "" })}
       fieldId={(item) => fieldId(item.uid, "title")}
     >
       {(item, _index, update) => (
@@ -405,6 +424,7 @@ function PracticalFields({ fid, draft, change, errors }: FieldsProps<"practical"
       max={LIST_MAX.practical}
       first={{ label: "Intitulé", maxLength: FIELD_MAX.pairTitle, placeholder: "Durée d'une séance" }}
       second={{ label: "Détail", maxLength: FIELD_MAX.pairText, placeholder: "1 heure" }}
+      layout="wideSecond"
       addLabel="Ajouter une info pratique"
       maxLabel={`${LIST_MAX.practical} infos pratiques au plus.`}
     />
@@ -485,6 +505,7 @@ function ContactFields({ fid, draft, change, errors }: FieldsProps<"contact">) {
         max={LIST_MAX.hours}
         first={{ label: "Jours", maxLength: FIELD_MAX.hoursLabel, placeholder: "Lundi au vendredi" }}
         second={{ label: "Heures", maxLength: FIELD_MAX.hoursValue, placeholder: "9 h – 19 h" }}
+        layout="halves"
         addLabel="Ajouter un horaire"
         maxLabel={`${LIST_MAX.hours} lignes d'horaires au plus.`}
       />

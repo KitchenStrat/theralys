@@ -164,6 +164,35 @@ describe("collectLinks", () => {
     const html = Array.from({ length: 1_000 }, (_, i) => `<a href="/page-${i}">Page ${i}</a>`).join("");
     expect(collectLinks(loadDocument(html), `${ORIGIN}/`, ROOT)).toHaveLength(400);
   });
+
+  it("emplacement d'un lien : pied de page d'abord, sinon menu ou en-tête, sinon corps — d'après tous ses ancêtres", () => {
+    const html = `<body>
+      <header><a href="/a">A</a><div><span><a href="/b">B</a></span></div></header>
+      <div class="navbar sticky"><a href="/c">C</a></div><ul class="menu"><li><a href="/d">D</a></li></ul><div role="navigation"><a href="/e">E</a></div><div role="banner"><a href="/f">F</a></div>
+      <main><a href="/g">G</a><div class="menus"><a href="/h">H</a></div><div class="Menu"><a href="/i">I</a></div></main>
+      <footer><nav><a href="/j">J</a></nav></footer><div role="contentinfo"><a href="/k">K</a></div><nav><footer><a href="/l">L</a></footer><a href="/m">M</a></nav>
+    </body>`;
+    const areas = Object.fromEntries(collectLinks(loadDocument(html), `${ORIGIN}/`, ROOT).map((item) => [new URL(item.url).pathname, item.area]));
+    expect(areas).toEqual({ "/a": "nav", "/b": "nav", "/c": "nav", "/d": "nav", "/e": "nav", "/f": "nav", "/g": "main", "/h": "main", "/i": "main", "/j": "footer", "/k": "footer", "/l": "footer", "/m": "nav" });
+  });
+
+  it("libellé d'un lien : son texte, borné ; sinon son intitulé accessible, son titre ou le texte de remplacement de son image", () => {
+    const html = `<a href="/a">  Un   <b>libellé</b>\n réparti </a><a href="/b" aria-label="Intitulé"><svg></svg></a><a href="/c" title="Titre"></a><a href="/d"><span><img src="x.png" alt="Image"></span></a><a href="/e"><img src="y.png"></a><a href="/f">${"mot ".repeat(5_000)}</a>`;
+    const links = collectLinks(loadDocument(html), `${ORIGIN}/`, ROOT);
+    expect(links.slice(0, 5).map((item) => item.text)).toEqual(["Un libellé réparti", "Intitulé", "Titre", "Image", ""]);
+    expect(links[5]!.text.length).toBeLessThanOrEqual(120);
+    expect(links[5]!.text.startsWith("mot mot mot")).toBe(true);
+  });
+
+  it("page piégée : adresses démesurées ignorées, liens examinés en nombre borné, sans y passer des secondes", () => {
+    const long = `<a href="/${"x".repeat(3_000)}">Trop longue</a>`;
+    const offsite = `<a href="https://www.autre-site.fr/page">Ailleurs</a>`.repeat(20_000);
+    const start = performance.now();
+    const links = collectLinks(loadDocument(`${long}<a href="/avant">Avant</a>${offsite}<a href="/apres">Après</a>`), `${ORIGIN}/`, ROOT);
+    expect(performance.now() - start).toBeLessThan(5_000);
+    // Le lien placé après vingt mille liens vers un autre site n'est pas examiné : une vraie page n'en compte pas tant
+    expect(paths(links)).toEqual(["/avant"]);
+  });
 });
 
 describe("toCandidates et planPages — choix des pages", () => {
@@ -254,6 +283,16 @@ describe("plan de site", () => {
     expect(parseSitemap(xxe).pages.join("")).not.toContain("root:");
     const many = `<urlset>${Array.from({ length: 2_000 }, (_, i) => `<url><loc>https://www.mon-cabinet.fr/p${i}</loc></url>`).join("")}</urlset>`;
     expect(parseSitemap(many).pages).toHaveLength(500);
+  });
+
+  it("parseSitemap : plan trop imbriqué ou trop touffu, adresse démesurée : rien, sans erreur ni attente", () => {
+    const start = performance.now();
+    expect(parseSitemap(`<urlset>${"<url>".repeat(100_000)}<loc>https://www.mon-cabinet.fr/</loc>`)).toEqual({ pages: [], sitemaps: [] });
+    expect(parseSitemap(`<urlset>${"<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(120_000)}</urlset>`)).toEqual({ pages: [], sitemaps: [] });
+    expect(parseSitemap(`<urlset><url><loc>https://www.mon-cabinet.fr/${"x".repeat(5_000)}</loc></url><url><loc>https://www.mon-cabinet.fr/ok</loc></url></urlset>`)).toEqual({ pages: ["https://www.mon-cabinet.fr/ok"], sitemaps: [] });
+    // Sans élément racine : des milliers d'entrées à la racine du document
+    expect(parseSitemap("<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(20_000)).pages).toHaveLength(500);
+    expect(performance.now() - start).toBeLessThan(5_000);
   });
 
   it("pickChildSitemaps : les plans des pages d'abord, jamais ceux des articles, étiquettes, auteurs ou produits", () => {

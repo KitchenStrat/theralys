@@ -27,6 +27,7 @@ import { isAutomationRefusal, isChallengeResponse } from "./challenge";
 import { SPECIALTY_PAGES_MAX, collectLinks, isInScope, pageKey, parseSitemap, pickChildSitemaps, planPages, toCandidates, type PageCandidate, type PageLink, type SiteScope } from "./discover";
 import { extractPage, loadDocument, metaRefreshTarget, type ExtractedPage } from "./extract";
 import { collectPageFacts, mergeSiteFacts, type PageFacts } from "./facts";
+import { MarkupTooComplexError } from "./markup-guard";
 import { ROBOTS_ABSENT, ROBOTS_MAX_BYTES, robotsFromResponse, type RobotsRules } from "./robots";
 import { PRODUCTION_POLICY, SafeFetchError, checkUrl, createFetchAgent, decodeHtml, decodeText, isConnectFailure, isPolicyRefusal, safeFetch, type NetworkPolicy, type SafeFetchOptions, type SafeFetchResult } from "./safe-fetch";
 import { sha256Hex } from "./text";
@@ -101,6 +102,20 @@ export function homeFailure(error: SafeFetchError): Failure {
       return { error: "internal", detail: error.message };
     default:
       return { error: "unreachable", detail: error.message };
+  }
+}
+
+/**
+ * Redirection par balise meta annoncée au début de la page (64 premiers
+ * kibioctets : la balise est dans l'en-tête du document). Un début de page
+ * trop complexe pour être analysé n'annonce rien.
+ */
+function leadingRefreshTarget(html: string, pageUrl: string): string | null {
+  try {
+    return metaRefreshTarget(loadDocument(html.slice(0, 64 * 1024)), pageUrl);
+  } catch (err) {
+    if (err instanceof MarkupTooComplexError) return null;
+    throw err;
   }
 }
 
@@ -246,7 +261,7 @@ async function readSite(config: Required<Omit<LiveReaderOptions, "policy">> & { 
       const html = decodeHtml(response.body, response.header("content-type"));
       if (isAutomationRefusal({ status: response.status, header: response.header, body: html })) throw new ReadStop({ error: "blocked", detail: `le site refuse les robots (HTTP ${response.status})` });
       if (response.status < 200 || response.status >= 300) throw new ReadStop({ error: "unreachable", detail: `réponse HTTP ${response.status}` });
-      const next = refreshes < 2 ? metaRefreshTarget(loadDocument(html.slice(0, 64 * 1024)), response.url) : null;
+      const next = refreshes < 2 ? leadingRefreshTarget(html, response.url) : null;
       if (next === null) return { response, html };
       target = next;
     }
@@ -272,7 +287,14 @@ async function readSite(config: Required<Omit<LiveReaderOptions, "policy">> & { 
     const scope = resolveScope(given, servedHome);
     const fetchedAt = (): string => config.now().toISOString();
 
-    const homeDocument = loadDocument(home.html);
+    let homeDocument: ReturnType<typeof loadDocument>;
+    try {
+      homeDocument = loadDocument(home.html);
+    } catch (err) {
+      // Document trop imbriqué ou trop touffu (fabriqué pour épuiser l'analyseur, ou hors norme) : il n'est pas analysé
+      if (err instanceof MarkupTooComplexError) throw new ReadStop({ error: "too_large", detail: `page d'accueil trop complexe pour être analysée (${err.message})` });
+      throw err;
+    }
     const homeLinks = collectLinks(homeDocument, servedHome.href, scope);
     const homeFacts = collectPageFacts(homeDocument, home.html, servedHome.href);
     const homePage = toPage(servedHome.href, "home", extractPage(homeDocument, servedHome.href), home.response, fetchedAt());
@@ -342,8 +364,17 @@ async function readSite(config: Required<Omit<LiveReaderOptions, "policy">> & { 
     const maxAttempts = maxPages + 6;
 
     const readPage = async (candidate: PageCandidate): Promise<PageResult> => {
+      let response: SafeFetchResult;
       try {
-        const response = await safeFetch(candidate.url, { ...request, ...HTML_PAGE, guard });
+        response = await safeFetch(candidate.url, { ...request, ...HTML_PAGE, guard });
+      } catch (err) {
+        if (!(err instanceof SafeFetchError)) throw err;
+        if (err.code === "robots") return { status: "robots" };
+        if (err.code === "blocked") return { status: "refused" };
+        if (err.code === "deadline" || err.code === "aborted") return { status: "interrupted" };
+        return { status: "failed" };
+      }
+      try {
         const html = decodeHtml(response.body, response.header("content-type"));
         if (response.status === 429 || isChallengeResponse({ status: response.status, header: response.header, body: html })) return { status: "refused" };
         if (response.status < 200 || response.status >= 300) return { status: "failed" };
@@ -361,11 +392,8 @@ async function readSite(config: Required<Omit<LiveReaderOptions, "policy">> & { 
         if (hashes.has(page.hash)) return { status: "duplicate" };
         hashes.add(page.hash);
         return { status: "ok", page, facts, links: pageLinks };
-      } catch (err) {
-        if (!(err instanceof SafeFetchError)) throw err;
-        if (err.code === "robots") return { status: "robots" };
-        if (err.code === "blocked") return { status: "refused" };
-        if (err.code === "deadline" || err.code === "aborted") return { status: "interrupted" };
+      } catch {
+        // Page reçue mais inexploitable (trop complexe pour être analysée, ou qui met l'analyse en défaut) : écartée, les autres pages restent lues
         return { status: "failed" };
       }
     };

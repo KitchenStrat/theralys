@@ -1,11 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { blogArticles, editorialCalendarEntries, getDb, hasBlog, PLANS } from "@theralys/db";
 import { loadExternalReference } from "@theralys/jobs";
 import { activeExternalSite, externalSpecialties, isHostedSiteHidden } from "@theralys/shared";
 import { Card } from "@theralys/ui";
 import { requireClient } from "@/lib/auth";
 import { parseMonthParam } from "@/lib/calendar";
-import { getBlogSettings, getEditablePages, getMonthItems, getSite } from "@/lib/data";
+import { getBlogSettings, getEditablePages, getMonthItems, getSite, type CalendarItem } from "@/lib/data";
 import { withReferenceSpecialties, type MotifSlugs } from "@/lib/social/blog-specialties";
 import { PublicationsClient } from "./publications-client";
 
@@ -53,7 +53,7 @@ export default async function PublicationsPage({ searchParams }: Props) {
     ? specialties.map((specialty) => specialty.title)
     : editablePages.filter((p) => p.type === "motif").map((p) => p.title);
   // Libellés de spécialité du calendrier : `getMonthItems` les lit sur le site hébergé
-  const calendarItems = specialties ? withReferenceSpecialties(items, await loadMotifSlugs(site.id), specialties) : items;
+  const calendarItems = specialties ? withReferenceSpecialties(items, await loadMotifSlugs(site.id, items), specialties) : items;
   const monthlyQuota = PLANS[site.plan].blogArticlesPerWeek * 4;
   // Les articles paraissent sur le blog hébergé ; dès que le site du client est la référence, le praticien les reprend chez lui
   const ownSite = activeExternalSite(site.theme);
@@ -83,19 +83,29 @@ export default async function PublicationsPage({ searchParams }: Props) {
 }
 
 /**
- * Spécialité (identifiant) de chaque article et de chaque sujet planifié du
- * site. `getMonthItems` ne rend que le titre de la spécialité, lu sur les
+ * Spécialité (identifiant) des articles et des sujets planifiés affichés ce
+ * mois-ci. `getMonthItems` ne rend que le titre de la spécialité, lu sur les
  * pages du site hébergé : pour le remplacer par celui du site du client, il
  * faut l'identifiant. Lu seulement quand le site du client est la référence.
  */
-async function loadMotifSlugs(siteId: string): Promise<MotifSlugs> {
+async function loadMotifSlugs(siteId: string, items: readonly CalendarItem[]): Promise<MotifSlugs> {
   const db = getDb();
+  const idsOf = (key: "articleId" | "entryId") => items.map((item) => item[key]).filter((id): id is string => typeof id === "string");
+  const articleIds = idsOf("articleId");
+  const entryIds = idsOf("entryId");
   const [articles, entries] = await Promise.all([
-    db.query.blogArticles.findMany({ where: eq(blogArticles.siteId, siteId), columns: { id: true, motifSlug: true } }),
-    db.query.editorialCalendarEntries.findMany({
-      where: and(eq(editorialCalendarEntries.siteId, siteId), eq(editorialCalendarEntries.status, "planned")),
-      columns: { id: true, motifSlug: true },
-    }),
+    articleIds.length === 0
+      ? []
+      : db.query.blogArticles.findMany({
+          where: and(eq(blogArticles.siteId, siteId), inArray(blogArticles.id, articleIds)),
+          columns: { id: true, motifSlug: true },
+        }),
+    entryIds.length === 0
+      ? []
+      : db.query.editorialCalendarEntries.findMany({
+          where: and(eq(editorialCalendarEntries.siteId, siteId), inArray(editorialCalendarEntries.id, entryIds)),
+          columns: { id: true, motifSlug: true },
+        }),
   ]);
   return {
     articles: new Map(articles.map((article) => [article.id, article.motifSlug])),

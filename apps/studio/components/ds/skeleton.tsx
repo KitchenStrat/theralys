@@ -25,13 +25,13 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
 /** Tuile de chiffre en attente : pastille, libellé, valeur, courbe. */
 export function KpiTileSkeleton({ className }: { className?: string }) {
   return (
-    <div aria-hidden className={clsx("rounded-ds-card bg-white p-5 shadow-ds-card ring-1 ring-ds-ink-900/5 sm:p-6", className)}>
+    <div aria-hidden className={clsx("min-w-0 rounded-ds-card bg-white p-5 shadow-ds-card ring-1 ring-ds-ink-900/5 sm:p-6", className)}>
       <div className="flex items-center gap-3">
-        <Skeleton className="size-11 rounded-ds-sm" />
-        <Skeleton className="h-4 w-28" />
+        <Skeleton className="size-11 shrink-0 rounded-ds-sm" />
+        <Skeleton className="h-4 w-28 max-w-full" />
       </div>
-      <Skeleton className="mt-5 h-9 w-24" />
-      <Skeleton className="mt-3 h-5 w-40 rounded-full" />
+      <Skeleton className="mt-5 h-9 w-24 max-w-full" />
+      <Skeleton className="mt-3 h-5 w-40 max-w-full rounded-full" />
       <Skeleton className="mt-5 h-10 w-full" />
     </div>
   );
@@ -40,10 +40,10 @@ export function KpiTileSkeleton({ className }: { className?: string }) {
 /** Carte en attente : un titre et quelques lignes. */
 export function CardSkeleton({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
-    <div aria-hidden className={clsx("rounded-ds-card bg-white p-5 shadow-ds-card ring-1 ring-ds-ink-900/5 sm:p-6", className)}>
+    <div aria-hidden className={clsx("min-w-0 rounded-ds-card bg-white p-5 shadow-ds-card ring-1 ring-ds-ink-900/5 sm:p-6", className)}>
       <div className="flex items-center gap-3.5">
-        <Skeleton className="size-11 rounded-ds-sm" />
-        <div className="flex-1 space-y-2">
+        <Skeleton className="size-11 shrink-0 rounded-ds-sm" />
+        <div className="min-w-0 flex-1 space-y-2">
           <Skeleton className="h-5 w-48 max-w-full" />
           <Skeleton className="h-3.5 w-64 max-w-full" />
         </div>
@@ -63,8 +63,8 @@ export function PageSkeleton({ tiles = 4, cards = 2 }: { tiles?: number; cards?:
     <div role="status" className="space-y-6">
       <span className="sr-only">Chargement de la page…</span>
       <div aria-hidden className="flex items-center gap-4 rounded-ds-band bg-white/70 p-5 ring-1 ring-ds-ink-200 sm:p-7">
-        <Skeleton className="size-14 rounded-ds-md" />
-        <div className="flex-1 space-y-2.5">
+        <Skeleton className="size-14 shrink-0 rounded-ds-md" />
+        <div className="min-w-0 flex-1 space-y-2.5">
           <Skeleton className="h-7 w-56 max-w-full" />
           <Skeleton className="h-4 w-96 max-w-full" />
         </div>

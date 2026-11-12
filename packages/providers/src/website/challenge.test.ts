@@ -70,4 +70,31 @@ describe("refus de lecture automatique", () => {
     const late = `${"<p>texte</p>".repeat(20_000)}<script>window._cf_chl_opt={}</script>`;
     expect(isChallengeResponse(response(503, late))).toBe(false);
   });
+
+  it("page presque vide : scripts, styles et blocs noscript ne comptent pas comme du texte, refermés ou non", () => {
+    const marker = "<script>window._cf_chl_opt={}</script>";
+    const code = "var a = 1; ".repeat(200);
+    expect(isChallengeResponse(response(200, `<html><body>${marker}<script>${code}</script><style>${code}</style><p>Vérification…</p></body></html>`))).toBe(true);
+    expect(isChallengeResponse(response(200, `<html><body>${marker}<p>Vérification…</p><SCRIPT type="module">${code}`))).toBe(true);
+    // Le même marqueur sur une page qui a du texte : une vraie page
+    expect(isChallengeResponse(response(200, `<html><body>${marker}<p>${"Un vrai paragraphe de contenu. ".repeat(40)}</p></body></html>`))).toBe(false);
+  });
+
+  it("une page d'attente est petite : une grosse page n'en est pas une, même avec un marqueur et peu de texte", () => {
+    const heavy = `<html><head><script>window._cf_chl_opt={};${"var a = 1; ".repeat(40_000)}</script></head><body><p>Bonjour</p></body></html>`;
+    expect(heavy.length).toBeGreaterThan(256 * 1024);
+    expect(isChallengeResponse(response(200, heavy))).toBe(false);
+    // En erreur, le marqueur suffit, quelle que soit la taille
+    expect(isChallengeResponse(response(503, heavy))).toBe(true);
+  });
+
+  it("page fabriquée pour faire traîner l'examen : jugée en un passage", () => {
+    const bodies = [`<title>x</title>${"<script ".repeat(30_000)}`, "<title ".repeat(30_000), `<title>Just a moment</title>${"<style>".repeat(30_000)}`, `_cf_chl_opt ${"<".repeat(200_000)}`, `_cf_chl_opt ${"<noscript>a</noscrip ".repeat(10_000)}`];
+    for (const body of bodies) {
+      const start = performance.now();
+      isChallengeResponse(response(200, body));
+      isChallengeResponse(response(503, body));
+      expect(performance.now() - start, body.slice(0, 30)).toBeLessThan(1_000);
+    }
+  });
 });

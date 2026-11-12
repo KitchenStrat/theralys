@@ -6,7 +6,11 @@ import { StepProgress, type ProgressStep, type StepProgressProps } from "./step-
 export type TimedStep = ProgressStep & {
   /** Durée typique observée de l'étape, en secondes */
   seconds: number;
-  /** Ce qui se fait pendant l'étape, affiché tour à tour : « Publication 3 sur 8 » */
+  /**
+   * Ce qui se fait pendant l'étape, affiché l'un après l'autre (3 s chacun) :
+   * des gestes (« Choix des sujets de la semaine »), pas des compteurs — le
+   * rythme est estimé, un « 3 sur 8 » serait inventé.
+   */
   details?: readonly string[];
 };
 
@@ -64,7 +68,8 @@ export type GenerationProgressProps = Omit<StepProgressProps, "steps" | "current
 export function GenerationProgress({ steps, running, done = false, failed = false, ...props }: GenerationProgressProps) {
   const { current, elapsed, inStep } = useStepTimeline(steps, running);
   const details = steps[current]?.details;
-  const detail = details && details.length > 0 ? details[Math.floor(inStep / 3) % details.length] : undefined;
+  // Une précision toutes les 3 s, puis la dernière reste affichée : pas de retour en arrière
+  const detail = details && details.length > 0 ? details[Math.min(details.length - 1, Math.floor(inStep / 3))] : undefined;
   return (
     <StepProgress
       steps={steps}

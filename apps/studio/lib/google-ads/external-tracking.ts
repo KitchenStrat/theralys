@@ -68,10 +68,10 @@ export const ADS_BANNER_UNKNOWN = "Aucun bandeau cookies n'a été repéré sur 
 
 /** Limite de la lecture, rappelée sous chaque relevé : ce qui n'est pas repéré n'est pas forcément absent. */
 export const READING_LIMIT =
-  "Notre lecture ne voit que le code de vos pages : une balise posée par un gestionnaire de balises, ou chargée seulement après l'accord du visiteur, peut lui échapper. Ce qui fait foi, c'est votre compte publicitaire.";
+  "Notre lecture ne voit que le code de vos pages : une balise installée par un autre outil (Google Tag Manager, par exemple), ou chargée seulement après l'accord du visiteur, peut lui échapper. Ce qui fait foi, c'est votre compte publicitaire.";
 
 /** Rappel sous chaque relevé : il ne change qu'à la prochaine lecture du site. */
-export const REREAD_REMINDER = "Vous venez d'installer une balise ou un bandeau ? Relancez la lecture de votre site depuis « Mon site » : ce relevé se mettra à jour.";
+export const REREAD_REMINDER = "Vous venez de changer quelque chose sur votre site ? Relancez sa lecture depuis « Mon site » : ce relevé se mettra à jour.";
 
 /**
  * Relevé Google Ads du site du client : balise (acquise aussi quand Google
@@ -100,6 +100,7 @@ export function googleAdsFindings(tracking: ExternalSiteTracking): TrackingFindi
 /** Balise publicitaire à installer : la balise Google, ou le Pixel Meta. */
 export type AdTag = "google" | "meta";
 
+/** Où installer une balise publicitaire sur le site du client, selon l'outil qui a servi à le créer. */
 export type TagInstallAdvice = {
   /** Nom de l'outil de création du site, quand il a été reconnu */
   tool: string | null;
@@ -118,7 +119,7 @@ const TAG_WORDING: Record<AdTag, { name: string; pasted: string; connect: string
 /** Sans outil reconnu, ou pour un outil sans pas-à-pas connu : où chercher, et à qui demander. */
 function genericAdvice(tag: AdTag): string {
   const brand = tag === "google" ? "« Google »" : "« Meta » ou « Facebook »";
-  return `Cherchez dans les réglages de l'outil qui a servi à créer votre site une rubrique ${brand}, « intégrations », « balises » ou « code d'en-tête ». Si quelqu'un s'occupe de votre site, transmettez-lui le code de ${TAG_WORDING[tag].name} : l'installer lui prendra quelques minutes.`;
+  return `Cherchez dans les réglages de l'outil qui a servi à créer votre site une rubrique ${brand}, « intégrations », « balises » ou « code d'en-tête ». Si quelqu'un s'occupe de votre site, transmettez-lui le code de ${TAG_WORDING[tag].name}.`;
 }
 
 /**
@@ -149,7 +150,7 @@ export function tagInstallAdvice(cms: ExternalCms | null, tag: AdTag): TagInstal
       return {
         tool,
         possible: true,
-        text: `Sur Squarespace, ${name} se colle dans « Injection de code » (Code Injection), zone « En-tête ». Cette fonction est réservée aux offres Core, Plus et Advanced.`,
+        text: `Sur Squarespace, ${name} se colle dans « Injection de code » (Code Injection), zone « En-tête ». Cette fonction est disponible avec les offres Core, Plus et Advanced.`,
       };
     case "webflow":
       return {

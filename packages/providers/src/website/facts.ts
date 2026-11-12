@@ -9,7 +9,7 @@
  * sur un numéro de téléphone, un lien `tel:` non).
  */
 
-import { load, type CheerioAPI } from "cheerio/slim";
+import type { CheerioAPI } from "cheerio/slim";
 import {
   EXTERNAL_MEASURE_PATH,
   TRACKING_ID_PATTERNS,
@@ -25,6 +25,8 @@ import {
   type ExternalSiteTags,
   type SiteSocialLinks,
 } from "@theralys/shared";
+import { firstDescendant, textOf } from "./dom";
+import { decodeEntities } from "./entities";
 import { documentLanguage, metaContent } from "./extract";
 import { cleanLine, cleanLineMax, foldText } from "./text";
 
@@ -71,8 +73,15 @@ const ADDRESS_MAX = 160;
 const PHONES_MAX = 3;
 const EMAILS_MAX = 3;
 const BOOKING_LINKS_MAX = 5;
-/** Bloc JSON-LD analysé au plus (octets) : au-delà, il est ignoré. */
+/** Bloc JSON-LD analysé au plus (caractères) : au-delà, il est ignoré. */
 const JSON_LD_MAX = 200_000;
+/** Bornes de ce qui est examiné sur une page : une vraie page en est loin, une page piégée ne doit pas coûter plus. */
+const JSON_LD_BLOCKS_MAX = 50;
+const ANCHORS_MAX = 3_000;
+const EMBEDS_MAX = 500;
+const HREF_MAX = 2_048;
+const LINK_RAW_TEXT_MAX = 2_000;
+const STRUCTURED_TEXT_RAW_MAX = 20_000;
 
 // ─── Petits outils ───────────────────────────────────────────────────────────
 
@@ -82,9 +91,9 @@ const asRecord = (value: unknown): Record<string, unknown> | null => (value !== 
 /** Chaîne des données structurées → texte : certains outils y laissent des entités HTML ou des balises. */
 function plainText(value: unknown, max: number): string {
   if (typeof value !== "string" && typeof value !== "number") return "";
-  const raw = String(value);
-  // Balises remplacées par des espaces, puis entités décodées par l'analyseur HTML
-  return cleanLineMax(/[&<]/.test(raw) ? load(raw.replace(/<[^>]{0,200}>/g, " ")).root().text() : raw, max);
+  const raw = String(value).slice(0, STRUCTURED_TEXT_RAW_MAX);
+  // Balises remplacées par des espaces, puis entités décodées
+  return cleanLineMax(/[&<]/.test(raw) ? decodeEntities(raw.replace(/<[^>]{0,200}>/g, " ")) : raw, max);
 }
 
 function unique<T>(values: readonly T[], keyOf: (value: T) => string): T[] {
@@ -347,13 +356,14 @@ export function readJsonLd($: CheerioAPI, pageUrl: string): { entities: Structur
     else if (typesOf(node).includes("WebSite") && websiteName === undefined) websiteName = plainText(asList(node.name)[0], NAME_MAX) || undefined;
     for (const key of NESTED_ENTITY_KEYS) if (node[key] !== undefined) visit(node[key], depth + 1);
   };
-  for (const element of $("script[type='application/ld+json' i]").toArray()) {
-    const raw = $(element)
-      .text()
+  for (const element of $("script[type='application/ld+json' i]").toArray().slice(0, JSON_LD_BLOCKS_MAX)) {
+    const text = textOf(element, JSON_LD_MAX + 1);
+    if (text.length > JSON_LD_MAX) continue;
+    const raw = text
       .trim()
       .replace(/^(?:\/\/\s*)?<!\[CDATA\[|(?:\/\/\s*)?\]\]>$/g, "")
       .replace(/^<!--|-->$/g, "");
-    if (raw === "" || raw.length > JSON_LD_MAX) continue;
+    if (raw === "") continue;
     try {
       visit(JSON.parse(raw), 0);
     } catch {
@@ -426,8 +436,10 @@ function readLinks($: CheerioAPI, pageUrl: string): { phones: string[]; emails: 
     if (clean) bookingLinks.push({ url: clean, platform });
   };
 
-  for (const element of $("a[href]").toArray()) {
-    const href = (element.attribs.href ?? "").trim();
+  for (const element of $("a[href]").toArray().slice(0, ANCHORS_MAX)) {
+    const rawHref = element.attribs.href ?? "";
+    if (rawHref.length > HREF_MAX) continue;
+    const href = rawHref.trim();
     if (/^tel:/i.test(href)) {
       const phone = displayPhone(href.replace(/^tel:(?:\/\/)?/i, ""));
       if (phone) phones.push(phone);
@@ -443,12 +455,15 @@ function readLinks($: CheerioAPI, pageUrl: string): { phones: string[]; emails: 
     const profile = socialProfileOf(url.href);
     if (profile) social.push(profile);
     // Libellé du lien : son texte, sinon son intitulé accessible ou le texte de remplacement de son image
-    const label = cleanLine($(element).text()) || element.attribs["aria-label"] || element.attribs.title || $(element).find("img[alt]").first().attr("alt") || "";
+    const label =
+      cleanLine(textOf(element, LINK_RAW_TEXT_MAX)) || element.attribs["aria-label"] || element.attribs.title || firstDescendant(element, (child) => child.name === "img" && child.attribs.alt !== undefined)?.attribs.alt || "";
     addBooking(url, label);
   }
   // Agendas intégrés : cadre d'une plateforme connue, bloc Calendly
-  for (const element of $("iframe[src], [data-url]").toArray()) {
-    const url = absoluteUrl(element.attribs.src ?? element.attribs["data-url"], pageUrl);
+  for (const element of $("iframe[src], [data-url]").toArray().slice(0, EMBEDS_MAX)) {
+    const target = element.attribs.src ?? element.attribs["data-url"] ?? "";
+    if (target.length > HREF_MAX) continue;
+    const url = absoluteUrl(target, pageUrl);
     if (url && bookingPlatformOf(url.href) !== null) addBooking(url, "");
   }
   return { phones, emails, bookingLinks, social };
@@ -476,7 +491,7 @@ export function detectTags($: CheerioAPI, html: string): ExternalSiteTags {
 
   const scripts = $("script").toArray();
   const sources = scripts.map((script) => script.attribs.src ?? "");
-  if (sources.some((src) => CONSENT_BANNER.test(src)) || scripts.some((script) => !script.attribs.src && CONSENT_BANNER.test($(script).text().slice(0, 20_000)))) tags.consentBanner = true;
+  if (sources.some((src) => CONSENT_BANNER.test(src)) || scripts.some((script) => !script.attribs.src && CONSENT_BANNER.test(textOf(script, 20_000)))) tags.consentBanner = true;
   // Le code de mesure du studio : un script servi par `EXTERNAL_MEASURE_PATH`, avec sa clé publique
   if (sources.some((src) => src.includes(`${EXTERNAL_MEASURE_PATH}?k=`))) tags.measureSnippet = true;
   return tags;

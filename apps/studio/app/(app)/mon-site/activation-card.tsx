@@ -56,13 +56,16 @@ export function ActivationCard({
     focusTitle.current = opts.switches === true;
     startTransition(async () => {
       const result = await action();
-      if (result.error) {
-        focusTitle.current = false;
-        setFailure(result.error);
-        opts.onError?.();
-        return;
-      }
-      setNotice(opts.done ?? null);
+      // Suite marquée comme transition elle aussi : le message arrive dans le même rendu que l'écran relu
+      startTransition(() => {
+        if (result.error) {
+          focusTitle.current = false;
+          setFailure(result.error);
+          opts.onError?.();
+          return;
+        }
+        setNotice(opts.done ?? null);
+      });
     });
   }
 

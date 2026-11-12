@@ -59,18 +59,45 @@ function hasChallengeHeader(header: ResponseView["header"]): boolean {
 
 function hasChallengeMarkup(body: string): boolean {
   const start = body.slice(0, 64 * 1024);
-  const title = /<title[^>]*>([^<]{0,200})/i.exec(start)?.[1] ?? "";
+  const title = /<title[^>]{0,200}>([^<]{0,200})/i.exec(start)?.[1] ?? "";
   return CHALLENGE_TITLE.test(title) || CHALLENGE_MARKERS.some((marker) => marker.test(start));
 }
 
-/** Texte hors balises, scripts et styles, grossièrement : sert seulement à juger si la page est presque vide. */
+/** Une page d'attente est petite : au-delà de cette taille, la page n'est pas mesurée et passe pour une vraie page. */
+const INTERSTITIAL_SIZE_MAX = 256 * 1024;
+const RAW_BLOCK_START = /^<(script|style|noscript|template)\b/i;
+const RAW_BLOCK_ENDS: Record<string, RegExp> = { script: /<\/script\s*>/gi, style: /<\/style\s*>/gi, noscript: /<\/noscript\s*>/gi, template: /<\/template\s*>/gi };
+
+/**
+ * Texte hors balises, scripts et styles, grossièrement : sert seulement à
+ * juger si la page est presque vide. Un seul passage, quoi que contienne la
+ * page (un bloc jamais refermé emporte la suite, qui n'est pas du texte).
+ */
 function roughTextLength(body: string): number {
-  return body
-    .slice(0, 256 * 1024)
-    .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim().length;
+  if (body.length > INTERSTITIAL_SIZE_MAX) return Number.POSITIVE_INFINITY;
+  let text = "";
+  let at = 0;
+  while (at < body.length) {
+    const open = body.indexOf("<", at);
+    if (open === -1) {
+      text += body.slice(at);
+      break;
+    }
+    text += `${body.slice(at, open)} `;
+    const block = RAW_BLOCK_START.exec(body.slice(open, open + 12))?.[1]?.toLowerCase();
+    const end = block ? RAW_BLOCK_ENDS[block] : undefined;
+    if (end) {
+      end.lastIndex = open;
+      const found = end.exec(body);
+      if (!found) break;
+      at = found.index + found[0].length;
+    } else {
+      const close = body.indexOf(">", open + 1);
+      if (close === -1) break;
+      at = close + 1;
+    }
+  }
+  return text.replace(/\s+/g, " ").trim().length;
 }
 
 /**

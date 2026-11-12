@@ -43,7 +43,7 @@ const NO_ANALYSIS = "Lancez d'abord une analyse depuis l'onglet Diagnostic.";
 const ANALYSIS_FAILED = "L'analyse a échoué — réessayez dans un instant.";
 const ANALYSIS_COUNTED = "Cette analyse est décomptée de votre quota mensuel.";
 const OWN_SITE_TRACKING =
-  "Vos annonces mènent désormais à votre propre site : ce réglage n'agit que sur votre site Harmony. Suivez le pas-à-pas de cet onglet pour installer le Pixel sur votre site.";
+  "Vos outils s'appuient désormais sur votre propre site : ce réglage n'agit que sur votre site Harmony. Suivez le pas-à-pas de cet onglet pour installer le Pixel sur votre site.";
 
 /** Message du service (déjà en français) terminé par une ponctuation, sinon le repli. */
 function sentence(message: string, fallback: string): string {

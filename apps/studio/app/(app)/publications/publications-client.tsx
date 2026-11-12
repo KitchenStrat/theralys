@@ -156,7 +156,7 @@ function OwnSiteBanner({ ownSite }: { ownSite: OwnSiteNotice }) {
         ? "Vos articles sont toujours rédigés ici et paraissent sur le blog de votre site Harmony, masqué des moteurs de recherche tant que vos outils s'appuient sur votre propre site."
         : "Vos articles sont toujours rédigés ici et paraissent sur le blog de votre site Harmony."}{" "}
       Pour les publier {ownSite.hostedHidden ? "" : "aussi "}sur <strong className="font-semibold text-ink-900">{ownSite.address}</strong>,
-      ouvrez un article et choisissez « Copier l&apos;article » : il se colle tel quel dans l&apos;éditeur de votre site.
+      ouvrez un article et choisissez « Copier l&apos;article », puis collez-le dans l&apos;éditeur de votre site.
     </p>
   );
 }

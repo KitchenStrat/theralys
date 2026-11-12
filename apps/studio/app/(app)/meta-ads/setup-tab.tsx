@@ -79,9 +79,9 @@ export function SetupTab({
             title="Pixel Meta sur votre site"
             intro={
               <>
-                Vos annonces mènent à votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>). Harmony n&apos;héberge pas ce
-                site et ne peut rien y installer : le Pixel s&apos;y pose directement, par vous ou par la personne qui s&apos;en occupe (étape 2 du tuto
-                ci-dessus).
+                Vos outils s&apos;appuient sur votre propre site (<strong className="text-ink-700">{externalTracking.address}</strong>), que Harmony
+                n&apos;héberge pas : nous ne pouvons rien y installer. Le Pixel s&apos;y pose directement, par vous ou par la personne qui s&apos;en occupe
+                (étape 2 du tuto ci-dessus).
               </>
             }
             findings={metaPixelFindings(externalTracking)}

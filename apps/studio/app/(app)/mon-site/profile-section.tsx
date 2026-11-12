@@ -93,11 +93,11 @@ function RubricBlock({
     setFailure(null);
     startTransition(async () => {
       const result = await restoreExternalRubric(rubric);
-      if (result.error) {
-        setFailure(result.error);
-        return;
-      }
-      close({ notice: pasted ? "Rubrique rétablie telle qu'elle a été lue dans votre texte." : "Rubrique rétablie telle qu'elle a été lue sur votre site." });
+      // Suite marquée comme transition elle aussi : la confirmation se referme dans le même rendu que le profil relu
+      startTransition(() => {
+        if (result.error) setFailure(result.error);
+        else close({ notice: pasted ? "Rubrique rétablie telle qu'elle a été lue dans votre texte." : "Rubrique rétablie telle qu'elle a été lue sur votre site." });
+      });
     });
   }
 

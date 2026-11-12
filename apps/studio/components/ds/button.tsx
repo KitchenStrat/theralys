@@ -7,14 +7,19 @@ import { Spinner } from "./spinner";
 export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger" | "inverse" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
+// `max-w-full` et pas de `whitespace-nowrap` : un libellé garde sa ligne tant qu'il tient, et passe à la
+// ligne plutôt que de faire déborder la page quand l'écran est trop étroit (320 px, libellés français).
 const BASE =
-  "group/btn relative isolate inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap select-none ds-press disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:opacity-55";
+  "group/btn relative isolate inline-flex max-w-full shrink-0 items-center justify-center gap-2 text-center font-semibold select-none ds-press disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:opacity-55";
 
-/** 44 px de haut par défaut ; `sm` (36 px) remonte à 44 px sur écran tactile. */
+/**
+ * 44 px de haut par défaut ; `sm` (36 px) remonte à 44 px sur écran tactile. Le rayon vaut la
+ * demi-hauteur : une pilule sur une ligne, un rectangle arrondi si le libellé en prend deux.
+ */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-4 text-sm pointer-coarse:min-h-11",
-  md: "min-h-11 px-5 text-ds-body",
-  lg: "min-h-12 px-6 text-base",
+  sm: "min-h-9 rounded-[1.125rem] px-4 py-1.5 text-sm pointer-coarse:min-h-11 pointer-coarse:rounded-[1.375rem]",
+  md: "min-h-11 rounded-[1.375rem] px-5 py-2 text-ds-body",
+  lg: "min-h-12 rounded-3xl px-6 py-2.5 text-base",
 };
 
 const VARIANTS: Record<ButtonVariant, string> = {

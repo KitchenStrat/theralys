@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { Card, Spinner } from "@theralys/ui";
 
@@ -16,7 +16,7 @@ const STEPS = ["Lecture de vos pages", "Compréhension de votre activité", "Pr�
 const STEP_STARTS_S = [0, 15, 35] as const;
 /** Au-delà, la lecture dure plus que d'habitude : l'écran le dit. */
 const LONG_AFTER_S = 75;
-/** La page se relit à cet intervalle jusqu'à la fin de la lecture. */
+/** Délai entre deux relectures de la page, jusqu'à la fin de la lecture. */
 const REFRESH_MS = 3000;
 
 /**
@@ -29,19 +29,24 @@ export function ReadingPanel({ address, hasPrevious }: { address: string; /** Un
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [long, setLong] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
 
+  // La page se relit toutes les 3 secondes, une relecture à la fois : la suivante n'est programmée qu'une fois la
+  // précédente arrivée. Lancées à intervalle fixe, les relectures s'empileraient dès que le serveur répond
+  // lentement, et l'écran attendrait la dernière de la file pour montrer le résultat.
   useEffect(() => {
+    if (refreshing) return;
     // Onglet en arrière-plan : inutile d'interroger le serveur, la page se relit au retour
     const refresh = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState === "visible") startRefresh(() => router.refresh());
     };
-    const timer = setInterval(refresh, REFRESH_MS);
+    const timer = setTimeout(refresh, REFRESH_MS);
     document.addEventListener("visibilitychange", refresh);
     return () => {
-      clearInterval(timer);
+      clearTimeout(timer);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [router]);
+  }, [refreshing, router]);
 
   useEffect(() => {
     const timers = [

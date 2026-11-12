@@ -19,7 +19,8 @@ import {
 import { activeExternalSite } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { getSite } from "@/lib/data";
-import { RUBRIC_IDS, applyRubricCorrection, restoreRubric } from "@/lib/external-site/rubrics";
+import { parseRubricDraft } from "@/lib/external-site/draft-schema";
+import { RUBRIC_IDS, applyRubricCorrection, checkRubricDraft, restoreRubric } from "@/lib/external-site/rubrics";
 
 /**
  * Actions de l'écran « Mon site » (site internet du client, cf.
@@ -153,23 +154,41 @@ export async function submitExternalSitePaste(input: unknown): Promise<MonSiteRe
 
 // ─── Corrections du profil ───────────────────────────────────────────────────
 
-const correctionSchema = z.object({ rubric: z.enum(RUBRIC_IDS), value: z.unknown() });
+const correctionSchema = z.object({ rubric: z.enum(RUBRIC_IDS), draft: z.unknown() });
+
+const FORM_INVALID = "Vérifiez les champs signalés, puis enregistrez de nouveau.";
+
+/** `fieldErrors` : erreurs par champ du formulaire (clés de `checkRubricDraft`), quand la saisie est refusée. */
+export type CorrectionResult = MonSiteResult & { fieldErrors?: Record<string, string> };
 
 /**
- * Enregistre la correction d'une rubrique. Les corrections complètes sont
- * recomposées ici, à partir de celles qui sont enregistrées à cet instant
- * (`applyRubricCorrection`) : une rubrique corrigée dans un autre onglet
- * n'est pas perdue. Le service nettoie puis enregistre l'ensemble.
+ * Enregistre la correction d'une rubrique à partir de son formulaire. Le
+ * contrôle fait dans le navigateur est refait ici, où il fait foi : ce qu'il
+ * accepte est exactement ce que le service gardera (une saisie n'est jamais
+ * écartée en silence), ce qu'il refuse revient avec ses erreurs par champ.
+ * Les corrections complètes sont recomposées à partir de celles qui sont
+ * enregistrées à cet instant (`applyRubricCorrection`) : une rubrique
+ * corrigée dans un autre onglet n'est pas perdue.
  */
-export async function saveExternalCorrection(input: unknown): Promise<MonSiteResult> {
+export async function saveExternalCorrection(input: unknown): Promise<CorrectionResult> {
   const parsed = correctionSchema.safeParse(input);
-  return run("correction", async (context) => {
+  let fieldErrors: Record<string, string> | undefined;
+  const result = await run("correction", async (context) => {
     if (!parsed.success) return refused("unavailable", INVALID);
+    const { rubric } = parsed.data;
+    const draft = parseRubricDraft(rubric, parsed.data.draft);
+    if (!draft) return refused("unavailable", INVALID);
     const current = await connectedSite(context);
     if ("refusal" in current) return current.refusal;
-    const { url, extracted, overrides } = current.view;
-    return saveExternalOverrides(context.db, context.site.id, applyRubricCorrection({ url, extracted, overrides }, parsed.data.rubric, parsed.data.value));
+    const { url, extracted, overrides, profile } = current.view;
+    const check = checkRubricDraft(rubric, draft, { siteUrl: url, profile });
+    if (!check.ok) {
+      fieldErrors = check.errors;
+      return refused("text", FORM_INVALID);
+    }
+    return saveExternalOverrides(context.db, context.site.id, applyRubricCorrection({ url, extracted, overrides }, rubric, check.value));
   });
+  return fieldErrors ? { ...result, fieldErrors } : result;
 }
 
 /** Rétablit une rubrique telle qu'elle a été lue sur le site : sa correction est retirée, les autres restent. */

@@ -174,8 +174,8 @@ export function ArticleEditor({
           <div className="mt-4 rounded-2xl bg-primary-50 p-4">
             <h2 className="text-sm font-semibold text-ink-900">Publier sur votre propre site</h2>
             <p className="mt-1 text-xs text-ink-700">
-              Cet article paraît sur le blog de votre site Harmony. Pour le publier sur votre propre site, copiez-le puis
-              collez-le dans l&apos;éditeur de votre site ; son image se télécharge à part.
+              Cet article paraît sur le blog de votre site Harmony. Pour le publier sur votre propre site, copiez-le, puis
+              collez-le dans l&apos;éditeur de votre site.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={exporter.copy} disabled={exporter.copying}>

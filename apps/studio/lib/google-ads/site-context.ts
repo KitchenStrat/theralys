@@ -20,7 +20,9 @@ import { publicSiteUrl, siteUrl } from "../data";
 import type { AdsSiteSources } from "./analysis-site";
 import { externalSiteTracking, type ExternalSiteTracking } from "./external-tracking";
 
+/** Ce que les sections publicitaires savent des sites d'un praticien au moment de l'affichage. */
 export type AdsSiteContext = {
+  /** Le site Harmony et, s'il est la référence, le site du client : adresse et pages d'atterrissage de chacun */
   sources: AdsSiteSources;
   /** Site du client quand il est la référence aujourd'hui : relevé de sa dernière lecture ; `null` : les outils s'appuient sur le site Harmony */
   externalTracking: ExternalSiteTracking | null;

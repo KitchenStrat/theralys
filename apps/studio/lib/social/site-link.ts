@@ -17,6 +17,11 @@
 
 import { activeExternalSite, bioLinkFor, referenceSiteUrl, type SiteLinkOptions, type SiteTheme } from "@theralys/shared";
 
+/**
+ * Lien vers le site de référence, pour les réseaux sociaux : l'adresse et la
+ * façon de la composer vont ensemble, pour qu'aucun appelant ne mette `src`
+ * sur le site du client ni ne l'oublie sur le site hébergé.
+ */
 export type SocialSiteLink = {
   /** Adresse de référence, avec protocole, sans barre finale : site du client s'il est la référence, sinon site hébergé */
   url: string;
@@ -37,6 +42,7 @@ export function linkOptionsOf(link: SocialSiteLink): SiteLinkOptions {
   return { sourceParam: link.sourceParam };
 }
 
+/** Liens proposés par la carte « Votre lien de bio ». */
 export type BioLinks = {
   /** Lien montré et copié en premier : celui d'Instagram, ou le lien unique */
   main: string;

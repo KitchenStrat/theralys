@@ -76,7 +76,7 @@ export function ExternalTrackingCard({
       </ul>
       <p className="mt-2 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
         {REREAD_REMINDER}{" "}
-        <Link href={MON_SITE_HREF} className={linkClass}>
+        <Link href={MON_SITE_HREF} className={clsx(linkClass, "whitespace-nowrap")}>
           Ouvrir Mon site →
         </Link>
       </p>
@@ -115,25 +115,28 @@ export function ExternalResultsCard({
       <h3 className="mt-4 text-sm font-semibold text-ink-900">Où regarder</h3>
       <ul className="mt-2 space-y-3 text-sm text-ink-700">
         <li className="rounded-2xl bg-cream-50 p-3">
-          {account}{" "}
-          <a href={accountLink.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
-            {accountLink.label} ↗<span className="sr-only"> (nouvel onglet)</span>
-          </a>
+          <p>{account}</p>
+          <p className="mt-1">
+            <a href={accountLink.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+              {accountLink.label} ↗<span className="sr-only"> (nouvel onglet)</span>
+            </a>
+          </p>
         </li>
         <li className="rounded-2xl bg-cream-50 p-3">
-          {EXTERNAL_RESULTS.site}{" "}
-          <Link href="/" className={linkClass}>
-            Ouvrir l&apos;accueil →
-          </Link>
-          {measureSnippet ? null : (
-            <>
-              {" "}
-              {EXTERNAL_RESULTS.measureMissing}{" "}
+          <p>
+            {EXTERNAL_RESULTS.site}
+            {measureSnippet ? null : ` ${EXTERNAL_RESULTS.measureMissing}`}
+          </p>
+          <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            <Link href="/" className={linkClass}>
+              Ouvrir l&apos;accueil →
+            </Link>
+            {measureSnippet ? null : (
               <Link href={MON_SITE_HREF} className={linkClass}>
                 Ouvrir Mon site →
               </Link>
-            </>
-          )}
+            )}
+          </p>
         </li>
       </ul>
     </Card>

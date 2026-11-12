@@ -12,6 +12,7 @@ import { ConnectForm } from "./connect-form";
 import { HostedSiteCard, type HostedSiteRole } from "./hosted-site-card";
 import { MeasureCard } from "./measure-card";
 import { ProfileSection } from "./profile-section";
+import { ReadAnnouncer, type ReadScreenState } from "./read-announcer";
 import { ReadErrorPanel } from "./read-error-panel";
 import { ReadingPanel } from "./reading-panel";
 import { SiteSummary } from "./site-summary";
@@ -39,7 +40,7 @@ export default async function MonSitePage() {
 
   if (!state.available) {
     return (
-      <Screen>
+      <Screen state="none">
         <Card className="p-10 text-center" data-testid="mon-site-unavailable">
           <p className="text-base font-medium text-ink-900">Cette section est en cours d&apos;activation</p>
           <p className="mt-1 text-sm text-ink-700">Revenez dans quelques minutes.</p>
@@ -54,7 +55,7 @@ export default async function MonSitePage() {
 
   if (!view) {
     return (
-      <Screen>
+      <Screen state="none">
         <HostedSiteCard url={hostedUrl} role="reference" />
         <section aria-labelledby="connect-title" data-testid="connect-card">
           <Card className="p-6 md:p-7">
@@ -78,7 +79,7 @@ export default async function MonSitePage() {
 
   if (view.status === "reading") {
     return (
-      <Screen>
+      <Screen state="reading">
         <ReadingPanel address={siteAddressLabel(view.url)} hasPrevious={view.readAt !== null} />
         <HostedSiteCard url={hostedUrl} role={hostedRole} />
       </Screen>
@@ -87,7 +88,7 @@ export default async function MonSitePage() {
 
   if (view.status === "error") {
     return (
-      <Screen>
+      <Screen state="error">
         <ReadErrorPanel url={view.url} error={view.error ?? "internal"} reads={view.reads} ownHosts={ownHosts} />
         <HostedSiteCard url={hostedUrl} role={hostedRole} />
       </Screen>
@@ -96,7 +97,7 @@ export default async function MonSitePage() {
 
   const measure = measureState(view.measure);
   return (
-    <Screen>
+    <Screen state={view.error ? "kept" : "ready"}>
       <SiteSummary
         url={view.url}
         source={view.source}
@@ -122,12 +123,13 @@ export default async function MonSitePage() {
   );
 }
 
-function Screen({ children }: { children: ReactNode }) {
+function Screen({ state, children }: { state: ReadScreenState; children: ReactNode }) {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
         <h1 className="text-4xl font-bold">Mon site</h1>
         <p className="mt-1 text-base text-ink-700">Le site sur lequel s&apos;appuient vos outils : contenus, liens et statistiques.</p>
+        <ReadAnnouncer state={state} />
       </header>
       {children}
     </div>

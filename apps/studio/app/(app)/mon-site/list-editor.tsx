@@ -28,6 +28,7 @@ export function ListEditor<T extends { uid: string }>({
   addLabel,
   maxLabel,
   itemLabel,
+  showItemLabel = true,
   blank,
   fieldId,
   disabled,
@@ -45,6 +46,8 @@ export function ListEditor<T extends { uid: string }>({
   maxLabel: string;
   /** Nom d'une ligne, pour son groupe et son bouton « Retirer » : « Question 2 » */
   itemLabel: (index: number) => string;
+  /** Afficher ce nom en tête de ligne (inutile quand le libellé du champ le dit déjà : « Paragraphe 2 ») */
+  showItemLabel?: boolean;
   blank: () => T;
   /** Identifiant du premier champ d'une ligne */
   fieldId: (item: T) => string;
@@ -81,12 +84,20 @@ export function ListEditor<T extends { uid: string }>({
           {items.map((item, index) => (
             <li key={item.uid}>
               <div role="group" aria-label={itemLabel(index)} className="rounded-2xl border border-cream-300 bg-cream-50 p-3 sm:p-4">
+                {showItemLabel ? (
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p aria-hidden className="text-sm font-semibold text-ink-900">
+                      {itemLabel(index)}
+                    </p>
+                    <RemoveButton label={itemLabel(index)} onClick={() => remove(item.uid)} />
+                  </div>
+                ) : null}
                 <div className="space-y-3">{children(item, index, (next) => onChange(items.map((current) => (current.uid === item.uid ? next : current))))}</div>
-                <div className="mt-2 flex justify-end">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(item.uid)} aria-label={`Retirer : ${itemLabel(index)}`}>
-                    Retirer
-                  </Button>
-                </div>
+                {showItemLabel ? null : (
+                  <div className="mt-2 flex justify-end">
+                    <RemoveButton label={itemLabel(index)} onClick={() => remove(item.uid)} />
+                  </div>
+                )}
               </div>
             </li>
           ))}
@@ -102,5 +113,13 @@ export function ListEditor<T extends { uid: string }>({
         )}
       </div>
     </fieldset>
+  );
+}
+
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" size="sm" onClick={onClick} aria-label={`Retirer : ${label}`}>
+      Retirer
+    </Button>
   );
 }
