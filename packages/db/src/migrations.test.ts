@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0007_meta_library puis 0008_api_usage, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0008_api_usage puis 0009_external_sites, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -62,6 +62,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0006_meta_ads",
       "0007_meta_library",
       "0008_api_usage",
+      "0009_external_sites",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -238,5 +239,34 @@ describe("0008_api_usage : registre des appels API et reprise de l'historique", 
     for (const kind of ["reply_ai", "post_regen", "meta_analysis", "meta_regen", "meta_media_pending", "ads_plan", "sync_attempt"]) {
       expect(backfill, kind).not.toContain(`'${kind}'`);
     }
+  });
+});
+
+describe("0009_external_sites : site internet du client et origine des visites", () => {
+  const statements = statementsOf("0009_external_sites");
+
+  it("table, clé étrangère gardée (site supprimé → ligne supprimée), deux index uniques, colonne origin — rien d'autre", () => {
+    expect(statements).toHaveLength(5);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "external_sites"'));
+    expect(table).toBeDefined();
+    for (const column of [
+      '"site_id" uuid NOT NULL',
+      '"url" text NOT NULL',
+      `"status" text DEFAULT 'reading' NOT NULL`,
+      `"source" text DEFAULT 'crawl' NOT NULL`,
+      `"pages" jsonb DEFAULT '[]'::jsonb NOT NULL`,
+      '"profile" jsonb',
+      '"overrides" jsonb',
+      '"measure_key" text NOT NULL',
+      '"measure_seen_at" timestamp with time zone',
+      '"consent_at" timestamp with time zone',
+    ]) {
+      expect(table, column).toContain(column);
+    }
+    expect(statements.some((s) => /ADD CONSTRAINT "external_sites_site_id_sites_id_fk".+ON DELETE cascade/s.test(s))).toBe(true);
+    // Une seule ligne par site, une clé de mesure par ligne
+    expect(statements.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "external_sites_site_id_unique" ON "external_sites"'))).toBe(true);
+    expect(statements.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "external_sites_measure_key_unique" ON "external_sites"'))).toBe(true);
+    expect(statements.some((s) => s === 'ALTER TABLE "analytics_events" ADD COLUMN IF NOT EXISTS "origin" text;')).toBe(true);
   });
 });

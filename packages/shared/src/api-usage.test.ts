@@ -47,8 +47,8 @@ describe("API_PROVIDERS", () => {
     expect(Object.keys(API_PROVIDERS).sort()).toEqual([...API_PROVIDER_IDS].sort());
     expect(new Set(API_PROVIDER_IDS).size).toBe(API_PROVIDER_IDS.length);
     for (const id of API_PROVIDER_IDS) expect(id).toMatch(/^[a-z][a-z0-9_]*$/);
-    // Les onze fournisseurs instrumentés
-    expect([...API_PROVIDER_IDS].sort()).toEqual(["anthropic", "dataforseo", "fal", "geo_api", "google_places", "meta_ad_library", "ovh", "pexels", "resend", "scrapecreators", "vercel"]);
+    // Les onze fournisseurs instrumentés, plus la lecture des sites des clients
+    expect([...API_PROVIDER_IDS].sort()).toEqual(["anthropic", "client_site", "dataforseo", "fal", "geo_api", "google_places", "meta_ad_library", "ovh", "pexels", "resend", "scrapecreators", "vercel"]);
   });
 
   it("libellé, rôle, unité et mode de facturation renseignés ; libellés distincts", () => {
@@ -69,7 +69,7 @@ describe("API_PROVIDERS", () => {
   it("fournisseurs gratuits : la phrase de facturation le dit d'emblée (« Gratuit », « Compris dans l'abonnement ») ; les payants annoncent un mode de prix", () => {
     const saysFree = (pricing: string) => /^(Gratuit|Compris dans l'abonnement)/.test(pricing);
     for (const id of API_PROVIDER_IDS) expect([id, saysFree(API_PROVIDERS[id].pricing)]).toEqual([id, API_PROVIDERS[id].free]);
-    expect(API_PROVIDER_IDS.filter((id) => API_PROVIDERS[id].free).sort()).toEqual(["geo_api", "meta_ad_library", "pexels", "resend", "vercel"]);
+    expect(API_PROVIDER_IDS.filter((id) => API_PROVIDERS[id].free).sort()).toEqual(["client_site", "geo_api", "meta_ad_library", "pexels", "resend", "vercel"]);
   });
 
   it("les prix cités dans les phrases sont ceux du barème (fal.ai, Google Places, ScrapeCreators)", () => {

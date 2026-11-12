@@ -15,6 +15,12 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type {
+  ExternalProfileOverrides,
+  ExternalSiteFacts,
+  ExternalSitePage,
+  ExternalSiteProfile,
+  ExternalSiteSource,
+  ExternalSiteStatus,
   GoogleAdsAnalysisStatus,
   GoogleAdsDiagnostic,
   GoogleAdsForecast,
@@ -290,10 +296,57 @@ export const analyticsEvents = pgTable(
     path: text("path").notNull().default("/"),
     /** Provenance (AnalyticsSource : instagram | facebook | linkedin | google | direct | other), null avant 0004 */
     source: text("source"),
+    /** Site mesuré : null = site hébergé, « external » = site du client (code de mesure, migration 0009) */
+    origin: text("origin"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("analytics_site_type_time_idx").on(t.siteId, t.type, t.occurredAt)],
 );
+
+// ─── Site internet du client (« site de référence ») ─────────────────────────
+
+/**
+ * Site du client, quand il a connecté le sien : une ligne par site. Ce qui a
+ * été lu (`pages`, `facts`), ce qui en a été compris (`profile`), ce que le
+ * praticien a corrigé (`overrides`, jamais écrasé par une relecture) et la clé
+ * publique du code de mesure. L'adresse retenue et l'interrupteur « les
+ * outils s'appuient sur ce site » vivent dans `sites.theme.externalSite`.
+ */
+export const externalSites = pgTable("external_sites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  siteId: uuid("site_id")
+    .notNull()
+    .unique()
+    .references(() => sites.id, { onDelete: "cascade" }),
+  /** Adresse d'accueil normalisée (normalizeExternalSiteUrl) */
+  url: text("url").notNull(),
+  status: text("status").$type<ExternalSiteStatus>().notNull().default("reading"),
+  /** Pages lues sur le site, ou texte collé par le praticien */
+  source: text("source").$type<ExternalSiteSource>().notNull().default("crawl"),
+  /** Code d'échec de la dernière lecture (ExternalReadError) et détail technique */
+  error: text("error"),
+  errorDetail: text("error_detail"),
+  /** Début de la lecture en cours (une lecture trop ancienne est tenue pour interrompue) */
+  readStartedAt: timestamp("read_started_at", { withTimezone: true }),
+  /** Dernière lecture aboutie */
+  readAt: timestamp("read_at", { withTimezone: true }),
+  /** Dernier contrôle de fraîcheur (relecture automatique) */
+  checkedAt: timestamp("checked_at", { withTimezone: true }),
+  pages: jsonb("pages").$type<ExternalSitePage[]>().notNull().default([]),
+  facts: jsonb("facts").$type<ExternalSiteFacts>(),
+  profile: jsonb("profile").$type<ExternalSiteProfile>(),
+  overrides: jsonb("overrides").$type<ExternalProfileOverrides>(),
+  /** Empreinte de l'ensemble des textes lus (détection de changement) */
+  contentHash: text("content_hash"),
+  /** Clé publique du code de mesure (EXTERNAL_MEASURE_KEY) */
+  measureKey: text("measure_key").notNull().unique(),
+  /** Première visite reçue du site : le code de mesure est installé */
+  measureSeenAt: timestamp("measure_seen_at", { withTimezone: true }),
+  /** « Ce site est le mien, j'autorise sa lecture » */
+  consentAt: timestamp("consent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * Journal des notifications envoyées par les jobs (e-mail hebdomadaire des
@@ -828,6 +881,8 @@ export type BlogArticle = typeof blogArticles.$inferSelect;
 export type BlogSettingsRow = typeof blogSettings.$inferSelect;
 export type EditorialCalendarEntry = typeof editorialCalendarEntries.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type ExternalSiteRow = typeof externalSites.$inferSelect;
+export type NewExternalSiteRow = typeof externalSites.$inferInsert;
 export type GoogleReview = typeof googleReviews.$inferSelect;
 export type SearchQueryStat = typeof searchQueryStats.$inferSelect;
 export type OnboardingTask = typeof onboardingTasks.$inferSelect;

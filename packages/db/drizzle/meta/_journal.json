@@ -64,6 +64,13 @@
       "when": 1794420000000,
       "tag": "0008_api_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794520000000,
+      "tag": "0009_external_sites",
+      "breakpoints": true
     }
   ]
 }

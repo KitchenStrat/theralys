@@ -353,6 +353,20 @@ export type SiteTracking = {
   googleAdsConversions?: GoogleAdsConversionLabels;
 };
 
+/**
+ * Site internet du client, quand il a déjà le sien (cf. `external-site.ts`).
+ * `active` : les outils s'appuient sur ce site plutôt que sur le site
+ * hébergé. Le reste (pages lues, profil, corrections) vit dans la table
+ * `external_sites`.
+ */
+export type ExternalSiteSetting = {
+  /** Adresse d'accueil normalisée : https://hôte[/chemin], sans barre finale */
+  url: string;
+  active: boolean;
+  /** Garder le site hébergé visible des moteurs de recherche (défaut : masqué tant que le site du client est la référence) */
+  keepHostedIndexed?: boolean;
+};
+
 /** Formats attendus des identifiants de suivi (validation studio + serveur). */
 export const TRACKING_ID_PATTERNS = {
   googleAnalyticsId: /^G-[A-Z0-9]{4,14}$/i,
@@ -497,6 +511,8 @@ export type SiteTheme = {
   footer?: SiteFooterSettings;
   /** Pages de spécialité en cours de génération (création depuis le studio). */
   generatingMotifs?: GeneratingMotif[];
+  /** Site internet du client, s'il a connecté le sien (cf. ExternalSiteSetting). JSONB — pas de migration. */
+  externalSite?: ExternalSiteSetting;
   preset: ThemePreset;
   fontPreset: FontPreset;
   /** Défauts (sites existants inclus) : naturel / rond / naturel */

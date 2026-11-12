@@ -13,7 +13,8 @@
     "./dataforseo/ads": "./src/dataforseo/ads.ts",
     "./meta": "./src/meta/index.ts",
     "./meta/media": "./src/meta/media.ts",
-    "./meta/geo": "./src/meta/geo.ts"
+    "./meta/geo": "./src/meta/geo.ts",
+    "./website": "./src/website/index.ts"
   },
   "scripts": {
     "lint": "eslint src",
@@ -22,9 +23,12 @@
   },
   "dependencies": {
     "@theralys/db": "workspace:*",
+    "@theralys/shared": "workspace:*",
+    "cheerio": "^1.2.0",
+    "robots-parser": "^3.0.1",
     "stripe": "^17.5.0",
-    "zod": "^3.24.1",
-    "@theralys/shared": "workspace:*"
+    "undici": "^8.12.4",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

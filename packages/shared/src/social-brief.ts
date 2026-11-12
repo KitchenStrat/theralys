@@ -140,6 +140,8 @@ export type SocialBriefInput = {
     title: string;
     metaDescription: string | null;
     sections: Section[];
+    /** Adresse publique de la page quand elle n'est pas servie par le site hébergé (site du client) */
+    href?: string;
   }[];
   articles: {
     id: string;
@@ -655,7 +657,7 @@ export function buildSocialBrief(input: SocialBriefInput): SocialBriefResult {
 
   // ── Pages de motifs ──
   const motifPages: SocialSiteBrief["motifPages"] = motifPagesRaw.slice(0, 6).map((page) => {
-    const id = ref("page", `page:${page.id}`, `Page « ${clip(page.title, 60)} »`, `${siteHref.replace(/\/+$/, "")}/motifs/${page.slug}`);
+    const id = ref("page", `page:${page.id}`, `Page « ${clip(page.title, 60)} »`, page.href ?? `${siteHref.replace(/\/+$/, "")}/motifs/${page.slug}`);
     const pageHero = section(page.sections, "hero");
     const rich = section(page.sections, "richText");
     const pageFaq = section(page.sections, "faq");

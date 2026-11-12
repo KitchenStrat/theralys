@@ -26,6 +26,7 @@ export const API_PROVIDER_IDS = [
   "resend",
   "ovh",
   "vercel",
+  "client_site",
 ] as const;
 export type ApiProviderId = (typeof API_PROVIDER_IDS)[number];
 
@@ -119,6 +120,13 @@ export const API_PROVIDERS: Record<ApiProviderId, ApiProviderInfo> = {
     pricing: "Compris dans l'abonnement Vercel.",
     free: true,
   },
+  client_site: {
+    label: "Sites des clients (lecture)",
+    role: "Lecture du site internet d'un client qui a connecté le sien",
+    unit: "pages",
+    pricing: "Gratuit (lecture directe des pages publiques).",
+    free: true,
+  },
 };
 
 export function isApiProviderId(value: unknown): value is ApiProviderId {
@@ -139,6 +147,7 @@ export const API_FEATURE_IDS = [
   "prospecting",
   "notifications",
   "domains",
+  "client_site",
 ] as const;
 export type ApiFeatureId = (typeof API_FEATURE_IDS)[number];
 
@@ -153,6 +162,7 @@ export const API_FEATURE_LABELS: Record<ApiFeatureId, string> = {
   prospecting: "Recherche d'établissements",
   notifications: "E-mails",
   domains: "Domaines",
+  client_site: "Site du client",
 };
 
 /** Libellé d'une fonctionnalité enregistrée ; « Non attribué » quand l'appel n'en portait pas (ou une valeur inconnue). */
