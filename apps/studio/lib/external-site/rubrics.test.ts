@@ -130,7 +130,7 @@ describe("bornes de saisie", () => {
       faq: many(LIST_MAX.faq, (i) => ({ question: text(FIELD_MAX.question, `question${i}`), answer: text(FIELD_MAX.answer, `reponse${i}`) })),
       contact: {
         address: text(FIELD_MAX.address, "adresse"),
-        phone: "+33 (0)5 55 01 02 03 04 05",
+        phone: "+33 (0)5 55 01 02 03 045",
         email: `${"a".repeat(FIELD_MAX.email - "@exemple.fr".length)}@exemple.fr`,
         hours: many(LIST_MAX.hours, (i) => ({ label: text(FIELD_MAX.hoursLabel, `jour${i}`), value: text(FIELD_MAX.hoursValue, `horaire${i}`) })),
         note: text(FIELD_MAX.note, "note"),
@@ -138,7 +138,7 @@ describe("bornes de saisie", () => {
       bookingUrl: "https://www.doctolib.fr/sophrologue/albi/demo",
       social: {},
     };
-    expect(full.contact.phone.length).toBeLessThanOrEqual(FIELD_MAX.phone);
+    expect(full.contact.phone).toHaveLength(FIELD_MAX.phone);
     expect(cleanExternalProfile(full, SITE)).toEqual(full);
   });
 
