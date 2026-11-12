@@ -121,8 +121,10 @@ export type SocialBriefInput = {
     type: "demo" | "client";
     theme: SiteTheme;
     bookingUrl: string | null;
-    /** siteUrl(site) — avec protocole */
+    /** Adresse publique de référence (site du client s'il est connecté, sinon site hébergé) — avec protocole */
     url: string;
+    /** Adresse du site hébergé, où vivent les articles du blog (défaut : `url`) */
+    hostedUrl?: string;
   };
   prospect: {
     firstName: string;
@@ -523,11 +525,13 @@ export function buildSocialBrief(input: SocialBriefInput): SocialBriefResult {
   const disabled = new Set(input.site.theme.disabledMotifs ?? []);
   const photos = photoCatalog();
   const refsById: Record<string, SocialSourceRef> = {};
-  const ref = (kind: SocialSourceRef["kind"], id: string, label: string, href?: string): string => {
-    refsById[id] = href ? { kind, id, label, href } : { kind, id, label };
+  const ref = (kind: SocialSourceRef["kind"], id: string, label: string, href?: string, publicHref?: string): string => {
+    refsById[id] = { kind, id, label, ...(href ? { href } : {}), ...(publicHref ? { publicHref } : {}) };
     return id;
   };
   const siteHref = input.site.url;
+  // Les articles du blog sont servis par le site hébergé, même quand le site du client est la référence
+  const blogHref = `${(input.site.hostedUrl ?? input.site.url).replace(/\/+$/, "")}/blog`;
 
   const voice: SocialVoice = input.voice ?? {
     ...DEFAULT_SOCIAL_VOICE,
@@ -695,7 +699,9 @@ export function buildSocialBrief(input: SocialBriefInput): SocialBriefResult {
     .sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
     .slice(0, 8)
     .map((a) => {
-      const id = ref("article", `article:${a.id}`, `Article « ${clip(a.title, 60)} »`, `/publications/${a.id}`);
+      // Lien montré au praticien : l'article dans le studio ; adresse publique seulement s'il est déjà en ligne
+      const online = a.status === "published" && (a.date === null || a.date.getTime() <= now.getTime());
+      const id = ref("article", `article:${a.id}`, `Article « ${clip(a.title, 60)} »`, `/publications/${a.id}`, online ? `${blogHref}/${a.slug}` : undefined);
       const outline = parseArticleOutline(a.content);
       const photoId = photos.add(a.imageUrl, "article", `Article « ${a.title} »`);
       const publishAt = a.date ? a.date.toISOString().slice(0, 10) : undefined;

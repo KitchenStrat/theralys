@@ -184,6 +184,8 @@ export type SocialSourceRef = {
   label: string;
   /** Site public ou /publications/<id> */
   href?: string;
+  /** Adresse publique de la source, quand `href` mène au studio (article déjà en ligne) : c'est elle qu'on donne à un lecteur */
+  publicHref?: string;
 };
 
 export type SocialPostContent = {

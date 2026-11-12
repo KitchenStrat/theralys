@@ -505,7 +505,7 @@ describe("buildSocialBrief — pages de motifs, articles, avis, photos", () => {
     expect(old.signs).toHaveLength(4);
     expect(old.exerciseSteps).toHaveLength(6);
     expect(old.faq).toHaveLength(3);
-    expect(refsById["article:a-old"]).toEqual({ kind: "article", id: "article:a-old", label: "Article « Dos noué au bureau : ce que la sophrologie peut changer »", href: "/publications/a-old" });
+    expect(refsById["article:a-old"]).toEqual({ kind: "article", id: "article:a-old", label: "Article « Dos noué au bureau : ce que la sophrologie peut changer »", href: "/publications/a-old", publicHref: "http://localhost:3000/claire-dupont-sophrologue-albi/blog/dos-noue" });
   });
 
   it("avis : jamais en démo", () => {
