@@ -7,6 +7,9 @@ import { Button, Card, CardHeader, NBSP } from "@/components/ds";
 import { bioLinksOf, type SocialSiteLink } from "@/lib/social/site-link";
 import { Disclosure, DownloadLink, ErrorNote } from "./social-ui";
 
+/** Sous 640 px, les boutons d'export empilés s'alignent à gauche : icône puis libellé, sur une ou deux lignes. */
+const STACKED_LINK_CLASS = "max-sm:justify-start max-sm:text-left";
+
 /**
  * Export du mois vers un planificateur (CSV : une ligne par contenu à venir,
  * non publié, et par réseau) ou un agenda (ICS : un événement par contenu du
@@ -22,12 +25,20 @@ export function ExportCard({ monthParam, count }: { monthParam: string; count: n
         title={<span id="export-titre">Exporter le mois</span>}
         description="Pour programmer vos contenus dans un planificateur, ou les retrouver dans votre agenda."
       />
-      {/* Étroit : deux boutons de même largeur, l'un sous l'autre (le premier libellé prend alors deux lignes) */}
+      {/* Étroit : deux boutons de même largeur, l'un sous l'autre, alignés à gauche (le premier libellé prend deux lignes) */}
       <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-        <DownloadLink href={href("csv")} icon={<FileSpreadsheet size={18} aria-hidden />}>
+        <DownloadLink
+          href={href("csv")}
+          icon={<FileSpreadsheet size={18} aria-hidden className="shrink-0" />}
+          className={STACKED_LINK_CLASS}
+        >
           Exporter le mois (CSV planificateur)
         </DownloadLink>
-        <DownloadLink href={href("ics")} icon={<CalendarPlus size={18} aria-hidden />}>
+        <DownloadLink
+          href={href("ics")}
+          icon={<CalendarPlus size={18} aria-hidden className="shrink-0" />}
+          className={STACKED_LINK_CLASS}
+        >
           Ajouter à mon agenda (ICS)
         </DownloadLink>
       </div>

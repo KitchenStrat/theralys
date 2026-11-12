@@ -83,6 +83,7 @@ export function ArticleEditor({
   const [zone, setZone] = useState<Zone>("texte");
 
   const notPublished = article.status !== "published";
+  const withdrawn = article.status === "withdrawn";
   // « Copier l'article » reprend ce qui est à l'écran, modifications en cours comprises
   const exporter = useArticleExport(() => ({ title, content }));
   // La marque de l'IA ne vaut que pour l'image enregistrée, pas pour une adresse que le praticien vient de coller
@@ -251,13 +252,17 @@ export function ArticleEditor({
         <div className="space-y-6 xl:sticky xl:top-6">
           {notPublished ? (
             <Card>
+              {/* Un article retiré n'est jamais publié d'office (seuls les articles planifiés le sont) : la phrase
+                  « sera publié automatiquement » serait fausse pour lui, d'où un intitulé et une phrase à part. */}
               <CardHeader
-                icon={CalendarClock}
-                title="Avant la publication"
+                icon={withdrawn ? EyeOff : CalendarClock}
+                title={withdrawn ? "Article retiré" : "Avant la publication"}
                 description={
-                  publicationMode === "auto"
-                    ? "Cet article sera publié automatiquement à la date prévue. Vous pouvez le replanifier, le publier maintenant ou le refuser."
-                    : "Publication manuelle : cet article ne sera mis en ligne que lorsque vous cliquerez sur « Publier maintenant »."
+                  withdrawn
+                    ? "Cet article est retiré : il n'est pas en ligne et ne sera pas publié automatiquement. « Publier maintenant » le met en ligne."
+                    : publicationMode === "auto"
+                      ? "Cet article sera publié automatiquement à la date prévue. Vous pouvez le replanifier, le publier maintenant ou le refuser."
+                      : "Publication manuelle : cet article ne sera mis en ligne que lorsque vous cliquerez sur « Publier maintenant »."
                 }
               />
               <div className="mt-5">

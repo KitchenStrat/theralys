@@ -583,7 +583,8 @@ function ReplyEditor({
               : "Lancez « Analyser les nouveaux avis » pour obtenir une réponse proposée, ou rédigez la vôtre ici."
         }
         aria-describedby={`${id}-count`}
-        className="mt-2 block w-full rounded-ds-sm border border-ds-ink-450 bg-white px-3.5 py-3 text-base text-ds-ink-900 placeholder:text-ds-ink-600"
+        // La zone suit la longueur de la réponse (là où le navigateur le permet) : on la lit en entier sans défiler dedans
+        className="mt-2 block max-h-96 min-h-32 w-full rounded-ds-sm border border-ds-ink-450 bg-white px-3.5 py-3 text-base text-ds-ink-900 field-sizing-content placeholder:text-ds-ink-600"
       />
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p

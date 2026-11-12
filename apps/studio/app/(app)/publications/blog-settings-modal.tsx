@@ -211,8 +211,10 @@ export function BlogSettingsModal({
               <ul className="mt-4 space-y-2.5">
                 {themes.map((theme, i) => (
                   <li key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-                    <span className="min-w-0 flex-[1_1_7rem] text-base break-words text-ds-ink-900">{theme.label}</span>
-                    <div className="flex shrink-0 items-center rounded-full bg-white p-0.5 inset-ring inset-ring-ds-ink-300">
+                    {/* Pas de `min-w-0` : le libellé ne descend jamais sous son mot le plus long. Faute de place,
+                        c'est le compteur qui passe à la ligne (calé à droite) : aucun mot n'est coupé en deux. */}
+                    <span className="max-w-full flex-[1_1_7rem] text-base break-words text-ds-ink-900">{theme.label}</span>
+                    <div className="ml-auto flex shrink-0 items-center rounded-full bg-white p-0.5 inset-ring inset-ring-ds-ink-300">
                       <button
                         type="button"
                         aria-label="Moins"
@@ -227,7 +229,7 @@ export function BlogSettingsModal({
                       >
                         <Minus size={18} aria-hidden />
                       </button>
-                      <span className="min-w-20 text-center text-ds-body font-semibold text-ds-ink-900 ds-tnum">
+                      <span className="min-w-18 text-center text-ds-body font-semibold text-ds-ink-900 ds-tnum">
                         {theme.perMonth} / mois
                       </span>
                       <button
