@@ -288,7 +288,7 @@ describe("plan de site", () => {
   it("parseSitemap : plan trop imbriqué ou trop touffu, adresse démesurée : rien, sans erreur ni attente", () => {
     const start = performance.now();
     expect(parseSitemap(`<urlset>${"<url>".repeat(100_000)}<loc>https://www.mon-cabinet.fr/</loc>`)).toEqual({ pages: [], sitemaps: [] });
-    expect(parseSitemap(`<urlset>${"<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(120_000)}</urlset>`)).toEqual({ pages: [], sitemaps: [] });
+    expect(parseSitemap(`<urlset>${"<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(60_000)}</urlset>`)).toEqual({ pages: [], sitemaps: [] });
     expect(parseSitemap(`<urlset><url><loc>https://www.mon-cabinet.fr/${"x".repeat(5_000)}</loc></url><url><loc>https://www.mon-cabinet.fr/ok</loc></url></urlset>`)).toEqual({ pages: ["https://www.mon-cabinet.fr/ok"], sitemaps: [] });
     // Sans élément racine : des milliers d'entrées à la racine du document
     expect(parseSitemap("<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(20_000)).pages).toHaveLength(500);

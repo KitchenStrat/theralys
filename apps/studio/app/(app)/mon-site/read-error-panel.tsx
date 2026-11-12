@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
 import { EXTERNAL_PASTE_FALLBACK_ERRORS, EXTERNAL_READ_ERRORS, type ExternalReadError } from "@theralys/shared";
 import { readsRemaining, readsRemainingLabel, siteAddressLabel } from "@/lib/external-site/format";
@@ -29,7 +29,14 @@ export function ReadErrorPanel({
   const [changing, setChanging] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const wasChanging = useRef(false);
   const { title, hint } = EXTERNAL_READ_ERRORS[error];
+
+  // Formulaire d'adresse refermé : le focus revient au bouton qui l'avait ouvert
+  useEffect(() => {
+    if (wasChanging.current && !changing) document.getElementById("change-address")?.focus();
+    wasChanging.current = changing;
+  }, [changing]);
   const canPaste = EXTERNAL_PASTE_FALLBACK_ERRORS.includes(error);
   const canRead = readsRemaining(reads) > 0;
 
@@ -81,7 +88,7 @@ export function ReadErrorPanel({
                 <Button type="button" variant={canPaste ? "secondary" : "primary"} disabled={pending || !canRead} onClick={() => act(rereadExternalSite)} data-testid="retry-read">
                   {pending ? <Spinner className={canPaste ? undefined : "text-white"} /> : null} Relancer la lecture
                 </Button>
-                <Button type="button" variant="secondary" disabled={pending} onClick={() => setChanging(true)} data-testid="change-address">
+                <Button id="change-address" type="button" variant="secondary" disabled={pending} onClick={() => setChanging(true)} data-testid="change-address">
                   Changer d&apos;adresse
                 </Button>
                 <Button type="button" variant="ghost" disabled={pending} onClick={() => act(disconnectExternalSiteAction)} data-testid="abandon-site">

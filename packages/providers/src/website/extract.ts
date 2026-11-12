@@ -168,6 +168,12 @@ function collectBlocks(roots: readonly DomNode[], dropped: Dropped): { blocks: s
   const headings: string[] = [];
   let hasMainTitle = false;
   let buffer = "";
+  /**
+   * Le tampon finit-il par une espace ? Tenu à jour à chaque ajout : relire
+   * la fin du tampon obligerait le moteur à le recopier à chaque fois, et des
+   * milliers d'éléments à la suite coûteraient le carré de leur nombre.
+   */
+  let endsWithSpace = false;
   /** Un élément de liste est ouvert et son premier bloc de texte n'est pas encore sorti */
   let bullet = false;
 
@@ -177,14 +183,20 @@ function collectBlocks(roots: readonly DomNode[], dropped: Dropped): { blocks: s
   const flush = (): void => {
     const line = cleanLine(buffer);
     buffer = "";
+    endsWithSpace = false;
     if (line === "") return;
     push(line, bullet ? "- " : "");
     bullet = false;
   };
+  const append = (data: string): void => {
+    if (data === "") return;
+    buffer += data;
+    endsWithSpace = /\s/.test(data.charAt(data.length - 1));
+  };
 
   const walk = (node: DomNode, depth: number): void => {
     if (isTextNode(node)) {
-      buffer += node.data;
+      append(node.data);
       return;
     }
     if (!isElement(node) || depth > DEPTH_MAX || dropped.has(node)) return;
@@ -222,7 +234,7 @@ function collectBlocks(roots: readonly DomNode[], dropped: Dropped): { blocks: s
     for (const child of node.children) {
       if (isElement(child)) {
         // Deux éléments en ligne accolés (boutons, liens) sont séparés à l'affichage
-        if (previousWasElement && !BLOCK_TAGS.has(child.name) && buffer !== "" && !/\s$/.test(buffer)) buffer += " ";
+        if (previousWasElement && !BLOCK_TAGS.has(child.name) && buffer.length > 0 && !endsWithSpace) append(" ");
         previousWasElement = true;
       } else if (isTextNode(child) && child.data.trim() !== "") previousWasElement = false;
       walk(child, depth + 1);

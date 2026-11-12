@@ -28,8 +28,13 @@
 export const MARKUP_LIMITS = {
   /** Niveaux d'imbrication des balises */
   depth: 400,
-  /** Nœuds hors texte : balises, commentaires, déclarations */
-  nodes: 200_000,
+  /**
+   * Nœuds hors texte : balises, commentaires, déclarations. Une vraie page en
+   * compte quelques milliers, les plus longues quelques dizaines de milliers ;
+   * à cent mille, analyser la page et en extraire le texte prend déjà une à
+   * deux secondes de calcul.
+   */
+  nodes: 100_000,
 } as const;
 
 /** Ce que l'analyseur produira pour un document. */

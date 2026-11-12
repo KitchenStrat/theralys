@@ -25,7 +25,7 @@ export function ConnectForm({
   idPrefix: string;
   ownHosts: readonly string[];
   initialUrl?: string;
-  /** Présent : le formulaire est ouvert depuis un autre écran et peut être refermé */
+  /** Présent : le formulaire vient d'être ouvert par un bouton (le focus va à l'adresse) et peut être refermé */
   onCancel?: () => void;
 }) {
   const [url, setUrl] = useState(initialUrl);
@@ -38,6 +38,12 @@ export function ConnectForm({
   const formRef = useRef<HTMLFormElement>(null);
 
   const check = normalizeExternalSiteUrl(url, { ownHosts });
+
+  // Formulaire ouvert par un bouton : le focus va au champ de l'adresse
+  const opened = onCancel !== undefined;
+  useEffect(() => {
+    if (opened) formRef.current?.querySelector<HTMLElement>("input")?.focus();
+  }, [opened]);
 
   // Après un envoi refusé : le premier champ en erreur reçoit le focus
   useEffect(() => {

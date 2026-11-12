@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { getSite } from "@/lib/data";
 import { googleAccess } from "@/lib/google/access";
 import { ownedActiveGooglePost } from "@/lib/google/post-access";
+import { loadDeliveredGoogleContent } from "@/lib/google/posts";
 import { GOOGLE_POST_SIZE, googlePostTxt, renderableGooglePost } from "@/lib/google/render";
 import { buildZip, contentDisposition, downloadFilename, type ZipEntry } from "@/lib/social/render/bundle";
 import { renderSlideCached } from "@/lib/social/render/cache";
@@ -39,7 +40,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
   // Formule : un client repassé à une formule sans Fiche Google ne rend ni ne télécharge plus ses posts
-  if (!googleAccess(await getSite(session.siteId))) {
+  const site = await getSite(session.siteId);
+  if (!googleAccess(site)) {
     return NextResponse.json({ error: "La Fiche Google n'est pas incluse dans votre formule." }, { status: 403 });
   }
 
@@ -53,7 +55,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
 
   const name = (suffix: string, ext: string) =>
     downloadFilename({ scheduledFor: post.scheduledFor, topic: post.topic }, suffix, ext);
-  const text = Buffer.from(googlePostTxt(post.content), "utf8");
+  // Même adresse de bouton que dans la modale : jamais un chemin interne du studio (posts créés avant le correctif)
+  const text = Buffer.from(googlePostTxt(await loadDeliveredGoogleContent(site, post)), "utf8");
 
   if (kind === "text") {
     await markDownloaded(post.id);

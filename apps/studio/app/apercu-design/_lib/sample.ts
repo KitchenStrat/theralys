@@ -199,7 +199,7 @@ export const SECTION_SAMPLES: Record<Exclude<SectionKey, "accueil">, SectionSamp
     generationSteps: ["Lecture de votre site et de votre ton", "Plan de l'article", "Rédaction", "Choix de l'image", "Relecture"],
     generationDetail: "Partie 2 sur 4 : « Les gestes qui soulagent »",
     emptyTitle: "Aucun sujet proposé par vous ce mois-ci",
-    emptyText: "Une question que vos patients posent souvent ? Proposez-la : elle deviendra un article de votre blog.",
+    emptyText: "Une question que vos patients posent souvent ? Elle peut devenir le prochain article de votre blog.",
     emptyAction: "Proposer un sujet",
   },
   "fiche-google": {

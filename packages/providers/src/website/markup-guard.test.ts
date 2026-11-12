@@ -169,15 +169,17 @@ describe("bornes d'un document analysable", () => {
     }
   };
 
-  it("bornes : 400 niveaux, 200 000 nœuds hors texte", () => {
-    expect(MARKUP_LIMITS).toEqual({ depth: 400, nodes: 200_000 });
+  it("bornes : 400 niveaux, 100 000 nœuds hors texte", () => {
+    expect(MARKUP_LIMITS).toEqual({ depth: 400, nodes: 100_000 });
     expect(reasonOf("<div>".repeat(400))).toBeNull();
     expect(reasonOf("<div>".repeat(401))).toBe("depth");
-    expect(reasonOf("<br>".repeat(200_000))).toBeNull();
-    expect(reasonOf("<br>".repeat(200_001))).toBe("nodes");
-    expect(reasonOf("<!---->".repeat(200_001))).toBe("nodes");
+    expect(reasonOf("<br>".repeat(100_000))).toBeNull();
+    expect(reasonOf("<br>".repeat(100_001))).toBe("nodes");
+    expect(reasonOf("<!---->".repeat(100_001))).toBe("nodes");
+    expect(reasonOf(`<p>${"<!x>".repeat(50_000)}${"<?x?>".repeat(50_000)}`)).toBe("nodes");
     expect(reasonOf("<a>".repeat(401), true)).toBe("depth");
-    expect(reasonOf(`<urlset>${"<url><loc>https://a.fr/</loc></url>".repeat(60_000)}</urlset>`, true)).toBeNull();
+    expect(reasonOf(`<urlset>${"<url><loc>https://a.fr/</loc></url>".repeat(40_000)}</urlset>`, true)).toBeNull();
+    expect(reasonOf(`<urlset>${"<url><loc>https://a.fr/</loc></url>".repeat(50_000)}</urlset>`, true)).toBe("nodes");
   });
 
   it("la mesure s'arrête dès qu'une borne est dépassée", () => {

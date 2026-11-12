@@ -82,10 +82,14 @@ const EMBEDS_MAX = 500;
 const HREF_MAX = 2_048;
 const LINK_RAW_TEXT_MAX = 2_000;
 const STRUCTURED_TEXT_RAW_MAX = 20_000;
+const LIST_MAX = 50;
+const ENTITIES_MAX = 20;
+const FOUND_PER_PAGE_MAX = 50;
 
 // ─── Petits outils ───────────────────────────────────────────────────────────
 
-const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : value === undefined || value === null ? [] : [value]);
+/** Valeur ou liste de valeurs des données structurées → liste, bornée (une liste démesurée n'est pas lue en entier). */
+const asList = (value: unknown): unknown[] => (Array.isArray(value) ? (value.length > LIST_MAX ? value.slice(0, LIST_MAX) : value) : value === undefined || value === null ? [] : [value]);
 const asRecord = (value: unknown): Record<string, unknown> | null => (value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null);
 
 /** Chaîne des données structurées → texte : certains outils y laissent des entités HTML ou des balises. */
@@ -331,7 +335,7 @@ function readEntity(node: Record<string, unknown>, rank: 0 | 1 | 2, pageUrl: str
     emails: emails.filter((email): email is string => email !== undefined),
     ...(address ? { address } : {}),
     hours: openingHoursLabels(node.openingHoursSpecification, node.openingHours),
-    links: [...asList(node.sameAs), ...actions].filter((link): link is string => typeof link === "string"),
+    links: [...asList(node.sameAs), ...actions].filter((link): link is string => typeof link === "string" && link.length <= HREF_MAX),
     ...(logo ? { logo } : {}),
   };
 }
@@ -344,7 +348,7 @@ export function readJsonLd($: CheerioAPI, pageUrl: string): { entities: Structur
   const entities: StructuredEntity[] = [];
   let websiteName: string | undefined;
   const visit = (value: unknown, depth: number): void => {
-    if (depth > 4) return;
+    if (depth > 4 || entities.length >= ENTITIES_MAX) return;
     if (Array.isArray(value)) {
       for (const item of value.slice(0, 200)) visit(item, depth);
       return;
@@ -433,7 +437,7 @@ function readLinks($: CheerioAPI, pageUrl: string): { phones: string[]; emails: 
     const platform = bookingPlatformOf(url.href);
     if (platform === null && (!BOOKING_TEXT.test(foldText(label)) || socialProfileOf(url.href) !== null)) return;
     const clean = bookingUrl(url);
-    if (clean) bookingLinks.push({ url: clean, platform });
+    if (clean && bookingLinks.length < FOUND_PER_PAGE_MAX) bookingLinks.push({ url: clean, platform });
   };
 
   for (const element of $("a[href]").toArray().slice(0, ANCHORS_MAX)) {
@@ -442,18 +446,18 @@ function readLinks($: CheerioAPI, pageUrl: string): { phones: string[]; emails: 
     const href = rawHref.trim();
     if (/^tel:/i.test(href)) {
       const phone = displayPhone(href.replace(/^tel:(?:\/\/)?/i, ""));
-      if (phone) phones.push(phone);
+      if (phone && phones.length < FOUND_PER_PAGE_MAX) phones.push(phone);
       continue;
     }
     if (/^mailto:/i.test(href)) {
       const email = cleanEmail(href);
-      if (email) emails.push(email);
+      if (email && emails.length < FOUND_PER_PAGE_MAX) emails.push(email);
       continue;
     }
     const url = absoluteUrl(href, pageUrl);
     if (!url) continue;
     const profile = socialProfileOf(url.href);
-    if (profile) social.push(profile);
+    if (profile && social.length < FOUND_PER_PAGE_MAX) social.push(profile);
     // Libellé du lien : son texte, sinon son intitulé accessible ou le texte de remplacement de son image
     const label =
       cleanLine(textOf(element, LINK_RAW_TEXT_MAX)) || element.attribs["aria-label"] || element.attribs.title || firstDescendant(element, (child) => child.name === "img" && child.attribs.alt !== undefined)?.attribs.alt || "";

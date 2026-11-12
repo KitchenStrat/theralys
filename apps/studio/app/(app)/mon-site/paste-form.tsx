@@ -16,7 +16,16 @@ const count = (value: number): string => value.toLocaleString("fr-FR");
  * service (`EXTERNAL_SITE_LIMITS`), même confirmation « ce site est le mien ».
  * Le profil est préparé pendant l'envoi : l'attente est annoncée.
  */
-export function PasteForm({ idPrefix, onCancel }: { idPrefix: string; onCancel?: () => void }) {
+export function PasteForm({
+  idPrefix,
+  onCancel,
+  onDone,
+}: {
+  idPrefix: string;
+  onCancel?: () => void;
+  /** Le profil a été préparé : pour un formulaire ouvert dans un écran qui reste affiché ensuite */
+  onDone?: () => void;
+}) {
   const [text, setText] = useState("");
   const [consent, setConsent] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
@@ -26,6 +35,13 @@ export function PasteForm({ idPrefix, onCancel }: { idPrefix: string; onCancel?:
   const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Formulaire ouvert par un bouton (il peut alors être refermé) : le focus va à la zone de texte
+  const opened = onCancel !== undefined;
+  useEffect(() => {
+    if (opened) formRef.current?.querySelector<HTMLElement>("textarea")?.focus();
+  }, [opened]);
+
+  // Après un envoi refusé : le premier champ en erreur reçoit le focus
   useEffect(() => {
     if (focusRequest > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [focusRequest]);
@@ -50,11 +66,17 @@ export function PasteForm({ idPrefix, onCancel }: { idPrefix: string; onCancel?:
     }
     startTransition(async () => {
       const result = await submitExternalSitePaste({ text, consent });
-      if (!result.error) return;
-      if (result.reason === "text") setTextError(result.error);
-      else if (result.reason === "consent") setConsentError(result.error);
-      else setFailure(result.error);
-      if (result.reason === "text" || result.reason === "consent") setFocusRequest((value) => value + 1);
+      // Suite marquée comme transition elle aussi : elle arrive dans le même rendu que l'écran relu
+      startTransition(() => {
+        if (!result.error) {
+          onDone?.();
+          return;
+        }
+        if (result.reason === "text") setTextError(result.error);
+        else if (result.reason === "consent") setConsentError(result.error);
+        else setFailure(result.error);
+        if (result.reason === "text" || result.reason === "consent") setFocusRequest((value) => value + 1);
+      });
     });
   }
 

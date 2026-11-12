@@ -192,6 +192,8 @@ export function AreaChart({ data, unit, label, height = 220, className }: AreaCh
                 className={clsx(
                   "absolute whitespace-nowrap",
                   k === 0 ? "" : k === axisCount - 1 ? "-translate-x-full" : "-translate-x-1/2",
+                  // Sur mobile, les voisins des deux extrémités s'effacent : les dates ne se touchent jamais
+                  axisCount >= 5 && (k === 1 || k === axisCount - 2) && "max-sm:hidden",
                 )}
                 style={{ left: `${xOf(i)}%` }}
               >

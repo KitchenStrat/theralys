@@ -297,7 +297,7 @@ describe("documents piégés", () => {
     expect(() => loadDocument(page("<div>".repeat(MARKUP_LIMITS.depth - 1)))).toThrow(MarkupTooComplexError);
   });
 
-  it("document trop touffu (plus de 200 000 balises) : refusé", () => {
+  it("document trop touffu (plus de cent mille balises) : refusé", () => {
     let error: unknown;
     try {
       loadDocument(page("<p>".repeat(MARKUP_LIMITS.nodes + 10)));
@@ -308,8 +308,8 @@ describe("documents piégés", () => {
     expect((error as MarkupTooComplexError).reason).toBe("nodes");
   });
 
-  it("cent mille éléments masqués à la suite : écartés sans y passer des secondes", () => {
-    const hidden = `<p style="display:none">Texte masqué.</p>`.repeat(100_000);
+  it("quatre-vingt-dix mille éléments masqués à la suite : écartés sans y passer des secondes", () => {
+    const hidden = `<p style="display:none">Texte masqué.</p>`.repeat(90_000);
     const { value, ms } = timed(() => extract(page(`<h1>Titre visible</h1>${hidden}<p>Texte visible.</p>`)));
     expect(value.text).toBe("Titre visible\nTexte visible.");
     expect(ms).toBeLessThan(5_000);

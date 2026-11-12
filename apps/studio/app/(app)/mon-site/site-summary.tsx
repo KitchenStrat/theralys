@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
 import { EXTERNAL_PASTE_FALLBACK_ERRORS, EXTERNAL_READ_ERRORS, type ExternalPageKind, type ExternalReadError, type ExternalSiteSource } from "@theralys/shared";
 import { PAGE_KIND_LABELS, plural, readsRemaining, readsRemainingLabel, siteAddressLabel, type DetectedItem } from "@/lib/external-site/format";
@@ -39,14 +39,23 @@ export function SiteSummary({
   detected: DetectedItem[];
 }) {
   const [pasting, setPasting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const wasPasting = useRef(false);
   const pasted = source === "pasted";
+
+  // Formulaire refermé : le focus revient au bouton qui l'avait ouvert
+  useEffect(() => {
+    if (wasPasting.current && !pasting) document.getElementById("open-paste")?.focus();
+    wasPasting.current = pasting;
+  }, [pasting]);
   const canRead = readsRemaining(reads) > 0;
   // Coller un texte est proposé quand c'est la suite utile : le profil vient déjà d'un texte collé, ou le site vient de refuser la lecture
   const canPaste = pasted || (error !== null && EXTERNAL_PASTE_FALLBACK_ERRORS.includes(error));
 
   function reread() {
+    setNotice(null);
     setFailure(null);
     startTransition(async () => {
       const result = await rereadExternalSite();
@@ -99,7 +108,7 @@ export function SiteSummary({
         </div>
 
         <div className="mt-2">
-          <ActionMessage error={failure} testId="reread-error" />
+          <ActionMessage error={failure} notice={notice} testId="summary-message" />
         </div>
 
         {error ? (
@@ -122,10 +131,28 @@ export function SiteSummary({
                 <p className="mb-3 mt-1 text-sm text-ink-700">
                   Collez le texte à jour de vos pages : il remplace ce qui avait été lu. Vos corrections sont conservées.
                 </p>
-                <PasteForm idPrefix="repaste" onCancel={() => setPasting(false)} />
+                <PasteForm
+                  idPrefix="repaste"
+                  onCancel={() => setPasting(false)}
+                  onDone={() => {
+                    setPasting(false);
+                    setNotice("Votre profil a été préparé à partir de ce texte. Relisez-le ci-dessous.");
+                  }}
+                />
               </div>
             ) : (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setPasting(true)} data-testid="open-paste">
+              <Button
+                id="open-paste"
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-3"
+                onClick={() => {
+                  setNotice(null);
+                  setPasting(true);
+                }}
+                data-testid="open-paste"
+              >
                 Coller le texte de mon site
               </Button>
             )}
