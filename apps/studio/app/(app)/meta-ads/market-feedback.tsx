@@ -39,7 +39,7 @@ export function MarketToastBar({ toast, onClose }: { toast: MarketToast | null; 
   }, [key, onClose]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-5 md:pl-[296px]">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-24 lg:pb-5 lg:pl-[296px]">
       {toast ? (
         <div
           key={toast.key}
@@ -99,7 +99,7 @@ export function BulkBar({
   const none = count === 0;
   const button = clsx("inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40", "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white");
   return (
-    <div className="pointer-events-none sticky bottom-4 z-30 mt-4 flex justify-center">
+    <div className="pointer-events-none sticky bottom-24 z-30 mt-4 flex justify-center lg:bottom-4">
       <div data-testid="meta-bulk-bar" role="toolbar" aria-label="Actions sur la sélection" className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-x-2 gap-y-1.5 rounded-2xl bg-ink-900 px-2 py-2 text-white shadow-pop sm:pl-4">
         <p className="basis-full px-2 text-center text-sm font-medium tabular-nums sm:mr-1 sm:basis-auto sm:px-0" aria-live="polite">
           {none ? "Touchez les annonces à sélectionner" : selectionLabel(count)}

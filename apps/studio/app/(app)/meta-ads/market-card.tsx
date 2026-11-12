@@ -135,7 +135,7 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
           <dl className="flex items-start justify-between gap-2">
             <Fact label="Diffusion">
               <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
+                <span aria-hidden className={clsx("h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-ds-success-600 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
                 <span className={diffusion.state === "active" ? undefined : "font-normal text-ink-500"}>{diffusion.short}</span>
                 {diffusion.state === "active" ? <span className="sr-only"> (en cours)</span> : null}
               </span>

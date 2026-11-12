@@ -19,23 +19,15 @@ async function previewLogout() {
 export default function PreviewLayout({ children }: { children: ReactNode }) {
   assertPreviewAllowed();
   return (
-    <>
-      {/* Graisses que la mise en page racine ne charge pas encore (Inter 700, Figtree 700 et 800) */}
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Figtree:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap"
-        precedence="default"
-      />
-      <AppShell
-        sections={SECTION_ORDER}
-        siteHref={SAMPLE_USER.siteHref}
-        logoutAction={previewLogout}
-        userName={SAMPLE_USER.firstName}
-        badges={{ publications: "2", "mon-site": "Nouveau" }}
-        hrefs={PREVIEW_HREFS}
-      >
-        {children}
-      </AppShell>
-    </>
+    <AppShell
+      sections={SECTION_ORDER}
+      siteHref={SAMPLE_USER.siteHref}
+      logoutAction={previewLogout}
+      userName={SAMPLE_USER.firstName}
+      badges={{ publications: "2", "mon-site": "Nouveau" }}
+      hrefs={PREVIEW_HREFS}
+    >
+      {children}
+    </AppShell>
   );
 }

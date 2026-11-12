@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSocialMedia } from "@theralys/db";
+import { AppShell, allowedSections } from "@/components/ds";
 import { destroySession, requireClient } from "@/lib/auth";
 import { getSite, publicSiteUrl } from "@/lib/data";
-import { StudioNav } from "./studio-nav";
 
 async function logoutAction() {
   "use server";
@@ -12,68 +11,33 @@ async function logoutAction() {
   redirect("/login");
 }
 
+/**
+ * Mise en page du studio : la coquille du design system (barre latérale à
+ * partir de 1 024 px, barre du haut et barre basse en dessous). Les sections
+ * affichées suivent la formule ; une démonstration les montre toutes. « Mon
+ * site » est toujours présent.
+ */
 export default async function StudioLayout({ children }: { children: ReactNode }) {
   const session = await requireClient();
   const site = await getSite(session.siteId);
+  const demo = site.type === "demo";
 
   return (
-    <div className="min-h-screen">
-      {session.impersonated ? (
-        <div className="flex items-center justify-center gap-3 bg-warning-100 px-4 py-1.5 text-sm text-ink-900">
-          <span>
-            🛟 Mode support — connecté en tant que <strong>{session.name}</strong>
-          </span>
-          <form action={logoutAction}>
-            <button type="submit" className="font-medium underline underline-offset-2">
-              Quitter
-            </button>
-          </form>
-        </div>
-      ) : null}
-
-      <div className="md:flex">
-        {/* Barre latérale : logo, navigation, accès au site et au compte */}
-        <aside className="flex flex-col border-b border-cream-200 bg-white/75 backdrop-blur-xl md:sticky md:top-0 md:h-screen md:w-[280px] md:shrink-0 md:border-b-0 md:border-r">
-          <div className="px-6 py-6">
-            <Link href="/" className="brand-word text-3xl">
-              Harmony
-            </Link>
-          </div>
-
-          <StudioNav
-            showPublications={site.type === "demo" || hasBlog(site.plan)}
-            showSocial={site.type === "demo" || hasSocialMedia(site.plan)}
-            showGoogle={site.type === "demo" || hasGoogleProfile(site.plan)}
-            showAds={site.type === "demo" || hasGoogleAds(site.plan)}
-            showMeta={site.type === "demo" || hasMetaAds(site.plan)}
-          />
-
-          <div className="border-t border-cream-200 p-4 md:mt-auto">
-            {/* Le site de référence : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony */}
-            <a
-              href={publicSiteUrl(site)}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="view-site-link"
-              className="flex items-center gap-1.5 rounded-xl px-4 py-3 text-base font-medium text-ink-500 transition-colors hover:bg-primary-50 hover:text-primary-700"
-            >
-              ↗ Voir mon site
-            </a>
-            <form action={logoutAction} className="mt-1">
-              <button
-                type="submit"
-                className="flex w-full items-center gap-1.5 rounded-xl bg-primary-50 px-4 py-3 text-base font-medium text-primary-700 transition-colors hover:bg-primary-100 hover:text-primary-800"
-              >
-                ⏻ Déconnexion
-              </button>
-            </form>
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1">
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-12 lg:py-12">{children}</div>
-        </main>
-      </div>
-    </div>
+    <AppShell
+      sections={allowedSections({
+        publications: demo || hasBlog(site.plan),
+        social: demo || hasSocialMedia(site.plan),
+        google: demo || hasGoogleProfile(site.plan),
+        googleAds: demo || hasGoogleAds(site.plan),
+        metaAds: demo || hasMetaAds(site.plan),
+      })}
+      // Le site de référence : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony
+      siteHref={publicSiteUrl(site)}
+      logoutAction={logoutAction}
+      userName={session.name}
+      supportName={session.impersonated ? session.name : undefined}
+    >
+      {children}
+    </AppShell>
   );
 }

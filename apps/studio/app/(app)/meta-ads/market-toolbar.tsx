@@ -205,7 +205,7 @@ function Pill({
             : "bg-white text-ink-700 ring-1 ring-inset ring-cream-300 hover:bg-cream-50 hover:ring-ink-300",
       )}
     >
-      {dot ? <span aria-hidden className="h-2 w-2 rounded-full bg-success-500" /> : null}
+      {dot ? <span aria-hidden className="h-2 w-2 rounded-full bg-ds-success-600" /> : null}
       {tone === "toggle" && active ? <Icon name="check" className="h-3.5 w-3.5" /> : null}
       {children}
       <span

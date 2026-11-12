@@ -113,7 +113,7 @@ export function ReviewsTab({
                     <span className="w-6 shrink-0 text-right">{d.rating} ★</span>
                     <span className="h-2 flex-1 overflow-hidden rounded-full bg-cream-200">
                       <span
-                        className="block h-full rounded-full bg-warning-500"
+                        className="block h-full rounded-full bg-ds-warning-500"
                         style={{ width: `${d.share}%` }}
                         role="img"
                         aria-label={`${d.count} avis à ${d.rating} étoiles`}

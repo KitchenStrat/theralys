@@ -42,5 +42,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/|favicon.ico).*)"],
+  // L'icône du studio (`app/icon.svg`) reste publique : la page de connexion l'affiche aussi
+  matcher: ["/((?!_next/|favicon.ico|icon.svg).*)"],
 };

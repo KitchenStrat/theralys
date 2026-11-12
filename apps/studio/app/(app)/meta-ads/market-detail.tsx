@@ -117,7 +117,7 @@ export function MarketDetail({ ad, mode, now, canEdit, error, savedAt, onClose, 
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5">
               <Fact label="Diffusion">
                 <span className="flex items-start gap-1.5">
-                  <span aria-hidden className={clsx("mt-1.5 h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-success-500 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
+                  <span aria-hidden className={clsx("mt-1.5 h-2 w-2 shrink-0 rounded-full", diffusion.state === "active" ? "bg-ds-success-600 shadow-[0_0_0_3px_rgb(22_163_74/0.15)]" : "bg-ink-300")} />
                   {diffusion.long}
                 </span>
               </Fact>
