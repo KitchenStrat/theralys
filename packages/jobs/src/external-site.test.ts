@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { Column, SQL, getTableColumns, getTableName, is, type Table } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import type * as AiModule from "@theralys/ai";
 import type { ExternalProfileExtractor, ExternalProfileInput } from "@theralys/ai";
 import { externalSites, googleUsage, prospects, sites, type Database, type Site } from "@theralys/db";
 import type { WebsiteReadOptions, WebsiteReader } from "@theralys/providers/website";
@@ -60,7 +61,7 @@ vi.mock("@theralys/providers/website", () => ({
   pastedTextToPages: factories.pastedTextToPages,
 }));
 vi.mock("@theralys/ai", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@theralys/ai")>()),
+  ...(await importOriginal<typeof AiModule>()),
   createExternalProfileExtractor: factories.createExternalProfileExtractor,
 }));
 
@@ -1054,7 +1055,8 @@ describe("runExternalSiteRead", () => {
     const handle = memoryDb({ external: [readingRow()] });
     const dirty = {
       ...PROFILE,
-      headline: `<b>Sophrologie</b>   à Albi​ ${"très ".repeat(60)}`,
+      // Balises, espaces multiples, caractère invisible (U+200B) et longueur hors bornes
+      headline: `<b>Sophrologie</b>   à Albi${String.fromCharCode(0x200b)} ${"très ".repeat(60)}`,
       specialties: [
         { ...PROFILE.specialties[0]!, slug: "Gestion du Stress !", url: "https://autre-site.fr/stress" },
         { ...PROFILE.specialties[1]!, title: "<script>alert(1)</script>Sommeil" },
@@ -2094,5 +2096,8 @@ describe("refreshExternalSites", () => {
     await expect(refresh(handle, reader, fakeExtractor().extractor)).resolves.toEqual({ checked: 1, changed: 0, failed: 1 });
     handle.failWith(undefined);
     expect(external(handle)).toMatchObject({ profile: PROFILE, checkedAt: null });
+    // Le journal porte le code de l'erreur, jamais son message (une erreur de base recopie la requête et ses paramètres)
+    expect(logged()).toMatch(/relecture du site .* interrompue \(08006\)/);
+    expect(logged()).not.toContain("connection terminated");
   });
 });

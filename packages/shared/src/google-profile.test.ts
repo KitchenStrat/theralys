@@ -194,6 +194,55 @@ describe("audit déterministe", () => {
     expect(audit.actions.find((a) => a.id === "get-reviews")?.title).toBe("Obtenez 56 avis de plus");
   });
 
+  it("site web de la fiche — site hébergé : comparé à l'adresse hébergée, textes « votre site Harmony », adresse recommandée dans le plan d'action", () => {
+    const base = { snapshot, benchmark: null, reviews: [], reviewsHaveOwnerReplies: false, now };
+    const site = { url: "https://claire-dupont.harmony-web.fr", hasBookingUrl: true };
+    const linked = auditGoogleProfile({ ...base, site });
+    expect(linked.checks.find((c) => c.id === "website")).toEqual({ id: "website", label: "Site web", status: "ok", points: 8, maxPoints: 8, detail: "Lien vers votre site Harmony (claire-dupont.harmony-web.fr)." });
+    expect(linked.actions.some((a) => a.id === "link-website")).toBe(false);
+    const elsewhere = auditGoogleProfile({ ...base, snapshot: { ...snapshot, website: "https://www.cabinet-dupont.fr/" }, site });
+    expect(elsewhere.checks.find((c) => c.id === "website")).toMatchObject({ status: "warn", points: 5, detail: "Lien vers cabinet-dupont.fr, pas vers votre site Harmony." });
+    expect(elsewhere.actions.find((a) => a.id === "link-website")).toEqual({
+      id: "link-website",
+      title: "Reliez la fiche à votre site Harmony",
+      why: "Le lien envoie les visiteurs Google vers vos pages de spécialité et votre prise de rendez-vous.",
+      how: "Fiche → Modifier le profil → Site web : https://claire-dupont.harmony-web.fr",
+      impact: "fort",
+      effort: "5 min",
+    });
+    // Drapeau à faux : comme absent
+    expect(auditGoogleProfile({ ...base, site: { ...site, external: false } })).toEqual(linked);
+  });
+
+  it("site web de la fiche — site du client comme référence : comparé à son adresse, textes neutres « votre site », son adresse recommandée", () => {
+    const base = { benchmark: null, reviews: [], reviewsHaveOwnerReplies: false, now };
+    const site = { url: "https://www.cabinet-dupont.fr", hasBookingUrl: true, external: true };
+    // La fiche pointe encore vers le site hébergé : ce n'est plus le bon site
+    const hostedLink = auditGoogleProfile({ ...base, snapshot, site });
+    expect(hostedLink.checks.find((c) => c.id === "website")).toMatchObject({ status: "warn", points: 5, detail: "Lien vers claire-dupont.harmony-web.fr, pas vers votre site." });
+    const action = hostedLink.actions.find((a) => a.id === "link-website")!;
+    expect(action.title).toBe("Reliez la fiche à votre site");
+    expect(action.how).toBe("Fiche → Modifier le profil → Site web : https://www.cabinet-dupont.fr");
+    // La fiche pointe vers le site du client (avec ou sans « www », page intérieure comprise) : acquis
+    for (const website of ["https://www.cabinet-dupont.fr", "https://cabinet-dupont.fr/", "http://cabinet-dupont.fr/contact"]) {
+      const own = auditGoogleProfile({ ...base, snapshot: { ...snapshot, website }, site });
+      expect(own.checks.find((c) => c.id === "website")).toMatchObject({ status: "ok", points: 8, detail: "Lien vers votre site (cabinet-dupont.fr)." });
+      expect(own.actions.some((a) => a.id === "link-website")).toBe(false);
+    }
+    // Aucun site sur la fiche : même détail que pour un site hébergé, action au libellé neutre
+    const none = auditGoogleProfile({ ...base, snapshot: { ...snapshot, website: null }, site });
+    expect(none.checks.find((c) => c.id === "website")).toMatchObject({ status: "missing", detail: "Aucun site web sur la fiche." });
+    expect(none.actions.find((a) => a.id === "link-website")?.title).toBe("Reliez la fiche à votre site");
+    // Jamais la marque pour le site du client, dans aucun texte de l'audit
+    for (const audit of [hostedLink, none]) {
+      expect(JSON.stringify([audit.checks, audit.actions])).not.toContain("Harmony");
+    }
+    // Le reste de l'audit ne dépend pas du site de référence
+    const hosted = auditGoogleProfile({ ...base, snapshot: { ...snapshot, website: null }, site: { url: "https://claire-dupont.harmony-web.fr", hasBookingUrl: true } });
+    expect(none.score).toBe(hosted.score);
+    expect(none.checks.filter((c) => c.id !== "website")).toEqual(hosted.checks.filter((c) => c.id !== "website"));
+  });
+
   it("un nom bourré de mots-clés est signalé", () => {
     const audit = auditGoogleProfile({
       snapshot: { ...snapshot, title: "Sophrologue Albi - Stress - Sommeil - Claire Dupont | Hypnose" },

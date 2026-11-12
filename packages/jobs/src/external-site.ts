@@ -125,6 +125,14 @@ export type ExternalSiteView = {
 /** `available: false` : la table n'existe pas encore (migration 0009 non appliquée). `site: null` : aucun site connecté. */
 export type ExternalSiteState = { available: false } | { available: true; site: ExternalSiteView | null };
 
+/**
+ * Motif d'un refus : `url` adresse refusée · `consent` confirmation « ce site
+ * est le mien » absente · `quota` lectures du mois épuisées · `busy` lecture
+ * déjà en cours · `text` texte collé trop court, trop long ou inexploitable ·
+ * `not_ready` site pas encore lu ou profil incomplet · `unavailable` rien à
+ * traiter pour l'instant (table pas encore créée, aucun site connecté,
+ * extraction en panne).
+ */
 export type ExternalSiteRefusal = "url" | "consent" | "quota" | "busy" | "text" | "not_ready" | "unavailable";
 /** Issue d'une action : en cas de refus, `message` est prêt à être montré au praticien. */
 export type ExternalSiteResult = { ok: true } | { ok: false; reason: ExternalSiteRefusal; message: string };
@@ -182,8 +190,21 @@ function gapsMessage(gaps: string[]): string {
   return `Vos outils ne peuvent pas encore s'appuyer sur votre site : il manque ${missing}. Complétez le profil, puis réessayez.`;
 }
 
-/** Nom de l'erreur, pour les journaux : jamais son message, qui peut reprendre un extrait de page. */
-const errorName = (err: unknown): string => (err instanceof Error ? err.name : typeof err);
+/**
+ * Étiquette d'une erreur pour les journaux : son code (SQLSTATE de la base,
+ * code réseau de Node) s'il y en a un, sinon son type. Jamais son message :
+ * il peut reprendre un extrait de page, une adresse ou les paramètres d'une
+ * requête.
+ */
+function errorName(err: unknown): string {
+  let current: unknown = err;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
+    const code = (current as Error & { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Z0-9_]{3,24}$/.test(code)) return code;
+    current = current.cause;
+  }
+  return err instanceof Error ? err.name : typeof err;
+}
 
 // ─── Hôtes et adresses ───────────────────────────────────────────────────────
 
@@ -199,7 +220,12 @@ function hostOf(value: string): string | null {
   }
 }
 
-/** Hôtes du site hébergé (domaine du site, hôte de base des sites, hôte du studio) : jamais acceptés comme « site du client ». */
+/**
+ * Hôtes du site hébergé (domaine du site, hôte de base des sites, hôte du
+ * studio) : jamais acceptés comme « site du client ». Connecter le site
+ * hébergé à lui-même ferait lire au studio ses propres pages et masquerait
+ * le site des moteurs de recherche au profit… de lui-même.
+ */
 export function hostedHostsOf(site: Pick<Site, "domain">, env: NodeJS.ProcessEnv = process.env): string[] {
   const hosts = new Set<string>();
   for (const value of [site.domain, env.SITES_BASE_URL, env.DEMO_HOST, env.STUDIO_BASE_URL]) {
@@ -491,7 +517,17 @@ async function extractProfile(extractor: ExternalProfileExtractor, input: Extern
 
 // ─── Écran « Mon site » ──────────────────────────────────────────────────────
 
-/** État du site du client d'un site, pour l'écran « Mon site ». */
+/**
+ * État du site du client d'un site, pour l'écran « Mon site ».
+ *
+ * `available: false` tant que la table n'existe pas (déploiement avant la
+ * migration) : l'écran se présente « en cours d'activation » plutôt qu'en
+ * erreur. Une lecture « en cours » depuis plus de
+ * EXTERNAL_SITE_LIMITS.readStaleMs est montrée comme un échec `internal` :
+ * le processus qui la menait s'est arrêté, le praticien doit pouvoir la
+ * relancer. L'interrupteur (`active`, `keepHostedIndexed`) est lu dans le
+ * thème du site passé en argument.
+ */
 export async function loadExternalSite(db: Database, site: Pick<Site, "id" | "theme">, now: Date = new Date()): Promise<ExternalSiteState> {
   let row: ExternalSiteRow | null;
   try {

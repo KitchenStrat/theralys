@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { GOOGLE_KEYWORDS_MAX, estimateScanCostUsd, type GoogleMapsListing } from "@theralys/shared";
+import { GOOGLE_KEYWORDS_MAX, auditGoogleProfile, estimateScanCostUsd, type GoogleMapsListing, type GoogleProfileSnapshot, type SiteTheme } from "@theralys/shared";
 import { DataForSeoError } from "@theralys/providers/dataforseo";
 import {
   GOOGLE_REVIEW_TASK_MAX_AGE_DAYS,
   GOOGLE_SCAN_BATCH,
+  auditSiteOf,
   dateOrNull,
   gridPointFrom,
   isKeywordScanDue,
@@ -134,5 +135,71 @@ describe("hasRealGoogleProvider", () => {
     expect(hasRealGoogleProvider({ DATAFORSEO_LOGIN: "a", DATAFORSEO_PASSWORD: "b" } as NodeJS.ProcessEnv)).toBe(true);
     expect(hasRealGoogleProvider({ DATAFORSEO_LOGIN: "a", DATAFORSEO_PASSWORD: "b", DATAFORSEO_MOCK: "1" } as NodeJS.ProcessEnv)).toBe(false);
     expect(hasRealGoogleProvider({ GOOGLE_PLACES_API_KEY: "k" } as NodeJS.ProcessEnv)).toBe(true);
+  });
+});
+
+describe("site comparé à la fiche par l'audit (auditSiteOf)", () => {
+  const THEME: SiteTheme = { preset: "terracotta", fontPreset: "chaleureux" };
+  const ENV = { SITES_BASE_URL: "https://demo.harmony-web.fr/" } as NodeJS.ProcessEnv;
+  const external = (active: boolean, url = "https://www.cabinet-dupont.fr/"): SiteTheme => ({ ...THEME, externalSite: { url, active } });
+  const snapshot = (website: string | null): GoogleProfileSnapshot => ({
+    source: "dataforseo",
+    fetchedAt: NOW.toISOString(),
+    placeId: "p",
+    cid: "c",
+    title: "Claire Dupont Sophrologue",
+    description: "x".repeat(300),
+    category: "Sophrologue",
+    additionalCategories: [],
+    address: "12 rue des Lilas, Albi",
+    phone: "05 63 00 00 00",
+    website,
+    isClaimed: true,
+    rating: 4.9,
+    votes: 40,
+    ratingDistribution: null,
+    totalPhotos: 15,
+    hasHours: true,
+    hours: null,
+    attributes: [],
+    bookOnlineUrl: null,
+    mainImage: null,
+    location: null,
+  });
+
+  it("site hébergé : son adresse (domaine, sinon adresse de démonstration), comme avant, sans drapeau", () => {
+    expect(auditSiteOf({ slug: "claire", domain: "claire-sophrologie.fr", theme: THEME, bookingUrl: "https://rdv.example" }, ENV)).toEqual({ url: "https://claire-sophrologie.fr", hasBookingUrl: true });
+    expect(auditSiteOf({ slug: "claire", domain: null, theme: THEME, bookingUrl: null }, ENV)).toEqual({ url: "https://demo.harmony-web.fr/claire", hasBookingUrl: false });
+    // Site du client connecté mais pas choisi comme référence, ou adresse invalide : toujours le site hébergé
+    expect(auditSiteOf({ slug: "claire", domain: null, theme: external(false), bookingUrl: null }, ENV)).toEqual({ url: "https://demo.harmony-web.fr/claire", hasBookingUrl: false });
+    expect(auditSiteOf({ slug: "claire", domain: "claire-sophrologie.fr", theme: external(true, "pas une adresse"), bookingUrl: null }, ENV)).toEqual({ url: "https://claire-sophrologie.fr", hasBookingUrl: false });
+  });
+
+  it("site du client comme référence : son adresse (sans barre finale) et le drapeau qui neutralise les textes", () => {
+    expect(auditSiteOf({ slug: "claire", domain: "claire-sophrologie.fr", theme: external(true), bookingUrl: "https://rdv.example" }, ENV)).toEqual({
+      url: "https://www.cabinet-dupont.fr",
+      hasBookingUrl: true,
+      external: true,
+    });
+  });
+
+  it("audit : la fiche qui pointe vers le site hébergé est à corriger quand le site du client est la référence, et l'adresse recommandée est la sienne", () => {
+    const site = { slug: "claire", domain: "claire-sophrologie.fr", bookingUrl: "https://rdv.example" };
+    const audit = (theme: SiteTheme, website: string | null) =>
+      auditGoogleProfile({ snapshot: snapshot(website), benchmark: null, reviews: [], reviewsHaveOwnerReplies: false, site: auditSiteOf({ ...site, theme }, ENV), now: NOW });
+    const website = (theme: SiteTheme, url: string | null) => audit(theme, url).checks.find((c) => c.id === "website")!;
+    // Sans site du client : inchangé
+    expect(website(THEME, "https://claire-sophrologie.fr")).toMatchObject({ status: "ok", detail: "Lien vers votre site Harmony (claire-sophrologie.fr)." });
+    expect(audit(THEME, "https://www.cabinet-dupont.fr").actions.find((a) => a.id === "link-website")).toMatchObject({
+      title: "Reliez la fiche à votre site Harmony",
+      how: "Fiche → Modifier le profil → Site web : https://claire-sophrologie.fr",
+    });
+    // Site du client comme référence
+    expect(website(external(true), "https://cabinet-dupont.fr/")).toMatchObject({ status: "ok", detail: "Lien vers votre site (cabinet-dupont.fr)." });
+    expect(website(external(true), "https://claire-sophrologie.fr")).toMatchObject({ status: "warn", detail: "Lien vers claire-sophrologie.fr, pas vers votre site." });
+    expect(audit(external(true), "https://claire-sophrologie.fr").actions.find((a) => a.id === "link-website")).toMatchObject({
+      title: "Reliez la fiche à votre site",
+      how: "Fiche → Modifier le profil → Site web : https://www.cabinet-dupont.fr",
+    });
   });
 });

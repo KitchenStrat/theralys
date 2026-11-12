@@ -17,16 +17,25 @@
  *                              la semaine » (réseaux sociaux + fiche Google)
  * - sendMonthReminders       : le 25 (Europe/Paris), e-mail « Préparez votre
  *                              mois » si le mois suivant est vide
+ * - refreshExternalSitesTick : relit chaque mois le site des clients qui ont
+ *                              connecté le leur (5 sites au plus par passage)
+ *
+ * Blog et site du client : quand le site du client est la référence des
+ * outils (`loadExternalReference`), les sujets du calendrier et la spécialité
+ * rattachée à un article viennent de ses spécialités, et non des pages de
+ * spécialité du site hébergé (seul un sujet planifié avant la connexion du
+ * site garde le titre de sa page hébergée). Les articles restent publiés sur
+ * le blog hébergé.
  *
  * `runAllTicks` enchaîne les ticks avec un try/catch par tick : un tick en
  * erreur est journalisé (`processed: 0`) et ne bloque pas les suivants. Les
  * notifications passent en tête (cron quotidien à 6 h UTC : les e-mails du
  * lundi et du 25 partent avant les appels fournisseur longs). Les ticks de
- * la fiche Google et les notifications reçoivent une échéance
- * (TICK_DEADLINE_MS après `now`) et n'entament plus d'élément au-delà, pour
- * rester sous la durée maximale de la route cron (800 s). Les notifications
- * sont idempotentes par `notification_log` (site, kind, période) : un cron
- * relancé n'envoie pas deux fois.
+ * la fiche Google, les notifications et la relecture des sites des clients
+ * reçoivent une échéance (TICK_DEADLINE_MS après `now`) et n'entament plus
+ * d'élément au-delà, pour rester sous la durée maximale de la route cron
+ * (800 s). Les notifications sont idempotentes par `notification_log` (site,
+ * kind, période) : un cron relancé n'envoie pas deux fois.
  */
 
 import { and, eq, inArray, isNotNull, lte, ne } from "drizzle-orm";
@@ -55,8 +64,9 @@ import {
   DEFAULT_VOICE,
   type BlogVoice,
 } from "@theralys/ai";
-import { readingTimeMinutes, slugify } from "@theralys/shared";
-import { addDays, planEditorialTopics, startOfDayUtc } from "./editorial";
+import { externalSpecialties, readingTimeMinutes, slugify } from "@theralys/shared";
+import { addDays, planEditorialTopics, startOfDayUtc, type MotifRef } from "./editorial";
+import { loadExternalReference, refreshExternalSites } from "./external-site";
 import { generateMockSearchStats } from "./google-mock";
 import { createGooglePlacesProvider } from "@theralys/providers/google";
 import { createLocalSearchProvider } from "@theralys/providers/dataforseo";
@@ -93,15 +103,28 @@ async function blogActiveSites(db: Database): Promise<Site[]> {
   return rows.map((r) => r.site).filter((s) => hasBlog(s.plan));
 }
 
+/**
+ * Spécialités dont le blog d'un site tire ses sujets : celles du site du
+ * client quand il est la référence des outils — le blog parle alors de ce
+ * que le praticien présente sur son propre site —, sinon les pages de
+ * spécialité du site hébergé, dans leur ordre d'affichage.
+ */
+async function editorialMotifs(db: Database, site: Site): Promise<MotifRef[]> {
+  const reference = await loadExternalReference(db, site);
+  if (reference) return externalSpecialties(reference.profile);
+  const motifs = await db.query.pages.findMany({
+    where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
+    orderBy: (p, { asc }) => [asc(p.position)],
+  });
+  return motifs.map((m) => ({ slug: m.slug, title: m.title }));
+}
+
 export async function ensureEditorialCalendars(now = new Date()): Promise<TickReport> {
   const db = getDb();
   let processed = 0;
 
   for (const site of await blogActiveSites(db)) {
-    const motifs = await db.query.pages.findMany({
-      where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
-      orderBy: (p, { asc }) => [asc(p.position)],
-    });
+    const motifs = await editorialMotifs(db, site);
     const prospect = site.prospectId
       ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
       : null;
@@ -126,7 +149,7 @@ export async function ensureEditorialCalendars(now = new Date()): Promise<TickRe
     });
 
     const topics = planEditorialTopics({
-      motifs: motifs.map((m) => ({ slug: m.slug, title: m.title })),
+      motifs,
       themes: settings?.themes ?? undefined,
       city: prospect?.city ?? "votre ville",
       plan: site.plan,
@@ -184,16 +207,23 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
       ),
     });
 
+    // Site du client en référence : la spécialité rattachée à un article est l'une des siennes
+    const reference = due.length > 0 ? await loadExternalReference(db, site) : null;
+    const externalMotifs = reference ? externalSpecialties(reference.profile) : null;
+
     for (const entry of due) {
-      const motifPage = entry.motifSlug
-        ? await db.query.pages.findFirst({
-            where: and(
-              eq(pages.siteId, site.id),
-              eq(pages.type, "motif"),
-              eq(pages.slug, entry.motifSlug),
-            ),
-          })
-        : null;
+      const externalMotif = entry.motifSlug ? externalMotifs?.find((m) => m.slug === entry.motifSlug) : undefined;
+      // À défaut — et toujours sans site du client — la page de spécialité du site hébergé (sujet planifié avant la connexion du site)
+      const motifPage =
+        entry.motifSlug && !externalMotif
+          ? await db.query.pages.findFirst({
+              where: and(
+                eq(pages.siteId, site.id),
+                eq(pages.type, "motif"),
+                eq(pages.slug, entry.motifSlug),
+              ),
+            })
+          : null;
 
       // Registre des appels API : rédaction et image rattachées au blog de ce site
       const usage = { feature: "blog", siteId: site.id } as const;
@@ -202,7 +232,7 @@ export async function generateDueArticles(now = new Date()): Promise<TickReport>
           {
             topic: entry.topic,
             motifSlug: entry.motifSlug,
-            motifTitle: motifPage?.title ?? null,
+            motifTitle: externalMotif?.title ?? motifPage?.title ?? null,
             profession: prospect?.profession ?? "praticien bien-être",
             city: prospect?.city ?? "votre ville",
             firstName: prospect?.firstName ?? "votre praticien",
@@ -433,6 +463,19 @@ async function upsertPlacesReviews(
   return withId.length;
 }
 
+/**
+ * Relecture mensuelle des sites des clients (`refreshExternalSites`) : un
+ * site connecté change sans prévenir, les outils doivent s'appuyer sur ce
+ * qu'il dit aujourd'hui. Dernier tick du passage, il respecte l'échéance
+ * commune : passé celle-ci (ou trop près d'elle pour une lecture complète),
+ * aucun site n'est entamé — il le sera au passage suivant. `processed` :
+ * sites relus, que leur contenu ait changé ou non.
+ */
+export async function refreshExternalSitesTick(now = new Date(), opts: TickOptions = {}): Promise<TickReport> {
+  const report = await refreshExternalSites(getDb(), { now, ...(opts.deadline ? { deadline: opts.deadline } : {}) });
+  return { task: "refresh-external-sites", processed: report.checked };
+}
+
 export const ALL_TICKS: readonly { task: string; run: (now: Date, opts: TickOptions) => Promise<TickReport> }[] = [
   // E-mails d'abord : ils ne dépendent pas des syncs du jour et ne doivent pas attendre les appels fournisseur
   { task: "weekly-content-digests", run: sendWeeklyContentDigests },
@@ -445,13 +488,15 @@ export const ALL_TICKS: readonly { task: string; run: (now: Date, opts: TickOpti
   { task: "sync-google-profiles", run: syncGoogleProfiles },
   { task: "collect-google-reviews", run: collectGoogleReviewTasks },
   { task: "scheduled-google-scans", run: runScheduledGoogleScans },
+  // En dernier : la relecture des sites des clients prend le temps qu'il reste avant l'échéance commune
+  { task: "refresh-external-sites", run: refreshExternalSitesTick },
 ];
 
 /**
  * Tous les ticks, dans l'ordre ; un tick en erreur est journalisé et ne
  * bloque pas les suivants. L'échéance commune (`now` + TICK_DEADLINE_MS) est
- * transmise à chaque tick ; seuls ceux de la fiche Google et des
- * notifications la lisent.
+ * transmise à chaque tick ; seuls ceux de la fiche Google, des notifications
+ * et de la relecture des sites des clients la lisent.
  */
 export async function runAllTicks(now = new Date()): Promise<TickReport[]> {
   const reports: TickReport[] = [];

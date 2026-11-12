@@ -5,6 +5,10 @@
  * planifiés, avis Google des sites clients, voix et consignes du
  * « Paramétrage ») puis `buildSocialBrief` (fonction pure de
  * `@theralys/shared`). Les jobs ne dépendent jamais du studio.
+ *
+ * Quand le site du client est la référence des outils, ce sont son profil et
+ * son adresse qui alimentent le brief : la règle vit une seule fois, dans
+ * `briefPagesFor` (`external-site.ts`), que le studio appelle aussi.
  */
 
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
@@ -24,20 +28,37 @@ import {
   DEFAULT_SOCIAL_VOICE,
   buildSocialBrief,
   cleanSocialInstructions,
+  referenceSiteUrl,
   type SocialBriefResult,
   type SocialVoice,
 } from "@theralys/shared";
+import { briefPagesFor } from "./external-site";
 
 /** Articles transmis au brief (il n'en garde que 8, les plus récents). */
 const ARTICLES_LIMIT = 12;
 /** Avis transmis au brief (il n'en garde que 6, après filtrage du texte). */
 const REVIEWS_LIMIT = 20;
 
-/** URL publique d'un site : domaine personnalisé, sinon SITES_BASE_URL + slug (même règle que le studio). */
+/**
+ * Adresse du site hébergé : domaine personnalisé, sinon SITES_BASE_URL + slug
+ * (même règle que le studio). C'est là que vivent les pages et les articles
+ * servis par la plateforme ; l'adresse donnée aux outils est `publicSiteUrl`.
+ */
 export function siteUrl(site: Pick<Site, "slug" | "domain">, env: NodeJS.ProcessEnv = process.env): string {
   if (site.domain) return `https://${site.domain}`;
   const base = env.SITES_BASE_URL ?? "http://localhost:3000";
   return `${base.replace(/\/$/, "")}/${site.slug}`;
+}
+
+/**
+ * Adresse publique de référence d'un site : celle du site du client quand il
+ * est la référence des outils (`sites.theme.externalSite` actif), sinon celle
+ * du site hébergé (`siteUrl`). C'est l'adresse à donner aux outils — liens,
+ * légendes, pages d'atterrissage, audit de la fiche Google ; tout ce qui
+ * désigne le site hébergé lui-même (aperçu, articles du blog) garde `siteUrl`.
+ */
+export function publicSiteUrl(site: Pick<Site, "slug" | "domain" | "theme">, env: NodeJS.ProcessEnv = process.env): string {
+  return referenceSiteUrl(siteUrl(site, env), site.theme);
 }
 
 type VoiceColumns = {
@@ -59,6 +80,9 @@ function voiceOf(row: VoiceColumns): SocialVoice {
 /**
  * Brief d'un site : `social_settings` fait foi (voix + consignes), sinon la
  * voix du blog, sinon la voix par défaut accordée au genre du prospect.
+ * Pages et adresse : celles du site du client quand il est la référence,
+ * sinon celles du site hébergé (`briefPagesFor`) ; les articles et les avis
+ * sont toujours ceux de la plateforme.
  */
 export async function loadGoogleBrief(db: Database, siteId: string, now = new Date()): Promise<SocialBriefResult> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
@@ -96,14 +120,17 @@ export async function loadGoogleBrief(db: Database, siteId: string, now = new Da
       ? voiceOf(blog)
       : { ...DEFAULT_SOCIAL_VOICE, accord: prospect?.gender ?? DEFAULT_SOCIAL_VOICE.accord };
 
+  const source = await briefPagesFor(db, site, sitePages, siteUrl(site));
+
   return buildSocialBrief({
     site: {
       id: site.id,
       name: site.name,
       type: site.type,
-      theme: site.theme,
+      theme: source.theme,
       bookingUrl: site.bookingUrl,
-      url: siteUrl(site),
+      url: source.url,
+      hostedUrl: source.hostedUrl,
     },
     prospect: prospect
       ? {
@@ -116,7 +143,7 @@ export async function loadGoogleBrief(db: Database, siteId: string, now = new Da
           googleReviewCount: prospect.googleReviewCount,
         }
       : null,
-    pages: sitePages,
+    pages: source.pages,
     articles,
     reviews,
     voice,

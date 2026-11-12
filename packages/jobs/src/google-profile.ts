@@ -48,7 +48,6 @@ import {
   gridPoints,
   gridRadiusKm,
   isMockPlaceId,
-  referenceSiteUrl,
   summarizeScan,
   usageMonthKey,
   type GeoPoint,
@@ -86,7 +85,7 @@ import {
 import { GOOGLE_REVIEWS_BATCH, createGoogleReviewsAnalyzer, fallbackReviewAnalysis } from "@theralys/ai";
 import { DataForSeoError, createLocalSearchProvider, type GoogleReviewItem } from "@theralys/providers/dataforseo";
 import { createGooglePlacesProvider, type GooglePlacesProvider } from "@theralys/providers/google";
-import { loadGoogleBrief, siteUrl } from "./google-brief";
+import { loadGoogleBrief, publicSiteUrl } from "./google-brief";
 import type { TickOptions, TickReport } from "./ticks";
 import { withApiUsage } from "@theralys/shared/usage-runtime";
 
@@ -404,14 +403,15 @@ async function reviewsForAudit(db: Database, siteId: string) {
 
 /**
  * Site auquel l'audit compare le site web déclaré sur la fiche, et que le
- * plan d'action recommande d'y inscrire : l'adresse de référence — celle du
- * site du client quand il est la référence (`external`, libellés neutres
- * « votre site »), sinon celle du site hébergé, comme avant.
+ * plan d'action recommande d'y inscrire : l'adresse de référence
+ * (`publicSiteUrl`) — celle du site du client quand il est la référence
+ * (`external`, libellés neutres « votre site »), sinon celle du site hébergé,
+ * comme avant. Seul le réglage du site compte ici : l'adresse du site du
+ * client reste la bonne même pendant que sa lecture est en cours ou en échec.
  */
 export function auditSiteOf(site: Pick<Site, "slug" | "domain" | "theme" | "bookingUrl">, env: NodeJS.ProcessEnv = process.env): GoogleAuditInput["site"] {
   return {
-    // Même règle que `publicSiteUrl` de `google-brief.ts` (adresse de référence d'un site)
-    url: referenceSiteUrl(siteUrl(site, env), site.theme),
+    url: publicSiteUrl(site, env),
     hasBookingUrl: Boolean(site.bookingUrl),
     ...(activeExternalSite(site.theme) ? { external: true } : {}),
   };

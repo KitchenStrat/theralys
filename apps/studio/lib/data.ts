@@ -19,6 +19,7 @@ import {
   type PeriodStats,
   type SourceSummary,
 } from "@theralys/analytics";
+import { referenceSiteUrl } from "@theralys/shared";
 
 export type Period = "7j" | "30j" | "6m";
 
@@ -264,4 +265,16 @@ export function siteUrl(site: Site): string {
   if (site.domain) return `https://${site.domain}`;
   const base = process.env.SITES_BASE_URL ?? "http://localhost:3000";
   return `${base.replace(/\/$/, "")}/${site.slug}`;
+}
+
+/**
+ * Adresse publique de référence d'un site : celle du site du client quand il
+ * est la référence des outils (`site.theme.externalSite` actif), sinon celle
+ * du site hébergé (`siteUrl`). C'est l'adresse à donner aux outils — liens de
+ * bio, légendes, pages d'atterrissage, boutons des posts Google ; l'éditeur,
+ * l'aperçu et les articles du blog gardent `siteUrl`, l'adresse du site
+ * hébergé. Même règle que `publicSiteUrl` côté jobs (`google-brief.ts`).
+ */
+export function publicSiteUrl(site: Site): string {
+  return referenceSiteUrl(siteUrl(site), site.theme);
 }

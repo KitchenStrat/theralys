@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { anonymousVisitorId, isBotUserAgent } from "./visitor";
+import { anonymousVisitorId, BOT_UA, isBotUserAgent } from "./visitor";
 
 const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SITE = "b6bed027-6656-4734-926f-501605751fdc";
@@ -9,6 +9,11 @@ const NOW = new Date("2026-11-12T10:00:00Z");
 const visitor = (init: Record<string, string>) => new Headers(init);
 
 describe("isBotUserAgent", () => {
+  it("règle inchangée de /api/track, au caractère près", () => {
+    expect(BOT_UA.source).toBe("bot|crawl|spider|slurp|lighthouse|headless|prerender|vercel-screenshot|monitor");
+    expect(BOT_UA.flags).toBe("i");
+  });
+
   it("écarte crawlers, aperçus et sondes, garde les navigateurs", () => {
     for (const ua of [
       "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",

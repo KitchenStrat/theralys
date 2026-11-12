@@ -1,0 +1,41 @@
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import { AppShell, SECTION_ORDER } from "@/components/ds";
+import { assertPreviewAllowed, PREVIEW_HREFS } from "./_lib/guard";
+import { SAMPLE_USER } from "./_lib/sample";
+
+export const metadata: Metadata = { title: "Aperçu du design system" };
+
+/** Aperçu : « Déconnexion » ne déconnecte pas. */
+async function previewLogout() {
+  "use server";
+}
+
+/**
+ * Page de démonstration du design system du studio, rendue dans la nouvelle
+ * coquille. Hors du groupe `(app)` : elle n'emprunte ni la mise en page ni les
+ * données des vraies pages. Absente en production (404).
+ */
+export default function PreviewLayout({ children }: { children: ReactNode }) {
+  assertPreviewAllowed();
+  return (
+    <>
+      {/* Graisses que la mise en page racine ne charge pas encore (Inter 700, Figtree 700 et 800) */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Figtree:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+        precedence="default"
+      />
+      <AppShell
+        sections={SECTION_ORDER}
+        siteHref={SAMPLE_USER.siteHref}
+        logoutAction={previewLogout}
+        userName={SAMPLE_USER.firstName}
+        badges={{ publications: "2", "mon-site": "Nouveau" }}
+        hrefs={PREVIEW_HREFS}
+      >
+        {children}
+      </AppShell>
+    </>
+  );
+}

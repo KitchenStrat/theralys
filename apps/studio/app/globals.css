@@ -616,6 +616,20 @@
     outline-offset: 2px;
   }
 }
+/* Dans un conteneur qui défile (onglets, barre basse) : l'anneau reste à l'intérieur, jamais rogné */
+@utility ds-focus-inset {
+  &:focus-visible {
+    outline: 2px solid var(--color-ds-brand-600);
+    outline-offset: -2px;
+  }
+}
+/* Liseré en dégradé de la section sur une carte blanche — une seule par écran */
+@utility ds-border-gradient {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(135deg, var(--ds-s-from), var(--ds-s-via), var(--ds-s-to)) border-box;
+}
 /* Chiffres alignés (tableaux, axes, dates) ; les grands chiffres isolés restent proportionnels */
 @utility ds-tnum {
   font-variant-numeric: tabular-nums;
@@ -861,27 +875,67 @@ html:has(.ds-app) {
     }
   }
 
-  /* Décor des bandeaux : halos statiques, jamais sous un texte qu'ils éclairciraient */
+  /* Décor des bandeaux : halos et anneaux statiques aux couleurs de la section. Sur teinte
+     douce, le texte posé dessus est foncé (encre de section, ink-700 et plus) : ≥ 4,5:1 même
+     au cœur du halo. */
   .ds-band-art {
     position: absolute;
     inset: 0;
+    overflow: hidden;
     pointer-events: none;
     border-radius: inherit;
     background:
-      radial-gradient(24rem 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 30%, transparent), transparent 70%),
-      radial-gradient(18rem 12rem at 78% 125%, color-mix(in oklab, var(--ds-s-to) 24%, transparent), transparent 70%);
+      radial-gradient(min(26rem, 72%) 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 38%, transparent), transparent 70%),
+      radial-gradient(min(20rem, 60%) 12rem at 80% 125%, color-mix(in oklab, var(--ds-s-to) 32%, transparent), transparent 70%);
   }
-  /* Sur un dégradé profond, les halos ne font que foncer ou déplacer la teinte (L ≤ 0,55) :
+  .ds-band-art::before,
+  .ds-band-art::after,
+  .ds-band-art-deep::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+  }
+  .ds-band-art::after {
+    top: -8rem;
+    right: -4.5rem;
+    width: 18rem;
+    height: 18rem;
+    border: 2.25rem solid color-mix(in oklab, var(--ds-s-from) 13%, transparent);
+  }
+  .ds-band-art::before {
+    right: 10rem;
+    bottom: -5.5rem;
+    width: 9rem;
+    height: 9rem;
+    border: 1.25rem solid color-mix(in oklab, var(--ds-s-to) 11%, transparent);
+  }
+  @media (max-width: 40rem) {
+    .ds-band-art::before {
+      display: none;
+    }
+    .ds-band-art::after {
+      right: -9rem;
+    }
+  }
+  /* Sur un dégradé profond, halos et anneau ne font que foncer ou déplacer la teinte (L ≤ 0,55) :
      le texte blanc garde ≥ 4,5:1 partout. */
   .ds-band-art-deep {
     position: absolute;
     inset: 0;
+    overflow: hidden;
     pointer-events: none;
     border-radius: inherit;
     background:
-      radial-gradient(30rem 20rem at 100% -10%, oklch(55% 0.097 185 / 0.75), transparent 68%),
-      radial-gradient(26rem 18rem at 8% 130%, oklch(50% 0.19 295 / 0.7), transparent 70%),
+      radial-gradient(min(30rem, 80%) 20rem at 100% -10%, oklch(55% 0.097 185 / 0.75), transparent 68%),
+      radial-gradient(min(26rem, 70%) 18rem at 8% 130%, oklch(50% 0.19 295 / 0.7), transparent 70%),
       radial-gradient(18rem 12rem at 55% -30%, oklch(47% 0.16 262 / 0.55), transparent 70%);
+  }
+  .ds-band-art-deep::after {
+    top: -9rem;
+    right: -5rem;
+    width: 21rem;
+    height: 21rem;
+    border: 2.5rem solid oklch(28.5% 0.062 240.3 / 0.14);
   }
 
   /* Squelette de chargement : bloc teinté, reflet qui passe (translation seule) */
@@ -907,7 +961,7 @@ html:has(.ds-app) {
   .ds-odo {
     display: inline-flex;
     align-items: flex-start;
-    white-space: nowrap;
+    white-space: pre;
     line-height: var(--ds-odo-lh, 1.1);
     user-select: none;
   }

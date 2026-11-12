@@ -4,11 +4,16 @@
  * planifiés, avis Google des sites clients, réglages « Paramétrage » : voix et
  * consignes) puis `buildSocialBrief` (fonction pure de `@theralys/shared`,
  * testée sans base).
+ *
+ * Quand le site du client est la référence des outils, ce sont son profil et
+ * son adresse qui alimentent le brief : la règle vit une seule fois, dans
+ * `briefPagesFor` (`@theralys/jobs`), que `loadGoogleBrief` appelle aussi.
  */
 
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { blogArticles, getDb, googleReviews, pages } from "@theralys/db";
 import { resolveProfession } from "@theralys/ai";
+import { briefPagesFor } from "@theralys/jobs";
 import { buildSocialBrief, type SocialBriefResult } from "@theralys/shared";
 import { getProspect, getSite, siteUrl } from "@/lib/data";
 import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
@@ -86,14 +91,18 @@ export async function loadSocialBrief(
     options.settings ? Promise.resolve(options.settings) : getSocialSettings(siteId),
   ]);
 
+  // Pages et adresse : celles du site du client quand il est la référence, sinon celles du site hébergé
+  const source = await briefPagesFor(db, site, sitePages, siteUrl(site));
+
   return buildSocialBrief({
     site: {
       id: site.id,
       name: site.name,
       type: site.type,
-      theme: site.theme,
+      theme: source.theme,
       bookingUrl: site.bookingUrl,
-      url: siteUrl(site),
+      url: source.url,
+      hostedUrl: source.hostedUrl,
     },
     prospect: prospect
       ? {
@@ -106,7 +115,7 @@ export async function loadSocialBrief(
           googleReviewCount: prospect.googleReviewCount,
         }
       : null,
-    pages: sitePages,
+    pages: source.pages,
     articles: mergeArticles(requiredArticles, recentArticles),
     reviews,
     voice: settings.voice,

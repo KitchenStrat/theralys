@@ -1,12 +1,18 @@
 /**
  * Moteur éditorial — planification pure (sans DB, testée unitairement).
- * Le calendrier de sujets est généré automatiquement à partir des pages de
- * spécialités + la ville (maillage SEO local), à la cadence de la formule :
- * Starter : pas de blog · Scale : 4/semaine (lun, mar, jeu, ven).
+ * Le calendrier de sujets est généré automatiquement à partir des
+ * spécialités du praticien + la ville (maillage SEO local), à la cadence de
+ * la formule : Starter : pas de blog · Scale : 4/semaine (lun, mar, jeu, ven).
+ *
+ * Les spécialités sont les pages de spécialité du site hébergé ou, quand le
+ * site du client est la référence des outils, celles de son propre site
+ * (`externalSpecialties`) : l'appelant choisit (`ticks.ts`), le moteur ne
+ * fait pas la différence. Les articles restent publiés sur le blog hébergé.
  */
 
 import type { BlogTheme, PlanId } from "@theralys/db";
 
+/** Spécialité dont le blog tire ses sujets : identifiant stable et titre. */
 export type MotifRef = { slug: string; title: string };
 
 export type PlannedTopic = {

@@ -86,6 +86,7 @@ export type MeasureEventRow = {
 /** Motifs d'une visite ignorée. Jamais renvoyés au navigateur : ils servent aux tests et à la lecture du code. */
 export type MeasureIgnoreReason = "invalid" | "bot" | "unknown_key" | "archived" | "origin";
 
+/** Issue du premier tri : la visite validée, ou le motif pour lequel elle est ignorée sans lire la base. */
 export type MeasureScreening =
   | { ok: true; payload: ExternalMeasurePayload }
   | { ok: false; reason: Extract<MeasureIgnoreReason, "invalid" | "bot"> };
@@ -149,6 +150,7 @@ export function externalMeasureSource(payload: Pick<ExternalMeasurePayload, "t" 
   return sourceFromReferrer(`https://${payload.r}`, null);
 }
 
+/** Issue de la décision : la ligne à inscrire, ou le motif pour lequel la visite est ignorée. */
 export type MeasureDecision =
   | {
       ok: true;

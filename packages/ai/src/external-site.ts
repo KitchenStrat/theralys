@@ -35,6 +35,7 @@ import { completeStructured, type AnthropicClientOptions } from "./anthropic";
 import { mockExternalProfile } from "./external-site-mock";
 import { externalProfileSystemPrompt, externalProfileUserPrompt, selectProfilePages, type ProfilePromptPage } from "./external-site-prompt";
 import {
+  addressGrounded,
   emailAppears,
   factTexts,
   foldText,
@@ -56,6 +57,7 @@ export { EXTERNAL_PROFILE_PROMPT_BUDGET, externalProfileSystemPrompt, externalPr
 
 // ─── Contrat ─────────────────────────────────────────────────────────────────
 
+/** Ce que l'extracteur reçoit du service : le site tel que le lecteur l'a rendu (`ExternalReadOutcome`), et la fiche du praticien. */
 export type ExternalProfileInput = {
   /** Adresse d'accueil du site (normalisée) */
   url: string;
@@ -65,6 +67,7 @@ export type ExternalProfileInput = {
   practitioner?: { name?: string | null; profession?: string | null; city?: string | null } | null;
 };
 
+/** Extracteur du profil : réel (un appel au modèle) ou de démonstration, selon `mode`. */
 export type ExternalProfileExtractor = {
   mode: AiMode;
   /**
@@ -78,6 +81,7 @@ export type ExternalProfileExtractor = {
   extract(input: ExternalProfileInput): Promise<ExternalSiteProfile>;
 };
 
+/** Dépendances injectables de `createExternalProfileExtractor`. */
 export type ExternalProfileExtractorDeps = {
   /** Appel au modèle (injectable pour les tests) */
   complete?: typeof completeStructured;
@@ -159,6 +163,7 @@ export const externalProfileSchema = z
     }),
   );
 
+/** Réponse du modèle une fois lue par le schéma : toutes les rubriques présentes, textes et listes à leur place — pas encore triée ni bornée. */
 export type ExternalProfileAnswer = z.output<typeof externalProfileSchema>;
 
 // ─── Garde-fous ──────────────────────────────────────────────────────────────
@@ -199,17 +204,18 @@ function bookingAppears(url: string, corpus: SiteCorpus): boolean {
  *    dans le texte des pages est écartée (mots significatifs, sans égard aux
  *    accents, à la casse, au pluriel) ; un même titre n'est gardé qu'une fois ;
  * 2. infos pratiques : une entrée dont un nombre ne figure dans aucune page
- *    est écartée (prix ou durée inventés) ;
+ *    est écartée (prix ou durée inventés) ; diplômes et formations : un
+ *    intitulé dont les mots ou l'année ne se lisent pas sur le site est écarté ;
  * 3. coordonnées : celles relevées dans le code des pages priment (téléphone,
  *    e-mail, adresse, horaires, lien de rendez-vous, réseaux sociaux) ; à
  *    défaut, celles du modèle ne sont gardées que si elles se lisent sur le
  *    site — téléphone et e-mail dans les pages ou les faits, adresses web
- *    écrites en toutes lettres, adresse postale, horaires et précision sans
- *    nombre étranger aux pages ;
- * 4. formulations : un texte que le marketing éthique refuse est retiré —
- *    `completeStructured` l'exige déjà du modèle, la règle vaut ici pour le
- *    brouillon de démonstration et pour une réponse refusée dont on garde
- *    les parties conformes ;
+ *    écrites en toutes lettres, adresse postale dont les nombres et les noms
+ *    y figurent, horaires et précision sans nombre étranger aux pages ;
+ * 4. formulations, au fil des rubriques : un texte que le marketing éthique
+ *    refuse est retiré — `completeStructured` l'exige déjà du modèle, la
+ *    règle vaut ici pour le brouillon de démonstration et pour une réponse
+ *    refusée dont on garde les parties conformes ;
  * 5. `cleanExternalProfile` une dernière fois : plafonds, identifiants
  *    uniques, mêmes bornes pour les valeurs venues des faits.
  *
@@ -253,6 +259,10 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
     ];
   });
 
+  // 2. Infos pratiques, diplômes et formations
+  const practical = each(answer.practical, (entry) => clean({ practical: [entry] }).practical).filter((item) => fair(item.title) && fair(item.text) && numbersGrounded(`${item.title} ${item.text}`, read));
+  const credentials = each(about.credentials, (entry) => clean({ about: { credentials: [entry] } }).about.credentials).filter((line) => fair(line) && titleGrounded(line, read) && numbersGrounded(line, read));
+
   // 3. Coordonnées : les faits d'abord, sinon ce qui se lit sur le site
   const base = clean(answer);
   const fromFacts = clean({ contact: { address: found.address, hours: found.hours }, social: found.social });
@@ -262,7 +272,7 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
   const proposed = base.contact;
   const phone = factPhone ?? (proposed.phone !== undefined && phoneAppears(proposed.phone, readOrFound) ? proposed.phone : undefined);
   const email = factEmail ?? (proposed.email !== undefined && emailAppears(proposed.email, readOrFound) ? proposed.email : undefined);
-  const address = fromFacts.contact.address ?? (proposed.address !== undefined && numbersGrounded(proposed.address, read) ? proposed.address : undefined);
+  const address = fromFacts.contact.address ?? (proposed.address !== undefined && addressGrounded(proposed.address, read) ? proposed.address : undefined);
   const hours =
     fromFacts.contact.hours.length > 0
       ? fromFacts.contact.hours
@@ -275,7 +285,7 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
     if (social[network] === undefined && link !== undefined && webAddressAppears(link, read)) social[network] = link;
   }
 
-  // 5. Plafonds et identifiants : le contrat, sur ce qui a passé les garde-fous
+  // 4 et 5. Formulations refusées retirées, puis le contrat (plafonds, identifiants) sur ce qui a passé les garde-fous
   return clean({
     headline: fair(base.headline) ? base.headline : "",
     intro: each(answer.intro, (entry) => clean({ intro: [entry] }).intro).filter(fair),
@@ -283,12 +293,8 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
       .filter((item) => fair(item.title))
       .map((item) => (item.text !== undefined && !fair(item.text) ? { title: item.title } : item)),
     specialties,
-    about: {
-      paragraphs: each(about.paragraphs, (entry) => clean({ about: { paragraphs: [entry] } }).about.paragraphs).filter(fair),
-      credentials: each(about.credentials, (entry) => clean({ about: { credentials: [entry] } }).about.credentials).filter(fair),
-    },
-    // 2. Infos pratiques
-    practical: each(answer.practical, (entry) => clean({ practical: [entry] }).practical).filter((item) => fair(item.title) && fair(item.text) && numbersGrounded(`${item.title} ${item.text}`, read)),
+    about: { paragraphs: each(about.paragraphs, (entry) => clean({ about: { paragraphs: [entry] } }).about.paragraphs).filter(fair), credentials },
+    practical,
     process: each(answer.process, (entry) => clean({ process: [entry] }).process).filter((item) => fair(item.title) && fair(item.description)),
     faq: each(answer.faq, (entry) => clean({ faq: [entry] }).faq).filter((item) => fair(item.question) && fair(item.answer)),
     contact: { address, phone, email, hours, note },
@@ -336,21 +342,21 @@ export function createExternalProfileExtractor(env: NodeJS.ProcessEnv = process.
       if (pages.every((page) => page.text === "")) return finalizeExternalProfile({}, input, pages);
 
       // `completeStructured` ne rend pas la réponse qu'il refuse : le schéma la retient au passage
-      let read: ExternalProfileAnswer | undefined;
+      let lastRead: ExternalProfileAnswer | undefined;
       const schema = externalProfileSchema.transform((answer) => {
-        read = answer;
+        lastRead = answer;
         return answer;
       });
       let answer: unknown;
       try {
         answer = await complete(options, externalProfileSystemPrompt(), externalProfileUserPrompt(input, pages), schema);
       } catch (err) {
-        if (read === undefined && err instanceof AnthropicError) throw err;
+        if (lastRead === undefined && err instanceof AnthropicError) throw err;
         const reason = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200);
         console.warn(
-          `[external-site] ${read === undefined ? "réponse du modèle inexploitable, profil réduit aux faits relevés" : "réponse du modèle refusée, seules ses parties conformes sont gardées"} : ${reason}`,
+          `[external-site] ${lastRead === undefined ? "réponse du modèle inexploitable, profil réduit aux faits relevés" : "réponse du modèle refusée, seules ses parties conformes sont gardées"} : ${reason}`,
         );
-        answer = read;
+        answer = lastRead;
       }
       return finalizeExternalProfile(answer, input, pages);
     },

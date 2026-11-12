@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { cleanExternalProfile, externalSpecialties } from "@theralys/shared";
 import { cadenceDays, planEditorialTopics } from "./editorial";
 
 const MOTIFS = [
@@ -100,5 +101,50 @@ describe("planification par thématiques (wizard)", () => {
     });
     expect(topics.length).toBe(8);
     for (const t of topics) expect(t.motifSlug).toBe("sommeil");
+  });
+});
+
+describe("planification depuis le site du client (site de référence)", () => {
+  // Spécialités telles que le studio les a comprises du site du client : titres libres, identifiants dérivés
+  const profile = cleanExternalProfile(
+    {
+      headline: "Sophrologie à Albi",
+      specialties: [
+        { title: "Préparation aux examens", excerpt: "Aborder les épreuves sereinement." },
+        { title: "Accompagnement de la grossesse", excerpt: "Vivre sa grossesse en confiance." },
+        { title: "Préparation aux examens", excerpt: "Même titre, autre page du site." },
+      ],
+    },
+    "https://www.cabinet-dupont.fr",
+  );
+  const motifs = externalSpecialties(profile);
+  const base = { city: "Albi", plan: "scale" as const, from: new Date("2026-11-13T00:00:00Z"), horizonWeeks: 6, existingDates: new Set<string>() };
+
+  it("les spécialités du site du client servent de sujets comme des pages de spécialité", () => {
+    expect(motifs).toEqual([
+      { slug: "preparation-aux-examens", title: "Préparation aux examens" },
+      { slug: "accompagnement-de-la-grossesse", title: "Accompagnement de la grossesse" },
+      { slug: "preparation-aux-examens-2", title: "Préparation aux examens" },
+    ]);
+    const topics = planEditorialTopics({ ...base, motifs });
+    expect(topics).toHaveLength(24);
+    expect(new Set(topics.map((t) => t.topic)).size).toBe(topics.length);
+    for (const t of topics) {
+      expect(motifs.some((m) => m.slug === t.motifSlug)).toBe(true);
+      expect(t.topic.toLowerCase()).toMatch(/préparation aux examens|accompagnement de la grossesse/);
+    }
+    // Chaque spécialité du site reçoit des sujets
+    expect(new Set(topics.map((t) => t.motifSlug)).size).toBe(3);
+  });
+
+  it("thématiques du praticien : un sujet est rattaché à la spécialité du site du client qui porte ce nom", () => {
+    const topics = planEditorialTopics({ ...base, motifs, themes: [{ label: "accompagnement de la grossesse", perMonth: 2 }, { label: "Bien dormir", perMonth: 2 }] });
+    expect(topics.length).toBeGreaterThan(0);
+    for (const t of topics) {
+      if (/grossesse/i.test(t.topic)) expect(t.motifSlug).toBe("accompagnement-de-la-grossesse");
+      else expect(t.motifSlug).toBeNull();
+    }
+    expect(topics.some((t) => t.motifSlug === "accompagnement-de-la-grossesse")).toBe(true);
+    expect(topics.some((t) => t.motifSlug === null)).toBe(true);
   });
 });

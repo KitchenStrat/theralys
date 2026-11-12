@@ -6,6 +6,6 @@ export * from "./google-profile";
 export * from "./google-ads";
 export * from "./meta-ads";
 export * from "./notifications";
-export { loadGoogleBrief } from "./google-brief";
+export { loadGoogleBrief, publicSiteUrl } from "./google-brief";
 export * from "./meta-library";
 export * from "./external-site";

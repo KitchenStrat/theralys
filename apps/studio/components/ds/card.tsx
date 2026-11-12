@@ -41,8 +41,9 @@ export function Card({ as: Tag = "div", variant = "plain", padding = "md", secti
   );
 }
 
+// `flex-col justify-start` : dans une grille, une carte étirée garde son contenu en haut (un <button> le centrerait)
 const INTERACTIVE =
-  "block w-full rounded-ds-card bg-white text-left shadow-ds-card ring-1 ring-ds-ink-900/5 ds-lift ds-focus";
+  "flex w-full flex-col items-stretch justify-start rounded-ds-card bg-white text-left shadow-ds-card ring-1 ring-ds-ink-900/5 ds-lift ds-focus";
 
 type InteractiveCommon = {
   padding?: CardPadding;
@@ -106,8 +107,8 @@ export type CardHeaderProps = {
 /** En-tête de carte : pastille d'icône, titre, phrase d'explication, action à droite. */
 export function CardHeader({ title, description, icon, as: Heading = "h2", action, className }: CardHeaderProps) {
   return (
-    <div className={clsx("flex flex-wrap items-start justify-between gap-x-4 gap-y-3", className)}>
-      <div className="flex min-w-0 items-start gap-3.5">
+    <div className={clsx("flex items-start justify-between gap-x-4 gap-y-3 max-sm:flex-wrap", className)}>
+      <div className="flex min-w-0 flex-1 items-start gap-3.5 max-sm:basis-full">
         {icon ? <IconBadge icon={icon} tone="soft" size="md" /> : null}
         <div className="min-w-0">
           <Heading className="font-ds-display text-lg/7 font-bold text-ds-ink-900 sm:text-xl/7">{title}</Heading>

@@ -761,11 +761,13 @@ export const externalPageId = (slug: string): string => `ext-${slug}`;
 /**
  * Le profil sous forme de pages d'un site hébergé (accueil + une page par
  * spécialité), pour `buildSocialBrief` : mêmes sections typées, mêmes
- * plafonds, mêmes références. `images` : photos déjà admises par le studio
- * (banque d'images, photos téléversées) à garder dans le catalogue du brief —
- * les images du site du client ne sont pas reprises.
+ * plafonds, mêmes références. `siteUrl` : adresse du site du client, donnée
+ * comme source aux spécialités qui n'y ont pas de page. `images` : photos
+ * déjà admises par le studio (banque d'images, photos téléversées) à garder
+ * dans le catalogue du brief — les images du site du client ne sont pas
+ * reprises.
  */
-export function externalBriefPages(profile: ExternalSiteProfile, opts: { images?: { hero?: string | null; about?: string | null } } = {}): SocialBriefInput["pages"] {
+export function externalBriefPages(profile: ExternalSiteProfile, opts: { siteUrl?: string; images?: { hero?: string | null; about?: string | null } } = {}): SocialBriefInput["pages"] {
   const sections: Section[] = [];
   if (profile.headline !== "" || profile.intro.length > 0) {
     sections.push({
@@ -826,7 +828,8 @@ export function externalBriefPages(profile: ExternalSiteProfile, opts: { images?
       ...(specialty.headings.length > 0 ? [{ type: "richText" as const, body: specialty.headings.map((heading) => `## ${heading}`).join("\n\n") }] : []),
       ...(specialty.faq.length > 0 ? [{ type: "faq" as const, title: "Questions fréquentes", items: specialty.faq }] : []),
     ],
-    ...(specialty.url ? { href: specialty.url } : {}),
+    // Une spécialité sans page à elle renvoie à l'accueil du site du client (jamais à une page « /motifs/… » qui n'y existe pas)
+    ...(specialty.url ? { href: specialty.url } : opts.siteUrl ? { href: opts.siteUrl } : {}),
   }));
   return [home, ...motifs];
 }

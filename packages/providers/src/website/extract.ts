@@ -50,9 +50,9 @@ const HEADINGS_MAX = 40;
 /** Profondeur d'imbrication parcourue : au-delà, le sous-arbre est ignoré (document pathologique). */
 const DEPTH_MAX = 400;
 
-/** Ce qui n'est jamais du texte de la page : code, médias, formulaires, navigation, encarts, fenêtres modales. */
+/** Ce qui n'est jamais du texte de la page : en-tête du document, code, médias, formulaires, navigation, encarts, fenêtres modales. */
 const NOISE = [
-  "script, style, noscript, template, iframe, frame, object, embed, svg, canvas, math, video, audio, map",
+  "head, title, script, style, noscript, template, iframe, frame, object, embed, svg, canvas, math, video, audio, map",
   "form, button, input, select, textarea, datalist, dialog",
   "nav, aside, [role='navigation'], [role='search'], [role='complementary'], [role='dialog'], [role='alertdialog'], [aria-modal='true']",
   // Fil d'Ariane, liens d'évitement, colonnes latérales et commentaires de visiteurs (contenu de tiers)
@@ -84,36 +84,58 @@ const HIDDEN_CLASSES = new Set([
   "w-condition-invisible",
 ]);
 
-/** Style en ligne qui masque l'élément : non affiché, invisible, rogné à rien ou renvoyé hors de l'écran. */
-const HIDDEN_STYLE = /(?:^|;)(?:display:none|visibility:(?:hidden|collapse)|text-indent:-\d{3,}|(?:left|right|top|bottom|margin-left|margin-top):-\d{4,}|clip:rect\(0(?:px)?[, ]0(?:px)?[, ]0(?:px)?[, ]0(?:px)?\)|clip-path:inset\((?:50|100)%\))/;
+/**
+ * Style en ligne qui masque l'élément : non affiché, invisible, rogné à
+ * rien ou renvoyé hors de l'écran. `opacity: 0` n'en fait pas partie : les
+ * constructeurs de sites le posent sur le contenu qu'ils font apparaître au
+ * défilement.
+ */
+const HIDDEN_STYLE = /(?:^|;)(?:display:none|visibility:(?:hidden|collapse)|text-indent:-\d{3,}|(?:left|right|top|bottom|margin-left|margin-top):-\d{4,}|clip:rect\((?:[01](?:px)?,?){4}\)|clip-path:inset\((?:50|100)%\))/;
 
 /** L'élément est-il masqué par son style en ligne ? */
 export function isHiddenByStyle(style: string | undefined): boolean {
   if (!style) return false;
-  return HIDDEN_STYLE.test(style.toLowerCase().replace(/\s+/g, "").replace(/!important/g, ""));
+  return HIDDEN_STYLE.test(style.toLowerCase().replace(/!important/g, "").replace(/\s+/g, ""));
 }
 
-/** Bandeaux de cookies et de consentement : outils connus, puis noms d'usage. */
-const COOKIE_BANNERS = [
+/**
+ * Blocs de témoignages et d'avis, reconnus à leur identifiant ou à leur
+ * classe : ce sont les propos de tiers, souvent sur leur santé. Ils ne
+ * servent pas à décrire l'activité et ne sont donc pas lus (collecte minimale).
+ */
+const TESTIMONIAL_NAME = /testimonial|t[eé]moignage|(?:^|[-_\s])(?:avis|reviews?|livre-?d-?or)(?:[-_\s]|$)/i;
+
+/** Bandeaux de cookies et de consentement des outils connus. */
+const KNOWN_COOKIE_BANNERS = [
   "#tarteaucitronRoot, #tarteaucitronAlertBig, #axeptio_overlay, #didomi-host, #onetrust-consent-sdk, #CybotCookiebotDialog, #cookie-law-info-bar, #cookie-notice",
   "#cmplz-cookiebanner-container, .cmplz-cookiebanner, #moove_gdpr_cookie_info_bar, .cc-window, .cky-consent-container, #cookiescript_injected, .sqs-cookie-banner-v2, #BorlabsCookieBox, #usercentrics-root, .iubenda-cs-container",
-  "[id*='cookie' i], [class*='cookie' i], [id*='consent' i], [class*='consent' i], [id*='gdpr' i], [class*='gdpr' i], [id*='rgpd' i], [class*='rgpd' i]",
 ].join(", ");
+/** Bandeaux reconnus à leur nom seulement : retirés s'ils sont courts (un nom de classe trompeur ne doit pas emporter la page). */
+const NAMED_COOKIE_BANNERS = "[id*='cookie' i], [class*='cookie' i], [id*='consent' i], [class*='consent' i], [id*='gdpr' i], [class*='gdpr' i], [id*='rgpd' i], [class*='rgpd' i]";
+const NAMED_BANNER_TEXT_MAX = 1_200;
 
 const BLOCK_TAGS = new Set(["address", "article", "blockquote", "body", "caption", "center", "dd", "details", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "html", "legend", "li", "main", "ol", "p", "pre", "section", "summary", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul"]);
 const HEADING_TAG = /^h([1-6])$/;
 
-/** Texte brut d'un sous-arbre, sur une ligne (titres, cellules de tableau). */
+/** Texte brut d'un sous-arbre, sur une ligne à nettoyer (titres, cellules de tableau, mesures de longueur). */
 function inlineText(node: DomNode, depth = 0): string {
   if (isTextNode(node)) return node.data;
   if (!isElement(node) || depth > DEPTH_MAX) return "";
   if (node.name === "br") return " ";
   let out = "";
+  let previousWasElement = false;
   for (const child of node.children) {
     const piece = inlineText(child, depth + 1);
-    // Deux éléments voisins sont séparés à l'affichage (marges, cellules) : sans espace, leurs mots se colleraient
-    out += isElement(child) && out !== "" && !/\s$/.test(out) && BLOCK_TAGS.has(child.name) ? ` ${piece}` : piece;
-    if (isElement(child) && BLOCK_TAGS.has(child.name)) out += " ";
+    if (isElement(child)) {
+      // Deux éléments voisins sont séparés à l'affichage (marges, cellules) : sans espace, leurs mots se colleraient
+      const separated = BLOCK_TAGS.has(child.name);
+      out += separated || previousWasElement ? ` ${piece}` : piece;
+      if (separated) out += " ";
+      previousWasElement = true;
+    } else {
+      out += piece;
+      if (isTextNode(child) && child.data.trim() !== "") previousWasElement = false;
+    }
   }
   return out;
 }
@@ -128,22 +150,22 @@ function hasBlockChild(node: DomElement, depth = 0): boolean {
  * élément de liste (préfixé « - ») ou ligne de tableau (cellules séparées
  * par « | » : les grilles de tarifs restent lisibles).
  */
-function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings: string[] } {
+function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings: string[]; hasMainTitle: boolean } {
   const blocks: string[] = [];
   const headings: string[] = [];
+  let hasMainTitle = false;
   let buffer = "";
   /** Un élément de liste est ouvert et son premier bloc de texte n'est pas encore sorti */
   let bullet = false;
 
-  const push = (line: string, opts: { bullet?: boolean } = {}): void => {
-    if (line === "" || !/[\p{L}\p{N}]/u.test(line)) return;
-    blocks.push(opts.bullet ? `- ${line}` : line);
+  const push = (line: string, prefix = ""): void => {
+    if (line !== "" && /[\p{L}\p{N}]/u.test(line)) blocks.push(`${prefix}${line}`);
   };
   const flush = (): void => {
     const line = cleanLine(buffer);
     buffer = "";
     if (line === "") return;
-    push(line, { bullet });
+    push(line, bullet ? "- " : "");
     bullet = false;
   };
 
@@ -161,12 +183,13 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
     const heading = HEADING_TAG.exec(tag);
     if (heading) {
       flush();
-      const line = cleanLineMax(inlineText(node), HEADING_MAX);
+      // Un titre dans un élément de liste n'est pas une puce, et le texte qui le suit non plus
       bullet = false;
-      if (line !== "") {
-        push(line);
-        if (Number(heading[1]) <= 3 && headings.length < HEADINGS_MAX && !headings.includes(line)) headings.push(line);
-      }
+      const line = cleanLineMax(inlineText(node), HEADING_MAX);
+      if (line === "") return;
+      push(line);
+      if (heading[1] === "1") hasMainTitle = true;
+      if (Number(heading[1]) <= 3 && headings.length < HEADINGS_MAX && !headings.includes(line)) headings.push(line);
       return;
     }
     if (tag === "tr") {
@@ -174,12 +197,8 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
       // Ligne de données : une ligne de texte. Tableau de mise en page (cellules à paragraphes) : parcours ordinaire.
       if (cells.length > 0 && !cells.some((cell) => hasBlockChild(cell))) {
         flush();
-        push(
-          cells
-            .map((cell) => cleanLine(inlineText(cell)))
-            .filter((cell) => cell !== "")
-            .join(" | "),
-        );
+        const row = cells.map((cell) => cleanLine(inlineText(cell))).filter((cell) => cell !== "");
+        push(row.join(" | "));
         return;
       }
     }
@@ -188,11 +207,12 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
     if (tag === "li") bullet = true;
     let previousWasElement = false;
     for (const child of node.children) {
-      // Deux éléments en ligne accolés (boutons, liens d'un menu) sont séparés à l'affichage
-      if (isElement(child) && previousWasElement && !BLOCK_TAGS.has(child.name) && buffer !== "" && !/\s$/.test(buffer)) buffer += " ";
+      if (isElement(child)) {
+        // Deux éléments en ligne accolés (boutons, liens) sont séparés à l'affichage
+        if (previousWasElement && !BLOCK_TAGS.has(child.name) && buffer !== "" && !/\s$/.test(buffer)) buffer += " ";
+        previousWasElement = true;
+      } else if (isTextNode(child) && child.data.trim() !== "") previousWasElement = false;
       walk(child, depth + 1);
-      if (isElement(child)) previousWasElement = true;
-      else if (isTextNode(child) && child.data.trim() !== "") previousWasElement = false;
     }
     if (block) flush();
     if (tag === "li") bullet = false;
@@ -200,7 +220,7 @@ function collectBlocks(roots: readonly DomNode[]): { blocks: string[]; headings:
 
   for (const root of roots) walk(root, 0);
   flush();
-  return { blocks, headings };
+  return { blocks, headings, hasMainTitle };
 }
 
 /** Retire les blocs répétés : deux fois de suite, ou repris plus loin à l'identique pour un bloc long (versions bureau et mobile d'une même section, carrousels). */
@@ -218,11 +238,10 @@ function dropRepeats(blocks: readonly string[]): string[] {
   return out;
 }
 
-/** Contenu d'une balise meta par nom ou propriété (première valeur non vide). */
+/** Contenu d'une balise meta par nom ou propriété (première valeur non vide, dans l'ordre des noms donnés). */
 export function metaContent($: CheerioAPI, ...names: string[]): string {
   for (const name of names) {
-    const selector = `meta[name="${name}" i], meta[property="${name}" i]`;
-    for (const element of $(selector).toArray()) {
+    for (const element of $(`meta[name="${name}" i], meta[property="${name}" i]`).toArray()) {
       const content = cleanLine($(element).attr("content") ?? "");
       if (content !== "") return content;
     }
@@ -232,10 +251,12 @@ export function metaContent($: CheerioAPI, ...names: string[]): string {
 
 /** Langue déclarée par le document, sous forme courte (« fr », « fr-FR ») ; `undefined` si absente ou illisible. */
 export function documentLanguage($: CheerioAPI): string | undefined {
-  const raw = ($("html").first().attr("lang") ?? $("html").first().attr("xml:lang") ?? metaContent($, "og:locale")).trim().replace("_", "-");
-  const match = /^([a-z]{2,3})(?:-([a-z]{2}|\d{3}))?$/i.exec(raw);
-  if (!match) return undefined;
-  return match[2] ? `${match[1]!.toLowerCase()}-${match[2].toUpperCase()}` : match[1]!.toLowerCase();
+  const root = $("html").first();
+  const raw = (root.attr("lang") || root.attr("xml:lang") || metaContent($, "og:locale")).trim().replace(/_/g, "-");
+  const [primary, ...rest] = raw.split("-");
+  if (!primary || !/^[a-z]{2,3}$/i.test(primary)) return undefined;
+  const region = rest.find((part) => /^[a-z]{2}$/i.test(part));
+  return region ? `${primary.toLowerCase()}-${region.toUpperCase()}` : primary.toLowerCase();
 }
 
 /**
@@ -262,11 +283,6 @@ export function metaRefreshTarget($: CheerioAPI, pageUrl: string): string | null
   return null;
 }
 
-/** L'élément structure-t-il la page (corps, contenu principal, ou porteur du titre) ? Un nom de classe trompeur ne doit pas le faire retirer. */
-function isStructural($: CheerioAPI, element: DomElement): boolean {
-  return ["html", "body", "main", "article"].includes(element.name) || $(element).find("main, article, h1").length > 0;
-}
-
 /**
  * Extrait le texte principal de la page. Modifie le document reçu (les
  * éléments écartés en sont retirés).
@@ -274,23 +290,38 @@ function isStructural($: CheerioAPI, element: DomElement): boolean {
 export function extractPage($: CheerioAPI, pageUrl: string): ExtractedPage {
   const description = cleanLineMax(metaContent($, "description", "og:description"), DESCRIPTION_MAX);
   const language = documentLanguage($);
-  const ogTitle = metaContent($, "og:title");
+  // Titre du document : celui d'une image vectorielle (<svg><title>) n'en est pas un
+  const documentTitle = cleanLine(
+    $("title")
+      .filter((_, element) => $(element).closest("svg").length === 0)
+      .first()
+      .text(),
+  );
+  const fallbackTitle = metaContent($, "og:title");
+  const lengthOf = (node: DomNode): number => cleanLine(inlineText(node)).length;
+
+  // Un nom de classe ne doit pas emporter la page : le corps, le contenu principal et ce qui porte le titre restent
+  const isStructural = (element: DomElement): boolean => ["html", "body", "main", "article"].includes(element.name) || $(element).find("main, article, h1").length > 0;
 
   // 1. Ce qui n'est pas du texte de page, puis ce qu'un visiteur ne voit pas
   $(NOISE).remove();
   $(HIDDEN_ATTRIBUTES).not("html, body").remove();
-  $("[style], [class]").each((_, element) => {
+  $("[style], [class], [id]").each((_, element) => {
     if (element.name === "html" || element.name === "body") return;
-    const classes = (element.attribs.class ?? "").split(/\s+/);
-    if (isHiddenByStyle(element.attribs.style) || classes.some((name) => HIDDEN_CLASSES.has(name.toLowerCase()))) $(element).remove();
+    const className = element.attribs.class ?? "";
+    if (isHiddenByStyle(element.attribs.style) || className.split(/\s+/).some((name) => HIDDEN_CLASSES.has(name.toLowerCase()))) $(element).remove();
+    else if (TESTIMONIAL_NAME.test(`${element.attribs.id ?? ""} ${className}`) && !isStructural(element)) $(element).remove();
   });
-  $(COOKIE_BANNERS).each((_, element) => {
-    if (!isStructural($, element)) $(element).remove();
+  $(KNOWN_COOKIE_BANNERS).not("html, body").remove();
+  $(NAMED_COOKIE_BANNERS).each((_, element) => {
+    if (!isStructural(element) && lengthOf(element) <= NAMED_BANNER_TEXT_MAX) $(element).remove();
   });
 
   // 2. En-tête et pied de page du site : retirés, sauf l'en-tête qui porte le titre de la page
   const body = $("body").first();
-  const scope = body.length > 0 ? body : $.root();
+  // Document sans balise <body> (fragment, HTML minimal) : tout le document tient lieu de corps
+  const scopeNodes: DomNode[] = body.length > 0 ? body.toArray() : $.root().contents().toArray();
+  const scope = $(scopeNodes);
   scope.find("footer, [role='contentinfo']").remove();
   scope.find("header, [role='banner']").each((_, element) => {
     const inContent = $(element).parents("main, [role='main'], article, section").length > 0;
@@ -298,44 +329,43 @@ export function extractPage($: CheerioAPI, pageUrl: string): ExtractedPage {
   });
 
   // 3. Contenu principal : la balise <main> quand elle porte l'essentiel du texte, sinon tout le corps
-  const lengthOf = (node: DomNode): number => cleanLine(inlineText(node)).length;
-  const scopeNodes: DomNode[] = scope.toArray();
   const scopeLength = scopeNodes.reduce((sum, node) => sum + lengthOf(node), 0);
-  let roots: DomNode[] = scopeNodes;
   const main = scope
     .find("main, [role='main']")
     .toArray()
     .map((element) => ({ element, length: lengthOf(element) }))
     .sort((a, b) => b.length - a.length)[0];
-  if (main && (main.length >= 200 || main.length >= scopeLength * 0.5)) {
+  const useMain = main !== undefined && (main.length >= 200 || main.length >= scopeLength * 0.5);
+  let roots = scopeNodes;
+  if (useMain) {
     // Un en-tête gardé hors de <main> porte le titre et l'accroche : il précède le contenu
     const heroes = scope
       .find("header, [role='banner']")
       .toArray()
-      .filter((element) => $(element).closest(main.element).length === 0 && $(main.element).closest(element).length === 0);
+      .filter((element) => $(element).find("h1").length > 0 && $(element).closest(main.element).length === 0 && $(main.element).closest(element).length === 0);
     roots = [...heroes, main.element];
   }
 
   const collected = collectBlocks(roots);
   let blocks = collected.blocks;
   const headings = collected.headings;
-  // Titre de page placé hors du contenu principal (bandeau de titre de certains thèmes) : repris en tête
-  if (roots !== scopeNodes && $(roots).find("h1").length === 0) {
-    const outside = cleanLineMax(inlineText(scope.find("h1").first().get(0) ?? { type: "text", data: "" } as unknown as DomNode), HEADING_MAX);
-    if (outside !== "") {
-      blocks = [outside, ...blocks];
-      if (!headings.includes(outside)) headings.unshift(outside);
+  if (useMain && !collected.hasMainTitle) {
+    // Titre de page placé hors du contenu principal (bandeau de titre de certains thèmes) : repris en tête
+    const outside = scope.find("h1").first().get(0);
+    const line = outside ? cleanLineMax(inlineText(outside), HEADING_MAX) : "";
+    if (line !== "") {
+      blocks = [line, ...blocks];
+      if (!headings.includes(line)) headings.unshift(line);
     }
   }
 
   const text = joinBlocks(dropRepeats(blocks), EXTERNAL_SITE_LIMITS.pageChars);
-  const documentTitle = cleanLine($("title").first().text());
   let host = "";
   try {
     host = new URL(pageUrl).hostname;
   } catch {
     host = "";
   }
-  const title = cleanLineMax(documentTitle || ogTitle || headings[0] || host, TITLE_MAX);
+  const title = cleanLineMax(documentTitle || fallbackTitle || headings[0] || host, TITLE_MAX);
   return { title, ...(description !== "" ? { description } : {}), headings: headings.slice(0, HEADINGS_MAX), text, ...(language ? { language } : {}) };
 }

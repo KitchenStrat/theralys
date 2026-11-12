@@ -26,7 +26,9 @@
  * - la régénération du plan (kind `ads_plan`, coût 0) est inscrite dans la
  *   même transaction que la mise à jour du plan, sous verrou par site, avec
  *   un marqueur en mémoire par site pour refuser un second clic simultané
- *   avant tout appel IA.
+ *   avant tout appel IA ; le bilan de l'analyse y est repris tel quel, sauf
+ *   si le site de référence a changé depuis (site du client connecté ou
+ *   retiré) : il est alors recalculé sur le site du moment.
  */
 
 import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
@@ -412,6 +414,26 @@ export function diagnosticInputFrom(
     forecast,
     ...(ctx.externalSite ? { externalSite: true, hasTagManager: Boolean(ctx.tracking.googleTagManagerId) } : {}),
   };
+}
+
+/**
+ * Bilan à donner au plan régénéré. Le bilan enregistré décrit le site qui
+ * était la référence le jour de l'analyse : tant que la référence n'a pas
+ * changé, il est repris tel quel (le même objet, comme avant). Si elle a
+ * changé depuis — site du client connecté, ou retiré —, ses points de
+ * préparation parleraient d'un autre site que celui des pages
+ * d'atterrissage du plan : le bilan est recalculé sur le site du moment,
+ * mots-clés et prévision de l'analyse conservés.
+ */
+export function diagnosticForRegeneration(
+  stored: GoogleAdsDiagnostic,
+  ctx: GoogleAdsContextData,
+  keywords: GoogleAdsKeywordSet,
+  forecast: GoogleAdsForecast | null,
+  now: Date,
+): GoogleAdsDiagnostic {
+  if (Boolean(stored.externalSite) === Boolean(ctx.externalSite)) return stored;
+  return diagnoseGoogleAds(diagnosticInputFrom(ctx, keywords, forecast), now);
 }
 
 /** Correspondance la plus fréquente (égalité : ordre de GOOGLE_ADS_MATCH_TYPES, « phrase » par défaut). */
@@ -807,7 +829,9 @@ async function runGoogleAdsAnalysisAttributed(
  * GOOGLE_ADS_PLAN_REGENERATIONS_PER_MONTH vérifié avant l'appel IA puis
  * recompté dans la transaction qui inscrit `google_usage` kind `ads_plan`
  * (coût 0) et enregistre le plan. Les pages d'atterrissage sont celles du
- * moment (site du client s'il est devenu la référence depuis l'analyse).
+ * moment ; si le site de référence a changé depuis l'analyse (site du client
+ * connecté ou retiré), le bilan est recalculé sur ce site et enregistré avec
+ * le plan (`diagnosticForRegeneration`), sinon il est repris tel quel.
  */
 export function regenerateGoogleAdsPlan(...args: Parameters<typeof regenerateGoogleAdsPlanAttributed>): ReturnType<typeof regenerateGoogleAdsPlanAttributed> {
   // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
@@ -851,8 +875,11 @@ async function regenerateGoogleAdsPlanAttributed(
       const instructions = cleanAdsInstructions(opts.instructions);
       const [ctx, { brief }] = await Promise.all([loadGoogleAdsContext(db, siteId, env, { loadReference: opts.loadReference }), (opts.loadBrief ?? loadGoogleBrief)(db, siteId, now)]);
       const planner = createGoogleAdsPlanner(env);
+      // Le plan et le bilan parlent toujours du même site : bilan repris tel quel tant que la référence n'a pas changé
+      const currentDiagnostic = diagnosticForRegeneration(diagnostic, ctx, keywords, forecast, now);
+      const diagnosticChanged = currentDiagnostic !== diagnostic;
       const plan = await planner.plan(brief, {
-        diagnostic,
+        diagnostic: currentDiagnostic,
         keywords,
         forecast,
         landingPages: ctx.landingPages,
@@ -867,12 +894,12 @@ async function regenerateGoogleAdsPlanAttributed(
         await tx.insert(googleUsage).values({ siteId, month: usageMonthKey(now), kind: "ads_plan", costUsd: 0, requests: 1 });
         await tx
           .update(googleAdsAnalyses)
-          .set({ plan, generator: planner.mode, instructions: instructions ?? null, error: null, updatedAt: new Date() })
+          .set({ plan, ...(diagnosticChanged ? { diagnostic: currentDiagnostic } : {}), generator: planner.mode, instructions: instructions ?? null, error: null, updatedAt: new Date() })
           .where(eq(googleAdsAnalyses.id, analysis.id));
         return usage.planRegenUsed;
       });
       if (used === null) return { status: "skipped", reason: "quota" };
-      console.info(`[google-ads] plan régénéré pour ${site.slug} (analyse ${analysis.id}, ${planner.mode})`);
+      console.info(`[google-ads] plan régénéré pour ${site.slug} (analyse ${analysis.id}, ${planner.mode}${diagnosticChanged ? ", bilan recalculé : le site de référence a changé" : ""})`);
       return { status: "done", analysisId: analysis.id, remaining: Math.max(0, GOOGLE_ADS_PLAN_REGENERATIONS_PER_MONTH - used - 1) };
     } catch (err) {
       console.error(`[google-ads] régénération du plan impossible pour ${site.slug} :`, err);

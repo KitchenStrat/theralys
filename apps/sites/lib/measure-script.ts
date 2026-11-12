@@ -30,6 +30,7 @@ export const MEASURE_INERT_MAX_AGE_S = 300;
 /** Script servi pour une clé invalide, inconnue ou d'un site archivé : il ne fait rien. La clé demandée n'y est jamais reprise. */
 export const INERT_MEASURE_SCRIPT = "/* Mesure d'audience inactive. */\n";
 
+/** Les seules valeurs propres à un site que le script embarque. */
 export type MeasureScriptInput = {
   /** Clé publique du site (`external_sites.measure_key`) */
   key: string;

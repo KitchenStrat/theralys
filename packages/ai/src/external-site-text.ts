@@ -149,7 +149,7 @@ const wordsOf = (text: string): string[] => foldText(text).split(" ").filter((wo
 
 /**
  * Mot ramené à une forme qui ne distingue ni le pluriel ni le féminin
- * (« sportives » et « sportif », « prénatales » et « prénatal »). Ce n'est pas
+ * (« sportives » et « sportif », « diplômée » et « diplômé »). Ce n'est pas
  * une racine : « gestion » et « gérer » restent deux mots, pour qu'un sujet
  * absent du site ne passe pas à la faveur d'un mot voisin.
  */
@@ -162,7 +162,7 @@ export function wordForm(word: string): string {
       .replace(/euse$/, "eu")
       .replace(/elle$/, "el")
       .replace(/([ei])nne$/, "$1n")
-      .replace(/e$/, "");
+      .replace(/e+$/, "");
   }
   return form;
 }
@@ -182,16 +182,34 @@ const FRAMING_WORDS = new Set("accompagnement accompagnements gestion trouble tr
  */
 export type SiteCorpus = {
   forms: ReadonlySet<string>;
-  /** Suites de chiffres lues, zéros de tête retirés */
+  /** Suites de chiffres lues hors numéros de téléphone, zéros de tête retirés */
   numbers: ReadonlySet<string>;
   /** Texte en minuscules, sans espace, point, tiret, barre ni parenthèse */
   compact: string;
   lower: string;
 };
 
-/** Suites de chiffres d'un texte (« 1 h 30 » → 1 et 30, « 55,50 € » → 55 et 50), zéros de tête retirés. */
+/**
+ * Suites de chiffres d'un texte (« 1 h 30 » → 1 et 30, « 55,50 € » → 55 et
+ * 50), zéros de tête retirés. Des décimales nulles ne comptent pas : « 60,00 € »
+ * et « 60 € » disent le même prix.
+ */
 export function numbersOf(text: string): string[] {
-  return (text.normalize("NFKD").match(/\d+/g) ?? []).map((digits) => digits.replace(/^0+(?=\d)/, ""));
+  const plain = text.normalize("NFKD").replace(/(\d)[.,]0{1,2}(?!\d)/g, "$1");
+  return (plain.match(/\d+/g) ?? []).map((digits) => digits.replace(/^0+(?=\d)/, ""));
+}
+
+// Numéro de téléphone écrit dans un texte : français (dix chiffres), ou international (« + » ou « 00 », puis l'indicatif)
+const PHONE_IN_TEXT = /(?<!\d)(?:(?:\+|00)\d{1,3}[\s.()-]*(?:\(0\)[\s.-]*)?\d(?:[\s.-]*\d){7,11}|0[1-9](?:[\s.-]?\d{2}){4})(?!\d)/g;
+
+/**
+ * Sépare les numéros de téléphone du reste d'un texte. Les paires de chiffres
+ * d'un numéro ne doivent pas servir d'alibi à un prix : sans cela, le
+ * « 05 36 49 12 34 » du cabinet ferait accepter un « 49 € » inventé.
+ */
+function splitPhones(text: string): { phones: string[]; rest: string } {
+  const phones = text.match(PHONE_IN_TEXT) ?? [];
+  return { phones, rest: phones.length > 0 ? text.replace(PHONE_IN_TEXT, " ") : text };
 }
 
 /** Corpus de comparaison construit sur des textes déjà assainis (`pageTexts`, `factTexts`). */
@@ -200,7 +218,7 @@ export function siteCorpus(texts: readonly string[]): SiteCorpus {
   const numbers = new Set<string>();
   for (const text of texts) {
     for (const word of wordsOf(text)) forms.add(wordForm(word));
-    for (const number of numbersOf(text)) numbers.add(number);
+    for (const number of numbersOf(splitPhones(text).rest)) numbers.add(number);
   }
   const lower = texts.join("\n").toLowerCase();
   return { forms, numbers, compact: lower.replace(/[\s.()/·-]+/g, ""), lower };
@@ -220,9 +238,28 @@ export function titleGrounded(title: string, corpus: SiteCorpus): boolean {
   return required.length > 0 && required.every((word) => corpus.forms.has(wordForm(word)));
 }
 
-/** Tous les nombres du texte se lisent-ils sur le site ? (Vrai pour un texte sans chiffre.) */
+/**
+ * Tous les nombres du texte se lisent-ils sur le site ? (Vrai pour un texte
+ * sans chiffre.) Un numéro de téléphone est jugé en entier, comme un numéro,
+ * et non groupe de chiffres par groupe de chiffres.
+ */
 export function numbersGrounded(text: string, corpus: SiteCorpus): boolean {
-  return numbersOf(text).every((number) => corpus.numbers.has(number));
+  const { phones, rest } = splitPhones(text);
+  return phones.every((phone) => phoneAppears(phone, corpus)) && numbersOf(rest).every((number) => corpus.numbers.has(number));
+}
+
+// Mots d'une adresse qu'on abrège ou développe sans rien y changer (« bd » pour « boulevard », « St » pour « Saint »)
+const ADDRESS_WORDS = new Set("rue avenue boulevard place chemin allee impasse route quai cours square faubourg passage residence batiment etage cedex bis ter saint sainte france".split(" "));
+
+/**
+ * Une adresse postale se lit-elle sur le site ? Ses nombres (numéro, code
+ * postal) et ses noms (voie, commune) doivent tous y figurer : une commune que
+ * le site ne nomme pas — celle de la fiche du praticien, par exemple — ne
+ * fait pas une adresse.
+ */
+export function addressGrounded(address: string, corpus: SiteCorpus): boolean {
+  const names = wordsOf(address).filter((word) => word.length >= 3 && !/^\d+$/.test(word) && !STOP_WORDS.has(word) && !ADDRESS_WORDS.has(word));
+  return numbersGrounded(address, corpus) && names.every((word) => corpus.forms.has(wordForm(word)));
 }
 
 /**

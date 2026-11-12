@@ -3,6 +3,8 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
   DEFAULT_SOCIAL_VOICE,
+  EMPTY_EXTERNAL_FACTS,
+  EMPTY_EXTERNAL_PROFILE,
   META_ADS_ANALYSES_PER_MONTH,
   META_ADS_INSTRUCTIONS_MAX,
   META_ADS_REGENERATIONS_PER_MONTH,
@@ -16,6 +18,8 @@ import {
   META_MEDIA_POSTER_WIDTH,
   buildMetaLocalIndex,
   buildMetaSeed,
+  buildSocialBrief,
+  externalBriefPages,
   metaCreativeIssues,
   metaPlanIssues,
   metaVideoPlanIssues,
@@ -25,6 +29,7 @@ import {
   type MetaAdsDiagnostic,
   type MetaAdsDiagnosticInput,
   type MetaAdsMarket,
+  type MetaAdsPlan,
   type MetaAdsSeed,
   type MetaMarketAd,
   type MetaMarketInsights,
@@ -36,6 +41,8 @@ import { googleUsage, metaAdMedia, metaAdsAnalyses, metaAdsLibrary, type Databas
 import { createMetaAdsPlanner } from "@theralys/ai";
 import { MetaAdLibraryError, MockAdLibraryProvider, type AdLibraryProvider, type AdLibrarySearchInput } from "@theralys/providers/meta";
 import { GEO_RETRY_DELAY_MS } from "@theralys/providers/meta/geo";
+import type { ExternalReference } from "./external-site";
+import type { AdsReferenceLoader } from "./google-ads";
 import {
   META_ADS_ANALYSIS_STALE_MINUTES,
   META_ERROR_MESSAGES,
@@ -127,7 +134,7 @@ const CONTEXT: MetaAdsContextData = {
   seed: SEED,
   landingPages: [
     { path: "/", title: "Accueil", kind: "home" },
-    { path: "/gestion-du-stress", title: "Gestion du stress", kind: "motif" },
+    { path: "/motifs/gestion-du-stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
   ],
   diagnosticInput: DIAGNOSTIC_INPUT,
   brief: BRIEF,
@@ -947,6 +954,7 @@ describe("chaîne mock complète", () => {
     expect(result.diagnostic.verdict).toBe("go");
     const paths = CONTEXT.landingPages.map((p) => p.path);
     expect(metaCreativeIssues(result.creatives!, paths)).toEqual([]);
+    for (const c of result.creatives!.creatives) expect(paths).toContain(c.landingPath);
     expect(result.creatives!.creatives.length).toBeGreaterThanOrEqual(3);
     expect(result.creatives!.notes.join(" ")).toContain("Mettre en avant le sommeil");
     // `photoUrl` renseigné depuis photosById (p1 est la seule photo du brief)
@@ -983,7 +991,9 @@ describe("chaîne mock complète", () => {
     expect(result.diagnostic.marketNote).toBeNull();
     expect(result.plan!.objective.type).toBe("traffic");
     expect(metaPlanIssues(result.plan!, false)).toEqual([]);
-    expect(metaCreativeIssues(result.creatives!, ["/", "/gestion-du-stress"])).toEqual([]);
+    expect(metaCreativeIssues(result.creatives!, ["/", "/motifs/gestion-du-stress"])).toEqual([]);
+    // Chemins exacts des pages actuelles : jamais l'ancien « /<slug> », qui mène à la page introuvable du site public
+    for (const c of result.creatives!.creatives) expect(["/", "/motifs/gestion-du-stress"]).toContain(c.landingPath);
   });
 
   it("veille en échec total (jeton expiré) : market null, provider conservé (meta), message dans marketError, génération maintenue", async () => {
@@ -1399,6 +1409,8 @@ type FakeDbConfig = {
   pendingReservations?: { id: string }[];
   /** Tables absentes (migration non appliquée) : toute requête sur elles échoue avec le code 42P01 */
   missingTables?: unknown[];
+  /** Pages du site hébergé (accueil et spécialités) */
+  pages?: Record<string, unknown>[];
 };
 
 /** Erreur du pilote pour une table absente, enveloppée comme le fait drizzle (`cause`). */
@@ -1416,6 +1428,8 @@ function fakeDb(config: FakeDbConfig = {}) {
   const dialect = new PgDialect();
   /** Tables lues par `select()` (dans l'ordre) */
   const selects: unknown[] = [];
+  /** Lectures des pages du site hébergé */
+  const reads = { pages: 0 };
   let analysisReads = 0;
   const thenable = <T>(value: T) => ({ then: (res: (v: T) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(value).then(res, rej) });
   const failing = () => ({ then: (res: (v: never) => unknown, rej?: (e: unknown) => unknown) => Promise.reject(missingTableError()).then(res, rej) });
@@ -1458,7 +1472,12 @@ function fakeDb(config: FakeDbConfig = {}) {
       findMany: async () => config.running ?? [],
     },
     prospects: { findFirst: async () => config.prospect },
-    pages: { findMany: async () => [] },
+    pages: {
+      findMany: async () => {
+        reads.pages++;
+        return config.pages ?? [];
+      },
+    },
     googleProfileAudits: { findFirst: async () => undefined },
     googleRankScans: { findFirst: async () => undefined },
     blogArticles: { findMany: async () => [] },
@@ -1496,7 +1515,7 @@ function fakeDb(config: FakeDbConfig = {}) {
     }),
   };
   const db = { ...executor, transaction: async <T>(fn: (tx: typeof executor) => Promise<T>) => fn(executor) };
-  return { db: db as unknown as Database, updates, inserts, deletes, purges, selects };
+  return { db: db as unknown as Database, updates, inserts, deletes, purges, selects, reads };
 }
 
 const doneUpdate = (updates: FakeWrite[]) => updates.find((u) => u.table === metaAdsAnalyses && u.values.status === "done");
@@ -2041,5 +2060,246 @@ describe("regenerateMetaAds (base simulée)", () => {
       expect(fake.inserts).toHaveLength(0);
       expect(fake.updates).toHaveLength(0);
     });
+  });
+});
+
+// ─── Site du client comme référence ──────────────────────────────────────────
+
+/** Réglage du site : le site du client est la référence. Pixel, bandeau et réseaux saisis dans le studio y figurent encore. */
+const EXTERNAL_THEME = {
+  ...THEME,
+  externalSite: { url: "https://www.cabinet-dupont.fr", active: true },
+  tracking: { metaPixelId: "999999999999999", cookieBanner: false },
+  social: { instagram: " https://www.instagram.com/reglage-du-studio " },
+} as SiteTheme;
+const EXTERNAL_SITE = { ...SITE, theme: EXTERNAL_THEME } as Site;
+
+/** Ce que `loadExternalReference` rend pour ce site : profil relu par le praticien et faits relevés dans ses pages. */
+const REFERENCE: ExternalReference = {
+  setting: { url: "https://www.cabinet-dupont.fr", active: true },
+  profile: {
+    ...EMPTY_EXTERNAL_PROFILE,
+    headline: "Sophrologue à Albi",
+    specialties: [
+      { slug: "gestion-du-stress", title: "Gestion du stress", excerpt: "Relâcher la pression.", url: "https://www.cabinet-dupont.fr/accompagnements/stress/", headings: [], faq: [] },
+      { slug: "sommeil", title: "Sommeil", excerpt: "Retrouver des nuits calmes.", url: "https://cabinet-dupont.fr/sommeil?lang=fr", headings: [], faq: [] },
+      { slug: "preparation-mentale", title: "Préparation mentale", excerpt: "Avant une échéance.", headings: [], faq: [] },
+    ],
+    contact: { phone: "05 63 00 00 00", address: "12 rue des Lilas, 81000 Albi", hours: [] },
+    social: { facebook: "https://www.facebook.com/cabinetdupont" },
+  },
+  facts: {
+    ...EMPTY_EXTERNAL_FACTS,
+    phones: ["06 11 22 33 44"],
+    social: { facebook: "https://www.facebook.com/ancienne-page", instagram: "https://www.instagram.com/cabinetdupont" },
+    tags: { metaPixelId: "123456789012345", consentBanner: true },
+  },
+};
+
+const EXTERNAL_LANDING_PAGES = [
+  { path: "/", title: "Accueil", kind: "home" },
+  { path: "/accompagnements/stress", title: "Gestion du stress", kind: "motif", slug: "gestion-du-stress" },
+  { path: "/sommeil?lang=fr", title: "Sommeil", kind: "motif", slug: "sommeil" },
+];
+const EXTERNAL_PATHS = EXTERNAL_LANDING_PAGES.map((page) => page.path);
+
+/** Pages du site hébergé du même site : elles ne doivent plus rien fournir quand le site du client est la référence. */
+const HOSTED_PAGES = [
+  { type: "home", slug: "", title: "Accueil", position: 0, sections: [{ type: "contact", title: "Contact", phone: "01 00 00 00 00", address: "1 place du Vigan, 81000 Albi" }] },
+  { type: "motif", slug: "hypnose", title: "Hypnose", position: 1, sections: [{ type: "richText", body: "Texte" }] },
+];
+
+/**
+ * Brief du site du client, construit comme le fait le chargeur de brief quand
+ * ce site est la référence : profil converti en pages (`externalBriefPages`),
+ * photo d'accueil du site hébergé gardée au catalogue, adresse du site du
+ * client. Les spécialités du brief et les pages d'atterrissage se rejoignent
+ * par l'identifiant de spécialité.
+ */
+const EXTERNAL_BRIEF_RESULT = buildSocialBrief({
+  site: {
+    id: SITE.id,
+    name: "Cabinet Dupont",
+    type: "client",
+    theme: { ...EXTERNAL_THEME, disabledMotifs: [] },
+    bookingUrl: SITE.bookingUrl,
+    url: REFERENCE.setting.url,
+    hostedUrl: "https://demo.harmony-web.fr/claire-dupont-sophrologue-albi",
+  },
+  prospect: { firstName: "Claire", lastName: "Dupont", profession: "Sophrologue", city: "Albi", gender: "feminin", googleRating: null, googleReviewCount: null },
+  pages: externalBriefPages(REFERENCE.profile, { images: { hero: "https://images.pexels.com/photos/3822622/cabinet.jpeg" } }),
+  articles: [],
+  reviews: [],
+  voice: null,
+  practiceName: "la sophrologie",
+  now: NOW,
+});
+const EXTERNAL_BRIEF: SocialSiteBrief = EXTERNAL_BRIEF_RESULT.brief;
+const loadExternalBrief = async () => EXTERNAL_BRIEF_RESULT;
+const loadHostedBrief = async () => ({ brief: BRIEF, photosById: {}, refsById: {} });
+
+/** Chargeur de référence simulé (jamais le vrai) : compte ses appels. */
+function referenceLoader(reference: ExternalReference | null) {
+  const calls: string[] = [];
+  const load: AdsReferenceLoader = async (_db, site) => {
+    calls.push(site.id);
+    return reference;
+  };
+  return { load, calls };
+}
+
+describe("site du client : contexte Meta Ads (base simulée, référence et brief injectés)", () => {
+  it("avec une référence : spécialités, téléphone, adresse de repli, pages, Pixel, bandeau et réseaux viennent du site du client ; les pages du site hébergé ne sont pas lues", async () => {
+    const fake = fakeDb({ site: EXTERNAL_SITE, pages: HOSTED_PAGES });
+    const loader = referenceLoader(REFERENCE);
+    const ctx = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { loadReference: loader.load, loadBrief: loadExternalBrief });
+    expect(loader.calls).toEqual([SITE.id]);
+    expect(fake.reads.pages).toBe(0);
+    expect(ctx.landingPages).toEqual(EXTERNAL_LANDING_PAGES);
+    expect(ctx.seed.specialties).toEqual(buildMetaSeed({ profession: "x", city: "", address: null, specialties: ["Gestion du stress", "Sommeil", "Préparation mentale"], competitorNames: [] }).specialties);
+    expect(JSON.stringify(ctx.seed)).not.toMatch(/hypnose/i);
+    // Sans adresse sur la fiche praticien : celle du site du client (code postal, département), pas celle du site hébergé
+    expect(ctx.seed).toMatchObject({ postalCode: "81000", department: { code: "81" } });
+    expect(ctx.diagnosticInput).toEqual({
+      profession: ctx.seed.profession,
+      city: "",
+      hasBookingUrl: true,
+      hasPhone: true,
+      // Pixel et bandeau repérés sur le site du client : le réglage du studio (Pixel saisi, bandeau désactivé) ne compte pas
+      hasPixel: true,
+      cookieBanner: true,
+      photosCount: EXTERNAL_BRIEF.photos.length,
+      // Réseaux : le réglage du site d'abord (Instagram), puis les liens trouvés sur le site du client (Facebook du profil)
+      facebookUrl: "https://www.facebook.com/cabinetdupont",
+      instagramUrl: "https://www.instagram.com/reglage-du-studio",
+      motifPages: 2,
+      profile: { linked: false, rating: null, votes: null },
+      externalSite: true,
+    });
+    expect(ctx.brief).toBe(EXTERNAL_BRIEF);
+    expect(ctx.photosById).toEqual({ p1: "https://images.pexels.com/photos/3822622/cabinet.jpeg" });
+    // Le brief porte l'adresse du site du client, et chaque page de spécialité y retrouve sa spécialité
+    expect(ctx.brief.domain).toBe("www.cabinet-dupont.fr");
+    const briefSlugs = ctx.brief.motifPages.map((motif) => motif.slug);
+    expect(briefSlugs).toEqual(["gestion-du-stress", "sommeil", "preparation-mentale"]);
+    for (const page of ctx.landingPages) if (page.kind === "motif") expect(briefSlugs).toContain(page.slug);
+  });
+
+  it("Pixel, bandeau, téléphone et réseaux absents du site du client : rien n'est repris du site hébergé ni du suivi saisi dans le studio", async () => {
+    const bare: ExternalReference = {
+      ...REFERENCE,
+      profile: { ...REFERENCE.profile, contact: { hours: [] }, social: {}, specialties: REFERENCE.profile.specialties.map((specialty) => ({ ...specialty, url: undefined })) },
+      facts: { ...EMPTY_EXTERNAL_FACTS },
+    };
+    const fake = fakeDb({ site: { ...EXTERNAL_SITE, theme: { ...EXTERNAL_THEME, social: {} } } as Site, pages: HOSTED_PAGES });
+    const ctx = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { loadReference: referenceLoader(bare).load, loadBrief: loadExternalBrief });
+    expect(ctx.diagnosticInput).toMatchObject({ hasPhone: false, hasPixel: false, cookieBanner: false, facebookUrl: null, instagramUrl: null, motifPages: 0, externalSite: true });
+    expect(ctx.landingPages).toEqual([{ path: "/", title: "Accueil", kind: "home" }]);
+    expect(ctx.seed.postalCode).toBeNull();
+    expect(fake.reads.pages).toBe(0);
+    // Liens relevés dans les pages quand le profil n'en porte pas
+    const fromFacts = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { loadReference: referenceLoader({ ...bare, facts: { ...EMPTY_EXTERNAL_FACTS, social: REFERENCE.facts.social, phones: ["06 11 22 33 44"] } }).load, loadBrief: loadExternalBrief });
+    expect(fromFacts.diagnosticInput).toMatchObject({ hasPhone: true, facebookUrl: "https://www.facebook.com/ancienne-page", instagramUrl: "https://www.instagram.com/cabinetdupont" });
+  });
+
+  it("l'adresse de la fiche praticien garde la priorité sur celle du site du client", async () => {
+    const fake = fakeDb({ site: { ...EXTERNAL_SITE, prospectId: PROSPECT.id } as Site, prospect: { ...PROSPECT, googleAddress: "3 rue Peyrolière, 31000 Toulouse", city: "Toulouse" } });
+    const ctx = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { loadReference: referenceLoader(REFERENCE).load, loadBrief: loadExternalBrief });
+    expect(ctx.seed).toMatchObject({ city: "Toulouse", postalCode: "31000" });
+  });
+
+  it("sans référence : contexte du site hébergé, strictement comme avant (pages lues, Pixel et bandeau du studio, réseaux du réglage, « /motifs/<slug> »)", async () => {
+    const hostedSite = { ...SITE, theme: { ...THEME, tracking: EXTERNAL_THEME.tracking, social: { facebook: "https://www.facebook.com/reglage" } } } as Site;
+    const expected = {
+      profession: expect.any(String),
+      city: "",
+      hasBookingUrl: true,
+      hasPhone: true,
+      hasPixel: true,
+      cookieBanner: false,
+      photosCount: BRIEF.photos.length,
+      facebookUrl: "https://www.facebook.com/reglage",
+      instagramUrl: null,
+      motifPages: 1,
+      profile: { linked: false, rating: null, votes: null },
+    };
+    const landing = [
+      { path: "/", title: "Accueil", kind: "home" },
+      { path: "/motifs/hypnose", title: "Hypnose", kind: "motif", slug: "hypnose" },
+    ];
+    // Site sans site du client : le chargeur de référence n'est pas appelé
+    const fake = fakeDb({ site: hostedSite, pages: HOSTED_PAGES });
+    const unused = referenceLoader(REFERENCE);
+    const ctx = await loadMetaAdsContext(fake.db, SITE.id, MOCK_ENV, { loadReference: unused.load, loadBrief: loadHostedBrief });
+    expect(unused.calls).toEqual([]);
+    expect(fake.reads.pages).toBe(1);
+    expect(ctx.diagnosticInput).toEqual(expected);
+    expect("externalSite" in ctx.diagnosticInput).toBe(false);
+    expect(ctx.landingPages).toEqual(landing);
+    expect(ctx.seed.specialties).toEqual(buildMetaSeed({ profession: "x", city: "", address: null, specialties: ["Hypnose"], competitorNames: [] }).specialties);
+    // Adresse de repli : la section Contact de l'accueil hébergé
+    expect(ctx.seed.postalCode).toBe("81000");
+    // Réglage actif mais référence inexploitable : mêmes données, tirées du site hébergé
+    const inactive = fakeDb({ site: { ...hostedSite, theme: { ...hostedSite.theme, externalSite: EXTERNAL_THEME.externalSite } } as Site, pages: HOSTED_PAGES });
+    const fallback = await loadMetaAdsContext(inactive.db, SITE.id, MOCK_ENV, { loadReference: referenceLoader(null).load, loadBrief: loadHostedBrief });
+    expect(fallback.diagnosticInput).toEqual(expected);
+    expect(fallback.landingPages).toEqual(landing);
+    expect(inactive.reads.pages).toBe(1);
+  });
+});
+
+describe("site du client : analyse et régénération Meta Ads (base simulée, référence et brief injectés)", () => {
+  const deps = { loadReference: referenceLoader(REFERENCE).load, loadBrief: loadExternalBrief };
+
+  it("runMetaAdsAnalysis : bilan formulé pour le site du client, créas sur ses pages réelles, plan sans suffixe « ?src=meta »", async () => {
+    const fake = fakeDb({ site: EXTERNAL_SITE, pages: HOSTED_PAGES });
+    const outcome = await silenced(() => runMetaAdsAnalysis(fake.db, SITE.id, { now: NOW, env: MOCK_ENV, ...deps }));
+    expect(outcome).toMatchObject({ status: "done" });
+    expect(fake.reads.pages).toBe(0);
+    const done = doneUpdate(fake.updates)!;
+    const diagnostic = done.values.diagnostic as MetaAdsDiagnostic;
+    expect(diagnostic.externalSite).toBe(true);
+    const check = (id: string) => diagnostic.checks.find((c) => c.id === id)!;
+    expect(check("pixel")).toMatchObject({ status: "ok", critical: true });
+    expect(check("pixel").detail).toContain("Le Pixel Meta a été repéré sur votre site");
+    expect(check("cookie_banner").detail).toBe("Un bandeau cookies a été repéré sur votre site.");
+    expect(check("phone").detail).toBe("Votre numéro de téléphone figure sur votre site.");
+    expect(check("landing_pages").detail).toBe("2 pages de spécialité trouvées sur votre site : des pages d'atterrissage ciblées.");
+    expect(JSON.stringify(diagnostic.checks)).not.toMatch(/Harmony|Paramétrage|Tracking|Pied de page/);
+    const creatives = done.values.creatives as MetaAdsCreativeSet;
+    expect(metaCreativeIssues(creatives, EXTERNAL_PATHS)).toEqual([]);
+    for (const creative of creatives.creatives) expect(EXTERNAL_PATHS).toContain(creative.landingPath);
+    expect(creatives.creatives.map((creative) => creative.landingPath)).toContain("/accompagnements/stress");
+    const plan = done.values.plan as MetaAdsPlan;
+    // Pixel repéré : campagne en conversions ; la mesure du site du client ne lit aucun paramètre d'adresse
+    expect(metaPlanIssues(plan, true)).toEqual([]);
+    expect(plan.objective.type).toBe("conversions_site");
+    expect("landingSuffix" in plan.campaign).toBe(false);
+    expect(JSON.stringify(plan)).not.toMatch(/src=meta|Paramétrage|bloc Résultats/);
+    // Les termes de veille viennent des spécialités du site du client, pas des pages du site hébergé
+    expect(JSON.stringify(fake.inserts[0]!.values.seed)).not.toMatch(/hypnose/i);
+  });
+
+  it("regenerateMetaAds : le bilan est recalculé pour le site du client devenu la référence ; sans Pixel repéré, le plan demande de l'installer sur le site", async () => {
+    const noPixel: ExternalReference = { ...REFERENCE, facts: { ...REFERENCE.facts, tags: {} } };
+    // Analyse d'avant la connexion du site : bilan et créas établis pour le site hébergé
+    const fake = fakeDb({ analysis: doneAnalysis(), site: EXTERNAL_SITE, pages: HOSTED_PAGES });
+    const outcome = await silenced(() => regenerateMetaAds(fake.db, SITE.id, { now: NOW, env: MOCK_ENV, loadReference: referenceLoader(noPixel).load, loadBrief: loadExternalBrief }));
+    expect(outcome).toMatchObject({ status: "done" });
+    const values = fake.updates.find((u) => u.table === metaAdsAnalyses)!.values;
+    const diagnostic = values.diagnostic as MetaAdsDiagnostic;
+    expect(diagnostic).toMatchObject({ externalSite: true, verdict: "wait" });
+    expect(diagnostic.checks.find((c) => c.id === "pixel")!.detail).toContain("Installez-le sur votre propre site");
+    // Bandeau non repéré : inconnu, pas un point à régler
+    expect(diagnostic.checks.find((c) => c.id === "cookie_banner")).toMatchObject({ status: "unknown" });
+    expect(diagnostic.prerequisites).not.toContain("Bandeau cookies actif");
+    const creatives = values.creatives as MetaAdsCreativeSet;
+    for (const creative of creatives.creatives) expect(EXTERNAL_PATHS).toContain(creative.landingPath);
+    const plan = values.plan as MetaAdsPlan;
+    expect(metaPlanIssues(plan, false)).toEqual([]);
+    expect(plan.objective.rationale).toContain("installez-le d'abord sur votre site");
+    expect(JSON.stringify(plan)).not.toMatch(/src=meta|Paramétrage|bloc Résultats/);
+    expect(fake.reads.pages).toBe(0);
+    expect(isMetaRegenerationInFlight(SITE.id)).toBe(false);
   });
 });

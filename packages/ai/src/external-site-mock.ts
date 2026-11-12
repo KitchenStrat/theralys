@@ -42,6 +42,7 @@ type Outline = { page: ExternalSitePage; headings: string[]; blocks: Block[]; se
 const fair = (text: string): boolean => checkEthicalCompliance(text).ok;
 const isQuestion = (text: string): boolean => /\?\s*$/.test(text);
 const isPresent = <T>(value: T | null | undefined): value is T => value !== null && value !== undefined;
+const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
  * Page découpée en blocs (une ligne du texte = un bloc) et en rubriques (un
@@ -145,6 +146,13 @@ const PROCESS_RE = /deroule|comment se passe|se passe une seance|premiere seance
 const HIGHLIGHTS_RE = /pourquoi|points forts|atouts|engagements|valeurs|mes plus|en bref/;
 const CREDENTIAL_RE = /\b(?:diplom\w*|certifi\w*|formations?|formee?|titulaire|agree\w*|membre|ecole|institut|universit\w*|rncp|federation|syndicat)\b/;
 
+/** Deux titres nomment-ils le même sujet ? Oui si les mots de l'un sont tous dans l'autre (« Sommeil » et « Sommeil et récupération »). */
+function sameSubject(a: string, b: string): boolean {
+  const words = (title: string): string[] => foldText(title).split(" ").filter((word) => word.length >= 3);
+  const [short, long] = words(a).length <= words(b).length ? [words(a), words(b)] : [words(b), words(a)];
+  return short.length > 0 && short.every((word) => long.includes(word));
+}
+
 const isSpecialtyTitle = (text: string): boolean => text.length >= 3 && text.length <= L.specialtyTitle && !isQuestion(text) && !SECTION_RE.test(foldText(text));
 
 /** Spécialité d'une page qui lui est consacrée : son titre principal, ses premières phrases, ses intertitres et ses questions. */
@@ -169,14 +177,17 @@ function specialtyOfPage(outline: Outline): ExternalProfileDraft["specialties"][
 /**
  * Spécialités lues dans les intertitres d'une page qui les énumère (accueil,
  * prestations) : ceux qui suivent l'intertitre « Mes spécialités » (ou son
- * équivalent) jusqu'à la rubrique suivante ; faute d'un tel repère, tous les
- * intertitres qui ne nomment pas une rubrique générale. Sans intertitre
- * utilisable, les lignes courtes de la rubrique « spécialités » (une liste).
+ * équivalent) jusqu'à la rubrique suivante ; sans intertitre utilisable, les
+ * lignes courtes de cette rubrique (une liste). Faute d'un tel repère — et
+ * sauf `announcedOnly` — tous les intertitres qui ne nomment pas une rubrique
+ * générale : une supposition, à ne faire que si rien d'autre ne nomme les
+ * spécialités.
  */
-function specialtiesOfHeadings(outline: Outline): ExternalProfileDraft["specialties"] {
+function specialtiesOfHeadings(outline: Outline, opts: { announcedOnly?: boolean } = {}): ExternalProfileDraft["specialties"] {
   const { headings, sections } = outline;
   const marker = headings.findIndex((heading) => SPECIALTIES_RE.test(foldText(heading)));
   let titles: string[] = [];
+  if (marker < 0 && opts.announcedOnly) return [];
   if (marker >= 0) {
     for (const heading of headings.slice(marker + 1)) {
       if (!isSpecialtyTitle(heading)) break;
@@ -193,6 +204,25 @@ function specialtiesOfHeadings(outline: Outline): ExternalProfileDraft["specialt
     const own = sections.find((section) => foldText(section.heading) === foldText(title));
     return { title, excerpt: lead(own?.body[0] ?? "", L.specialtyExcerpt), headings: [], faq: [] };
   });
+}
+
+/**
+ * Paragraphes du haut d'une page d'accueil : tout ce qui précède la première
+ * rubrique (spécialités, à propos, tarifs…) ou la première spécialité. C'est
+ * la présentation de l'activité ; plus bas, un paragraphe appartient à sa
+ * rubrique et ne doit pas être repris deux fois.
+ */
+function leadParagraphs(outline: Outline, specialtyTitles: readonly string[]): string[] {
+  const first = foldText(outline.headings[0] ?? "");
+  const stops = new Set(specialtyTitles.map(foldText));
+  const bodies: string[] = [];
+  for (const section of outline.sections) {
+    const heading = foldText(section.heading);
+    const rubric = stops.has(heading) || SPECIALTIES_RE.test(heading) || (SECTION_RE.test(heading) && !/bienvenue/.test(heading));
+    if (heading !== "" && heading !== first && rubric) break;
+    bodies.push(...section.body);
+  }
+  return paragraphsOf(bodies);
 }
 
 /** Diplômes et formations : lignes courtes qui en ont le vocabulaire, sinon les phrases courtes qui en parlent. */
@@ -250,7 +280,7 @@ function processOf(outlines: readonly Outline[]): ExternalProfileDraft["process"
       const lines = section.body.length > 1 ? section.body : sentencesOf(section.body[0] ?? "");
       for (const text of lines) {
         const titled = /^([^:.!?]{3,60}?)\s*:\s+(\S.{9,})$/.exec(text);
-        const description = lead(titled?.[2] ?? text, L.shortText);
+        const description = capitalize(lead(titled?.[2] ?? text, L.shortText));
         if (description !== "") steps.push({ title: titled?.[1] ?? `Étape ${steps.length + 1}`, description });
       }
     } else {
@@ -326,14 +356,18 @@ export function mockExternalProfile(input: ExternalProfileInput): ExternalProfil
 
   const headline = [home?.headings[0], sanitizeSiteText(home?.page.title), sanitizeSiteText(facts.name)].find((text): text is string => typeof text === "string" && text !== "" && fair(text)) ?? "";
 
-  const homeParagraphs = home ? paragraphsOf(bodyOf(home)) : [];
+  // Spécialités : les pages qui leur sont consacrées, puis celles que l'accueil annonce sans leur donner de page ;
+  // sans rien de tout cela, les intertitres de l'accueil, puis ceux de la page des prestations
+  const fromPages = ofKind("specialty").map(specialtyOfPage).filter(isPresent);
+  const fromHome = home ? specialtiesOfHeadings(home, { announcedOnly: fromPages.length > 0 }) : [];
+  const services = ofKind("services")[0];
+  const listed = fromHome.length > 0 || fromPages.length > 0 || !services ? fromHome : specialtiesOfHeadings(services);
+  const specialties = [...fromPages, ...listed.filter((item) => !fromPages.some((known) => sameSubject(known.title, item.title)))];
+
+  // Présentation : le haut de l'accueil, à défaut la description que le site donne de lui-même
+  const homeParagraphs = home ? leadParagraphs(home, specialties.map((item) => item.title)) : [];
   const described = lead(sanitizeSiteText(home?.page.description) || sanitizeSiteText(facts.description), L.paragraph);
   const intro = homeParagraphs.length > 0 ? homeParagraphs.slice(0, L.introParagraphs).map((text) => lead(text, L.paragraph)) : described !== "" ? [described] : [];
-
-  const fromPages = ofKind("specialty").map(specialtyOfPage).filter(isPresent);
-  const fromHome = fromPages.length === 0 && home ? specialtiesOfHeadings(home) : [];
-  const services = ofKind("services")[0];
-  const specialties = fromPages.length > 0 ? fromPages : fromHome.length > 0 ? fromHome : services ? specialtiesOfHeadings(services) : [];
 
   // À propos : la page qui lui est consacrée, à défaut la rubrique de l'accueil qui en tient lieu
   const aboutPage = ofKind("about")[0];
@@ -344,9 +378,15 @@ export function mockExternalProfile(input: ExternalProfileInput): ExternalProfil
   const strengths = home?.sections.find((section) => HIGHLIGHTS_RE.test(foldText(section.heading)))?.body ?? [];
   const highlights = strengths.flatMap((text): ExternalProfileDraft["highlights"] => {
     const titled = /^([^:.!?]{3,60}?)\s*:\s+(\S.{9,})$/.exec(text);
-    if (titled) return [{ title: titled[1] ?? "", text: lead(titled[2] ?? "", L.shortText) }];
+    if (titled) return [{ title: titled[1] ?? "", text: capitalize(lead(titled[2] ?? "", L.shortText)) }];
     return text.length <= 60 && fair(text) ? [{ title: text }] : [];
   });
+
+  const process = processOf(ofKind("home", "services", "about", "faq", "other", "specialty", "booking", "pricing"));
+  // « Comment se déroule une séance ? » est déjà le déroulement : pas une question fréquente de plus
+  const faq = uniqueQuestions(ofKind("faq", "home", "services", "pricing", "about", "contact", "booking", "other").flatMap(questionsOf)).filter(
+    (item) => process.length === 0 || !PROCESS_RE.test(foldText(item.question)),
+  );
 
   return {
     headline,
@@ -355,8 +395,8 @@ export function mockExternalProfile(input: ExternalProfileInput): ExternalProfil
     specialties,
     about: { paragraphs: aboutParagraphs.slice(0, L.aboutParagraphs).map((text) => lead(text, L.paragraph)), credentials },
     practical: practicalOf(ofKind("pricing", "services", "booking", "home", "faq", "about", "contact", "other", "specialty")),
-    process: processOf(ofKind("home", "services", "about", "faq", "other", "specialty", "booking", "pricing")),
-    faq: uniqueQuestions(ofKind("faq", "home", "services", "pricing", "about", "contact", "booking", "other").flatMap(questionsOf)),
+    process,
+    faq,
     contact: contactOf(ofKind("contact", "home", "booking", "about", "pricing", "other")),
   };
 }

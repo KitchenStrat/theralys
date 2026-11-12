@@ -74,17 +74,24 @@ function roughTextLength(body: string): number {
 }
 
 /**
- * La réponse est-elle un refus de lecture automatique ?
+ * La réponse est-elle un défi anti-robots ?
  * - un en-tête de protection anti-robots, quel que soit le statut ;
- * - un statut de refus (401, 403, 429…) ;
  * - une erreur accompagnée des marqueurs d'une page de défi (503 d'attente) ;
  * - une page servie en 200 mais presque vide et marquée comme page de défi.
- * Une erreur ordinaire (404, 500, 503 de maintenance) n'en est pas un.
  */
-export function isAutomationRefusal(response: ResponseView): boolean {
+export function isChallengeResponse(response: ResponseView): boolean {
   if (hasChallengeHeader(response.header)) return true;
-  if (REFUSAL_STATUSES.has(response.status)) return true;
   if (response.status >= 400) return hasChallengeMarkup(response.body);
   if (response.status >= 200 && response.status < 300) return hasChallengeMarkup(response.body) && roughTextLength(response.body) <= INTERSTITIAL_TEXT_MAX;
   return false;
+}
+
+/** Le statut est-il un refus d'accès (401, 403, 429…) ? Une erreur ordinaire (404, 500, 503 de maintenance) n'en est pas un. */
+export function isRefusalStatus(status: number): boolean {
+  return REFUSAL_STATUSES.has(status);
+}
+
+/** La réponse est-elle un refus de lecture automatique : défi anti-robots ou statut de refus ? */
+export function isAutomationRefusal(response: ResponseView): boolean {
+  return isChallengeResponse(response) || isRefusalStatus(response.status);
 }
