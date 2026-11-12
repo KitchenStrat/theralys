@@ -28,11 +28,19 @@ import type { SocialBriefInput } from "./social-brief";
 
 type ThemeWithExternal = Pick<SiteTheme, "externalSite"> | null | undefined;
 
-/** Site du client quand il est la référence des outils (réglage présent, actif, adresse valide), sinon `null`. */
+/**
+ * Site du client quand il est la référence des outils (réglage présent,
+ * actif, adresse valide), sinon `null`. L'adresse rendue est toujours sous sa
+ * forme normalisée, quelle que soit la façon dont elle a été enregistrée :
+ * tout ce qui la compare ou la compose (liens, pages d'atterrissage, hôtes du
+ * code de mesure) lit la même.
+ */
 export function activeExternalSite(theme: ThemeWithExternal): ExternalSiteSetting | null {
   const setting = theme?.externalSite;
   if (!setting || setting.active !== true) return null;
-  return normalizeExternalSiteUrl(setting.url).ok ? setting : null;
+  const check = normalizeExternalSiteUrl(setting.url);
+  if (!check.ok) return null;
+  return check.url === setting.url ? setting : { ...setting, url: check.url };
 }
 
 /**
@@ -44,7 +52,7 @@ export function activeExternalSite(theme: ThemeWithExternal): ExternalSiteSettin
  */
 export function referenceSiteUrl(hostedUrl: string, theme: ThemeWithExternal): string {
   const external = activeExternalSite(theme);
-  return (external ? external.url : hostedUrl).replace(/\/+$/, "");
+  return external ? external.url : hostedUrl.replace(/\/+$/, "");
 }
 
 /**
@@ -160,7 +168,8 @@ export function bareHost(host: string): string {
 export function externalHosts(url: string): string[] {
   try {
     const bare = bareHost(new URL(url).hostname);
-    return [bare, `www.${bare}`];
+    // Adresse sans hôte (« mailto: », « tel: ») : aucun site
+    return bare === "" ? [] : [bare, `www.${bare}`];
   } catch {
     return [];
   }
@@ -169,7 +178,8 @@ export function externalHosts(url: string): string[] {
 /** Deux adresses désignent-elles le même site (même hôte, « www. » ignoré) ? */
 export function isSameSiteHost(a: string, b: string): boolean {
   try {
-    return bareHost(new URL(a).hostname) === bareHost(new URL(b).hostname);
+    const host = bareHost(new URL(a).hostname);
+    return host !== "" && host === bareHost(new URL(b).hostname);
   } catch {
     return false;
   }
@@ -217,7 +227,13 @@ export function normalizeExternalSiteUrl(input: string | null | undefined, opts:
 
   const bare = bareHost(host);
   for (const own of opts.ownHosts ?? []) {
-    const ownBare = bareHost(own.trim());
+    let ownHost = own.trim();
+    try {
+      ownHost = new URL(`https://${ownHost}`).hostname;
+    } catch {
+      // Entrée illisible : comparée telle quelle
+    }
+    const ownBare = bareHost(ownHost);
     if (ownBare !== "" && hostMatches(bare, ownBare)) return failUrl("own");
   }
   if (!SOCIAL_HOST_EXCEPTIONS.includes(host) && SOCIAL_HOSTS.some((domain) => hostMatches(bare, domain))) return failUrl("social");
@@ -226,8 +242,13 @@ export function normalizeExternalSiteUrl(input: string | null | undefined, opts:
   let path = parsed.pathname.replace(/\/+$/, "");
   // Adresse copiée depuis la page d'accueil (« /accueil », « /fr/index.php ») : le site est le dossier qui la
   // contient — gardée telle quelle, elle réduirait la lecture, les liens et les pages d'atterrissage à cette seule page
-  const lastSlash = path.lastIndexOf("/");
-  if (HOME_PAGE_SEGMENT.test(path.slice(lastSlash + 1))) path = path.slice(0, lastSlash);
+  for (;;) {
+    const lastSlash = path.lastIndexOf("/");
+    if (!HOME_PAGE_SEGMENT.test(path.slice(lastSlash + 1))) break;
+    const parent = path.slice(0, lastSlash);
+    if (SOCIAL_HOST_EXCEPTIONS.includes(host) && sharedHostSitePath(`https://${host}${parent}`) === "") break;
+    path = parent;
+  }
   const url = `https://${host}${path}`;
   if (url.length > EXTERNAL_URL_MAX) return failUrl("too_long");
   // Hôte partagé donné sans le dossier du site : ce n'est l'adresse d'aucun site
@@ -624,6 +645,8 @@ function cleanPairs<K1 extends string, K2 extends string>(value: unknown, first:
     const a = cleanText(row[first], max1);
     const b = cleanText(row[second], max2);
     if (a === "" || (secondRequired && b === "")) continue;
+    // Doublon exact seulement (les deux champs) : un même libellé peut légitimement revenir avec une autre valeur (« Lundi » matin, puis après-midi)
+    if (out.some((kept) => (kept[first] as string).toLowerCase() === a.toLowerCase() && (kept[second] as string).toLowerCase() === b.toLowerCase())) continue;
     out.push({ [first]: a, [second]: b } as { [P in K1]: string } & { [P in K2]: string });
     if (out.length >= count) break;
   }
@@ -652,7 +675,16 @@ export function cleanBookingUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   if (/^tel:/i.test(trimmed)) {
-    const number = trimmed.slice(4).replace(/[^\d+]/g, "");
+    let rawNumber = trimmed.slice(4);
+    try {
+      rawNumber = decodeURIComponent(rawNumber);
+    } catch {
+      // Encodage illisible : valeur gardée telle quelle
+    }
+    // Ce qui suit « ; » (paramètre : « ;ext=12 ») ou « , » (pause avant un poste) ne fait pas partie du numéro
+    rawNumber = rawNumber.split(/[;,]/)[0] ?? "";
+    if (/^(\+|00)/.test(rawNumber.replace(/[^\d+]/g, ""))) rawNumber = rawNumber.replace(/\(0\)/g, "");
+    const number = rawNumber.replace(/[^\d+]/g, "");
     return /^\+?\d{6,15}$/.test(number) ? `tel:${number}` : undefined;
   }
   return cleanHttpUrl(trimmed);
@@ -661,7 +693,14 @@ export function cleanBookingUrl(value: unknown): string | undefined {
 /** Numéro de téléphone tel qu'affiché (chiffres, espaces, points, « + ») ; sinon `undefined`. */
 export function cleanPhone(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const phone = value.replace(/[^\d+ .()-]/g, "").replace(/\s+/g, " ").trim();
+  if (value.length > 120) return undefined;
+  // Un libellé en tête (« Tél. : », « Portable : ») n'est pas le numéro ; tout autre texte mêlé aux chiffres (horaires
+  // voisins, précision entre parenthèses) rend la valeur illisible : mieux vaut aucun numéro qu'un numéro faux
+  const phone = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[\p{L}.' ]{1,30}:\s?/u, "");
+  if (!/^[\d+ .()-]*$/.test(phone)) return undefined;
   const digits = phone.replace(/\D/g, "");
   return digits.length >= 6 && digits.length <= 15 && phone.length <= 24 ? phone : undefined;
 }
@@ -681,6 +720,9 @@ const SOCIAL_NETWORK_HOSTS: Record<keyof SiteSocialLinks, readonly string[]> = {
 };
 
 /** Liens de réseaux sociaux : https, sur l'hôte du réseau attendu, page de profil (pas un bouton de partage). */
+// Segments d'adresse des boutons de partage et modules intégrés des réseaux sociaux
+const SHARE_SEGMENTS: ReadonlySet<string> = new Set(["sharer", "sharer.php", "share", "share.php", "sharearticle", "sharing", "intent", "dialog", "plugins", "cws"]);
+
 export function cleanSocialLinks(value: unknown): SiteSocialLinks {
   const row = record(value);
   const out: SiteSocialLinks = {};
@@ -690,7 +732,10 @@ export function cleanSocialLinks(value: unknown): SiteSocialLinks {
     const parsed = new URL(url);
     const host = bareHost(parsed.hostname);
     if (!SOCIAL_NETWORK_HOSTS[network].some((domain) => hostMatches(host, domain))) continue;
-    if (parsed.pathname === "/" || /\/(sharer|share|intent|dialog|plugins)\b/i.test(parsed.pathname)) continue;
+    // Bouton de partage ou module intégré, à n'importe quel niveau du chemin (« /fr_FR/sharer/… », « /v19.0/dialog/share ») :
+    // ce n'est pas la page du praticien. Un nom de profil qui contient seulement l'un de ces mots (« share.the.calm ») reste admis.
+    const segments = parsed.pathname.split("/").filter((segment) => segment !== "").map((segment) => segment.toLowerCase());
+    if (segments.length === 0 || segments.some((segment) => SHARE_SEGMENTS.has(segment))) continue;
     out[network] = url;
   }
   return out;
@@ -725,7 +770,7 @@ export function cleanExternalProfile(raw: unknown, siteUrl: string): ExternalSit
       slug,
       title,
       excerpt: cleanText(row.excerpt, L.specialtyExcerpt),
-      ...(pageUrl && isSameSiteHost(pageUrl, siteUrl) ? { url: pageUrl } : {}),
+      ...(pageUrl && isPageOfSite(siteUrl, pageUrl) ? { url: pageUrl } : {}),
       ...(summary !== "" ? { summary } : {}),
       headings: cleanTexts(row.headings, 90, L.specialtyHeadings),
       faq: cleanPairs(row.faq, "question", "answer", L.shortText, L.answer, L.specialtyFaq, true),
@@ -791,8 +836,9 @@ export function cleanExternalOverrides(raw: unknown, siteUrl: string): ExternalP
 export function mergeExternalProfile(extracted: ExternalSiteProfile | null | undefined, overrides: ExternalProfileOverrides | null | undefined): ExternalSiteProfile {
   const base = extracted ?? EMPTY_EXTERNAL_PROFILE;
   if (!overrides) return base;
-  const { contact: contactOverrides, bookingUrl, ...rest } = overrides;
-  const contact = { ...base.contact, ...(contactOverrides ?? {}) };
+  const defined = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
+  const { contact: contactOverrides, bookingUrl, ...rest } = defined(overrides);
+  const contact = { ...base.contact, ...defined(contactOverrides ?? {}) };
   for (const key of ["address", "phone", "email", "note"] as const) {
     if (contact[key] === "") delete contact[key];
   }
@@ -908,25 +954,38 @@ export function externalBriefPages(profile: ExternalSiteProfile, opts: { siteUrl
 export type ExternalLandingPage = { path: string; title: string; kind: "home" | "motif" };
 
 /**
- * Chemin d'une page du site du client, relatif à l'adresse de référence
- * (`siteUrl`), ou `null` si la page est hors de ce site. Les outils composent
- * ensuite l'adresse complète en `adresse de référence + chemin`.
+ * La page appartient-elle au site du client ? Même hôte (« www. » ignoré) et,
+ * quand l'adresse du site porte un dossier (« sites.google.com/view/<nom> »),
+ * page rangée sous ce dossier : celle d'un autre site du même hôte n'en est pas.
  */
-export function externalLandingPath(siteUrl: string, pageUrl: string): string | null {
+export function isPageOfSite(siteUrl: string, pageUrl: string): boolean {
   let base: URL;
   let page: URL;
   try {
     base = new URL(siteUrl);
     page = new URL(pageUrl);
   } catch {
-    return null;
+    return false;
   }
-  if (bareHost(base.hostname) !== bareHost(page.hostname)) return null;
-  const prefix = base.pathname.replace(/\/+$/, "");
-  const path = page.pathname.replace(/\/+$/, "");
-  if (prefix !== "" && path !== prefix && !path.startsWith(`${prefix}/`)) return null;
-  const relative = path.slice(prefix.length);
-  return `${relative === "" ? "/" : relative}${page.search}`.slice(0, 200);
+  const host = bareHost(base.hostname);
+  if (host === "" || host !== bareHost(page.hostname)) return false;
+  return isUnderSitePath(page.pathname.replace(/\/+$/, ""), base.pathname.replace(/\/+$/, ""));
+}
+
+/**
+ * Chemin d'une page du site du client, relatif à l'adresse de référence
+ * (`siteUrl`), ou `null` si la page est hors de ce site (`isPageOfSite`) ou
+ * si ce chemin dépasse 200 caractères — tronqué, il mènerait à une page qui
+ * n'existe pas. Les outils composent ensuite l'adresse complète en `adresse
+ * de référence + chemin`.
+ */
+export function externalLandingPath(siteUrl: string, pageUrl: string): string | null {
+  if (!isPageOfSite(siteUrl, pageUrl)) return null;
+  const prefix = new URL(siteUrl).pathname.replace(/\/+$/, "");
+  const page = new URL(pageUrl);
+  const relative = page.pathname.replace(/\/+$/, "").slice(prefix.length);
+  const landing = `${relative === "" ? "/" : relative}${page.search}`;
+  return landing.length <= 200 ? landing : null;
 }
 
 /** Pages d'atterrissage du site du client : l'accueil, puis les pages de spécialité qui existent sur ce site. */
@@ -960,6 +1019,7 @@ export function isExternalMeasureKey(value: unknown): value is string {
 
 /** Balise à coller sur le site du client. `sitesBaseUrl` : adresse de base des sites hébergés. */
 export function externalMeasureTag(sitesBaseUrl: string, key: string): string {
+  if (!isExternalMeasureKey(key)) throw new Error("clé de mesure hors format");
   const base = sitesBaseUrl.replace(/\/+$/, "");
   return `<script async src="${base}${EXTERNAL_MEASURE_PATH}?k=${key}"></script>`;
 }

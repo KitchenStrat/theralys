@@ -29,8 +29,18 @@ export type ExternalSiteTracking = {
   metaPixel: boolean;
   /** Un bandeau de consentement connu a été repéré (la lecture ne les reconnaît pas tous) */
   consentBanner: boolean;
-  /** Le code de mesure du studio a été repéré : les visites du site remontent sur l'accueil */
+  /** Le code de mesure du studio est en place — repéré dans le code des pages, ou des visites en ont déjà été reçues : les visites du site remontent sur l'accueil */
   measureSnippet: boolean;
+  /** `false` : le praticien a collé le texte de ses pages, leur code n'a jamais été lu — rien ne peut être dit de ses balises */
+  codeRead: boolean;
+};
+
+/** Ce que le studio sait du site du client en dehors du code de ses pages. */
+export type ExternalSiteState = {
+  /** Origine du contenu (`pasted` : texte collé, code jamais lu) ; absente : lu sur le site */
+  source?: "crawl" | "pasted";
+  /** Première visite reçue du code de mesure */
+  measureSeenAt?: Date | null;
 };
 
 /**
@@ -39,7 +49,7 @@ export type ExternalSiteTracking = {
  * un identifiant vide ne compte pas, un bandeau n'est acquis que s'il a été
  * repéré.
  */
-export function externalSiteTracking(address: string, facts: Pick<ExternalSiteFacts, "tags" | "cms">): ExternalSiteTracking {
+export function externalSiteTracking(address: string, facts: Pick<ExternalSiteFacts, "tags" | "cms">, state: ExternalSiteState = {}): ExternalSiteTracking {
   const found = (value: string | undefined): boolean => Boolean(value?.trim());
   return {
     address,
@@ -48,7 +58,9 @@ export function externalSiteTracking(address: string, facts: Pick<ExternalSiteFa
     tagManager: found(facts.tags.googleTagManagerId),
     metaPixel: found(facts.tags.metaPixelId),
     consentBanner: facts.tags.consentBanner === true,
-    measureSnippet: facts.tags.measureSnippet === true,
+    // Des visites reçues prouvent mieux que la lecture du code que la mesure est en place (balise posée depuis la dernière lecture, ou par un outil que la lecture ne voit pas)
+    measureSnippet: facts.tags.measureSnippet === true || Boolean(state.measureSeenAt),
+    codeRead: state.source !== "pasted",
   };
 }
 
@@ -65,6 +77,10 @@ export type TrackingFinding = {
 
 /** Bandeau non repéré, dit pour la balise Google Ads (le texte partagé parle du Pixel). */
 export const ADS_BANNER_UNKNOWN = "Aucun bandeau cookies n'a été repéré sur votre site : vérifiez que la balise Google Ads ne s'y charge qu'après l'accord du visiteur.";
+/** Code du site jamais lu (texte collé) : même rappel, sans prétendre avoir cherché le bandeau. */
+export const ADS_BANNER_UNREAD = "Nous n'avons pas pu lire le code de votre site : vérifiez que la balise Google Ads ne s'y charge qu'après l'accord du visiteur.";
+/** En tête du relevé quand le code du site n'a jamais été lu. */
+export const CODE_UNREAD_NOTE = "Votre site n'a pas pu être lu automatiquement (vous avez collé le texte de ses pages) : nous ne pouvons rien dire des balises qui y sont installées.";
 
 /** Limite de la lecture, rappelée sous chaque relevé : ce qui n'est pas repéré n'est pas forcément absent. */
 export const READING_LIMIT =
@@ -84,14 +100,14 @@ export function googleAdsFindings(tracking: ExternalSiteTracking): TrackingFindi
     {
       id: "tag",
       label: "Balise Google Ads sur le site",
-      status: tracking.googleAdsTag || tracking.tagManager ? "ok" : "todo",
-      detail: tracking.googleAdsTag ? texts.adsTagOk : tracking.tagManager ? texts.tagManagerOk : texts.adsTagTodo,
+      status: tracking.googleAdsTag || tracking.tagManager ? "ok" : tracking.codeRead ? "todo" : "unknown",
+      detail: tracking.googleAdsTag ? texts.adsTagOk : tracking.tagManager ? texts.tagManagerOk : tracking.codeRead ? texts.adsTagTodo : texts.adsTagUnread,
     },
     {
       id: "consent",
       label: "Bandeau cookies",
       status: tracking.consentBanner ? "ok" : "unknown",
-      detail: tracking.consentBanner ? texts.cookieBannerOk : ADS_BANNER_UNKNOWN,
+      detail: tracking.consentBanner ? texts.cookieBannerOk : tracking.codeRead ? ADS_BANNER_UNKNOWN : ADS_BANNER_UNREAD,
     },
     { id: "conversions", label: "Conversions mesurées", status: "unknown", detail: texts.conversionsUnknown },
   ];
@@ -203,7 +219,7 @@ export const EXTERNAL_RESULTS = {
   reason:
     "Sur votre propre site, Harmony ne cherche pas à savoir quelles visites viennent de vos annonces : ce serait un suivi publicitaire, que nous ne faisons pas sans l'accord de vos visiteurs.",
   site: "Les visites et les clics vers la prise de rendez-vous de l'ensemble de votre site, toutes provenances confondues, se lisent sur l'accueil du studio.",
-  measureMissing: "Ces chiffres demandent le code de mesure de Harmony sur votre site ; il n'a pas été repéré à la dernière lecture. Vous le trouverez dans « Mon site ».",
+  measureMissing: "Ces chiffres demandent le code de mesure de Harmony sur votre site ; nous n'en avons encore reçu aucune visite. Vous le trouverez dans « Mon site ».",
 } as const;
 
 /** Où lire les résultats des annonces Google : le compte Google Ads, seul à les connaître. */

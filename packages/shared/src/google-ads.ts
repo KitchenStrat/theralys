@@ -871,6 +871,12 @@ export type GoogleAdsDiagnosticInput = {
   externalSite?: boolean;
   /** Site du client : Google Tag Manager repéré dans ses pages (la balise Google Ads peut passer par lui) */
   hasTagManager?: boolean;
+  /**
+   * Site du client dont le code n'a jamais été lu (le praticien a collé le
+   * texte de ses pages) : une balise non repérée n'y est ni acquise ni à
+   * installer — « inconnu ».
+   */
+  externalSiteUnread?: boolean;
   profile: {
     linked: boolean;
     claimed: boolean | null;
@@ -1015,13 +1021,17 @@ export const EXTERNAL_SITE_CHECK_DETAILS = {
   adsTagOk: "La balise Google Ads a été repérée sur votre site.",
   tagManagerOk: "Google Tag Manager a été repéré sur votre site : votre balise Google Ads peut passer par lui.",
   adsTagTodo:
-    "Aucune balise Google Ads n'a été repérée sur votre site. Installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+    "Aucune balise Google Ads n'a été repérée sur votre site. Si elle y est déjà (chargée seulement après l'accord du visiteur, notre lecture ne la voit pas), contrôlez-la dans votre compte Google Ads ; sinon, installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+  /** Site dont le praticien a collé le texte : le code des pages n'a jamais été lu, rien ne peut être dit de ses balises */
+  adsTagUnread: "Nous n'avons pas pu lire le code de votre site : nous ne pouvons pas dire si la balise Google Ads y est installée. Contrôlez-le dans votre compte Google Ads.",
   conversionsUnknown: "Nous ne pouvons pas le vérifier depuis votre site : contrôlez dans votre compte Google Ads que vos prises de rendez-vous et vos appels y sont bien comptés.",
   pixelOk: "Le Pixel Meta a été repéré sur votre site : contrôlez dans le Gestionnaire d'événements de Meta que vos prises de rendez-vous et vos appels y sont bien comptés.",
   pixelTodo:
-    "Aucun Pixel Meta n'a été repéré sur votre site. Installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+    "Aucun Pixel Meta n'a été repéré sur votre site. S'il y est déjà (chargé par Google Tag Manager, ou seulement après l'accord du visiteur, notre lecture ne le voit pas), contrôlez-le dans le Gestionnaire d'événements de Meta ; sinon, installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+  pixelUnread: "Nous n'avons pas pu lire le code de votre site : nous ne pouvons pas dire si le Pixel Meta y est installé. Contrôlez-le dans le Gestionnaire d'événements de Meta.",
   cookieBannerOk: "Un bandeau cookies a été repéré sur votre site.",
   cookieBannerUnknown: "Aucun bandeau cookies n'a été repéré sur votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
+  cookieBannerUnread: "Nous n'avons pas pu lire le code de votre site : vérifiez que le Pixel ne s'y charge qu'après l'accord du visiteur.",
   facebookPageTodo: "Une page Facebook est indispensable pour diffuser des annonces : indiquez son lien dans « Mon site ».",
   photosTodo: "Ajoutez au moins 3 photos de vous et du cabinet dans le studio : sur Meta, le visuel fait l'essentiel du résultat.",
 } as const;
@@ -1030,8 +1040,9 @@ export const EXTERNAL_SITE_CHECK_DETAILS = {
  * Points de préparation, dans l'ordre d'affichage. Avec `externalSite` (site
  * du client), quatre points changent : le téléphone et les pages sont ceux
  * lus sur ce site ; la balise est acquise dès qu'une balise Google Ads ou
- * Google Tag Manager y a été repérée ; les conversions, invérifiables de
- * l'extérieur, passent en « inconnu » sans jamais bloquer.
+ * Google Tag Manager y a été repérée — et « inconnue » quand le code du site
+ * n'a jamais été lu (`externalSiteUnread`) ; les conversions, invérifiables
+ * de l'extérieur, passent en « inconnu » sans jamais bloquer.
  */
 export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsReadinessCheck[] {
   const p = input.profile;
@@ -1042,6 +1053,7 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
   const reviewsStatus: GoogleAdsReadinessStatus =
     p.votes === null || p.rating === null ? "unknown" : p.votes >= minVotes && p.rating >= 4.3 ? "ok" : "todo";
   const tagDetected = input.hasAdsTag || (external && input.hasTagManager === true);
+  const unread = external && input.externalSiteUnread === true;
   return [
     check(
       "profile_linked",
@@ -1121,13 +1133,15 @@ export function adsReadinessChecks(input: GoogleAdsDiagnosticInput): GoogleAdsRe
     check(
       "tracking_tag",
       "Balise Google Ads sur le site",
-      tagDetected ? "ok" : "todo",
+      tagDetected ? "ok" : unread ? "unknown" : "todo",
       external
         ? input.hasAdsTag
           ? texts.adsTagOk
           : tagDetected
             ? texts.tagManagerOk
-            : texts.adsTagTodo
+            : unread
+              ? texts.adsTagUnread
+              : texts.adsTagTodo
         : input.hasAdsTag
           ? "La balise se charge sur le site (après consentement quand le bandeau cookies est actif)."
           : "Renseignez votre identifiant AW-… dans l'onglet Paramétrage & suivi : sans balise, Google ne peut pas optimiser vos annonces.",

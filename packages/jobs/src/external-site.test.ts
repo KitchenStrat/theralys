@@ -1843,10 +1843,15 @@ describe("loadExternalReference", () => {
     const overrides = { headline: "Retrouver le calme, à Albi", specialties: [PROFILE.specialties[1]!] };
     const handle = memoryDb({ external: [externalRow({ overrides })] });
     const setting = { ...ACTIVE, keepHostedIndexed: true };
-    expect(await reference(handle, setting)).toEqual({ setting, profile: { ...PROFILE, ...overrides }, facts: FACTS });
+    expect(await reference(handle, setting)).toEqual({ setting, profile: { ...PROFILE, ...overrides }, facts: FACTS, source: "crawl", measureSeenAt: daysAgo(2) });
     // Une seule requête, sur la seule table du site du client
     expect(handle.log).toEqual([{ op: "select", table: "external_sites", tx: false }]);
-    expect(await reference(memoryDb({ external: [externalRow({ source: "pasted", facts: null })] }))).toMatchObject({ profile: PROFILE, facts: { phones: [], emails: [], hours: [], bookingLinks: [], social: {}, tags: {} } });
+    // Texte collé : les faits sont vides et l'origine le dit — le code des pages n'a jamais été lu, rien ne peut être dit de ses balises
+    expect(await reference(memoryDb({ external: [externalRow({ source: "pasted", facts: null })] }))).toMatchObject({ profile: PROFILE, source: "pasted", facts: { phones: [], emails: [], hours: [], bookingLinks: [], social: {}, tags: {} } });
+    // Première visite reçue du code de mesure : les outils savent que la mesure est en place, quoi qu'ait vu la lecture du code ; `null` tant qu'il n'a rien envoyé
+    const seenAt = minutesAgo(90);
+    expect(await reference(memoryDb({ external: [externalRow({ measureSeenAt: seenAt })] }))).toMatchObject({ source: "crawl", measureSeenAt: seenAt });
+    expect(await reference(memoryDb({ external: [externalRow({ measureSeenAt: null })] }))).toMatchObject({ measureSeenAt: null });
   });
 
   it("sans réglage actif : `null` sans aucune requête", async () => {
@@ -1867,7 +1872,7 @@ describe("loadExternalReference", () => {
 
   it("l'état de la dernière tentative ne compte pas : relecture en cours, interrompue ou en échec, la dernière lecture aboutie reste la référence", async () => {
     const overrides = { headline: "Retrouver le calme, à Albi" };
-    const expected = { setting: ACTIVE, profile: { ...PROFILE, ...overrides }, facts: FACTS };
+    const expected = { setting: ACTIVE, profile: { ...PROFILE, ...overrides }, facts: FACTS, measureSeenAt: daysAgo(2) };
     for (const row of [
       rereadingRow({ overrides }),
       rereadingRow({ overrides, readStartedAt: minutesAgo(7) }),
@@ -1876,7 +1881,7 @@ describe("loadExternalReference", () => {
       // État que le service n'inscrit plus (site en « erreur » avec un profil) : le profil enregistré compte quand même
       externalRow({ overrides, status: "error", error: "unreachable" }),
     ]) {
-      expect(await reference(memoryDb({ external: [row] }))).toEqual(expected);
+      expect(await reference(memoryDb({ external: [row] }))).toEqual({ ...expected, source: row.source });
     }
   });
 
@@ -1952,12 +1957,13 @@ describe("briefPagesFor", () => {
     const handle = memoryDb({ external: [externalRow()] });
     const active = site({ url: `${SITE_URL}/`, active: true });
     const source = await briefPagesFor(handle.db, active, HOSTED, HOSTED_URL);
-    // L'adresse du site du client (celle du réglage) est donnée comme source aux spécialités sans page à elles
-    expect(source.pages).toEqual(externalBriefPages(PROFILE, { siteUrl: `${SITE_URL}/`, images: { hero: HERO_IMAGE, about: ABOUT_IMAGE } }));
-    expect(source.pages.map((p) => p.href)).toEqual([undefined, `${SITE_URL}/gestion-du-stress`, `${SITE_URL}/`]);
+    // L'adresse du site du client est donnée comme source aux spécialités sans page à elles — sous sa forme normalisée,
+    // même quand le réglage a été enregistré avec une barre finale
+    expect(source.pages).toEqual(externalBriefPages(PROFILE, { siteUrl: SITE_URL, images: { hero: HERO_IMAGE, about: ABOUT_IMAGE } }));
+    expect(source.pages.map((p) => p.href)).toEqual([undefined, `${SITE_URL}/gestion-du-stress`, SITE_URL]);
     expect(source.url).toBe(SITE_URL);
     expect(source.hostedUrl).toBe(HOSTED_URL);
-    expect(source.reference).toEqual({ setting: active.theme.externalSite, profile: PROFILE, facts: FACTS });
+    expect(source.reference).toEqual({ setting: { url: SITE_URL, active: true }, profile: PROFILE, facts: FACTS, source: "crawl", measureSeenAt: daysAgo(2) });
     // Les pages désactivées du site hébergé ne filtrent pas les spécialités du site du client
     expect(source.theme).toEqual({ ...active.theme, disabledMotifs: [] });
     expect(source.pages.map((p) => [p.id, p.type, p.slug])).toEqual([

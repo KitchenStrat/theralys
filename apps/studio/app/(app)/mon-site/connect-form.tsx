@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { Button, Spinner } from "@theralys/ui";
 import { normalizeExternalSiteUrl } from "@theralys/shared";
+import { readingHint } from "@/lib/external-site/format";
 import { connectExternalSite } from "./actions";
 import { ActionMessage, CheckboxField, TextField } from "./fields";
 
@@ -92,7 +93,7 @@ export function ConnectForm({
           disabled={pending}
           error={urlError ?? undefined}
           // L'aide confirme l'adresse qui sera lue ; en cas d'erreur, le message (qui donne déjà l'exemple) la remplace
-          hint={urlError ? undefined : check.ok ? `Nous lirons le site ${check.url}` : "Par exemple : www.mon-cabinet.fr"}
+          hint={urlError ? undefined : check.ok ? readingHint(check.url) : "Par exemple : www.mon-cabinet.fr"}
           testId="connect-url"
         />
       </div>

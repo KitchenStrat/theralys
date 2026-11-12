@@ -944,7 +944,7 @@ export async function loadMetaAdsContext(
       instagramUrl: social?.instagram?.trim() || external?.social.instagram?.trim() || null,
       motifPages: external ? external.motifPages : motifs.length,
       profile: metaProfileFrom(prospect ?? null, audit ?? null, hasRealGoogleProvider(env)),
-      ...(external ? { externalSite: true } : {}),
+      ...(external ? { externalSite: true, ...(external.codeRead ? {} : { externalSiteUnread: true }) } : {}),
     },
     photosById: briefResult.photosById,
     brief: briefResult.brief,

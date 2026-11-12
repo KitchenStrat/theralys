@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
+  EXTERNAL_SITE_CHECK_DETAILS,
   DEFAULT_SOCIAL_VOICE,
   EMPTY_EXTERNAL_FACTS,
   EMPTY_EXTERNAL_PROFILE,
@@ -2077,6 +2078,9 @@ const EXTERNAL_SITE = { ...SITE, theme: EXTERNAL_THEME } as Site;
 /** Ce que `loadExternalReference` rend pour ce site : profil relu par le praticien et faits relevés dans ses pages. */
 const REFERENCE: ExternalReference = {
   setting: { url: "https://www.cabinet-dupont.fr", active: true },
+  // Lu sur le site lui-même (le code des pages a été examiné) ; aucune visite encore reçue du code de mesure
+  source: "crawl",
+  measureSeenAt: null,
   profile: {
     ...EMPTY_EXTERNAL_PROFILE,
     headline: "Sophrologue à Albi",
@@ -2260,7 +2264,8 @@ describe("site du client : analyse et régénération Meta Ads (base simulée, r
     const diagnostic = done.values.diagnostic as MetaAdsDiagnostic;
     expect(diagnostic.externalSite).toBe(true);
     const check = (id: string) => diagnostic.checks.find((c) => c.id === id)!;
-    expect(check("pixel")).toMatchObject({ status: "ok", critical: true });
+    // Site du client : le Pixel n'est jamais bloquant (non repéré, il peut échapper à la lecture)
+    expect(check("pixel")).toMatchObject({ status: "ok", critical: false });
     expect(check("pixel").detail).toContain("Le Pixel Meta a été repéré sur votre site");
     expect(check("cookie_banner").detail).toBe("Un bandeau cookies a été repéré sur votre site.");
     expect(check("phone").detail).toBe("Votre numéro de téléphone figure sur votre site.");
@@ -2290,8 +2295,11 @@ describe("site du client : analyse et régénération Meta Ads (base simulée, r
     expect(outcome).toMatchObject({ status: "done" });
     const values = fake.updates.find((u) => u.table === metaAdsAnalyses)!.values;
     const diagnostic = values.diagnostic as MetaAdsDiagnostic;
-    expect(diagnostic).toMatchObject({ externalSite: true, verdict: "wait" });
-    expect(diagnostic.checks.find((c) => c.id === "pixel")!.detail).toContain("Installez-le sur votre propre site");
+    // Pixel non repéré sur le site du client : à régler, sans bloquer le verdict (le praticien ne pourrait pas lever un blocage que la lecture a peut-être posé à tort)
+    expect(diagnostic).toMatchObject({ externalSite: true, verdict: "go_with_prerequisites" });
+    expect(diagnostic.checks.find((c) => c.id === "pixel")).toMatchObject({ status: "todo", critical: false, detail: EXTERNAL_SITE_CHECK_DETAILS.pixelTodo });
+    expect(diagnostic.checks.find((c) => c.id === "pixel")!.detail).toContain("installez-le sur votre propre site");
+    expect(diagnostic.prerequisites).toContain("Pixel Meta installé sur le site");
     // Bandeau non repéré : inconnu, pas un point à régler
     expect(diagnostic.checks.find((c) => c.id === "cookie_banner")).toMatchObject({ status: "unknown" });
     expect(diagnostic.prerequisites).not.toContain("Bandeau cookies actif");

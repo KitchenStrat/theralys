@@ -1036,6 +1036,12 @@ export type MetaAdsDiagnosticInput = {
    * formulés pour ce site. Absent : site hébergé.
    */
   externalSite?: boolean;
+  /**
+   * Site du client dont le code n'a jamais été lu (le praticien a collé le
+   * texte de ses pages) : Pixel et bandeau ne peuvent être ni constatés ni
+   * réclamés — « inconnu ».
+   */
+  externalSiteUnread?: boolean;
   profile: { linked: boolean; rating: number | null; votes: number | null };
   /** Lecture de la veille : zone, comptes par zone (toutes les annonces repérées), signaux forts par zone, annonces conservées */
   market: Pick<MetaAdsMarket, "scopeUsed" | "counts" | "strongCounts" | "ads"> | null;
@@ -1106,35 +1112,45 @@ function check(id: MetaAdsCheckId, label: string, status: MetaAdsReadinessStatus
 }
 
 /**
- * Points de préparation, dans l'ordre d'affichage. Le Pixel est bloquant :
- * sans lui, aucune donnée réelle de conversion. Avec `externalSite` (site du
+ * Points de préparation, dans l'ordre d'affichage. Sur le site hébergé, le
+ * Pixel est bloquant : sans lui, aucune donnée réelle de conversion, et le
+ * produit sait avec certitude s'il est posé. Avec `externalSite` (site du
  * client), le Pixel et le bandeau sont ceux repérés à la dernière lecture du
- * site — un bandeau non repéré reste « inconnu », la lecture ne connaissant
- * pas tous les bandeaux —, et les textes renvoient vers le site lui-même,
- * vers « Mon site » ou vers le studio, jamais vers l'éditeur du site hébergé.
+ * site : un Pixel non repéré n'y est pas forcément absent (chargé par Google
+ * Tag Manager, ou seulement après l'accord du visiteur, il échappe à la
+ * lecture) — il reste à régler, mais ne bloque jamais le verdict, que le
+ * praticien n'aurait aucun moyen de lever. Un bandeau non repéré reste
+ * « inconnu », la lecture ne connaissant pas tous les bandeaux ; quand le code
+ * du site n'a jamais été lu (`externalSiteUnread`), Pixel et bandeau sont
+ * « inconnus ». Les textes renvoient vers le site lui-même, vers « Mon site »
+ * ou vers le studio, jamais vers l'éditeur du site hébergé.
  */
 export function metaReadinessChecks(input: MetaAdsDiagnosticInput): MetaAdsReadinessCheck[] {
   const contactCritical = !input.hasBookingUrl && !input.hasPhone;
   const p = input.profile;
   const external = input.externalSite === true;
+  const unread = external && input.externalSiteUnread === true;
   const texts = EXTERNAL_SITE_CHECK_DETAILS;
   const reviewsStatus: MetaAdsReadinessStatus = p.votes === null || p.rating === null ? "unknown" : p.votes >= 10 && p.rating >= 4.3 ? "ok" : "todo";
   return [
     check(
       "pixel",
       "Pixel Meta installé sur le site",
-      input.hasPixel ? "ok" : "todo",
+      input.hasPixel ? "ok" : unread ? "unknown" : "todo",
       external
         ? input.hasPixel
           ? texts.pixelOk
-          : texts.pixelTodo
+          : unread
+            ? texts.pixelUnread
+            : texts.pixelTodo
         : input.hasPixel
           ? "Les clics RDV, appels et e-mails remontent dans Meta : vos campagnes s'optimisent sur de vraies prises de contact."
           : "Collez l'identifiant de votre Pixel dans l'onglet Paramétrage & suivi : c'est la seule façon de mesurer de vraies prises de contact et de laisser Meta optimiser dessus.",
-      true,
+      // Site du client : un Pixel non repéré peut échapper à la lecture, et le praticien ne pourrait pas lever le blocage
+      !external,
     ),
     external
-      ? check("cookie_banner", "Bandeau cookies actif", input.cookieBanner ? "ok" : "unknown", input.cookieBanner ? texts.cookieBannerOk : texts.cookieBannerUnknown, false)
+      ? check("cookie_banner", "Bandeau cookies actif", input.cookieBanner ? "ok" : "unknown", input.cookieBanner ? texts.cookieBannerOk : unread ? texts.cookieBannerUnread : texts.cookieBannerUnknown, false)
       : check(
           "cookie_banner",
           "Bandeau cookies actif",

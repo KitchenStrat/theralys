@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXTERNAL_PAGE_KINDS } from "@theralys/shared";
-import { PAGE_KIND_LABELS, detectedItems, formatDayParis, formatMomentParis, frenchSpacing, plural, readsRemaining, readsRemainingLabel, siteAddressLabel } from "./format";
+import { PAGE_KIND_LABELS, detectedItems, formatDayParis, formatMomentParis, frenchSpacing, plural, readingHint, readsRemaining, readsRemainingLabel, siteAddressLabel } from "./format";
 
 describe("frenchSpacing", () => {
   it("rend insécable l'espace avant « : ; ? ! » et à l'intérieur des guillemets", () => {
@@ -14,6 +14,23 @@ describe("frenchSpacing", () => {
     const once = frenchSpacing("Ouvrez « Paramètres » : c'est là.");
     expect(frenchSpacing(once)).toBe(once);
     expect(frenchSpacing("")).toBe("");
+  });
+});
+
+describe("readingHint", () => {
+  it("adresse d'accueil : le site entier sera lu", () => {
+    expect(readingHint("https://www.cabinet-exemple.fr")).toBe("Nous lirons le site https://www.cabinet-exemple.fr");
+  });
+
+  it("adresse qui porte un chemin : seule cette partie du site sera lue, et l'aide dit comment lire le site entier", () => {
+    const hint = readingHint("https://www.maison-de-sante.fr/praticiens/dupont");
+    expect(hint).toBe("Nous lirons https://www.maison-de-sante.fr/praticiens/dupont et les pages rangées sous cette adresse. Pour lire tout votre site, indiquez seulement son adresse d'accueil.");
+    expect(readingHint("https://www.cabinet-exemple.fr/fr")).toContain("les pages rangées sous cette adresse");
+  });
+
+  it("site hébergé sous un dossier (Google Sites) : son adresse est ce dossier, rien à signaler — sauf si une page y est désignée", () => {
+    expect(readingHint("https://sites.google.com/view/cabinet-dupont")).toBe("Nous lirons le site https://sites.google.com/view/cabinet-dupont");
+    expect(readingHint("https://sites.google.com/view/cabinet-dupont/tarifs")).toContain("les pages rangées sous cette adresse");
   });
 });
 

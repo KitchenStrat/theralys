@@ -158,7 +158,19 @@ export type ExternalSiteRefusal = "url" | "consent" | "quota" | "busy" | "text" 
 export type ExternalSiteResult = { ok: true } | { ok: false; reason: ExternalSiteRefusal; message: string };
 
 /** Ce que les outils lisent quand le site du client est la référence. */
-export type ExternalReference = { setting: ExternalSiteSetting; profile: ExternalSiteProfile; facts: ExternalSiteFacts };
+export type ExternalReference = {
+  setting: ExternalSiteSetting;
+  profile: ExternalSiteProfile;
+  facts: ExternalSiteFacts;
+  /**
+   * Origine du contenu. `pasted` : le praticien a collé le texte de ses pages,
+   * leur code n'a jamais été lu — les faits relevés (balises, outil de
+   * création) sont alors vides sans que cela dise rien du site.
+   */
+  source: ExternalSiteSource;
+  /** Première visite reçue du code de mesure ; `null` tant qu'il n'a rien envoyé */
+  measureSeenAt: Date | null;
+};
 
 // ─── Réglages ────────────────────────────────────────────────────────────────
 
@@ -978,14 +990,14 @@ export async function loadExternalReference(db: Database, site: Pick<Site, "id" 
   if (!setting) return null;
   try {
     const [row] = await db
-      .select({ url: externalSites.url, profile: externalSites.profile, overrides: externalSites.overrides, facts: externalSites.facts })
+      .select({ url: externalSites.url, profile: externalSites.profile, overrides: externalSites.overrides, facts: externalSites.facts, source: externalSites.source, measureSeenAt: externalSites.measureSeenAt })
       .from(externalSites)
       .where(eq(externalSites.siteId, site.id))
       .limit(1);
     if (!row || !isSameAddress(row.url, setting.url)) return null;
     const profile = mergeExternalProfile(row.profile, row.overrides);
     if (!isExternalProfileUsable(profile)) return null;
-    return { setting, profile, facts: completeFacts(row.facts) };
+    return { setting, profile, facts: completeFacts(row.facts), source: row.source === "pasted" ? "pasted" : "crawl", measureSeenAt: row.measureSeenAt };
   } catch (err) {
     if (!isSchemaMissing(err)) throw err;
     return null;

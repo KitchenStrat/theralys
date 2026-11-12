@@ -3,7 +3,7 @@ import { EXTERNAL_SITE_CHECK_DETAILS } from "@theralys/shared";
 import type { ExternalSiteTracking } from "../google-ads/external-tracking";
 import { META_RESULTS_ACCOUNT, metaPixelFindings } from "./external-tracking";
 
-const NOTHING: ExternalSiteTracking = { address: "www.claire-sophrologie.fr", cms: null, googleAdsTag: false, tagManager: false, metaPixel: false, consentBanner: false, measureSnippet: false };
+const NOTHING: ExternalSiteTracking = { address: "www.claire-sophrologie.fr", cms: null, googleAdsTag: false, tagManager: false, metaPixel: false, consentBanner: false, measureSnippet: false, codeRead: true };
 
 describe("metaPixelFindings — relevé affiché à la place du formulaire du Pixel", () => {
   it("rien de repéré : Pixel à installer, bandeau à vérifier — avec les textes du diagnostic", () => {
@@ -19,6 +19,13 @@ describe("metaPixelFindings — relevé affiché à la place du formulaire du Pi
     expect(findings[0]?.detail).toBe(EXTERNAL_SITE_CHECK_DETAILS.pixelOk);
     expect(findings[0]?.detail).toContain("contrôlez dans le Gestionnaire d'événements");
     expect(findings[1]?.detail).toBe(EXTERNAL_SITE_CHECK_DETAILS.cookieBannerOk);
+  });
+
+  it("code du site jamais lu : Pixel et bandeau inconnus, rien n'est dit « à installer »", () => {
+    expect(metaPixelFindings({ ...NOTHING, codeRead: false })).toEqual([
+      { id: "pixel", label: "Pixel Meta installé sur le site", status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.pixelUnread },
+      { id: "consent", label: "Bandeau cookies", status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.cookieBannerUnread },
+    ]);
   });
 
   it("une balise Google ne dit rien du Pixel", () => {

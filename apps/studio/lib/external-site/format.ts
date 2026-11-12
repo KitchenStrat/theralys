@@ -7,7 +7,7 @@
  * composants (jamais reformatées dans le navigateur).
  */
 
-import { EXTERNAL_CMS_LABELS, type ExternalPageKind, type ExternalSiteFacts } from "@theralys/shared";
+import { EXTERNAL_CMS_LABELS, sharedHostSitePath, type ExternalPageKind, type ExternalSiteFacts } from "@theralys/shared";
 
 const PARIS_TZ = "Europe/Paris";
 /** Espace insécable : « 10 h 32 », « 3 lectures » ne se coupent pas en fin de ligne. */
@@ -21,6 +21,25 @@ const NBSP = " ";
  */
 export function frenchSpacing(text: string): string {
   return text.replace(/ ([:;?!»])/g, `${NBSP}$1`).replace(/« /g, `«${NBSP}`);
+}
+
+/**
+ * Aide sous l'adresse saisie dans « Lire mon site » : ce qui sera lu. Une
+ * adresse qui porte un chemin (« www.mon-cabinet.fr/tarifs ») limite la
+ * lecture à cette page et à celles qui se trouvent dessous : c'est dit avant
+ * l'envoi, avec la façon de lire le site entier. Un site hébergé sous un
+ * dossier (Google Sites) n'a pas d'autre adresse : rien à signaler.
+ * `url` : adresse déjà normalisée (`normalizeExternalSiteUrl`).
+ */
+export function readingHint(url: string): string {
+  let path = "";
+  try {
+    path = new URL(url).pathname.replace(/\/+$/, "");
+  } catch {
+    // Adresse illisible (elle ne devrait pas l'être) : l'aide ordinaire
+  }
+  if (path === "" || path === sharedHostSitePath(url)) return `Nous lirons le site ${url}`;
+  return `Nous lirons ${url} et les pages rangées sous cette adresse. Pour lire tout votre site, indiquez seulement son adresse d'accueil.`;
 }
 
 /** Adresse telle qu'on la lit : sans protocole ni barre finale (`www.mon-cabinet.fr`). */

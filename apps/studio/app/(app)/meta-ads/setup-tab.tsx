@@ -85,6 +85,7 @@ export function SetupTab({
               </>
             }
             findings={metaPixelFindings(externalTracking)}
+            codeRead={externalTracking.codeRead}
             adviceTitle="Où installer le Pixel"
             advice={tagInstallAdvice(externalTracking.cms, "meta")}
           />

@@ -850,9 +850,20 @@ describe("adsReadinessChecks — site du client (externalSite)", () => {
     expect(of({ ...externalInput, hasTagManager: true }, "tracking_tag").detail).toBe(EXTERNAL_SITE_CHECK_DETAILS.adsTagOk);
     const missing = of({ ...externalInput, hasAdsTag: false }, "tracking_tag");
     expect(missing).toMatchObject({ status: "todo", critical: false });
+    // Non repérée ne veut pas dire absente : le texte dit quoi faire dans les deux cas
     expect(missing.detail).toBe(
-      "Aucune balise Google Ads n'a été repérée sur votre site. Installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+      "Aucune balise Google Ads n'a été repérée sur votre site. Si elle y est déjà (chargée seulement après l'accord du visiteur, notre lecture ne la voit pas), contrôlez-la dans votre compte Google Ads ; sinon, installez-la sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
     );
+  });
+
+  it("code du site jamais lu (texte collé par le praticien) : la balise est « inconnue », ni acquise ni à installer — sauf si elle a été repérée", () => {
+    const unread = of({ ...externalInput, hasAdsTag: false, externalSiteUnread: true }, "tracking_tag");
+    expect(unread).toMatchObject({ status: "unknown", critical: false, detail: EXTERNAL_SITE_CHECK_DETAILS.adsTagUnread });
+    expect(unread.detail).toBe("Nous n'avons pas pu lire le code de votre site : nous ne pouvons pas dire si la balise Google Ads y est installée. Contrôlez-le dans votre compte Google Ads.");
+    expect(diagnoseGoogleAds({ ...externalInput, hasAdsTag: false, externalSiteUnread: true }).prerequisites).not.toContain("Balise Google Ads sur le site");
+    // Le drapeau ne vaut que pour un site du client, et ne retire rien à ce qui a été repéré
+    expect(of({ ...externalInput, externalSiteUnread: true }, "tracking_tag").status).toBe("ok");
+    expect(of({ ...externalInput, externalSite: undefined, hasAdsTag: false, externalSiteUnread: true }, "tracking_tag").status).toBe("todo");
   });
 
   it("conversions : invérifiables de l'extérieur — « inconnu », jamais bloquant ni à régler, quels que soient les libellés saisis dans le studio", () => {

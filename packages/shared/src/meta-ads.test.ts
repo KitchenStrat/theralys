@@ -60,6 +60,7 @@ import {
   type MetaMarketScope,
   type MetaVideoBrief,
 } from "./meta-ads";
+import { EXTERNAL_SITE_CHECK_DETAILS } from "./google-ads";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -1620,7 +1621,9 @@ describe("metaReadinessChecks — site du client (externalSite)", () => {
   it("mêmes dix points, mêmes libellés ; rendez-vous, Instagram, avis et fiche Google ne changent pas", () => {
     const hosted = metaReadinessChecks(readyInput);
     const external = metaReadinessChecks(externalInput);
-    expect(external.map((c) => [c.id, c.label, c.critical])).toEqual(hosted.map((c) => [c.id, c.label, c.critical]));
+    // Seule différence : le Pixel n'est bloquant que sur le site hébergé, où le produit sait avec certitude s'il est posé
+    expect(external.map((c) => [c.id, c.label, c.critical])).toEqual(hosted.map((c) => [c.id, c.label, c.id === "pixel" ? false : c.critical]));
+    expect(hosted.find((c) => c.id === "pixel")?.critical).toBe(true);
     expect(external.every((c) => c.status === "ok")).toBe(true);
     const poor: MetaAdsDiagnosticInput = { ...readyInput, hasBookingUrl: false, instagramUrl: null, photosCount: 1, profile: { linked: false, rating: null, votes: null } };
     for (const id of ["instagram", "booking", "reviews", "profile_linked"]) {
@@ -1632,15 +1635,28 @@ describe("metaReadinessChecks — site du client (externalSite)", () => {
     expect(checkOf(externalInput, "facebook_page")).toEqual(checkOf(readyInput, "facebook_page"));
   });
 
-  it("Pixel : repéré sur le site du client (prises de contact à contrôler chez Meta), sinon à installer sur ce site puis site à relire — toujours bloquant", () => {
+  it("Pixel : repéré sur le site du client (prises de contact à contrôler chez Meta), sinon à régler sur ce site puis site à relire — jamais bloquant", () => {
     const found = checkOf(externalInput, "pixel");
-    expect(found).toMatchObject({ status: "ok", critical: true });
+    expect(found).toMatchObject({ status: "ok", critical: false });
     expect(found.detail).toBe("Le Pixel Meta a été repéré sur votre site : contrôlez dans le Gestionnaire d'événements de Meta que vos prises de rendez-vous et vos appels y sont bien comptés.");
+    // Non repéré ne veut pas dire absent (Google Tag Manager, chargement après l'accord du visiteur) : à régler, mais le
+    // praticien ne pourrait pas lever un blocage que la lecture aurait posé à tort
     const missing = checkOf({ ...externalInput, hasPixel: false }, "pixel");
-    expect(missing).toMatchObject({ status: "todo", critical: true });
+    expect(missing).toMatchObject({ status: "todo", critical: false });
     expect(missing.detail).toBe(
-      "Aucun Pixel Meta n'a été repéré sur votre site. Installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
+      "Aucun Pixel Meta n'a été repéré sur votre site. S'il y est déjà (chargé par Google Tag Manager, ou seulement après l'accord du visiteur, notre lecture ne le voit pas), contrôlez-le dans le Gestionnaire d'événements de Meta ; sinon, installez-le sur votre propre site (vous-même ou la personne qui s'en occupe), puis relancez la lecture de votre site depuis « Mon site ».",
     );
+  });
+
+  it("code du site jamais lu (texte collé par le praticien) : Pixel et bandeau « inconnus », rien à régler", () => {
+    const unread: MetaAdsDiagnosticInput = { ...externalInput, hasPixel: false, cookieBanner: false, externalSiteUnread: true };
+    expect(checkOf(unread, "pixel")).toMatchObject({ status: "unknown", critical: false, detail: EXTERNAL_SITE_CHECK_DETAILS.pixelUnread });
+    expect(checkOf(unread, "pixel").detail).toBe("Nous n'avons pas pu lire le code de votre site : nous ne pouvons pas dire si le Pixel Meta y est installé. Contrôlez-le dans le Gestionnaire d'événements de Meta.");
+    expect(checkOf(unread, "cookie_banner")).toMatchObject({ status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.cookieBannerUnread });
+    // Ni blocage ni prérequis : le verdict ne dépend pas de ce que personne n'a pu lire
+    expect(diagnoseMetaAds(unread)).toMatchObject({ verdict: "go", prerequisites: [] });
+    // Le drapeau ne vaut que pour un site du client
+    expect(checkOf({ ...readyInput, hasPixel: false, externalSiteUnread: true }, "pixel")).toMatchObject({ status: "todo", critical: true });
   });
 
   it("bandeau cookies : repéré → ok ; non repéré → inconnu (la lecture ne connaît pas tous les bandeaux), jamais « à régler »", () => {
@@ -1704,9 +1720,9 @@ describe("diagnoseMetaAds", () => {
     const external: MetaAdsDiagnosticInput = { ...readyInput, externalSite: true };
     expect(diagnoseMetaAds(external, now)).toMatchObject({ verdict: "go", score: 100, prerequisites: [], externalSite: true });
     expect(diagnoseMetaAds({ ...external, cookieBanner: false }, now)).toMatchObject({ verdict: "go", score: 97, prerequisites: [] });
-    // Pixel non repéré : bloquant, comme pour un site hébergé
+    // Pixel non repéré : à régler (−8), sans bloquer — sur un site que le produit n'héberge pas, « non repéré » n'est pas « absent »
     const noPixel = diagnoseMetaAds({ ...external, hasPixel: false }, now);
-    expect(noPixel).toMatchObject({ verdict: "wait", score: 80, externalSite: true });
+    expect(noPixel).toMatchObject({ verdict: "go_with_prerequisites", score: 92, externalSite: true });
     expect(noPixel.prerequisites[0]).toBe("Pixel Meta installé sur le site");
     expect("externalSite" in diagnoseMetaAds(readyInput, now)).toBe(false);
     // Site hébergé : bandeau désactivé = point à régler (−8), inchangé

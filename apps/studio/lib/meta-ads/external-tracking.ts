@@ -24,14 +24,14 @@ export function metaPixelFindings(tracking: ExternalSiteTracking): TrackingFindi
     {
       id: "pixel",
       label: "Pixel Meta installé sur le site",
-      status: tracking.metaPixel ? "ok" : "todo",
-      detail: tracking.metaPixel ? texts.pixelOk : texts.pixelTodo,
+      status: tracking.metaPixel ? "ok" : tracking.codeRead ? "todo" : "unknown",
+      detail: tracking.metaPixel ? texts.pixelOk : tracking.codeRead ? texts.pixelTodo : texts.pixelUnread,
     },
     {
       id: "consent",
       label: "Bandeau cookies",
       status: tracking.consentBanner ? "ok" : "unknown",
-      detail: tracking.consentBanner ? texts.cookieBannerOk : texts.cookieBannerUnknown,
+      detail: tracking.consentBanner ? texts.cookieBannerOk : tracking.codeRead ? texts.cookieBannerUnknown : texts.cookieBannerUnread,
     },
   ];
 }

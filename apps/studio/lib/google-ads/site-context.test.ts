@@ -19,6 +19,8 @@ const HOSTED_URL = "https://demo.harmony-web.fr/claire-dupont";
 
 const REFERENCE: ExternalReference = {
   setting: { url: "https://www.claire-sophrologie.fr", active: true },
+  source: "crawl",
+  measureSeenAt: null,
   profile: {
     ...EMPTY_EXTERNAL_PROFILE,
     headline: "Sophrologue à Albi",
@@ -66,7 +68,11 @@ describe("adsSiteContextFrom", () => {
       metaPixel: false,
       consentBanner: true,
       measureSnippet: false,
+      codeRead: true,
     });
+    // Texte collé, visites déjà reçues : le relevé le dit
+    const pasted = adsSiteContextFrom({ site: SITE, hostedUrl: HOSTED_URL, referenceUrl: "https://www.claire-sophrologie.fr", motifRows: MOTIFS, reference: { ...REFERENCE, source: "pasted", measureSeenAt: new Date("2026-11-12T09:00:00Z") } });
+    expect(pasted.externalTracking).toMatchObject({ codeRead: false, measureSnippet: true });
   });
 
   it("une analyse du site Harmony garde l'adresse du site Harmony après la connexion du site du client, et inversement", () => {

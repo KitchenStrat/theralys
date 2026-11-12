@@ -171,6 +171,8 @@ export type GoogleAdsContextData = {
   motifPages: number;
   /** Le site du client est la référence (absent : site hébergé) */
   externalSite?: boolean;
+  /** Site du client dont le code n'a jamais été lu (texte collé) : ses balises sont « inconnues » */
+  externalSiteUnread?: boolean;
 };
 
 export type GoogleAdsContext = GoogleAdsContextData & { site: Site; prospect: Prospect | null };
@@ -194,6 +196,8 @@ export type ExternalAdsSite = {
   tags: ExternalSiteTags;
   /** Réseaux sociaux du profil, complétés par les liens relevés dans les pages */
   social: SiteSocialLinks;
+  /** `false` : le praticien a collé le texte de ses pages, leur code n'a jamais été lu (aucune balise ne peut y être constatée) */
+  codeRead: boolean;
 };
 
 // ─── Logique pure (testée sans base) ─────────────────────────────────────────
@@ -351,6 +355,7 @@ export function externalAdsSite(reference: ExternalReference): ExternalAdsSite {
     motifPages: landingPages.filter((page) => page.kind === "motif").length,
     tags: facts.tags,
     social: { ...facts.social, ...profile.social },
+    codeRead: reference.source !== "pasted",
   };
 }
 
@@ -412,7 +417,7 @@ export function diagnosticInputFrom(
     benchmark: ctx.benchmark,
     keywords,
     forecast,
-    ...(ctx.externalSite ? { externalSite: true, hasTagManager: Boolean(ctx.tracking.googleTagManagerId) } : {}),
+    ...(ctx.externalSite ? { externalSite: true, hasTagManager: Boolean(ctx.tracking.googleTagManagerId), ...(ctx.externalSiteUnread ? { externalSiteUnread: true } : {}) } : {}),
   };
 }
 
@@ -617,7 +622,7 @@ export async function loadGoogleAdsContext(
     trackedKeywords: keywords.map((k) => k.keyword),
     landingPages: external ? external.landingPages : landingPagesFrom(motifs),
     motifPages: external ? external.motifPages : motifs.length,
-    ...(external ? { externalSite: true } : {}),
+    ...(external ? { externalSite: true, ...(external.codeRead ? {} : { externalSiteUnread: true }) } : {}),
   };
 }
 

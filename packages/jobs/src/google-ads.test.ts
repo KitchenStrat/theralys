@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EXTERNAL_SITE_CHECK_DETAILS,
   DEFAULT_SOCIAL_VOICE,
   EMPTY_EXTERNAL_FACTS,
   EMPTY_EXTERNAL_PROFILE,
@@ -521,6 +522,9 @@ const PROSPECT: Partial<Prospect> = { id: "44444444-4444-4444-8444-444444444444"
 /** Ce que `loadExternalReference` rend pour ce site : profil relu par le praticien et faits relevés dans ses pages. */
 const REFERENCE: ExternalReference = {
   setting: { url: "https://www.cabinet-dupont.fr", active: true },
+  // Lu sur le site lui-même (le code des pages a été examiné) ; aucune visite encore reçue du code de mesure
+  source: "crawl",
+  measureSeenAt: null,
   profile: {
     ...EMPTY_EXTERNAL_PROFILE,
     headline: "Sophrologue à Albi",
@@ -605,6 +609,9 @@ describe("site du client : ce que les annonces en lisent (externalAdsSite)", () 
     expect(site.tags).toEqual({ googleAdsId: "AW-123456789", googleTagManagerId: "GTM-ABC1234", metaPixelId: "123456789012345", consentBanner: true });
     // Réseaux : ceux du profil d'abord, complétés par les liens relevés dans les pages
     expect(site.social).toEqual({ facebook: "https://www.facebook.com/cabinetdupont", instagram: "https://www.instagram.com/cabinetdupont" });
+    // Le code des pages a été lu ; pas quand le praticien a collé son texte
+    expect(site.codeRead).toBe(true);
+    expect(externalAdsSite({ ...REFERENCE, source: "pasted" }).codeRead).toBe(false);
   });
 
   it("téléphone et adresse : le profil, sinon le premier numéro et l'adresse relevés dans les pages, sinon rien", () => {
@@ -732,8 +739,13 @@ describe("site du client : contexte Google Ads (base simulée, référence injec
     expect(nothing).toMatchObject({ hasAdsTag: false, hasTagManager: false, hasPhone: false });
     const todo = diagnoseGoogleAds(nothing, NOW).checks.find((c) => c.id === "tracking_tag")!;
     expect(todo.status).toBe("todo");
-    expect(todo.detail).toContain("Installez-la sur votre propre site");
+    expect(todo.detail).toBe(EXTERNAL_SITE_CHECK_DETAILS.adsTagTodo);
+    expect(todo.detail).toContain("installez-la sur votre propre site");
     expect(todo.detail).toContain("depuis « Mon site »");
+    // Texte collé par le praticien : le code du site n'a jamais été lu, la balise n'est ni acquise ni à installer
+    const unread = diagnoseGoogleAds(diagnosticInputFrom({ ...ctx, externalSiteUnread: true, tracking: { googleAdsId: null, googleTagManagerId: null, hasConversionLabels: false } }, null, null), NOW);
+    expect(unread.checks.find((c) => c.id === "tracking_tag")).toMatchObject({ status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.adsTagUnread });
+    expect(unread.prerequisites).not.toContain("Balise Google Ads sur le site");
     // Site hébergé : aucune clé de plus dans l'entrée
     const hosted = diagnosticInputFrom(CONTEXT, null, null);
     expect("externalSite" in hosted).toBe(false);

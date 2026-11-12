@@ -60,7 +60,7 @@ export function adsSiteContextFrom(input: {
   const domain = siteDomainOf(input.referenceUrl);
   return {
     sources: { hosted, external: { domain, pages: pageRefs(externalAdsSite(input.reference).landingPages) } },
-    externalTracking: externalSiteTracking(domain, input.reference.facts),
+    externalTracking: externalSiteTracking(domain, input.reference.facts, { source: input.reference.source, measureSeenAt: input.reference.measureSeenAt }),
   };
 }
 

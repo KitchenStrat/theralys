@@ -4,6 +4,7 @@ import Link from "next/link";
 import { clsx } from "clsx";
 import { Card } from "@theralys/ui";
 import {
+  CODE_UNREAD_NOTE,
   EXTERNAL_RESULTS,
   MON_SITE_HREF,
   READING_LIMIT,
@@ -39,12 +40,15 @@ export function ExternalTrackingCard({
   title,
   intro,
   findings,
+  codeRead,
   adviceTitle,
   advice,
 }: {
   title: string;
   intro: React.ReactNode;
   findings: TrackingFinding[];
+  /** `false` : le praticien a collé le texte de ses pages, leur code n'a jamais été lu — le relevé ne prétend rien en dire */
+  codeRead: boolean;
   /** « Où installer la balise Google », « Où installer le Pixel » */
   adviceTitle: string;
   advice: TagInstallAdvice;
@@ -54,8 +58,13 @@ export function ExternalTrackingCard({
       <h2 className="text-xl font-semibold">{title}</h2>
       <p className="mt-1 text-sm text-ink-500">{intro}</p>
 
-      <h3 className="mt-5 text-sm font-semibold text-ink-900">Ce que la dernière lecture de votre site a relevé</h3>
-      <ul className="mt-1 divide-y divide-cream-200" aria-label="Relevé de la dernière lecture de votre site">
+      <h3 className="mt-5 text-sm font-semibold text-ink-900">{codeRead ? "Ce que la dernière lecture de votre site a relevé" : "Ce que nous savons de votre site"}</h3>
+      {codeRead ? null : (
+        <p className="mt-1 text-sm text-ink-700" data-testid="external-code-unread">
+          {CODE_UNREAD_NOTE}
+        </p>
+      )}
+      <ul className="mt-1 divide-y divide-cream-200" aria-label={codeRead ? "Relevé de la dernière lecture de votre site" : "Ce que nous savons de votre site"}>
         {findings.map((finding) => {
           const status = FINDING[finding.status];
           return (
@@ -74,19 +83,21 @@ export function ExternalTrackingCard({
           );
         })}
       </ul>
-      <p className="mt-2 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
-        {REREAD_REMINDER}{" "}
-        <Link href={MON_SITE_HREF} className={clsx(linkClass, "whitespace-nowrap")}>
-          Ouvrir Mon site →
-        </Link>
-      </p>
+      {codeRead ? (
+        <p className="mt-2 rounded-xl bg-cream-100 px-4 py-3 text-sm text-ink-700">
+          {REREAD_REMINDER}{" "}
+          <Link href={MON_SITE_HREF} className={clsx(linkClass, "whitespace-nowrap")}>
+            Ouvrir Mon site →
+          </Link>
+        </p>
+      ) : null}
 
       <h3 className="mt-5 text-sm font-semibold text-ink-900">{adviceTitle}</h3>
       <p className={clsx("mt-1 text-sm", advice.possible ? "text-ink-700" : "rounded-xl bg-warning-100 px-4 py-3 text-ink-900")} data-testid="external-install-advice">
         {tagInstallIntro(advice)} {advice.text}
       </p>
 
-      <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">{READING_LIMIT}</p>
+      {codeRead ? <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">{READING_LIMIT}</p> : null}
     </Card>
   );
 }

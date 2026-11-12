@@ -82,6 +82,7 @@ export function SetupTab({
               </>
             }
             findings={googleAdsFindings(externalTracking)}
+            codeRead={externalTracking.codeRead}
             adviceTitle="Où installer la balise Google"
             advice={tagInstallAdvice(externalTracking.cms, "google")}
           />

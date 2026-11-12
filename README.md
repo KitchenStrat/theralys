@@ -82,6 +82,7 @@ Ticks, dans l'ordre (`packages/jobs/src/ticks.ts`) :
 | `sync-google-profiles` | fiche Google du studio : instantané + audit tous les 30 jours |
 | `collect-google-reviews` | tâches d'avis DataForSEO terminées → avis, audit, analyse IA |
 | `scheduled-google-scans` | relevés de visibilité planifiés (14 jours) |
+| `refresh-external-sites` | relit les sites des clients connectés dont la dernière lecture a 30 jours (quelques sites par passage, hors quota du praticien) ; solde les lectures interrompues |
 
 Les deux ticks d'e-mail passent par `packages/providers/src/mail` (Resend avec
 `RESEND_API_KEY` + `MAIL_FROM`, sinon mock) et sont idempotents par
@@ -128,6 +129,46 @@ Toutes les APIs externes ont un mode mock pour développer sans clé :
   (ou avec `DATAFORSEO_MOCK=1`), audit, carte de visibilité et avis complets sont simulés de
   façon déterministe ; avec les identifiants, DataForSEO fournit les données publiques Google
   Maps (≤ 5 $ par site et par mois, plafond vérifié avant chaque appel).
+- **Site du client (« Mon site »)** : avec `EXTERNAL_SITE_MOCK=1`, la lecture d'un site est
+  simulée sans aucun accès réseau (site fictif cohérent avec l'adresse saisie ; les hôtes
+  `demo-bloque…`, `demo-robots…`, `demo-vide…`, `demo-injoignable…` et `demo-lent…` rejouent
+  chaque échec). Sans cette variable, le lecteur réel est utilisé — il ne demande aucune clé.
+
+## Site du client (« Mon site »)
+
+Un praticien qui a déjà son site le connecte depuis le studio : ses outils (réseaux
+sociaux, fiche Google, Google Ads, Meta Ads, liens et statistiques) s'appuient alors sur
+ce site, et non plus sur le site inclus dans la formule.
+
+- **Lecture** (`packages/providers/src/website`) : à l'adresse donnée, notre lecteur lit au
+  plus 12 pages publiques. Il s'identifie (`HarmonyBot`, présenté sur la page publique
+  `/robot` du site vitrine), respecte `robots.txt`, n'exécute aucun script et ne contourne
+  aucune protection : un site qui le refuse est signalé comme tel, et le praticien peut
+  coller le texte de ses pages à la place. Garde-fous : adresses internes refusées à
+  chaque saut (redirections comprises), tailles, durées et complexité des pages bornées.
+- **Profil** (`packages/ai/src/external-site.ts`) : le texte lu est résumé en un profil
+  (présentation, spécialités avec leur page, infos pratiques, contact, rendez-vous, réseaux)
+  que le praticien relit et corrige rubrique par rubrique ; ses corrections survivent aux
+  relectures. Rien de ce qui n'est pas dans les pages lues n'est gardé (titres, chiffres et
+  coordonnées sont recoupés avec le texte).
+- **Référence des outils** : l'interrupteur vit dans `sites.theme.externalSite`
+  (`{ url, active, keepHostedIndexed? }`), le contenu dans la table `external_sites`
+  (migration `0009_external_sites`). `publicSiteUrl(site)` donne l'adresse de référence ;
+  le profil est converti en pages pour les générateurs (`externalBriefPages`). Tant que le
+  site du client est la référence, le site hébergé reste en ligne mais sort des moteurs de
+  recherche (`noindex`, plan de site vide), sauf si le praticien choisit de le garder
+  visible. Les articles du blog restent rédigés et publiés sur le site hébergé, avec un
+  bouton « Copier l'article » pour les reprendre ailleurs.
+- **Statistiques** : une balise à coller sur le site du client (`GET/POST /api/m` de
+  `apps/sites`) compte visites, provenance et clics vers la prise de rendez-vous ou le
+  téléphone — sans cookie, sans identifiant, sans aucun paramètre d'adresse (donc aucun
+  identifiant de campagne), avec refus possible par l'ancre `#mesure-off`. Les lignes
+  portent `analytics_events.origin = 'external'`. Aucune visite n'y est rattachée à une
+  annonce : sur ce site, le suivi publicitaire se règle dans le compte publicitaire du
+  praticien, et le studio dit seulement ce que la lecture a repéré dans le code des pages.
+- **Limites** : 6 lectures par mois lancées par le praticien, relecture automatique tous
+  les 30 jours (`refresh-external-sites`). Une relecture qui échoue, ou qui rendrait un
+  profil inexploitable, ne remplace jamais la précédente.
 
 ## Ce que couvre la Phase 4
 

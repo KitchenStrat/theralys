@@ -262,6 +262,12 @@ Paramétrage est en cours d'activation ». Appliquez-les alors sans attendre.
    du tracking et les ticks d'e-mail échouent (erreur journalisée, les autres
    ticks continuent) : appliquez-la avant de déployer.
 
+   La migration `0009_external_sites` crée la table `external_sites` et ajoute
+   `analytics_events.origin` (section « Mon site » du studio : un praticien y
+   connecte son propre site). Tant qu'elle n'est pas appliquée, rien ne casse :
+   la section affiche qu'elle est en cours d'activation, le code de mesure
+   servi est inerte et la relecture mensuelle ne fait rien.
+
    Une ligne par entrée du journal (`created_at` = champ `when` de
    `packages/db/drizzle/meta/_journal.json`). Fusionnez/déployez ensuite, puis
    ouvrez `https://app.harmony-web.fr/reseaux-sociaux` : le calendrier s'affiche.

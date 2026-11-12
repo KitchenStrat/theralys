@@ -7,13 +7,14 @@ import {
   READING_LIMIT,
   REREAD_REMINDER,
   externalSiteTracking,
+  ADS_BANNER_UNREAD,
   googleAdsFindings,
   tagInstallAdvice,
   tagInstallIntro,
   type ExternalSiteTracking,
 } from "./external-tracking";
 
-const NOTHING: ExternalSiteTracking = { address: "www.claire-sophrologie.fr", cms: null, googleAdsTag: false, tagManager: false, metaPixel: false, consentBanner: false, measureSnippet: false };
+const NOTHING: ExternalSiteTracking = { address: "www.claire-sophrologie.fr", cms: null, googleAdsTag: false, tagManager: false, metaPixel: false, consentBanner: false, measureSnippet: false, codeRead: true };
 
 describe("externalSiteTracking", () => {
   it("relève ce que la dernière lecture a repéré ; un identifiant vide ne compte pas", () => {
@@ -23,7 +24,19 @@ describe("externalSiteTracking", () => {
         cms: "wordpress",
         tags: { googleAdsId: "AW-1234567890", googleTagManagerId: " ", metaPixelId: "1234567890123456", consentBanner: true, measureSnippet: true },
       }),
-    ).toEqual({ address: "www.claire-sophrologie.fr", cms: "wordpress", googleAdsTag: true, tagManager: false, metaPixel: true, consentBanner: true, measureSnippet: true });
+    ).toEqual({ address: "www.claire-sophrologie.fr", cms: "wordpress", googleAdsTag: true, tagManager: false, metaPixel: true, consentBanner: true, measureSnippet: true, codeRead: true });
+  });
+
+  it("code de mesure : en place dès qu'une visite a été reçue, même si la lecture du code ne l'a pas repéré", () => {
+    // Balise posée depuis la dernière lecture, ou par un outil que la lecture ne voit pas : les visites reçues font foi
+    expect(externalSiteTracking("www.claire-sophrologie.fr", { tags: {} }, { measureSeenAt: new Date("2026-11-12T09:00:00Z") }).measureSnippet).toBe(true);
+    expect(externalSiteTracking("www.claire-sophrologie.fr", { tags: {} }, { measureSeenAt: null }).measureSnippet).toBe(false);
+    expect(externalSiteTracking("www.claire-sophrologie.fr", { tags: { measureSnippet: true } }, { measureSeenAt: null }).measureSnippet).toBe(true);
+  });
+
+  it("texte collé par le praticien : le code des pages n'a jamais été lu", () => {
+    expect(externalSiteTracking("www.claire-sophrologie.fr", { tags: {} }, { source: "pasted" }).codeRead).toBe(false);
+    expect(externalSiteTracking("www.claire-sophrologie.fr", { tags: {} }, { source: "crawl" }).codeRead).toBe(true);
   });
 });
 
@@ -32,6 +45,14 @@ describe("googleAdsFindings — relevé affiché à la place du formulaire de su
     expect(googleAdsFindings(NOTHING)).toEqual([
       { id: "tag", label: "Balise Google Ads sur le site", status: "todo", detail: EXTERNAL_SITE_CHECK_DETAILS.adsTagTodo },
       { id: "consent", label: "Bandeau cookies", status: "unknown", detail: ADS_BANNER_UNKNOWN },
+      { id: "conversions", label: "Conversions mesurées", status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.conversionsUnknown },
+    ]);
+  });
+
+  it("code du site jamais lu : rien n'est dit « à installer » — balise et bandeau inconnus, avec leurs propres textes", () => {
+    expect(googleAdsFindings({ ...NOTHING, codeRead: false })).toEqual([
+      { id: "tag", label: "Balise Google Ads sur le site", status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.adsTagUnread },
+      { id: "consent", label: "Bandeau cookies", status: "unknown", detail: ADS_BANNER_UNREAD },
       { id: "conversions", label: "Conversions mesurées", status: "unknown", detail: EXTERNAL_SITE_CHECK_DETAILS.conversionsUnknown },
     ]);
   });
