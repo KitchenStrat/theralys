@@ -199,7 +199,8 @@ export type CorrectionBase = {
  * par champ ; un champ vidé reste vide). Les autres rubriques ne bougent pas.
  */
 export function applyRubricCorrection(base: CorrectionBase, rubric: RubricId, value: unknown): ExternalProfileOverrides {
-  const read = base.extracted ?? EMPTY_EXTERNAL_PROFILE;
+  // Ce qui a été lu passe par le même nettoyage que la saisie : un formulaire enregistré sans y toucher n'est jamais une correction
+  const read = cleanExternalProfile(base.extracted ?? EMPTY_EXTERNAL_PROFILE, base.url);
   const given = isRecord(value) ? value : {};
   const next: ExternalProfileOverrides = { ...(base.overrides ?? {}) };
 
@@ -385,15 +386,15 @@ const CHECKS: { [R in RubricId]: (draft: RubricDrafts[R], siteUrl: string, error
       }
       const kept = item.kept;
       // Résumé, intertitres et questions viennent de la page de la spécialité : ils ne valent plus pour une autre page
-      const samePage = kept !== null && (url === undefined || kept.url === undefined || sameContent(url, kept.url));
+      const page = kept !== null && (url === undefined || kept.url === undefined || url === kept.url) ? kept : null;
       specialties.push({
         slug: kept?.slug ?? "",
         title,
         excerpt,
         ...(url !== undefined ? { url } : {}),
-        ...(samePage && kept.summary !== undefined ? { summary: kept.summary } : {}),
-        headings: samePage ? kept.headings : [],
-        faq: samePage ? kept.faq : [],
+        ...(page?.summary !== undefined ? { summary: page.summary } : {}),
+        headings: page?.headings ?? [],
+        faq: page?.faq ?? [],
       });
     }
     return { specialties };

@@ -38,7 +38,7 @@ const CHALLENGE_MARKERS: readonly RegExp[] = [
 
 /** Titres de pages d'attente ou de refus servies aux robots, en français et en anglais. */
 const CHALLENGE_TITLE =
-  /^\s*(?:just a moment|un instant|one moment|please wait|veuillez patienter|attention required|access denied|acc[eè]s refus[eé]|acc[eè]s interdit|security check|v[eé]rification de s[eé]curit[eé]|v[eé]rification en cours|checking your browser|robot check|are you (?:a )?(?:human|robot)|human verification|bot verification|ddos protection|pardon our interruption|403 forbidden|captcha)(?![a-z0-9À-ɏ])/i;
+  /^\s*(?:just a moment|un instant|one moment|please wait|veuillez patienter|attention required|access denied|acc[eè]s refus[eé]|acc[eè]s interdit|security check|v[eé]rification de s[eé]curit[eé]|v[eé]rification en cours|checking your browser|robot check|are you (?:a )?(?:human|robot)|human verification|bot verification|ddos protection|pardon our interruption|403 forbidden|captcha)(?![a-z0-9\xc0-\xff])/i;
 
 /** Au-delà de cette longueur de texte, une page servie en 200 est tenue pour une vraie page, quels que soient ses marqueurs. */
 const INTERSTITIAL_TEXT_MAX = 600;

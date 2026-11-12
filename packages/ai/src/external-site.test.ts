@@ -1318,6 +1318,40 @@ describe("mockExternalProfile", () => {
     ]);
   });
 
+  it("infos pratiques et déroulement : ni intertitre, ni délai d'annulation, ni phrase prise pour un libellé, ni phrase coupée", () => {
+    const pricing = page("pricing", "/tarifs", "Tarifs", ["Tarifs", "Règlement et remboursement"], [
+      "Tarifs",
+      "Prestation | Durée | Tarif",
+      "Séance d'hypnose | 1 h | 70 €",
+      "Séance enfant ou adolescent | 45 min | 55 €",
+      "Règlement et remboursement",
+      "Règlement par carte bancaire, chèque ou espèces. Une facture vous est remise sur demande.",
+      "Certaines mutuelles prennent en charge une partie des séances : renseignez-vous auprès de la vôtre.",
+      "Toute séance non annulée 24 heures à l'avance est due.",
+    ]);
+    const home = page("home", "/", "Hypnothérapeute à Nantes", ["Hypnothérapeute à Nantes", "Comment se passe une séance ?"], [
+      "Hypnothérapeute à Nantes",
+      "Comment se passe une séance ?",
+      "L'hypnose que je pratique est douce et respectueuse : vous gardez le contrôle tout au long de la séance, je vous guide vers vos propres ressources.",
+      "Par des pressions précises sur les zones réflexes des pieds, la séance procure une détente profonde ; elle vient en complément, jamais à la place, d'un suivi médical régulier.",
+      "La première séance commence par un temps d'échange pour faire le point sur votre demande.",
+    ]);
+    const given = input({ pages: [home, pricing], facts: EMPTY_EXTERNAL_FACTS });
+    const profile = finalizeExternalProfile(mockExternalProfile(given), given);
+    // La durée se lit dans la grille des tarifs ; « 24 heures à l'avance » n'est pas la durée d'une séance, un intertitre n'est pas une information
+    expect(profile.practical).toEqual([
+      { title: "Tarifs", text: "Séance d'hypnose – 1 h – 70 € · Séance enfant ou adolescent – 45 min – 55 €" },
+      { title: "Remboursement", text: "Certaines mutuelles prennent en charge une partie des séances : renseignez-vous auprès de la vôtre." },
+      { title: "Moyens de paiement", text: "Règlement par carte bancaire, chèque ou espèces." },
+    ]);
+    // Un paragraphe qui contient un deux-points n'est pas « Libellé : texte » ; une phrase trop longue pour une étape est passée plutôt que coupée
+    expect(profile.process).toEqual([
+      { title: "Étape 1", description: "L'hypnose que je pratique est douce et respectueuse : vous gardez le contrôle tout au long de la séance, je vous guide vers vos propres ressources." },
+      { title: "Étape 2", description: "La première séance commence par un temps d'échange pour faire le point sur votre demande." },
+    ]);
+    expect(profile.process.every((step) => !step.description.endsWith("…"))).toBe(true);
+  });
+
   it("une question posée sur deux pages n'est gardée qu'une fois ; les mentions légales ne donnent jamais les coordonnées", () => {
     const home = page("home", "/", "Sophrologue à Albi", ["Sophrologue à Albi", FAQ_ITEMS[1]!.question], ["Sophrologue à Albi", FAQ_ITEMS[1]!.question, "Non, venez comme vous êtes."]);
     const legal = page("legal", "/mentions-legales", "Mentions légales", ["Mentions légales"], [

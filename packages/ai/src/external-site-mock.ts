@@ -90,16 +90,28 @@ function sentencesOf(text: string): string[] {
     .filter((sentence) => sentence !== "");
 }
 
-/** Premières phrases d'un texte tant qu'elles tiennent dans `max` (au moins une), phrases refusées par le marketing éthique exclues. */
-function lead(text: string, max: number): string {
+/**
+ * Premières phrases d'un texte tant qu'elles tiennent dans `max`, phrases
+ * refusées par le marketing éthique exclues. La première est gardée même trop
+ * longue (le contrat la coupera) — sauf `strict`, pour les textes courts où
+ * une phrase coupée ne dit plus rien : mieux vaut alors ne rien rendre.
+ */
+function lead(text: string, max: number, opts: { strict?: boolean } = {}): string {
   let out = "";
   for (const sentence of sentencesOf(text)) {
     if (!fair(sentence)) continue;
     const next = out === "" ? sentence : `${out} ${sentence}`;
-    if (out !== "" && next.length > max) break;
+    if (next.length > max && (out !== "" || opts.strict)) break;
     out = next;
   }
   return out;
+}
+
+/** « Libellé : texte » — une étape ou un point fort écrit sur une ligne. Le libellé est court : au-delà, c'est une phrase qui contient un deux-points. */
+function labelled(text: string): { label: string; rest: string } | null {
+  const match = /^(\p{Lu}[^:.!?]{2,39}?)\s*:\s+(\S.{9,})$/u.exec(text);
+  const label = match?.[1] ?? "";
+  return match && label.split(" ").length <= 5 ? { label, rest: match[2] ?? "" } : null;
 }
 
 /** Blocs de texte d'une page, intertitres exclus. */
@@ -245,7 +257,8 @@ const DAY_RE = /\b(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/i;
 
 /** Infos pratiques : la durée d'une séance, les tarifs, le remboursement et les moyens de paiement, recopiés des lignes qui les donnent. */
 function practicalOf(outlines: readonly Outline[]): ExternalProfileDraft["practical"] {
-  const lines = outlines.flatMap((outline) => outline.blocks.flatMap((block) => (block.text.length <= L.shortText ? [block.text] : sentencesOf(block.text)))).filter((text) => text.length <= L.shortText && fair(text));
+  // Phrases du texte (une ligne de tableau ou de liste en est une), jamais un intertitre : « Règlement et remboursement » n'apprend rien
+  const lines = outlines.flatMap((outline) => bodyOf(outline).flatMap(sentencesOf)).filter((text) => text.length <= L.shortText && fair(text));
   const used = new Set<string>();
   const take = (test: (text: string, folded: string) => boolean): string | undefined => {
     const found = lines.find((text) => !used.has(text) && test(text, foldText(text)));
@@ -260,7 +273,14 @@ function practicalOf(outlines: readonly Outline[]): ExternalProfileDraft["practi
     prices = next;
     used.add(text);
   }
-  const duration = take((text, folded) => DURATION_RE.test(text) && /seance|consultation|duree|\bdure\b/.test(folded) && !/ouvert|horaire/.test(folded) && !DAY_RE.test(text));
+  // Une durée de séance est dite (« dure une heure », « séances de 45 minutes ») : un délai d'annulation ou une plage d'ouverture n'en est pas une
+  const duration = take(
+    (text, folded) =>
+      DURATION_RE.test(text) &&
+      /\bdure(?:nt)?\b|\bduree\b|\bcomptez\b|\bprevoir\b|\bprevoyez\b|\bseances? (?:individuelles? )?d(?:e|une?) /.test(folded) &&
+      !/annul|avance|retard|ouvert|horaire/.test(folded) &&
+      !DAY_RE.test(text),
+  );
   const refund = take((_text, folded) => /mutuelle|rembours|prise en charge/.test(folded));
   const payment = take((_text, folded) => /cheque|espece|carte bancaire|\bcb\b|virement|paiement|reglement/.test(folded));
   return [
@@ -285,15 +305,15 @@ function processOf(outlines: readonly Outline[]): ExternalProfileDraft["process"
     if (section.body.length > 0) {
       const lines = section.body.length > 1 ? section.body : sentencesOf(section.body[0] ?? "");
       for (const text of lines) {
-        const titled = /^([^:.!?]{3,60}?)\s*:\s+(\S.{9,})$/.exec(text);
-        const description = capitalize(lead(titled?.[2] ?? text, L.shortText));
-        if (description !== "") steps.push({ title: titled?.[1] ?? `Étape ${steps.length + 1}`, description });
+        const step = labelled(text);
+        const description = capitalize(lead(step?.rest ?? text, L.shortText, { strict: true }));
+        if (description !== "") steps.push({ title: step?.label ?? `Étape ${steps.length + 1}`, description });
       }
     } else {
       for (const next of sections.slice(at + 1)) {
-        const description = lead(next.body[0] ?? "", L.shortText);
-        if (description === "" || isQuestion(next.heading) || SECTION_RE.test(foldText(next.heading))) break;
-        steps.push({ title: next.heading, description });
+        if (isQuestion(next.heading) || SECTION_RE.test(foldText(next.heading))) break;
+        const description = lead(next.body[0] ?? "", L.shortText, { strict: true });
+        if (description !== "") steps.push({ title: next.heading, description });
       }
     }
     if (steps.length > 0) return steps.slice(0, L.process);
@@ -384,8 +404,8 @@ export function mockExternalProfile(input: ExternalProfileInput): ExternalProfil
 
   const strengths = home?.sections.find((section) => HIGHLIGHTS_RE.test(foldText(section.heading)))?.body ?? [];
   const highlights = strengths.flatMap((text): ExternalProfileDraft["highlights"] => {
-    const titled = /^([^:.!?]{3,60}?)\s*:\s+(\S.{9,})$/.exec(text);
-    if (titled) return [{ title: titled[1] ?? "", text: capitalize(lead(titled[2] ?? "", L.shortText)) }];
+    const point = labelled(text);
+    if (point) return fair(point.label) ? [{ title: point.label, text: capitalize(lead(point.rest, L.shortText, { strict: true })) }] : [];
     return text.length <= 60 && fair(text) ? [{ title: text }] : [];
   });
 

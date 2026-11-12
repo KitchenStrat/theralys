@@ -147,6 +147,9 @@ const PROFILE: ExternalSiteProfile = cleanExternalProfile(
   SITE_URL,
 );
 
+/** Profil lu incomplet : une présentation, aucune spécialité — inexploitable sans corrections. */
+const PARTIAL: ExternalSiteProfile = { ...EMPTY_EXTERNAL_PROFILE, headline: "Sophrologie à Albi" };
+
 const ACTIVE: ExternalSiteSetting = { url: SITE_URL, active: true };
 const themeWith = (setting: ExternalSiteSetting | undefined, extra: Partial<SiteTheme> = {}): SiteTheme => ({ ...THEME, ...extra, ...(setting ? { externalSite: setting } : {}) });
 
@@ -1089,10 +1092,60 @@ describe("runExternalSiteRead", () => {
     expect(external(handle)).toMatchObject({ status: "ready", source: "crawl", error: null, pages, facts, profile, overrides, contentHash: externalContentHash(pages, facts), readAt: NOW });
   });
 
-  it("profil encore incomplet : enregistré « prêt » quand même, le praticien le complète à la main", async () => {
+  it("première lecture au profil encore incomplet : enregistrée « prêt » quand même, le praticien le complète à la main", async () => {
     const handle = memoryDb({ external: [readingRow()] });
     await run(handle, fakeReader().reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor);
     expect(external(handle)).toMatchObject({ status: "ready", error: null, profile: EMPTY_EXTERNAL_PROFILE, pages: PAGES, readAt: NOW });
+    // De même après une première lecture en échec : rien d'exploitable n'était enregistré
+    const retried = memoryDb({ external: [readingRow({ error: null })] });
+    await run(retried, fakeReader().reader, fakeExtractor(() => PARTIAL).extractor);
+    expect(external(retried)).toMatchObject({ status: "ready", error: null, profile: PARTIAL });
+  });
+
+  it("relecture qui ramène un profil inexploitable alors que le précédent l'était : écartée comme un échec `empty`, la lecture précédente reste", async () => {
+    for (const thin of [EMPTY_EXTERNAL_PROFILE, PARTIAL, { ...PROFILE, headline: "", intro: [], about: { paragraphs: [], credentials: [] } }]) {
+      const before = rereadingRow();
+      const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+      const { extractor, calls } = fakeExtractor(() => thin);
+      const newPages = [page("/", "home", "Site en travaux", HOME_TEXT.repeat(2))];
+      await expect(run(handle, fakeReader(() => okRead({ url: BARE_URL, pages: newPages, facts: { ...FACTS, tags: {} } })).reader, extractor)).resolves.toBeUndefined();
+      expect(calls).toHaveLength(1);
+      // Pages, faits, profil, adresse et empreinte : ceux de la lecture précédente
+      expect(external(handle)).toEqual({ ...before, status: "ready", error: "empty", errorDetail: expect.stringMatching(/^Profil lu inexploitable, il manque : /), updatedAt: NOW });
+      expect(themeOf(handle)).toEqual(themeWith(ACTIVE));
+      const site = { id: SITE_ID, theme: themeOf(handle) };
+      expect(await loadExternalReference(handle.db, site)).toMatchObject({ profile: PROFILE, facts: FACTS });
+      const state = await loadExternalSite(handle.db, site, NOW);
+      expect(state.available && state.site).toMatchObject({ status: "ready", error: "empty", readAt: daysAgo(3), usable: true, extracted: PROFILE });
+    }
+    expect(logs.warn).toHaveBeenCalledWith(`[site-client] lecture du site ${SITE_ID} en échec : empty (lecture précédente conservée)`);
+  });
+
+  it("le profil précédent n'était pas exploitable non plus : la relecture est enregistrée, comme une première lecture", async () => {
+    const handle = memoryDb({ external: [rereadingRow({ profile: PARTIAL })] });
+    await run(handle, fakeReader().reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor);
+    expect(external(handle)).toMatchObject({ status: "ready", error: null, profile: EMPTY_EXTERNAL_PROFILE, readAt: NOW });
+    // Avec des corrections qui suffisent à elles seules, rien d'exploitable n'est perdu non plus
+    const overrides = { headline: "Sophrologie à Albi", specialties: PROFILE.specialties };
+    const corrected = memoryDb({ external: [rereadingRow({ profile: PARTIAL, overrides })], sites: [activeSiteRow()] });
+    await run(corrected, fakeReader().reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor);
+    expect(external(corrected)).toMatchObject({ status: "ready", error: null, profile: EMPTY_EXTERNAL_PROFILE, overrides, readAt: NOW });
+    expect(await loadExternalReference(corrected.db, { id: SITE_ID, theme: themeOf(corrected) })).not.toBeNull();
+  });
+
+  it("le profil effectif (lu puis corrigé) ne doit pas cesser d'être exploitable : la relecture qui le ferait est écartée aussi", async () => {
+    // Présentation lue sur le site, spécialités saisies par le praticien : ensemble, un profil exploitable
+    const overrides = { specialties: PROFILE.specialties };
+    const before = rereadingRow({ profile: PARTIAL, overrides });
+    const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    await run(handle, fakeReader().reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor);
+    expect(external(handle)).toEqual({ ...before, status: "ready", error: "empty", errorDetail: "Profil lu inexploitable, il manque : une présentation de votre activité, au moins une spécialité", updatedAt: NOW });
+    expect(await loadExternalReference(handle.db, { id: SITE_ID, theme: themeOf(handle) })).toMatchObject({ profile: { ...PARTIAL, ...overrides } });
+    // Corrections qui suffisent à elles seules : le profil lu sur le site, exploitable, n'est pas remplacé par un profil vide pour autant
+    const rich = rereadingRow({ overrides: { headline: "Sophrologie à Albi", specialties: PROFILE.specialties } });
+    const kept = memoryDb({ external: [rich] });
+    await run(kept, fakeReader().reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor);
+    expect(external(kept)).toMatchObject({ status: "ready", error: "empty", profile: PROFILE, readAt: daysAgo(3) });
   });
 
   it("le profil est nettoyé avant d'être enregistré, quel que soit l'extracteur", async () => {
@@ -1465,10 +1518,29 @@ describe("submitExternalSiteText", () => {
     expect(themeOf(other)).toEqual(themeWith({ url: OTHER_URL, active: false }));
   });
 
-  it("profil incomplet : enregistré « prêt » quand même", async () => {
+  it("premier texte au profil incomplet : enregistré « prêt » quand même", async () => {
     const handle = memoryDb();
     expect(await submit(handle, {}, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ ok: true });
     expect(external(handle)).toMatchObject({ status: "ready", profile: EMPTY_EXTERNAL_PROFILE });
+    // Site déjà lu mais au profil resté incomplet : le texte le remplace, même incomplet lui aussi
+    const partial = memoryDb({ external: [externalRow({ profile: PARTIAL })] });
+    expect(await submit(partial, {}, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ ok: true });
+    expect(external(partial)).toMatchObject({ status: "ready", source: "pasted", error: null, profile: EMPTY_EXTERNAL_PROFILE, readAt: NOW });
+  });
+
+  it("texte collé sur un site déjà lu, trop mince pour un profil exploitable : il ne remplace pas la lecture précédente, l'issue le dit", async () => {
+    const before = externalRow({ overrides: { headline: "Corrigé" } });
+    const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    const refusal = await submit(handle, {}, fakeExtractor(() => PARTIAL).extractor);
+    expect(refusal).toMatchObject({ ok: false, reason: "text" });
+    expect(refusal.ok === false && refusal.message).toMatch(/votre profil précédent est conservé/);
+    // Lecture précédente intacte, toujours lue sur le site ; l'échec `empty` est gardé pour l'écran
+    expect(external(handle)).toEqual({ ...before, status: "ready", error: "empty", errorDetail: "Profil lu inexploitable, il manque : au moins une spécialité", readStartedAt: NOW, consentAt: NOW, updatedAt: NOW });
+    const site = { id: SITE_ID, theme: themeOf(handle) };
+    expect(await loadExternalReference(handle.db, site)).toMatchObject({ profile: { ...PROFILE, headline: "Corrigé" }, facts: FACTS });
+    const state = await loadExternalSite(handle.db, site, NOW);
+    expect(state.available && state.site).toMatchObject({ status: "ready", error: "empty", source: "crawl", usable: true });
+    expect(handle.rows(googleUsage)).toEqual([]);
   });
 
   it("l'extraction échoue alors que le site avait déjà été lu : l'issue le dit, la lecture précédente et son origine restent, le site reste « prêt »", async () => {
@@ -2048,10 +2120,21 @@ describe("refreshExternalSites", () => {
     expect(await refresh(handle, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ checked: 1, changed: 0, failed: 1 });
     expect(external(handle)).toEqual({ ...before, checkedAt: NOW, updatedAt: NOW });
     expect(logged()).toMatch(/profil inexploitable/);
-    // Les corrections du praticien comptent : avec elles, un profil lu incomplet reste exploitable et est enregistré
-    const corrected = memoryDb({ external: [due({ overrides: { headline: "Sophrologie à Albi", specialties: PROFILE.specialties } })], sites: [activeSiteRow()] });
+    // Même règle que pour une lecture du praticien — même si les corrections suffiraient à elles seules, un profil lu exploitable n'est pas remplacé par un profil vide
+    const overrides = { headline: "Sophrologie à Albi", specialties: PROFILE.specialties };
+    const rich = due({ overrides });
+    const kept = memoryDb({ external: [rich], sites: [activeSiteRow()] });
+    expect(await refresh(kept, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ checked: 1, changed: 0, failed: 1 });
+    expect(external(kept)).toEqual({ ...rich, checkedAt: NOW, updatedAt: NOW });
+    // Profil effectif tenu par une présentation lue et des spécialités corrigées : la relecture qui le rendrait inexploitable est écartée
+    const mixed = due({ profile: PARTIAL, overrides: { specialties: PROFILE.specialties } });
+    const guarded = memoryDb({ external: [mixed], sites: [activeSiteRow()] });
+    expect(await refresh(guarded, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ checked: 1, changed: 0, failed: 1 });
+    expect(external(guarded)).toEqual({ ...mixed, checkedAt: NOW, updatedAt: NOW });
+    // Rien d'exploitable à perdre (profil lu déjà incomplet, corrections suffisantes à elles seules) : la relecture est enregistrée
+    const corrected = memoryDb({ external: [due({ profile: PARTIAL, overrides })], sites: [activeSiteRow()] });
     expect(await refresh(corrected, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ checked: 1, changed: 1, failed: 0 });
-    expect(external(corrected)).toMatchObject({ profile: EMPTY_EXTERNAL_PROFILE, readAt: NOW });
+    expect(external(corrected)).toMatchObject({ profile: EMPTY_EXTERNAL_PROFILE, overrides, readAt: NOW });
   });
 
   it("l'échec laissé par une relecture du praticien : effacé dès qu'une relecture automatique aboutit, gardé si elle échoue aussi", async () => {

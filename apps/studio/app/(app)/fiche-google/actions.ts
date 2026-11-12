@@ -12,9 +12,10 @@ import {
   hasGoogleProfile,
   type NewGooglePost,
   type PlanId,
+  type Site,
   googleUsage,
 } from "@theralys/db";
-import { checkEthicalCompliance, createGooglePostGenerator } from "@theralys/ai";
+import { checkEthicalCompliance, createGooglePostGenerator, type GooglePostLinks } from "@theralys/ai";
 import {
   analyzeGoogleReviews,
   generateGoogleReviewReply,
@@ -42,7 +43,7 @@ import {
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
-import { getProspect, getSite, siteUrl } from "@/lib/data";
+import { getProspect, getSite, publicSiteUrl } from "@/lib/data";
 import { canAddKeyword, isGridRadius, normalizeKeyword } from "@/lib/google/keywords";
 import { ownedGooglePost } from "@/lib/google/post-access";
 import {
@@ -452,6 +453,17 @@ async function recentTopicsAcrossChannels(siteId: string, now: Date): Promise<st
   return [...new Set([...google, ...social])].slice(0, 60);
 }
 
+/**
+ * Liens du bouton d'action des posts. Le bouton est lu par les visiteurs de
+ * la fiche : « En savoir plus » doit les mener au site de référence — celui du
+ * client quand ses outils s'appuient dessus, sinon le site hébergé
+ * (`publicSiteUrl`). Le lien d'un article reste celui du blog hébergé : il
+ * vient du brief, pas d'ici.
+ */
+function postLinks(site: Site): GooglePostLinks {
+  return { siteUrl: publicSiteUrl(site), bookingUrl: site.bookingUrl };
+}
+
 // ─── Posts Google : préparation du mois ──────────────────────────────────────
 
 const planSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
@@ -500,8 +512,7 @@ export async function planGoogleMonth(input: unknown): Promise<{ error?: string;
       activeKeywordTexts(site.id),
     ]);
     const generator = attributeApiUsage(createGooglePostGenerator(), { feature: "google_profile", siteId: site.id });
-    const links = { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl };
-    const posts = await generator.planMonth(brief, { month, slots: initial.freeSlots, recentTopics, photosById, refsById, keywords }, links);
+    const posts = await generator.planMonth(brief, { month, slots: initial.freeSlots, recentTopics, photosById, refsById, keywords }, postLinks(site));
 
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
@@ -617,7 +628,7 @@ export async function requestGooglePost(input: unknown): Promise<{ error?: strin
     const post = await generator.generateRequest(
       brief,
       { topic, accentHex: accentColor, scheduledFor: day, recentTopics, photosById, refsById, keywords },
-      { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
+      postLinks(site),
     );
 
     const inserted = await db.transaction(async (tx) => {
@@ -740,7 +751,7 @@ export async function regenerateGooglePost(input: unknown): Promise<{ error?: st
         keywords,
         ...(instructions === "" ? {} : { instructions }),
       },
-      { siteUrl: siteUrl(site), bookingUrl: site.bookingUrl },
+      postLinks(site),
     );
 
     // 3. Transaction courte sous verrou par site : quota recompté, post remplacé et régénération inscrite ensemble

@@ -109,7 +109,7 @@ describe("pastedTextToPages", () => {
     const dirty = `<h1>Mon   cabinet</h1>\r\n\r\n<p>Bienvenue${u(0x200b)} au <b>cabinet</b>.${u(0xa0)}Les séances durent une heure.</p>\r\n<script>alert(1)</script>${u(0xe0049)}${u(0xe0047)}\r\n\r\n\r\n\r\n${"Suite du texte, sans rien de particulier. ".repeat(8)}`;
     const [page] = pastedTextToPages(dirty, URL_, NOW);
     expect(page!.text.split("\n").slice(0, 3)).toEqual(["Mon cabinet", "Bienvenue au cabinet . Les séances durent une heure.", "alert(1)"]);
-    expect(/[<>​ \r]|[\u{e0000}-\u{e007f}]/u.test(page!.text)).toBe(false);
+    expect(/[<>\u{200b}\u{a0}\r]|[\u{e0000}-\u{e007f}]/u.test(page!.text)).toBe(false);
   });
 
   it("déterministe : même texte, même adresse, même date → mêmes pages ; la date par défaut est l'instant présent", () => {

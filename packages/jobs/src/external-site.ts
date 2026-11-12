@@ -25,8 +25,10 @@
  *   remplace : pendant une relecture, et si elle échoue, les outils gardent
  *   le profil précédent. L'échec est alors gardé à part (`error`), le site
  *   reste « prêt » ; seule une première lecture en échec donne un site en
- *   « erreur ». `source` dit d'où vient ce qui est enregistré, pas la nature
- *   de la dernière tentative ;
+ *   « erreur ». Une relecture qui ramène un profil inexploitable alors que
+ *   le précédent l'était compte comme un échec (`empty`) : elle ne le
+ *   remplace pas. `source` dit d'où vient ce qui est enregistré, pas la
+ *   nature de la dernière tentative ;
  * - l'adresse retenue vit à deux endroits, la ligne et le réglage du site :
  *   ils changent toujours ensemble ; un réglage actif ne survit jamais à un
  *   changement de site (le praticien relit le nouveau profil, puis réactive) ;
@@ -190,6 +192,7 @@ const MESSAGES = {
   textShort: `Ce texte est trop court pour en tirer un profil. Collez au moins ${formatCount(EXTERNAL_SITE_LIMITS.pastedMinChars)} caractères : votre page d'accueil et vos pages de spécialité, par exemple.`,
   textLong: `Ce texte est trop long. Gardez l'essentiel de vos pages : ${formatCount(EXTERNAL_SITE_LIMITS.pastedMaxChars)} caractères au plus.`,
   textUnreadable: "Nous n'avons pas trouvé assez de texte dans ce que vous avez collé. Collez le contenu de vos pages : accueil, spécialités, présentation.",
+  textTooThin: "Ce texte ne nous a pas permis de retrouver votre présentation et vos spécialités : votre profil précédent est conservé. Pour le remplacer, collez le texte complet de vos pages : accueil, spécialités, présentation.",
   connectFirst: "Indiquez d'abord l'adresse de votre site : nous le lirons, puis vous pourrez choisir que vos outils s'appuient dessus.",
   stillReading: "La lecture de votre site est en cours. Vous pourrez l'activer dès qu'elle sera terminée.",
   readFailed: "La dernière lecture de votre site n'a pas abouti. Relancez-la, ou collez le texte de vos pages, avant de l'activer.",
@@ -566,6 +569,28 @@ async function extractProfile(extractor: ExternalProfileExtractor, input: Extern
   return cleanExternalProfile(await extractor.extract(input), input.url);
 }
 
+/**
+ * Une relecture ferait-elle perdre un profil exploitable ? Oui si le profil
+ * lu cesse de l'être alors que le précédent l'était — le profil lu sur le
+ * site, ou le profil effectif (lu puis corrigé) sur lequel les outils
+ * s'appuient. Un site en maintenance, une page vidée ou un texte collé trop
+ * mince ne doivent pas effacer ce que le studio avait compris du site : la
+ * relecture est alors écartée comme un échec `empty`, la lecture précédente
+ * reste en place. Même règle pour une lecture du praticien, un texte collé
+ * et la relecture mensuelle ; une première lecture, elle, est toujours
+ * enregistrée, même incomplète : le praticien la complète à la main.
+ */
+function losesUsableProfile(previous: ExternalSiteProfile | null, next: ExternalSiteProfile, overrides: ExternalProfileOverrides | null): boolean {
+  if (isExternalProfileUsable(previous) && !isExternalProfileUsable(next)) return true;
+  return isExternalProfileUsable(mergeExternalProfile(previous, overrides)) && !isExternalProfileUsable(mergeExternalProfile(next, overrides));
+}
+
+/** Détail technique d'une relecture écartée parce que son profil n'est pas exploitable. */
+function thinProfileDetail(next: ExternalSiteProfile, overrides: ExternalProfileOverrides | null): string {
+  const gaps = new Set([...externalProfileGaps(next), ...externalProfileGaps(mergeExternalProfile(next, overrides))]);
+  return `Profil lu inexploitable, il manque : ${[...gaps].join(", ")}`;
+}
+
 // ─── Écran « Mon site » ──────────────────────────────────────────────────────
 
 /**
@@ -660,10 +685,12 @@ export async function beginExternalSiteRead(db: Database, site: Site, input: { u
  * échec est inscrit avec le code du contrat, que le praticien voit. Si une
  * lecture précédente avait abouti, elle reste en place et le site reste
  * « prêt » — une relecture ratée ne retire jamais leur référence aux outils ;
- * seule une première lecture en échec laisse le site en « erreur ». Un profil
- * encore incomplet est enregistré tel quel : le praticien le complète à la
- * main. Si le site répond sur l'autre variante de son adresse (avec ou sans
- * « www. »), c'est elle qui est retenue.
+ * seule une première lecture en échec laisse le site en « erreur ». Une
+ * première lecture au profil encore incomplet est enregistrée telle quelle :
+ * le praticien la complète à la main. Une relecture qui ramène un profil
+ * inexploitable alors que le précédent l'était est écartée comme un échec
+ * `empty` (`losesUsableProfile`). Si le site répond sur l'autre variante de
+ * son adresse (avec ou sans « www. »), c'est elle qui est retenue.
  */
 export function runExternalSiteRead(db: Database, siteId: string, deps: ExternalSiteDeps = {}): Promise<void> {
   // Registre des appels API : la lecture et l'extraction sont rattachées à la fonctionnalité et au site
@@ -694,6 +721,11 @@ async function readAndStore(db: Database, siteId: string, deps: ExternalSiteDeps
     const url = servedAddress(row.url, outcome.url, hostedHostsOf({ domain: site?.domain ?? null }, env));
     const extractor = deps.extractor ?? createExternalProfileExtractor(env);
     const profile = await extractProfile(extractor, { url, pages: outcome.pages, facts, practitioner: await practitionerOf(db, site?.prospectId ?? null) });
+    // Relecture qui ramène trop peu : elle ne remplace pas un profil exploitable
+    if (attempt.hasPrevious && losesUsableProfile(row.profile, profile, row.overrides)) {
+      await failRead(db, attempt, "empty", thinProfileDetail(profile, row.overrides), clock());
+      return;
+    }
     const stored = await storeRead(db, attempt, row.url, { url, source: "crawl", pages: outcome.pages, facts, profile }, clock());
     if (!stored) console.warn(`${LOG} lecture du site ${siteId} sans suite : l'état du site a changé entre-temps`);
   } catch (err) {
@@ -714,8 +746,10 @@ async function readAndStore(db: Database, siteId: string, deps: ExternalSiteDeps
  * tient lieu de pages lues. Mêmes contrôles que pour une lecture (adresse,
  * consentement, pas de lecture en cours), sans quota : aucune page n'est
  * demandée au site. Le profil est extrait et enregistré dans la foulée ; si
- * l'extraction échoue, l'issue le dit et l'échec est inscrit comme celui
- * d'une lecture : ce qui avait été lu auparavant sur ce site reste en place.
+ * l'extraction échoue, ou si le texte ne donne pas un profil exploitable
+ * alors que le précédent l'était, l'issue le dit et l'échec est inscrit comme
+ * celui d'une lecture : ce qui avait été lu auparavant sur ce site reste en
+ * place.
  */
 export function submitExternalSiteText(db: Database, site: Site, input: { url: string; text: string; consent: boolean }, deps: ExternalSiteDeps = {}): Promise<ExternalSiteResult> {
   // Registre des appels API : l'extraction est rattachée à la fonctionnalité et au site
@@ -743,16 +777,18 @@ async function submitText(db: Database, site: Site, input: { url: string; text: 
   if (textLength(pages) === 0) return refuse("text", MESSAGES.textUnreadable);
 
   let attempt: ReadAttempt;
+  /** Lecture précédente conservée (même site, déjà lu) : ce que ce texte ne doit pas appauvrir */
+  let previous: Pick<ExternalSiteRow, "profile" | "overrides"> | null;
   try {
-    const started = await db.transaction(async (tx): Promise<ReadAttempt | null> => {
+    const started = await db.transaction(async (tx) => {
       await lockExternalSite(tx, site.id);
       const row = await loadRow(tx, site.id);
       if (row && isReadInProgress(row, now)) return null;
       const hasPrevious = await startRead(tx, site.id, row, address.url, "pasted", now);
-      return { siteId: site.id, startedAt: now, hasPrevious };
+      return { attempt: { siteId: site.id, startedAt: now, hasPrevious }, previous: hasPrevious ? row : null };
     });
     if (!started) return refuse("busy", MESSAGES.busy);
-    attempt = started;
+    ({ attempt, previous } = started);
   } catch (err) {
     if (!isSchemaMissing(err)) throw err;
     return refuse("unavailable", MESSAGES.unavailable);
@@ -763,6 +799,11 @@ async function submitText(db: Database, site: Site, input: { url: string; text: 
     const facts = completeFacts(null);
     const extractor = deps.extractor ?? createExternalProfileExtractor(env);
     const profile = await extractProfile(extractor, { url: address.url, pages, facts, practitioner: await practitionerOf(db, site.prospectId) });
+    // Texte trop mince pour un profil exploitable : il ne remplace pas celui qui l'était
+    if (previous && losesUsableProfile(previous.profile, profile, previous.overrides)) {
+      await failRead(db, attempt, "empty", thinProfileDetail(profile, previous.overrides), clock());
+      return refuse("text", MESSAGES.textTooThin);
+    }
     const stored = await storeRead(db, attempt, address.url, { url: address.url, source: "pasted", pages, facts, profile }, clock());
     return stored ? { ok: true } : refuse("busy", MESSAGES.superseded);
   } catch (err) {
@@ -1123,8 +1164,8 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
     }
     const url = servedAddress(row.url, outcome.url, hostedHostsOf({ domain: site?.domain ?? null }, env));
     const profile = await extractProfile(extractor, { url, pages: outcome.pages, facts, practitioner: await practitionerOf(db, site?.prospectId ?? null) });
-    // Un profil devenu inexploitable (site en maintenance, page vidée) ferait retomber tous les outils sur le site hébergé sans que le praticien l'ait décidé
-    if (!isExternalProfileUsable(mergeExternalProfile(profile, row.overrides))) return await refreshFailed(db, row, "profil inexploitable", clock());
+    // Même règle que pour une lecture du praticien : un profil devenu inexploitable (site en maintenance, page vidée) ne remplace pas celui qui l'était
+    if (losesUsableProfile(row.profile, profile, row.overrides)) return await refreshFailed(db, row, "profil inexploitable", clock());
 
     const previous = row;
     const now = clock();
@@ -1163,8 +1204,10 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
  * Seuls les sites actifs et lus sur le site lui-même sont relus (un texte
  * collé ne se relit pas). Empreinte inchangée : seule la date du contrôle est
  * inscrite. Empreinte différente : le profil est extrait de nouveau et
- * enregistré, les corrections du praticien restent. En cas d'échec, la
- * lecture précédente reste la référence des outils. Ces relectures ne sont
+ * enregistré, les corrections du praticien restent — sauf s'il n'est plus
+ * exploitable alors que le précédent l'était (`losesUsableProfile`) : la
+ * relecture compte alors comme un échec. En cas d'échec, la lecture
+ * précédente reste la référence des outils. Ces relectures ne sont
  * pas comptées dans le quota du praticien. `checked` : sites relus ;
  * `changed` : profils mis à jour ; `failed` : relectures en échec.
  *

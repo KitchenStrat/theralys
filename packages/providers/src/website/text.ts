@@ -88,7 +88,7 @@ export function sha256Hex(text: string): string {
 export function foldText(value: string): string {
   return value
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u{300}-\u{36f}]/gu, "")
     .toLowerCase()
     .replace(/œ/g, "oe")
     .replace(/æ/g, "ae")

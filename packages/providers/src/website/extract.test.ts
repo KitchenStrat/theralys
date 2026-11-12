@@ -52,7 +52,7 @@ describe("extractPage — page d'accueil de type WordPress", () => {
 
   it("caractères invisibles (largeur nulle, césure, sens d'écriture, étiquettes Unicode) : retirés du texte", () => {
     expect(lines).toContain("Le cabinet est accessible aux personnes à mobilité réduite et dispose d'une salle d'attente.");
-    expect(/[​­‮]|[\u{e0000}-\u{e007f}]/u.test(result.text)).toBe(false);
+    expect(/[\u{200b}\u{ad}\u{202e}]|[\u{e0000}-\u{e007f}]/u.test(result.text)).toBe(false);
   });
 
   it("bloc de témoignages : écarté (propos de tiers sur leur santé)", () => {
