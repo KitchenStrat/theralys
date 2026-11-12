@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isAutomationRefusal, isChallengeResponse, isRefusalStatus } from "./challenge";
-import { cpuNow } from "./test-timing";
+import { cpuNow, sinceMs } from "./test-timing";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const response = (status: number, body = "", headers: Record<string, string> = {}) => ({ status, body, header: (name: string): string | null => headers[name.toLowerCase()] ?? null });
@@ -95,7 +95,7 @@ describe("refus de lecture automatique", () => {
       const start = cpuNow();
       isChallengeResponse(response(200, body));
       isChallengeResponse(response(503, body));
-      expect(cpuNow() - start, body.slice(0, 30)).toBeLessThan(1_000);
+      expect(sinceMs(start), body.slice(0, 30)).toBeLessThan(1_000);
     }
   });
 });

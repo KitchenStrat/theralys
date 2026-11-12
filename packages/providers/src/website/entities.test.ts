@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeEntities } from "./entities";
-import { cpuNow } from "./test-timing";
+import { cpuNow, sinceMs } from "./test-timing";
 
 const cp = (...codes: number[]): string => String.fromCodePoint(...codes);
 
@@ -82,7 +82,7 @@ describe("decodeEntities — robustesse", () => {
     const text = "a&b&amp;c&#233;&eacute&unknown;&".repeat(100_000);
     const start = cpuNow();
     const decoded = decodeEntities(text);
-    expect(cpuNow() - start).toBeLessThan(2_000);
+    expect(sinceMs(start)).toBeLessThan(2_000);
     expect(decoded.startsWith("a&b&céé&unknown;&a&b&céé&unknown;&")).toBe(true);
   });
 

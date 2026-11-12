@@ -27,6 +27,7 @@ import {
   type SafeFetchResult,
 } from "./safe-fetch";
 import { fakeResolver, html, localPolicy, selfSignedCertificate, startServer, type Handler, type TestServer } from "./test-kit";
+import { timed } from "./test-timing";
 
 const UA = "LecteurDeTest/1.0 (+https://lecteur.test/robot)";
 const SITE = "www.cabinet-test.fr";
@@ -725,11 +726,11 @@ describe("décodage", () => {
 
   it("balises meta fabriquées pour faire hésiter la recherche du jeu de caractères : jugées en un passage", () => {
     const head = `${"<meta ".repeat(30)}charset=${" ".repeat(3_800)}!`;
-    const started = process.cpuUsage();
-    for (let i = 0; i < 20; i++) expect(decodeHtml(Buffer.from(`${head}<p>ok</p>`), null)).toContain("<p>ok</p>");
-    const spent = process.cpuUsage(started);
+    const { ms } = timed(() => {
+      for (let i = 0; i < 20; i++) expect(decodeHtml(Buffer.from(`${head}<p>ok</p>`), null)).toContain("<p>ok</p>");
+    });
     // Vingt lectures : quelques millisecondes ; l'ancienne expression en demandait plusieurs centaines par lecture
-    expect((spent.user + spent.system) / 1_000).toBeLessThan(1_000);
+    expect(ms).toBeLessThan(1_000);
     // Espaces et guillemets autour du signe égal : l'étiquette est toujours lue
     const latin1 = Uint8Array.of(0x63, 0x61, 0x66, 0xe9);
     expect(decodeHtml(Buffer.concat([Buffer.from(`<meta charset = ' iso-8859-15 '>`), latin1]), null)).toContain("café");
