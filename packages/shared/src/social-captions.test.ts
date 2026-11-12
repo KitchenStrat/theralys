@@ -48,6 +48,35 @@ describe("captionFor", () => {
   });
 });
 
+describe("captionFor sans paramètre de provenance (site du client)", () => {
+  const OWN = "https://www.mon-cabinet.fr";
+  const plain = { sourceParam: false } as const;
+  const content = {
+    caption: `Une accroche.\n\n${BIO}\n\nClaire, sophrologue à Albi`,
+    hashtags: ["#SophrologueAlbi", "#Albi", "#Sophrologie", "#BienEtre"],
+  };
+  it("Facebook et LinkedIn : l'adresse seule à la place de la bio, la même pour les deux réseaux", () => {
+    const fb = captionFor("facebook", content, OWN, BIO, plain);
+    expect(fb).toBe(`Une accroche.\n\nPour prendre rendez-vous : ${OWN}\n\nClaire, sophrologue à Albi\n\n#SophrologueAlbi #Albi #Sophrologie`);
+    expect(captionFor("linkedin", content, OWN, BIO, plain)).toBe(fb);
+    expect(fb).not.toContain("src=");
+    expect(fb).not.toContain("?");
+  });
+  it("sans ligne bio : l'adresse seule est ajoutée en fin de légende, sauf si le site y est déjà cité", () => {
+    expect(captionFor("linkedin", { caption: "Sans ligne bio.", hashtags: [] }, OWN, BIO, plain)).toBe(`Sans ligne bio.\n\nPour prendre rendez-vous : ${OWN}`);
+    const own = { caption: "Tout est là : https://mon-cabinet.fr/sophrologie", hashtags: [] as string[] };
+    expect(captionFor("facebook", own, OWN, BIO, plain)).toBe("Tout est là : https://mon-cabinet.fr/sophrologie");
+  });
+  it("Instagram ne change pas : la légende et tous les hashtags, sans lien", () => {
+    expect(captionFor("instagram", content, OWN, BIO, plain)).toBe(captionFor("instagram", content, OWN, BIO));
+    expect(captionFor("instagram", content, OWN, BIO, plain)).not.toContain(OWN);
+  });
+  it("l'option explicite `sourceParam: true` équivaut au comportement par défaut", () => {
+    expect(captionFor("facebook", content, "https://site.fr", BIO, { sourceParam: true })).toBe(captionFor("facebook", content, "https://site.fr", BIO));
+    expect(captionFor("facebook", content, "https://site.fr", BIO, {})).toContain("https://site.fr/?src=fb");
+  });
+});
+
 describe("provenance", () => {
   it("src du lien de bio, puis referrer, sinon direct", () => {
     expect(sourceFromReferrer("https://google.com/", "ig")).toBe("instagram");
@@ -75,5 +104,17 @@ describe("provenance", () => {
   it("bioLinkFor ajoute src sans casser l'URL", () => {
     expect(bioLinkFor("https://site.fr/", "instagram")).toBe("https://site.fr/?src=ig");
     expect(bioLinkFor("https://site.fr/?a=1", "linkedin")).toBe("https://site.fr/?a=1&src=li");
+    // Par défaut et avec l'option explicite : même lien tracé, un paramètre par réseau
+    expect(bioLinkFor("https://site.fr", "facebook", {})).toBe("https://site.fr/?src=fb");
+    expect(bioLinkFor("https://site.fr", "facebook", { sourceParam: true })).toBe("https://site.fr/?src=fb");
+    expect(bioLinkFor("pas une url", "instagram")).toBe("pas une url?src=ig");
+  });
+  it("bioLinkFor sans paramètre de provenance (site du client) : l'adresse telle quelle, la même pour tous les réseaux", () => {
+    const plain = { sourceParam: false } as const;
+    for (const network of ["instagram", "facebook", "linkedin"] as const) {
+      expect(bioLinkFor("https://www.mon-cabinet.fr", network, plain)).toBe("https://www.mon-cabinet.fr");
+    }
+    // Ni barre finale ajoutée, ni chemin modifié
+    expect(bioLinkFor("https://www.mon-cabinet.fr/sophrologie", "instagram", plain)).toBe("https://www.mon-cabinet.fr/sophrologie");
   });
 });

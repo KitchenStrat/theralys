@@ -1,16 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb, sites } from "@theralys/db";
-import { isIndexable } from "@/lib/indexing";
+import { robotsTxt } from "@/lib/indexing";
 
 export const dynamic = "force-dynamic";
 
 /**
- * robots.txt par hôte :
- * - hôte de démos → tout est interdit à l'indexation ;
- * - domaine custom d'un client (Phase 3) → indexation + sitemap ;
+ * robots.txt par hôte (règle dans `robotsTxt`, lib/indexing.ts) :
+ * - hôte de démos → tout est interdit ;
+ * - domaine custom d'un client (Phase 3) → parcours autorisé + sitemap ;
  * - domaine d'un client dont le propre site est la référence des outils →
- *   tout est interdit, comme pour une démo (`isIndexable`).
+ *   parcours autorisé, sans sitemap : ses pages portent `noindex`, que les
+ *   moteurs ne peuvent lire qu'en les parcourant.
  */
 export async function GET(request: NextRequest) {
   const host = (request.headers.get("host") ?? "").split(":")[0] ?? "";
@@ -18,15 +19,7 @@ export async function GET(request: NextRequest) {
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.domain, host) });
 
-  if (site && isIndexable(site)) {
-    return robotsResponse(`User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml\n`);
-  }
-
-  return robotsResponse("User-agent: *\nDisallow: /\n");
-}
-
-function robotsResponse(body: string) {
-  return new NextResponse(body, {
+  return new NextResponse(robotsTxt(site, host), {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
 }

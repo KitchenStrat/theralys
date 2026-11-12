@@ -1090,9 +1090,6 @@ describe("site du client (référence des outils)", () => {
     // Un conseil du modèle sur le suffixe est écarté lui aussi
     const withSuffix = finalizeMetaPlan({ ...mockMetaPlan(b, p), tips: ["Ajoutez ?src=meta à la fin de chaque adresse de destination.", "Répondez vite aux messages reçus sous vos annonces."] }, p, "anthropic", NOW);
     expect(withSuffix.tips.some((t) => t.includes(META_ADS_LANDING_SUFFIX))).toBe(false);
-    // Avec le Pixel repéré : conversions, justification d'origine
-    const withPixel = planInput({}, { external: true, pixel: true });
-    expect(finalizeMetaPlan(mockMetaPlan(b, withPixel), withPixel, "mock", NOW).objective).toMatchObject({ type: "conversions_site", pixelEvent: "Schedule" });
     // Site hébergé : textes et suffixe d'origine
     const hosted = planInput();
     const hostedPlan = finalizeMetaPlan(mockMetaPlan(brief(), hosted), hosted, "mock", NOW);
@@ -1100,6 +1097,38 @@ describe("site du client (référence des outils)", () => {
     expect(hostedPlan.campaign.landingSuffix).toBe(META_ADS_LANDING_SUFFIX);
     expect(hostedPlan.tips.at(-1)).toBe(META_LANDING_TIP);
     expect(defaultMetaMilestones(hosted)[2]!.kpis).toContain("Part des contacts venus de Meta dans le bloc Résultats du studio");
+  });
+
+  it("plan avec le Pixel repéré sur le site du client : conversions, et la justification demande de vérifier que l'événement est bien reçu (le studio ne connaît pas ce que ce Pixel envoie)", () => {
+    const b = externalBrief();
+    const p = planInput({}, { external: true, pixel: true });
+    const expected =
+      "Le Pixel a été repéré sur votre site : vérifiez d'abord, dans le Gestionnaire d'événements de Meta, qu'il reçoit bien l'événement Schedule (clic « Prendre rendez-vous ») ; sinon, faites-le ajouter sur votre site. La campagne s'optimise alors sur ces prises de contact réelles, pas sur les clics.";
+    const plan = finalizeMetaPlan(mockMetaPlan(b, p), p, "mock", NOW);
+    expect(metaPlanIssues(plan, true)).toEqual([]);
+    expect(plan.objective).toEqual({ type: "conversions_site", pixelEvent: "Schedule", rationale: expected });
+    expect(JSON.stringify(plan)).not.toMatch(/src=meta|Paramétrage|bloc Résultats|Harmony|éditeur/);
+    // Le modèle affirme que les prises de contact sont mesurées, sans demander de vérifier : justification du code
+    const sure = finalizeMetaPlan({ ...mockMetaPlan(b, p), objective: { type: "conversions_site", pixelEvent: "Schedule", rationale: "Le Pixel est en place : la campagne s'optimise sur les prises de rendez-vous." } }, p, "anthropic", NOW);
+    expect(sure.objective.rationale).toBe(expected);
+    // Il demande de vérifier l'événement : sa justification est gardée
+    const careful = "Le Pixel est présent sur votre site : contrôlez dans le Gestionnaire d'événements que l'événement Schedule remonte, puis lancez la campagne en conversions.";
+    expect(finalizeMetaPlan({ ...mockMetaPlan(b, p), objective: { type: "conversions_site", pixelEvent: "Schedule", rationale: careful } }, p, "anthropic", NOW).objective.rationale).toBe(careful);
+    // Invite : le modèle sait que le Pixel est seulement repéré
+    const prompt = metaPlanUserPrompt(b, p);
+    expect(prompt).toContain("le Pixel a été repéré sur le site du praticien, sans que ses événements soient connus : \"objective.type\" = \"conversions_site\"");
+    expect(prompt).toContain("\"rationale\" en 2 phrases, qui demande de vérifier d'abord, dans le Gestionnaire d'événements de Meta, que cet événement est bien reçu depuis le site.");
+    // Site hébergé avec Pixel : il envoie lui-même les événements — invite, justification du code et justification du modèle d'origine
+    const hosted = planInput({}, { pixel: true });
+    const hostedPrompt = metaPlanUserPrompt(brief(), hosted);
+    expect(hostedPrompt).toContain("le Pixel est installé : \"objective.type\" = \"conversions_site\"");
+    expect(hostedPrompt).toContain("(clic « Prendre rendez-vous »), \"rationale\" en 2 phrases.\n");
+    expect(hostedPrompt).not.toContain("Gestionnaire d'événements de Meta, que cet événement");
+    expect(finalizeMetaPlan(mockMetaPlan(brief(), hosted), hosted, "mock", NOW).objective.rationale).toBe(
+      "Le Pixel est installé : la campagne est optimisée sur les prises de contact réelles (clic « Prendre rendez-vous »), pas sur les clics. Meta apprend sur ces événements et montre les annonces aux personnes les plus susceptibles de contacter le cabinet.",
+    );
+    const modelText = "Le Pixel est en place : la campagne s'optimise sur les prises de rendez-vous.";
+    expect(finalizeMetaPlan({ ...mockMetaPlan(brief(), hosted), objective: { type: "conversions_site", pixelEvent: "Schedule", rationale: modelText } }, hosted, "anthropic", NOW).objective.rationale).toBe(modelText);
   });
 
   it("note sur les photos : elles s'ajoutent dans le studio (dans l'éditeur pour un site hébergé)", () => {

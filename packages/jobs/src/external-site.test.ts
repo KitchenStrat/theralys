@@ -194,6 +194,11 @@ function readingRow(overrides: Row = {}): Row {
   return externalRow({ status: "reading", readStartedAt: minutesAgo(1), readAt: null, pages: [], facts: null, profile: null, contentHash: null, measureSeenAt: null, ...overrides });
 }
 
+/** Site déjà lu (profil exploitable enregistré) dont une relecture est en cours depuis une minute. */
+function rereadingRow(overrides: Row = {}): Row {
+  return externalRow({ status: "reading", readStartedAt: minutesAgo(1), ...overrides });
+}
+
 function usageRow(overrides: Row = {}): Row {
   return { id: rowId(), siteId: SITE_ID, month: "2026-11", kind: EXTERNAL_READ_USAGE_KIND, costUsd: 0, requests: 1, createdAt: NOW, ...overrides };
 }
@@ -297,10 +302,10 @@ function isWrapped(text: string): boolean {
 
 /**
  * Condition drizzle → prédicat : la condition est rendue en SQL par le
- * dialecte PostgreSQL, puis relue (`=`, `>=`, `<`, `in`, `not in` et `is null`
- * sur les colonnes de la table, reliés par `and` et `or` avec leurs
- * parenthèses). Toute autre forme lève : la base simulée ne fait pas semblant
- * de filtrer.
+ * dialecte PostgreSQL, puis relue (`=`, `>=`, `<=`, `<`, `in`, `not in`,
+ * `is null` et `is not null` sur les colonnes de la table, reliés par `and`
+ * et `or` avec leurs parenthèses). Toute autre forme lève : la base simulée
+ * ne fait pas semblant de filtrer.
  */
 function predicateOf(table: Table, condition: unknown): (row: Row) => boolean {
   if (condition === undefined) return () => true;
@@ -308,14 +313,15 @@ function predicateOf(table: Table, condition: unknown): (row: Row) => boolean {
   const name = getTableName(table);
   const keys = keysBySqlName(table);
   const atomOf = (atom: string): ((row: Row) => boolean) => {
-    const match = /^"([^"]+)"\."([^"]+)" (?:(=|>=|<) (\$\d+)|(in|not in) \((\$\d+(?:, \$\d+)*)\)|(is null))$/.exec(atom);
+    const match = /^"([^"]+)"\."([^"]+)" (?:(=|>=|<=|<) (\$\d+)|(in|not in) \((\$\d+(?:, \$\d+)*)\)|(is null|is not null))$/.exec(atom);
     const key = match && match[1] === name ? keys.get(match[2]!) : undefined;
     if (!match || !key) throw new Error(`Condition non simulée sur ${name} : ${atom}`);
-    if (match[7]) return (row: Row) => row[key] === null || row[key] === undefined;
+    if (match[7]) return (row: Row) => (row[key] === null || row[key] === undefined) === (match[7] === "is null");
     const values = [...(match[4] ?? match[6]!).matchAll(/\$(\d+)/g)].map((param) => params[Number(param[1]) - 1]);
     // Une valeur NULL ne satisfait aucune comparaison
     const known = (row: Row) => row[key] !== null && row[key] !== undefined;
     if (match[3] === ">=") return (row: Row) => known(row) && (comparable(row[key], row[key]) as number) >= (comparable(values[0], row[key]) as number);
+    if (match[3] === "<=") return (row: Row) => known(row) && (comparable(row[key], row[key]) as number) <= (comparable(values[0], row[key]) as number);
     if (match[3] === "<") return (row: Row) => known(row) && (comparable(row[key], row[key]) as number) < (comparable(values[0], row[key]) as number);
     const among = (row: Row) => values.some((value) => comparable(row[key], row[key]) === comparable(value, row[key]));
     return match[5] === "not in" ? (row: Row) => known(row) && !among(row) : among;
@@ -729,7 +735,7 @@ describe("loadExternalSite", () => {
     expect(completed).toMatchObject({ usable: true, gaps: [] });
   });
 
-  it("lecture en cours depuis moins de EXTERNAL_SITE_LIMITS.readStaleMs : `reading` ; au-delà, elle compte comme un échec `internal`", async () => {
+  it("première lecture en cours depuis moins de EXTERNAL_SITE_LIMITS.readStaleMs : `reading` ; au-delà, elle compte comme un échec `internal`", async () => {
     const stale = EXTERNAL_SITE_LIMITS.readStaleMs;
     const at = (ms: number) => memoryDb({ external: [readingRow({ readStartedAt: new Date(NOW.getTime() - ms) })] });
     expect(await view(at(MINUTE_MS))).toMatchObject({ status: "reading", reading: true, error: null });
@@ -740,14 +746,35 @@ describe("loadExternalSite", () => {
     expect(await view(memoryDb({ external: [readingRow({ readStartedAt: null })] }))).toMatchObject({ status: "error", reading: false, error: "internal" });
   });
 
-  it("lecture en échec : le code du contrat ; un code inconnu ou absent devient `internal`", async () => {
-    const failed = (error: unknown) => memoryDb({ external: [externalRow({ status: "error", error, errorDetail: "HTTP 403" })] });
-    expect(await view(failed("blocked"))).toMatchObject({ status: "error", reading: false, error: "blocked" });
+  it("relecture d'un site déjà lu : `reading` le temps de la lecture, le profil précédent toujours montré ; interrompue, le site reste « prêt » avec l'échec `internal`", async () => {
+    const stale = EXTERNAL_SITE_LIMITS.readStaleMs;
+    const at = (ms: number) => memoryDb({ external: [rereadingRow({ readStartedAt: new Date(NOW.getTime() - ms) })] });
+    const kept = { readAt: daysAgo(3), profile: PROFILE, usable: true, source: "crawl" };
+    expect(await view(at(MINUTE_MS))).toMatchObject({ status: "reading", reading: true, error: null, ...kept });
+    expect(await view(at(stale - 1))).toMatchObject({ status: "reading", reading: true, error: null, ...kept });
+    expect(await view(at(stale))).toMatchObject({ status: "ready", reading: false, error: "internal", ...kept });
+    expect(await view(at(stale + 10 * MINUTE_MS))).toMatchObject({ status: "ready", reading: false, error: "internal", ...kept });
+    expect((await view(at(stale))).pages).toHaveLength(2);
+  });
+
+  it("première lecture en échec : site en « erreur » avec le code du contrat ; un code inconnu ou absent devient `internal`", async () => {
+    const failed = (error: unknown) => memoryDb({ external: [readingRow({ status: "error", error, errorDetail: "HTTP 403" })] });
+    expect(await view(failed("blocked"))).toMatchObject({ status: "error", reading: false, error: "blocked", readAt: null, extracted: null });
     expect(await view(failed("robots"))).toMatchObject({ status: "error", error: "robots" });
     expect(await view(failed("code-inconnu"))).toMatchObject({ status: "error", error: "internal" });
     expect(await view(failed(null))).toMatchObject({ status: "error", error: "internal" });
-    // Un site prêt ne montre jamais un code resté d'une lecture antérieure
-    expect(await view(memoryDb({ external: [externalRow({ error: "timeout" })] }))).toMatchObject({ status: "ready", error: null });
+  });
+
+  it("relecture en échec : le site reste « prêt », l'échec est exposé et le profil précédent conservé", async () => {
+    const failed = (error: unknown) => memoryDb({ external: [externalRow({ error, errorDetail: "HTTP 403", overrides: { headline: "Corrigé" } })] });
+    const site = await view(failed("blocked"));
+    expect(site).toMatchObject({ status: "ready", reading: false, error: "blocked", readAt: daysAgo(3), extracted: PROFILE, usable: true, gaps: [] });
+    expect(site.profile.headline).toBe("Corrigé");
+    expect(site.pages).toHaveLength(2);
+    expect(await view(failed("timeout"))).toMatchObject({ status: "ready", error: "timeout" });
+    expect(await view(failed("code-inconnu"))).toMatchObject({ status: "ready", error: "internal" });
+    // Aucun échec en mémoire : rien à dire
+    expect(await view(failed(null))).toMatchObject({ status: "ready", error: null });
   });
 
   it("rien n'a encore été lu : faits vides, profil vide, code de mesure non repéré", async () => {
@@ -898,12 +925,28 @@ describe("beginExternalSiteRead", () => {
     expect(handle.locks).toEqual([LOCK_KEY, LOCK_KEY]);
   });
 
-  it("relire le même site : ce qui a été lu, les corrections et la clé de mesure restent ; l'échec précédent est effacé", async () => {
+  it("relire le même site : ce qui a été lu, son origine, les corrections et la clé de mesure restent ; l'échec précédent est effacé", async () => {
     const overrides = { headline: "Ma présentation corrigée" };
-    const before = externalRow({ status: "error", error: "timeout", errorDetail: "délai dépassé", overrides, checkedAt: daysAgo(1) });
+    // Site prêt dont la dernière relecture avait échoué ; son contenu vient d'un texte collé
+    const before = externalRow({ source: "pasted", error: "timeout", errorDetail: "délai dépassé", overrides, checkedAt: daysAgo(1) });
     const handle = memoryDb({ external: [before] });
     expect(await begin(handle)).toEqual({ ok: true });
-    expect(external(handle)).toEqual({ ...before, status: "reading", source: "crawl", readStartedAt: NOW, consentAt: NOW, error: null, errorDetail: null, updatedAt: NOW });
+    // `source` dit toujours d'où vient ce qui est enregistré : elle ne change que lorsqu'une lecture aboutit
+    expect(external(handle)).toEqual({ ...before, status: "reading", readStartedAt: NOW, consentAt: NOW, error: null, errorDetail: null, updatedAt: NOW });
+  });
+
+  it("pendant la relecture d'un site actif, les outils gardent le profil précédent comme référence", async () => {
+    const overrides = { headline: "Ma présentation corrigée" };
+    const handle = memoryDb({ external: [externalRow({ overrides })], sites: [activeSiteRow()] });
+    const site = { id: SITE_ID, theme: themeWith(ACTIVE) };
+    const before = await loadExternalReference(handle.db, site);
+    expect(before).toMatchObject({ profile: { ...PROFILE, ...overrides }, facts: FACTS });
+    expect(await begin(handle)).toEqual({ ok: true });
+    expect(external(handle)).toMatchObject({ status: "reading", readStartedAt: NOW });
+    expect(await loadExternalReference(handle.db, site)).toEqual(before);
+    expect(themeOf(handle)).toEqual(themeWith(ACTIVE));
+    const state = await loadExternalSite(handle.db, site, NOW);
+    expect(state.available && state.site).toMatchObject({ status: "reading", reading: true, active: true, usable: true, readAt: daysAgo(3) });
   });
 
   it("variante « www. » de la même adresse : le même site — rien n'est effacé, l'adresse saisie est retenue et le réglage la suit sans s'éteindre", async () => {
@@ -1037,12 +1080,13 @@ describe("runExternalSiteRead", () => {
 
   it("relecture du même site : ce qui avait été lu est remplacé, les corrections du praticien ne sont pas touchées", async () => {
     const overrides = { headline: "Ma présentation corrigée", specialties: [PROFILE.specialties[1]!] };
-    const handle = memoryDb({ external: [externalRow({ status: "reading", readStartedAt: minutesAgo(1), overrides })] });
+    // Le contenu précédent venait d'un texte collé : une lecture du site aboutie en change l'origine
+    const handle = memoryDb({ external: [rereadingRow({ overrides, source: "pasted" })] });
     const pages = [page("/", "home", "Accueil", `${HOME_TEXT} Nouveau paragraphe.`)];
     const facts = { ...FACTS, tags: {} };
     const profile = { ...PROFILE, headline: "Nouvelle accroche du site" };
     await run(handle, fakeReader(() => okRead({ pages, facts })).reader, fakeExtractor(() => profile).extractor);
-    expect(external(handle)).toMatchObject({ status: "ready", pages, facts, profile, overrides, contentHash: externalContentHash(pages, facts), readAt: NOW });
+    expect(external(handle)).toMatchObject({ status: "ready", source: "crawl", error: null, pages, facts, profile, overrides, contentHash: externalContentHash(pages, facts), readAt: NOW });
   });
 
   it("profil encore incomplet : enregistré « prêt » quand même, le praticien le complète à la main", async () => {
@@ -1101,11 +1145,48 @@ describe("runExternalSiteRead", () => {
     expect(external(unknown)).toMatchObject({ status: "error", error: "internal" });
   });
 
-  it("échec en relisant un site déjà lu : ce qui avait été lu et les corrections restent en place", async () => {
-    const before = externalRow({ status: "reading", readStartedAt: minutesAgo(1), overrides: { headline: "Corrigé" } });
-    const handle = memoryDb({ external: [before] });
-    await run(handle, fakeReader(() => ({ ok: false, error: "unreachable" })).reader, fakeExtractor().extractor);
-    expect(external(handle)).toEqual({ ...before, status: "error", error: "unreachable", errorDetail: null, updatedAt: NOW });
+  it("relecture en échec d'un site déjà lu : pages, faits, profil et corrections restent, le site redevient « prêt » et l'échec est gardé pour l'écran", async () => {
+    const before = rereadingRow({ overrides: { headline: "Corrigé" } });
+    const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    const { extractor, calls } = fakeExtractor();
+    await expect(run(handle, fakeReader(() => ({ ok: false, error: "unreachable", detail: "ENOTFOUND" })).reader, extractor)).resolves.toBeUndefined();
+    expect(external(handle)).toEqual({ ...before, status: "ready", error: "unreachable", errorDetail: "ENOTFOUND", updatedAt: NOW });
+    expect(calls).toEqual([]);
+    // Les outils n'ont rien perdu : la lecture précédente reste leur référence
+    const site = { id: SITE_ID, theme: themeOf(handle) };
+    expect(await loadExternalReference(handle.db, site)).toMatchObject({ profile: { ...PROFILE, headline: "Corrigé" }, facts: FACTS });
+    const state = await loadExternalSite(handle.db, site, NOW);
+    expect(state.available && state.site).toMatchObject({ status: "ready", reading: false, error: "unreachable", readAt: daysAgo(3), active: true, usable: true });
+    expect(logs.warn).toHaveBeenCalledWith(`[site-client] lecture du site ${SITE_ID} en échec : unreachable (lecture précédente conservée)`);
+  });
+
+  it("relecture en échec, quelle qu'en soit la cause (trop peu de texte, lecteur ou extracteur qui lève) : toujours « prêt », l'origine du contenu ne change pas", async () => {
+    const cases: [WebsiteReader, ExternalProfileExtractor, string, string | null][] = [
+      [fakeReader(() => okRead({ pages: [page("/", "home", "Maintenance", "Site en maintenance.")] })).reader, fakeExtractor().extractor, "empty", "1 page(s), 20 caractère(s)"],
+      [{ mode: "live", read: () => Promise.reject(new TypeError("fetch failed")) }, fakeExtractor().extractor, "internal", "fetch failed"],
+      [fakeReader().reader, fakeExtractor(() => Promise.reject(new Error("529 overloaded"))).extractor, "internal", "529 overloaded"],
+      [fakeReader(() => ({ ok: false, error: "captcha" }) as unknown as ExternalReadOutcome).reader, fakeExtractor().extractor, "internal", null],
+    ];
+    for (const [reader, extractor, error, errorDetail] of cases) {
+      // Contenu précédent venu d'un texte collé : une lecture du site ratée ne le fait pas passer pour des pages lues
+      const before = rereadingRow({ source: "pasted", overrides: { headline: "Corrigé" } });
+      const handle = memoryDb({ external: [before] });
+      await expect(run(handle, reader, extractor)).resolves.toBeUndefined();
+      expect(external(handle)).toEqual({ ...before, status: "ready", source: "pasted", error, errorDetail, updatedAt: NOW });
+    }
+  });
+
+  it("une relecture aboutie efface l'échec de la précédente", async () => {
+    const handle = memoryDb({ external: [rereadingRow()], sites: [activeSiteRow()] });
+    await run(handle, fakeReader(() => ({ ok: false, error: "timeout", detail: "délai dépassé" })).reader, fakeExtractor().extractor);
+    expect(external(handle)).toMatchObject({ status: "ready", error: "timeout", errorDetail: "délai dépassé", readAt: daysAgo(3) });
+    // Nouvelle tentative du praticien, qui aboutit
+    expect(await beginExternalSiteRead(handle.db, SITE, { url: SITE_URL, consent: true }, { now: NOW, env: ENV })).toEqual({ ok: true });
+    const profile = { ...PROFILE, headline: "Nouvelle accroche du site" };
+    await run(handle, fakeReader().reader, fakeExtractor(() => profile).extractor);
+    expect(external(handle)).toMatchObject({ status: "ready", error: null, errorDetail: null, profile, readAt: NOW });
+    const state = await loadExternalSite(handle.db, { id: SITE_ID, theme: themeOf(handle) }, NOW);
+    expect(state.available && state.site).toMatchObject({ status: "ready", error: null, readAt: NOW });
   });
 
   it("trop peu de texte pour tenter un profil : `empty`, sans appel à l'extracteur", async () => {
@@ -1167,8 +1248,8 @@ describe("runExternalSiteRead", () => {
     expect(logs.error).toHaveBeenCalled();
   });
 
-  it("rien à lire : pas de ligne, site déjà prêt ou en erreur, texte collé en cours de traitement — le lecteur n'est pas appelé", async () => {
-    for (const seed of [[], [externalRow()], [externalRow({ status: "error", error: "blocked" })], [readingRow({ source: "pasted" })], [readingRow({ readStartedAt: null })], [readingRow({ siteId: OTHER_SITE_ID })]]) {
+  it("rien à lire : pas de ligne, site déjà prêt ou en erreur, début de lecture inconnu — le lecteur n'est pas appelé", async () => {
+    for (const seed of [[], [externalRow()], [externalRow({ error: "timeout" })], [readingRow({ status: "error", error: "blocked" })], [readingRow({ readStartedAt: null })], [readingRow({ siteId: OTHER_SITE_ID })]]) {
       const handle = memoryDb({ external: seed });
       const { reader, calls } = fakeReader();
       await expect(run(handle, reader, fakeExtractor().extractor)).resolves.toBeUndefined();
@@ -1390,7 +1471,17 @@ describe("submitExternalSiteText", () => {
     expect(external(handle)).toMatchObject({ status: "ready", profile: EMPTY_EXTERNAL_PROFILE });
   });
 
-  it("l'extraction échoue : le site passe en erreur `internal` et l'issue le dit au praticien", async () => {
+  it("l'extraction échoue alors que le site avait déjà été lu : l'issue le dit, la lecture précédente et son origine restent, le site reste « prêt »", async () => {
+    const before = externalRow({ overrides: { headline: "Corrigé" } });
+    const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    const refusal = await submit(handle, {}, fakeExtractor(() => Promise.reject(new Error("529 overloaded"))).extractor);
+    expect(refusal).toEqual({ ok: false, reason: "unavailable", message: `${EXTERNAL_READ_ERRORS.internal.title}. ${EXTERNAL_READ_ERRORS.internal.hint}` });
+    // Contenu lu sur le site : il ne passe pas pour un texte collé parce qu'un collage a échoué
+    expect(external(handle)).toEqual({ ...before, status: "ready", error: "internal", errorDetail: "529 overloaded", readStartedAt: NOW, consentAt: NOW, updatedAt: NOW });
+    expect(await loadExternalReference(handle.db, { id: SITE_ID, theme: themeOf(handle) })).toMatchObject({ profile: { ...PROFILE, headline: "Corrigé" } });
+  });
+
+  it("première tentative, l'extraction échoue : le site passe en erreur `internal` et l'issue le dit au praticien", async () => {
     const handle = memoryDb();
     const refusal = await submit(handle, {}, fakeExtractor(() => Promise.reject(new Error(`réponse illisible : ${PAGE_SECRET}`))).extractor);
     expect(refusal).toEqual({ ok: false, reason: "unavailable", message: `${EXTERNAL_READ_ERRORS.internal.title}. ${EXTERNAL_READ_ERRORS.internal.hint}` });
@@ -1538,7 +1629,7 @@ describe("setExternalSiteActive", () => {
     expect(themeOf(handle).social).toEqual({ youtube: "https://www.youtube.com/@claire-sophro" });
   });
 
-  it("activation refusée (`not_ready`) : rien de connecté, lecture en cours, interrompue ou en échec — rien n'est écrit", async () => {
+  it("activation refusée (`not_ready`) : rien de connecté, lecture en cours, première lecture interrompue ou en échec — rien n'est écrit", async () => {
     const refused = async (seed: Row[], pattern: RegExp) => {
       const handle = memoryDb({ external: seed });
       const refusal = await setExternalSiteActive(handle.db, SITE_ID, { active: true });
@@ -1550,7 +1641,20 @@ describe("setExternalSiteActive", () => {
     await refused([], /Indiquez d'abord l'adresse de votre site/);
     await refused([readingRow()], /lecture de votre site est en cours/);
     await refused([readingRow({ readStartedAt: minutesAgo(7) })], /n'a pas abouti/);
-    await refused([externalRow({ status: "error", error: "blocked" })], /n'a pas abouti/);
+    await refused([readingRow({ status: "error", error: "blocked" })], /n'a pas abouti/);
+    // Relecture en cours d'un site déjà lu : l'activation attend sa fin (une minute au plus)
+    await refused([rereadingRow()], /lecture de votre site est en cours/);
+  });
+
+  it("activation possible sur la dernière lecture aboutie : après une relecture en échec, ou interrompue", async () => {
+    for (const row of [externalRow({ error: "timeout", errorDetail: "délai dépassé" }), rereadingRow({ readStartedAt: minutesAgo(7) })]) {
+      const handle = memoryDb({ external: [row] });
+      expect(await setExternalSiteActive(handle.db, SITE_ID, { active: true })).toEqual({ ok: true });
+      expect(themeOf(handle).externalSite).toEqual({ url: SITE_URL, active: true });
+      // L'activation ne touche pas à la ligne : l'échec de la dernière lecture reste visible
+      expect(external(handle)).toEqual(row);
+      expect(await loadExternalReference(handle.db, { id: SITE_ID, theme: themeOf(handle) })).toMatchObject({ profile: PROFILE });
+    }
   });
 
   it("activation refusée tant que le profil n'est pas exploitable : le message dit ce qui manque", async () => {
@@ -1681,11 +1785,27 @@ describe("loadExternalReference", () => {
     expect(handle.log).toEqual([]);
   });
 
-  it("`null` tant que le site n'est pas prêt : pas de ligne, lecture en cours, échec", async () => {
+  it("`null` tant que rien d'exploitable n'est enregistré : pas de ligne, première lecture en cours, interrompue ou en échec", async () => {
     expect(await reference(memoryDb())).toBeNull();
     expect(await reference(memoryDb({ external: [externalRow({ siteId: OTHER_SITE_ID })] }))).toBeNull();
-    expect(await reference(memoryDb({ external: [externalRow({ status: "reading", readStartedAt: minutesAgo(1) })] }))).toBeNull();
-    expect(await reference(memoryDb({ external: [externalRow({ status: "error", error: "timeout" })] }))).toBeNull();
+    expect(await reference(memoryDb({ external: [readingRow()] }))).toBeNull();
+    expect(await reference(memoryDb({ external: [readingRow({ readStartedAt: minutesAgo(7) })] }))).toBeNull();
+    expect(await reference(memoryDb({ external: [readingRow({ status: "error", error: "timeout" })] }))).toBeNull();
+  });
+
+  it("l'état de la dernière tentative ne compte pas : relecture en cours, interrompue ou en échec, la dernière lecture aboutie reste la référence", async () => {
+    const overrides = { headline: "Retrouver le calme, à Albi" };
+    const expected = { setting: ACTIVE, profile: { ...PROFILE, ...overrides }, facts: FACTS };
+    for (const row of [
+      rereadingRow({ overrides }),
+      rereadingRow({ overrides, readStartedAt: minutesAgo(7) }),
+      externalRow({ overrides, error: "timeout", errorDetail: "délai dépassé" }),
+      externalRow({ overrides, source: "pasted", error: "blocked" }),
+      // État que le service n'inscrit plus (site en « erreur » avec un profil) : le profil enregistré compte quand même
+      externalRow({ overrides, status: "error", error: "unreachable" }),
+    ]) {
+      expect(await reference(memoryDb({ external: [row] }))).toEqual(expected);
+    }
   });
 
   it("`null` quand le profil effectif n'est pas exploitable, ou que la ligne ne décrit pas le site du réglage", async () => {
@@ -1735,11 +1855,11 @@ describe("briefPagesFor", () => {
     expect(handle.log).toEqual([]);
   });
 
-  it("réglage actif mais site pas prêt, profil inexploitable ou table absente : le site hébergé, avec son adresse", async () => {
+  it("réglage actif mais rien d'exploitable enregistré (première lecture en cours ou en échec, profil incomplet) ou table absente : le site hébergé, avec son adresse", async () => {
     for (const handle of [
       memoryDb(),
-      memoryDb({ external: [externalRow({ status: "reading", readStartedAt: minutesAgo(1) })] }),
-      memoryDb({ external: [externalRow({ status: "error", error: "blocked" })] }),
+      memoryDb({ external: [readingRow()] }),
+      memoryDb({ external: [readingRow({ status: "error", error: "blocked" })] }),
       memoryDb({ external: [externalRow({ profile: EMPTY_EXTERNAL_PROFILE })] }),
       memoryDb({}, { fail: missing(externalSites) }),
     ]) {
@@ -1748,11 +1868,21 @@ describe("briefPagesFor", () => {
     }
   });
 
+  it("relecture en cours ou en échec : le brief reste celui du site du client, avec la dernière lecture aboutie", async () => {
+    const expected = externalBriefPages(PROFILE, { siteUrl: SITE_URL, images: { hero: HERO_IMAGE, about: ABOUT_IMAGE } });
+    for (const row of [rereadingRow(), rereadingRow({ readStartedAt: minutesAgo(7) }), externalRow({ error: "timeout" })]) {
+      const source = await briefPagesFor(memoryDb({ external: [row] }).db, site(ACTIVE), HOSTED, HOSTED_URL);
+      expect(source).toMatchObject({ pages: expected, url: SITE_URL, hostedUrl: HOSTED_URL, reference: { profile: PROFILE } });
+    }
+  });
+
   it("site du client en référence : son profil converti en pages, les photos d'accueil et « à propos » du site hébergé gardées, son adresse", async () => {
     const handle = memoryDb({ external: [externalRow()] });
     const active = site({ url: `${SITE_URL}/`, active: true });
     const source = await briefPagesFor(handle.db, active, HOSTED, HOSTED_URL);
-    expect(source.pages).toEqual(externalBriefPages(PROFILE, { images: { hero: HERO_IMAGE, about: ABOUT_IMAGE } }));
+    // L'adresse du site du client (celle du réglage) est donnée comme source aux spécialités sans page à elles
+    expect(source.pages).toEqual(externalBriefPages(PROFILE, { siteUrl: `${SITE_URL}/`, images: { hero: HERO_IMAGE, about: ABOUT_IMAGE } }));
+    expect(source.pages.map((p) => p.href)).toEqual([undefined, `${SITE_URL}/gestion-du-stress`, `${SITE_URL}/`]);
     expect(source.url).toBe(SITE_URL);
     expect(source.hostedUrl).toBe(HOSTED_URL);
     expect(source.reference).toEqual({ setting: active.theme.externalSite, profile: PROFILE, facts: FACTS });
@@ -1771,8 +1901,8 @@ describe("briefPagesFor", () => {
   it("site hébergé sans photo ou sans page d'accueil : le profil du client seul", async () => {
     const handle = memoryDb({ external: [externalRow()] });
     const noImages: SocialBriefInput["pages"] = [{ ...HOSTED[0]!, sections: [{ type: "hero", title: "Accueil", paragraphs: [] }] }];
-    expect((await briefPagesFor(handle.db, site(ACTIVE), noImages, HOSTED_URL)).pages).toEqual(externalBriefPages(PROFILE));
-    expect((await briefPagesFor(handle.db, site(ACTIVE), [], HOSTED_URL)).pages).toEqual(externalBriefPages(PROFILE));
+    expect((await briefPagesFor(handle.db, site(ACTIVE), noImages, HOSTED_URL)).pages).toEqual(externalBriefPages(PROFILE, { siteUrl: SITE_URL }));
+    expect((await briefPagesFor(handle.db, site(ACTIVE), [], HOSTED_URL)).pages).toEqual(externalBriefPages(PROFILE, { siteUrl: SITE_URL }));
   });
 
   it("dans le brief : domaine et spécialités du site du client, photos déjà admises au catalogue, articles toujours sur le blog hébergé", async () => {
@@ -1797,6 +1927,9 @@ describe("briefPagesFor", () => {
     expect(Object.values(photosById)).toEqual([HERO_IMAGE, ABOUT_IMAGE]);
     expect(refsById["section:home:hero"]?.href).toBe(SITE_URL);
     expect(refsById["page:ext-gestion-du-stress"]?.href).toBe(`${SITE_URL}/gestion-du-stress`);
+    // « Sommeil » n'a pas de page à elle sur le site du client : sa source est l'accueil de ce site, pas une page « /motifs/… » qui n'y existe pas
+    expect(refsById["page:ext-sommeil"]?.href).toBe(SITE_URL);
+    expect(Object.values(refsById).some((ref) => ref.href?.includes("/motifs/"))).toBe(false);
     expect(refsById["article:a1"]).toMatchObject({ href: "/publications/a1", publicHref: `${HOSTED_URL}/blog/bien-dormir` });
   });
 });
@@ -1919,6 +2052,69 @@ describe("refreshExternalSites", () => {
     const corrected = memoryDb({ external: [due({ overrides: { headline: "Sophrologie à Albi", specialties: PROFILE.specialties } })], sites: [activeSiteRow()] });
     expect(await refresh(corrected, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => EMPTY_EXTERNAL_PROFILE).extractor)).toEqual({ checked: 1, changed: 1, failed: 0 });
     expect(external(corrected)).toMatchObject({ profile: EMPTY_EXTERNAL_PROFILE, readAt: NOW });
+  });
+
+  it("l'échec laissé par une relecture du praticien : effacé dès qu'une relecture automatique aboutit, gardé si elle échoue aussi", async () => {
+    const failure = { error: "timeout", errorDetail: "délai dépassé" };
+    // Site inchangé : la lecture a abouti, l'échec n'a plus lieu d'être montré
+    const same = memoryDb({ external: [due(failure)], sites: [activeSiteRow()] });
+    expect(await refresh(same, fakeReader().reader, fakeExtractor().extractor)).toEqual({ checked: 1, changed: 0, failed: 0 });
+    expect(external(same)).toMatchObject({ status: "ready", error: null, errorDetail: null, checkedAt: NOW, readAt: daysAgo(40), profile: PROFILE });
+    // Site modifié : idem, avec le nouveau profil
+    const changed = memoryDb({ external: [due(failure)], sites: [activeSiteRow()] });
+    expect(await refresh(changed, fakeReader(() => okRead({ pages: NEW_PAGES })).reader, fakeExtractor(() => NEW_PROFILE).extractor)).toEqual({ checked: 1, changed: 1, failed: 0 });
+    expect(external(changed)).toMatchObject({ status: "ready", error: null, errorDetail: null, readAt: NOW, profile: NEW_PROFILE });
+    // Relecture automatique en échec : elle n'inscrit rien d'autre que la date du contrôle, l'échec du praticien reste tel quel
+    const before = due(failure);
+    const failed = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    expect(await refresh(failed, fakeReader(() => ({ ok: false, error: "blocked", detail: "HTTP 403" })).reader, fakeExtractor().extractor)).toEqual({ checked: 1, changed: 0, failed: 1 });
+    expect(external(failed)).toEqual({ ...before, checkedAt: NOW, updatedAt: NOW });
+  });
+
+  it("lectures interrompues : soldées en début de passage — « prêt » avec la lecture précédente, « erreur » si rien n'avait été lu ; une lecture encore en cours n'est pas touchée", async () => {
+    const stale = minutesAgo(7);
+    const ids = { reread: SITE_ID, first: "d0000000-0000-4000-8000-000000000001", running: "d0000000-0000-4000-8000-000000000002", unknown: "d0000000-0000-4000-8000-000000000003", limit: "d0000000-0000-4000-8000-000000000004" };
+    const key = (index: number) => String(index).padStart(24, "s");
+    const rows = {
+      // Relecture interrompue d'un site déjà lu (il y a trois jours) : son profil reste la référence
+      reread: rereadingRow({ readStartedAt: stale, overrides: { headline: "Corrigé" }, source: "pasted" }),
+      // Première lecture interrompue : rien n'a jamais été lu
+      first: readingRow({ siteId: ids.first, measureKey: key(1), readStartedAt: stale }),
+      // Lecture en cours depuis une minute : elle tourne peut-être encore
+      running: rereadingRow({ siteId: ids.running, measureKey: key(2) }),
+      // Début de lecture inconnu : tenue pour interrompue
+      unknown: readingRow({ siteId: ids.unknown, measureKey: key(3), readStartedAt: null }),
+      // Juste à la limite : interrompue, comme pour l'écran
+      limit: rereadingRow({ siteId: ids.limit, measureKey: key(4), readStartedAt: new Date(NOW.getTime() - EXTERNAL_SITE_LIMITS.readStaleMs) }),
+    };
+    const handle = memoryDb({ external: Object.values(rows) });
+    const { reader, calls } = fakeReader();
+    expect(await refresh(handle, reader, fakeExtractor().extractor)).toEqual({ checked: 0, changed: 0, failed: 0 });
+    expect(calls).toEqual([]);
+    const settled = { error: "internal", errorDetail: "Lecture interrompue avant la fin", updatedAt: NOW };
+    expect(external(handle, ids.reread)).toEqual({ ...rows.reread, status: "ready", ...settled });
+    expect(external(handle, ids.first)).toEqual({ ...rows.first, status: "error", ...settled });
+    expect(external(handle, ids.running)).toEqual(rows.running);
+    expect(external(handle, ids.unknown)).toEqual({ ...rows.unknown, status: "error", ...settled });
+    expect(external(handle, ids.limit)).toEqual({ ...rows.limit, status: "ready", ...settled });
+    expect(logs.warn).toHaveBeenCalledWith(`[site-client] lecture du site ${SITE_ID} interrompue : soldée en échec (lecture précédente conservée)`);
+    expect(logs.warn).toHaveBeenCalledWith(`[site-client] lecture du site ${ids.first} interrompue : soldée en échec`);
+    // L'état inscrit est celui que l'écran montrait déjà
+    const state = await loadExternalSite(handle.db, { id: SITE_ID, theme: THEME }, NOW);
+    expect(state.available && state.site).toMatchObject({ status: "ready", reading: false, error: "internal", source: "pasted", usable: true });
+    // Passage suivant : plus rien à solder
+    logs.warn.mockClear();
+    expect(await refresh(handle, reader, fakeExtractor().extractor)).toEqual({ checked: 0, changed: 0, failed: 0 });
+    expect(logs.warn).not.toHaveBeenCalled();
+  });
+
+  it("une relecture interrompue ne sort pas le site de la relecture mensuelle : soldé, il est relu au même passage s'il est dû", async () => {
+    const before = due({ status: "reading", readStartedAt: minutesAgo(30) });
+    const handle = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    const { reader, calls } = fakeReader(() => okRead({ pages: NEW_PAGES }));
+    expect(await refresh(handle, reader, fakeExtractor(() => NEW_PROFILE).extractor)).toEqual({ checked: 1, changed: 1, failed: 0 });
+    expect(calls).toHaveLength(1);
+    expect(external(handle)).toMatchObject({ status: "ready", error: null, errorDetail: null, profile: NEW_PROFILE, readAt: NOW, checkedAt: NOW });
   });
 
   it("ne relit que les sites actifs, prêts, lus sur le site lui-même et dus", async () => {

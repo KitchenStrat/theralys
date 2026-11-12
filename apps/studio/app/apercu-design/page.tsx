@@ -188,7 +188,7 @@ export default function DesignPreviewPage() {
                 ["Secondaire · Inter 400 · 15 px (text-ds-body), encre 600", <span key="e" className="text-ds-body text-ds-ink-600">Prévu le vendredi 13 novembre, à 9 h 00.</span>],
                 ["Mention et badge · Inter 500 · 13 px (text-ds-meta)", <span key="f" className="text-ds-meta font-medium text-ds-ink-600">7 derniers jours</span>],
               ].map(([label, sample]) => (
-                <div key={String(label)} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[20rem_minmax(0,1fr)] sm:items-baseline sm:gap-6">
+                <div key={String(label)} className="grid gap-1 py-3 first:pt-0 last:pb-0 md:grid-cols-[20rem_minmax(0,1fr)] md:items-baseline md:gap-6">
                   <dt className="text-ds-meta text-ds-ink-600">{label}</dt>
                   <dd>{sample}</dd>
                 </div>
@@ -213,7 +213,7 @@ export default function DesignPreviewPage() {
               </span>
             </div>
           </Specimen>
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <Specimen title="Tailles et liens" note="lg 48 px · md 44 px · sm 36 px (44 px au doigt) · LinkButton pour naviguer">
               <div className="flex flex-wrap items-center gap-3">
                 <Button size="lg">Grand</Button>
@@ -243,7 +243,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="badges" title="Badges et statuts" lead="Teinte 100, texte 900 : au moins 9:1 en 13 px. Un statut porte toujours une icône et un libellé, jamais la couleur seule.">
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <Specimen title="Statuts d'un contenu">
               <div className="flex flex-wrap gap-2">
                 <StatusPill status="brouillon" />
@@ -267,7 +267,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="cartes" title="Cartes" lead="Blanches, à ombre douce teintée. Seule la carte cliquable se soulève au survol ; la carte teintée met en avant sans ajouter d'ombre.">
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-3">
             <Card>
               <CardHeader as="h3" icon={FileSearch} title="Carte simple" description="Fond blanc, ombre de repos." />
               <p className="mt-4 text-base text-ds-ink-700">Un message ou une mesure par carte.</p>
@@ -300,7 +300,7 @@ export default function DesignPreviewPage() {
               <KpiTile section="reseaux-sociaux" icon={Eye} label="Vues de vos publications" caption="30 derniers jours" value={4812} delta={{ value: 0, label: "stable sur un mois" }} href="/apercu-design/section/reseaux-sociaux" />
             </div>
           </Replay>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <Specimen title="Graphique en aire (AreaChart)" note="Survol, toucher ou flèches du clavier : repère et infobulle. Les valeurs restent lisibles dans le tableau replié." className="min-w-0">
               <div data-ds-section="mon-site">
                 <AreaChart data={VISITS_30} unit={["visite", "visites"]} label="Visites de votre site sur 30 jours" height={200} />
@@ -323,7 +323,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="progression" title="Progression" lead="La jauge prend le dégradé de la section, sa piste une teinte de la même famille. Barre et anneau se remplissent à l'arrivée (translation et rotation seulement) et sont toujours doublés d'un texte.">
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-2">
             <Specimen title="Barres (ProgressBar)">
               <div className="space-y-5">
                 <ProgressBar value={3} max={8} label="Contenus publiés" valueText="3 sur 8" section="reseaux-sociaux" />
@@ -352,7 +352,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="demarrage" title="Mise en route et prochaine étape" lead="Une seule « prochaine étape » par écran, avec sa durée. La mise en route garde visibles les étapes déjà faites et ne met en avant que la suivante.">
-          <div className="grid items-start gap-5 lg:grid-cols-2">
+          <div className="grid items-start gap-5 md:grid-cols-2">
             <SetupChecklist steps={CHECKLIST} section="accueil" />
             <div className="space-y-5">
               <NextStepCard
@@ -372,7 +372,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="vides" title="États vides" lead="Trois situations, trois messages : rien encore (la cause, le bénéfice, une action), rien trouvé (comment élargir), tout est traité. Jamais pendant un chargement.">
-          <div className="grid gap-5 lg:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-3">
             <Card padding="none" section="google-ads">
               <EmptyState icon={Sparkles} title="Vous n'avez pas encore de campagne" action={<Button>Voir combien cela coûterait</Button>}>
                 La publicité fait apparaître votre cabinet en haut des résultats quand quelqu'un cherche un praticien près de
@@ -391,7 +391,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="chargement" title="Chargement" lead="Un squelette reprend la forme du contenu attendu ; son reflet est le seul mouvement en boucle admis, et il s'arrête en mouvement réduit.">
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-3">
             <KpiTileSkeleton />
             <CardSkeleton lines={3} />
             <Specimen title="Blocs de texte et indicateur">
@@ -404,7 +404,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="onglets" title="Onglets" lead="L'onglet actif se distingue par trois indices : le trait ou la pastille, la graisse, la couleur. L'indicateur glisse en 240 ms.">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <Specimen title="Onglets de page (Tabs)" className="min-w-0">
               <div data-ds-section="reseaux-sociaux">
                 <TabsDemo />
@@ -417,7 +417,7 @@ export default function DesignPreviewPage() {
         </Block>
 
         <Block id="generation" title="Génération longue et confirmation" lead="Pour 30 à 90 secondes d'attente : des étapes nommées, ce qui se fait, une durée annoncée, le temps écoulé — jamais un pourcentage inventé. La réussite : une coche, une onde chaude, un message.">
-          <div className="grid items-start gap-5 lg:grid-cols-3">
+          <div className="grid items-start gap-5 xl:grid-cols-3">
             <Card section="reseaux-sociaux">
               <GenerationDemo
                 title="Nous préparons vos contenus de décembre"

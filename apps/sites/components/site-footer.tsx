@@ -3,6 +3,7 @@ import type { Page, Site } from "@theralys/db";
 import { FOOTER_SOCIAL_NETWORKS, LEGAL_PAGES, type SiteSocialLinks } from "@theralys/shared";
 import { cabinetAddressLine, cabinetMapsUrl, visibleCabinets } from "@/lib/cabinets";
 import { hasBlogAccess } from "@/lib/site-data";
+import { homePath } from "@/lib/site-paths";
 import { ManageCookiesButton } from "./manage-cookies-button";
 
 export type FooterGoogleBusiness = {
@@ -43,6 +44,7 @@ export function SiteFooter({
   phone,
 }: {
   site: Site;
+  /** Préfixe public des chemins du site (`publicPathPrefix`) : vide sur le domaine d'un client */
   prefix: string;
   /** Pages de spécialité activées (liens de la colonne Liens) */
   motifPages: Pick<Page, "id" | "slug" | "title">[];
@@ -51,7 +53,7 @@ export function SiteFooter({
   /** Téléphone de la section Contact de l'accueil */
   phone: string | null;
 }) {
-  const home = `${prefix}`;
+  const home = homePath(prefix);
   const footer = site.theme.footer ?? {};
   const text = footer.text?.trim();
   const details = footer.details?.trim();

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatDateFr } from "@theralys/shared";
 import { getPublishedArticles, getSiteByKey, hasBlogAccess, siteBaseUrl } from "@/lib/site-data";
+import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = { params: Promise<{ site: string }> };
 
@@ -24,6 +25,7 @@ export default async function BlogIndexPage({ params }: Props) {
   // Formule sans blog (Starter) : la rubrique n'existe pas sur le site public
   if (!hasBlogAccess(site)) notFound();
   const articles = await getPublishedArticles(site.id);
+  const prefix = publicPathPrefix(siteKey);
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-14">
@@ -37,7 +39,7 @@ export default async function BlogIndexPage({ params }: Props) {
           {articles.map((article) => (
             <Link
               key={article.id}
-              href={`/${siteKey}/blog/${article.slug}`}
+              href={`${prefix}/blog/${article.slug}`}
               className="flex gap-5 rounded-[var(--r-lg)] border border-black/5 bg-[var(--site-surface)] p-5 shadow-sm transition-shadow hover:shadow-md"
             >
               {article.imageUrl ? (

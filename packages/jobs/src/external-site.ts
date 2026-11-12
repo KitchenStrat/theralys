@@ -21,6 +21,12 @@
  *   leur résultat n'est inscrit que si la ligne est restée telle que la
  *   lecture l'a trouvée (une nouvelle lecture, un changement d'adresse ou une
  *   déconnexion survenus entre-temps l'emportent) ;
+ * - une lecture aboutie reste la référence jusqu'à ce qu'une autre la
+ *   remplace : pendant une relecture, et si elle échoue, les outils gardent
+ *   le profil précédent. L'échec est alors gardé à part (`error`), le site
+ *   reste « prêt » ; seule une première lecture en échec donne un site en
+ *   « erreur ». `source` dit d'où vient ce qui est enregistré, pas la nature
+ *   de la dernière tentative ;
  * - l'adresse retenue vit à deux endroits, la ligne et le réglage du site :
  *   ils changent toujours ensemble ; un réglage actif ne survit jamais à un
  *   changement de site (le praticien relit le nouveau profil, puis réactive) ;
@@ -35,7 +41,7 @@
  */
 
 import { createHash, randomInt } from "node:crypto";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { createExternalProfileExtractor, type ExternalProfileExtractor, type ExternalProfileInput } from "@theralys/ai";
 import { externalSites, googleUsage, prospects, sites, type Database, type ExternalSiteRow, type Site } from "@theralys/db";
 import { createWebsiteReader, pastedTextToPages, type WebsiteReader } from "@theralys/providers/website";
@@ -89,11 +95,23 @@ export type ExternalSiteDeps = {
 /** État du site du client pour l'écran « Mon site » du studio. */
 export type ExternalSiteView = {
   url: string;
+  /**
+   * `ready` : une lecture a abouti, son profil est celui qui est montré —
+   * même si une lecture plus récente a échoué (`error` le dit alors).
+   * `error` : la première lecture a échoué, rien n'a encore été lu.
+   */
   status: ExternalSiteStatus;
   /** Une lecture est en cours (et n'a pas été interrompue) */
   reading: boolean;
+  /** Origine de ce qui est enregistré : pages lues sur le site, ou texte collé */
   source: ExternalSiteSource;
+  /**
+   * Échec de la dernière lecture, jusqu'à ce qu'une lecture aboutisse. Avec
+   * `status: "ready"` : « la dernière lecture a échoué, le profil précédent
+   * est conservé ».
+   */
   error: ExternalReadError | null;
+  /** Dernière lecture aboutie : celle dont viennent les pages et le profil montrés */
   readAt: Date | null;
   /** Les outils s'appuient sur ce site */
   active: boolean;
@@ -343,11 +361,27 @@ function isReadInProgress(row: Pick<ExternalSiteRow, "status" | "readStartedAt">
   return row.status === "reading" && row.readStartedAt !== null && now.getTime() - row.readStartedAt.getTime() < EXTERNAL_SITE_LIMITS.readStaleMs;
 }
 
-/** État montré au praticien : une lecture interrompue (processus arrêté en route) compte comme un échec. */
-function effectiveStatus(row: Pick<ExternalSiteRow, "status" | "readStartedAt" | "error">, now: Date): { status: ExternalSiteStatus; error: ExternalReadError | null } {
-  if (row.status === "ready") return { status: "ready", error: null };
+/**
+ * Une lecture précédente a-t-elle abouti (date et profil enregistrés) ? Elle
+ * reste alors la référence quoi qu'il arrive à la lecture suivante.
+ */
+function hasPreviousRead(row: Pick<ExternalSiteRow, "readAt" | "profile">): boolean {
+  return row.readAt !== null && row.profile !== null && row.profile !== undefined;
+}
+
+/**
+ * État montré au praticien. Un site « prêt » peut porter l'échec de sa
+ * dernière lecture (le profil précédent est conservé). Une lecture
+ * interrompue (processus arrêté en route) compte comme un échec `internal` :
+ * le site est « prêt » si une lecture avait déjà abouti, « en erreur » sinon —
+ * exactement ce que `failRead` aurait inscrit.
+ */
+function effectiveStatus(row: Pick<ExternalSiteRow, "status" | "readStartedAt" | "error" | "readAt" | "profile">, now: Date): { status: ExternalSiteStatus; error: ExternalReadError | null } {
+  const recorded: ExternalReadError | null = row.error === null ? null : isExternalReadError(row.error) ? row.error : "internal";
+  if (row.status === "ready") return { status: "ready", error: recorded };
   if (isReadInProgress(row, now)) return { status: "reading", error: null };
-  return { status: "error", error: row.status === "error" && isExternalReadError(row.error) ? row.error : "internal" };
+  if (row.status === "error") return { status: "error", error: recorded ?? "internal" };
+  return { status: hasPreviousRead(row) ? "ready" : "error", error: "internal" };
 }
 
 /**
@@ -414,27 +448,35 @@ const OTHER_SITE_RESET = {
  * Passe le site en « lecture en cours » (sous verrou) : ligne créée avec sa
  * clé de mesure, ou mise à jour. Une adresse qui désigne un autre site efface
  * ce qui avait été lu et les corrections du praticien, et désactive le
- * réglage ; la même adresse (ou sa variante « www. ») garde tout.
+ * réglage ; la même adresse (ou sa variante « www. ») garde tout : ce qui
+ * avait été lu reste en place, avec son origine (`source`), tant que la
+ * nouvelle lecture n'a pas abouti. Rend `true` si une lecture précédente
+ * aboutie est ainsi conservée.
  */
-async function startRead(tx: DbTransaction, siteId: string, row: ExternalSiteRow | null, url: string, source: ExternalSiteSource, now: Date): Promise<void> {
+async function startRead(tx: DbTransaction, siteId: string, row: ExternalSiteRow | null, url: string, source: ExternalSiteSource, now: Date): Promise<boolean> {
   if (!row) {
     await tx
       .insert(externalSites)
       .values({ siteId, url, status: "reading", source, readStartedAt: now, consentAt: now, measureKey: newExternalMeasureKey(), createdAt: now, updatedAt: now });
     // Un réglage resté d'une connexion antérieure ne vaut pas pour ce site : il suit l'adresse et attend une nouvelle activation
     await moveSetting(tx, siteId, url, true, now);
-    return;
+    return false;
   }
   const sameSite = isSameAddress(row.url, url);
   await tx
     .update(externalSites)
-    .set({ url, status: "reading", source, readStartedAt: now, consentAt: now, error: null, errorDetail: null, updatedAt: now, ...(sameSite ? {} : OTHER_SITE_RESET) })
+    .set({ url, status: "reading", readStartedAt: now, consentAt: now, error: null, errorDetail: null, updatedAt: now, ...(sameSite ? {} : { ...OTHER_SITE_RESET, source }) })
     .where(eq(externalSites.id, row.id));
   if (row.url !== url) await moveSetting(tx, siteId, url, !sameSite, now);
+  return sameSite && hasPreviousRead(row);
 }
 
-/** Une lecture en cours, désignée par son site et l'instant de son début. */
-type ReadAttempt = { siteId: string; startedAt: Date };
+/**
+ * Une lecture en cours, désignée par son site et l'instant de son début.
+ * `hasPrevious` : une lecture précédente a abouti et reste en place — si
+ * celle-ci échoue, le site redevient « prêt » avec le profil précédent.
+ */
+type ReadAttempt = { siteId: string; startedAt: Date; hasPrevious: boolean };
 
 /**
  * Condition « la colonne porte cet instant », à la milliseconde : une date
@@ -450,12 +492,13 @@ function sameAttempt(attempt: ReadAttempt) {
   return and(eq(externalSites.siteId, attempt.siteId), eq(externalSites.status, "reading"), sameInstant(externalSites.readStartedAt, attempt.startedAt));
 }
 
-type ReadContent = { url: string; pages: ExternalSitePage[]; facts: ExternalSiteFacts; profile: ExternalSiteProfile };
+type ReadContent = { url: string; source: ExternalSiteSource; pages: ExternalSitePage[]; facts: ExternalSiteFacts; profile: ExternalSiteProfile };
 
 /**
  * Inscrit le résultat d'une lecture lancée par le praticien : pages, faits,
- * profil, empreinte, état « prêt ». Sans effet (false) si la ligne n'attend
- * plus cette lecture. Les corrections du praticien ne sont pas touchées.
+ * profil, origine, empreinte, état « prêt » — et l'échec d'une lecture
+ * antérieure est effacé. Sans effet (false) si la ligne n'attend plus cette
+ * lecture. Les corrections du praticien ne sont pas touchées.
  */
 async function storeRead(db: Database, attempt: ReadAttempt, previousUrl: string, content: ReadContent, now: Date): Promise<boolean> {
   return db.transaction(async (tx) => {
@@ -465,6 +508,7 @@ async function storeRead(db: Database, attempt: ReadAttempt, previousUrl: string
       .set({
         url: content.url,
         status: "ready",
+        source: content.source,
         error: null,
         errorDetail: null,
         pages: content.pages,
@@ -482,13 +526,20 @@ async function storeRead(db: Database, attempt: ReadAttempt, previousUrl: string
   });
 }
 
-/** Inscrit l'échec d'une lecture (code du contrat, détail technique court). Ce qui avait été lu auparavant reste en place. */
+/**
+ * Inscrit l'échec d'une lecture (code du contrat, détail technique court).
+ * Quand une lecture précédente avait abouti, elle reste la référence : pages,
+ * faits et profil ne bougent pas, le site redevient « prêt » et l'échec est
+ * gardé pour l'écran (« la dernière lecture a échoué, le profil précédent est
+ * conservé »). Seule une première lecture en échec laisse le site en
+ * « erreur ».
+ */
 async function failRead(db: Database, attempt: ReadAttempt, error: ExternalReadError, detail: string | undefined, now: Date): Promise<void> {
-  console.warn(`${LOG} lecture du site ${attempt.siteId} en échec : ${error}`);
+  console.warn(`${LOG} lecture du site ${attempt.siteId} en échec : ${error}${attempt.hasPrevious ? " (lecture précédente conservée)" : ""}`);
   const errorDetail = (detail ?? "").replace(/\s+/g, " ").trim().slice(0, ERROR_DETAIL_MAX);
   await db
     .update(externalSites)
-    .set({ status: "error", error, errorDetail: errorDetail === "" ? null : errorDetail, updatedAt: now })
+    .set({ status: attempt.hasPrevious ? "ready" : "error", error, errorDetail: errorDetail === "" ? null : errorDetail, updatedAt: now })
     .where(sameAttempt(attempt));
 }
 
@@ -525,8 +576,10 @@ async function extractProfile(extractor: ExternalProfileExtractor, input: Extern
  * erreur. Une lecture « en cours » depuis plus de
  * EXTERNAL_SITE_LIMITS.readStaleMs est montrée comme un échec `internal` :
  * le processus qui la menait s'est arrêté, le praticien doit pouvoir la
- * relancer. L'interrupteur (`active`, `keepHostedIndexed`) est lu dans le
- * thème du site passé en argument.
+ * relancer. Ce qui est montré (pages, profil, date) est toujours la dernière
+ * lecture aboutie : après une relecture en échec le site reste « prêt » et
+ * `error` dit ce qui s'est passé. L'interrupteur (`active`,
+ * `keepHostedIndexed`) est lu dans le thème du site passé en argument.
  */
 export async function loadExternalSite(db: Database, site: Pick<Site, "id" | "theme">, now: Date = new Date()): Promise<ExternalSiteState> {
   let row: ExternalSiteRow | null;
@@ -576,7 +629,9 @@ export async function loadExternalSite(db: Database, site: Pick<Site, "id" | "th
  * envois simultanés ne passent pas tous les deux, et une lecture comptée au
  * quota est toujours une lecture réellement lancée. Changer d'adresse pour
  * un autre site efface ce qui avait été lu et les corrections (elles
- * décrivaient l'ancien site) ; la clé de mesure reste.
+ * décrivaient l'ancien site) ; la clé de mesure reste. Relire le même site
+ * ne retire rien : les outils gardent le profil précédent le temps de la
+ * lecture.
  */
 export async function beginExternalSiteRead(db: Database, site: Site, input: { url: string; consent: boolean }, deps: ExternalSiteDeps = {}): Promise<ExternalSiteResult> {
   const now = deps.now ?? new Date();
@@ -602,10 +657,13 @@ export async function beginExternalSiteRead(db: Database, site: Site, input: { u
 /**
  * Lit le site puis en extrait le profil, et inscrit le résultat (ou l'échec).
  * Ne lève jamais et ne laisse jamais le site en « lecture en cours » : tout
- * échec devient un état « erreur » que le praticien voit, avec le code du
- * contrat. Un profil encore incomplet est enregistré tel quel : le praticien
- * le complète à la main. Si le site répond sur l'autre variante de son
- * adresse (avec ou sans « www. »), c'est elle qui est retenue.
+ * échec est inscrit avec le code du contrat, que le praticien voit. Si une
+ * lecture précédente avait abouti, elle reste en place et le site reste
+ * « prêt » — une relecture ratée ne retire jamais leur référence aux outils ;
+ * seule une première lecture en échec laisse le site en « erreur ». Un profil
+ * encore incomplet est enregistré tel quel : le praticien le complète à la
+ * main. Si le site répond sur l'autre variante de son adresse (avec ou sans
+ * « www. »), c'est elle qui est retenue.
  */
 export function runExternalSiteRead(db: Database, siteId: string, deps: ExternalSiteDeps = {}): Promise<void> {
   // Registre des appels API : la lecture et l'extraction sont rattachées à la fonctionnalité et au site
@@ -617,9 +675,9 @@ async function readAndStore(db: Database, siteId: string, deps: ExternalSiteDeps
   let attempt: ReadAttempt | null = null;
   try {
     const row = await loadRow(db, siteId);
-    // Seule une lecture de site lancée par `beginExternalSiteRead` est à mener ici (un texte collé est traité par son propre appel)
-    if (!row || row.status !== "reading" || row.source !== "crawl" || !row.readStartedAt) return;
-    attempt = { siteId, startedAt: row.readStartedAt };
+    // Rien à mener sans lecture lancée par `beginExternalSiteRead`
+    if (!row || row.status !== "reading" || !row.readStartedAt) return;
+    attempt = { siteId, startedAt: row.readStartedAt, hasPrevious: hasPreviousRead(row) };
     const env = deps.env ?? process.env;
     const site = await loadSiteContext(db, siteId);
     const reader = deps.reader ?? createWebsiteReader(env);
@@ -636,7 +694,7 @@ async function readAndStore(db: Database, siteId: string, deps: ExternalSiteDeps
     const url = servedAddress(row.url, outcome.url, hostedHostsOf({ domain: site?.domain ?? null }, env));
     const extractor = deps.extractor ?? createExternalProfileExtractor(env);
     const profile = await extractProfile(extractor, { url, pages: outcome.pages, facts, practitioner: await practitionerOf(db, site?.prospectId ?? null) });
-    const stored = await storeRead(db, attempt, row.url, { url, pages: outcome.pages, facts, profile }, clock());
+    const stored = await storeRead(db, attempt, row.url, { url, source: "crawl", pages: outcome.pages, facts, profile }, clock());
     if (!stored) console.warn(`${LOG} lecture du site ${siteId} sans suite : l'état du site a changé entre-temps`);
   } catch (err) {
     if (isSchemaMissing(err)) return;
@@ -656,7 +714,8 @@ async function readAndStore(db: Database, siteId: string, deps: ExternalSiteDeps
  * tient lieu de pages lues. Mêmes contrôles que pour une lecture (adresse,
  * consentement, pas de lecture en cours), sans quota : aucune page n'est
  * demandée au site. Le profil est extrait et enregistré dans la foulée ; si
- * l'extraction échoue, le site passe en erreur et l'issue le dit.
+ * l'extraction échoue, l'issue le dit et l'échec est inscrit comme celui
+ * d'une lecture : ce qui avait été lu auparavant sur ce site reste en place.
  */
 export function submitExternalSiteText(db: Database, site: Site, input: { url: string; text: string; consent: boolean }, deps: ExternalSiteDeps = {}): Promise<ExternalSiteResult> {
   // Registre des appels API : l'extraction est rattachée à la fonctionnalité et au site
@@ -683,27 +742,28 @@ async function submitText(db: Database, site: Site, input: { url: string; text: 
   }
   if (textLength(pages) === 0) return refuse("text", MESSAGES.textUnreadable);
 
+  let attempt: ReadAttempt;
   try {
-    const started = await db.transaction(async (tx) => {
+    const started = await db.transaction(async (tx): Promise<ReadAttempt | null> => {
       await lockExternalSite(tx, site.id);
       const row = await loadRow(tx, site.id);
-      if (row && isReadInProgress(row, now)) return false;
-      await startRead(tx, site.id, row, address.url, "pasted", now);
-      return true;
+      if (row && isReadInProgress(row, now)) return null;
+      const hasPrevious = await startRead(tx, site.id, row, address.url, "pasted", now);
+      return { siteId: site.id, startedAt: now, hasPrevious };
     });
     if (!started) return refuse("busy", MESSAGES.busy);
+    attempt = started;
   } catch (err) {
     if (!isSchemaMissing(err)) throw err;
     return refuse("unavailable", MESSAGES.unavailable);
   }
 
-  const attempt: ReadAttempt = { siteId: site.id, startedAt: now };
   try {
     // Un texte collé ne porte ni balise ni lien relevé dans le code des pages
     const facts = completeFacts(null);
     const extractor = deps.extractor ?? createExternalProfileExtractor(env);
     const profile = await extractProfile(extractor, { url: address.url, pages, facts, practitioner: await practitionerOf(db, site.prospectId) });
-    const stored = await storeRead(db, attempt, address.url, { url: address.url, pages, facts, profile }, clock());
+    const stored = await storeRead(db, attempt, address.url, { url: address.url, source: "pasted", pages, facts, profile }, clock());
     return stored ? { ok: true } : refuse("busy", MESSAGES.superseded);
   } catch (err) {
     console.error(`${LOG} texte collé pour le site ${site.id} : extraction interrompue (${errorName(err)})`);
@@ -856,25 +916,32 @@ export async function disconnectExternalSite(db: Database, siteId: string): Prom
 // ─── Ce que lisent les outils ────────────────────────────────────────────────
 
 /**
- * Référence des outils : profil effectif et faits du site du client quand il
- * est actif et exploitable, sinon `null` (les outils lisent alors le site
- * hébergé). `null` aussi tant que la table n'existe pas.
+ * Référence des outils : profil effectif et faits du site du client dès que
+ * le réglage est actif et qu'un profil exploitable est enregistré, sinon
+ * `null` (les outils lisent alors le site hébergé). `null` aussi tant que la
+ * table n'existe pas.
+ *
+ * L'état de la dernière tentative ne compte pas : pendant une relecture, ou
+ * après une relecture en échec, ce qui est enregistré est toujours la
+ * dernière lecture aboutie — les outils ne retombent pas sur le site hébergé
+ * parce que le site du client a mis du temps à répondre. Pendant une
+ * première lecture rien n'est enregistré : `null`.
  *
  * Sans réglage actif, aucune requête n'est faite : un site qui n'a pas
- * connecté le sien ne paie rien. Une lecture en cours ou en échec, un profil
- * devenu inexploitable ou une adresse qui ne correspond plus au réglage
- * rendent `null` : les outils ne s'appuient jamais sur un état douteux.
+ * connecté le sien ne paie rien. Un profil devenu inexploitable, ou une ligne
+ * qui ne décrit pas le site du réglage, rendent `null` : les outils ne
+ * s'appuient jamais sur un état douteux.
  */
 export async function loadExternalReference(db: Database, site: Pick<Site, "id" | "theme">): Promise<ExternalReference | null> {
   const setting = activeExternalSite(site.theme);
   if (!setting) return null;
   try {
     const [row] = await db
-      .select({ url: externalSites.url, status: externalSites.status, profile: externalSites.profile, overrides: externalSites.overrides, facts: externalSites.facts })
+      .select({ url: externalSites.url, profile: externalSites.profile, overrides: externalSites.overrides, facts: externalSites.facts })
       .from(externalSites)
       .where(eq(externalSites.siteId, site.id))
       .limit(1);
-    if (!row || row.status !== "ready" || !isSameAddress(row.url, setting.url)) return null;
+    if (!row || !isSameAddress(row.url, setting.url)) return null;
     const profile = mergeExternalProfile(row.profile, row.overrides);
     if (!isExternalProfileUsable(profile)) return null;
     return { setting, profile, facts: completeFacts(row.facts) };
@@ -904,9 +971,11 @@ export type BriefSiteSource = {
  * studio). Quand le site du client est la référence : son profil converti en
  * pages (`externalBriefPages`), les photos d'accueil et « à propos » du site
  * hébergé gardées au catalogue (elles ont déjà été admises par le studio),
- * et l'adresse du site du client. Sinon : les pages et l'adresse du site
- * hébergé, comme avant. Dans les deux cas `hostedUrl` reste l'adresse du site
- * hébergé : c'est là que vivent les articles du blog.
+ * et l'adresse du site du client — c'est aussi elle qui sert de source aux
+ * spécialités sans page à elles (pas de lien vers une page qui n'existe pas
+ * sur ce site). Sinon : les pages et l'adresse du site hébergé, comme avant.
+ * Dans les deux cas `hostedUrl` reste l'adresse du site hébergé : c'est là
+ * que vivent les articles du blog.
  *
  * Les pages de spécialité désactivées sont une notion du site hébergé : elles
  * ne masquent pas une spécialité du site du client qui porterait le même nom.
@@ -922,7 +991,7 @@ export async function briefPagesFor(db: Database, site: Pick<Site, "id" | "theme
     return section && "imageUrl" in section ? section.imageUrl : undefined;
   };
   return {
-    pages: externalBriefPages(reference.profile, { images: { hero: imageOf("hero"), about: imageOf("about") } }),
+    pages: externalBriefPages(reference.profile, { siteUrl: reference.setting.url, images: { hero: imageOf("hero"), about: imageOf("about") } }),
     url: referenceSiteUrl(hostedUrl, site.theme),
     hostedUrl,
     theme: { ...site.theme, disabledMotifs: [] },
@@ -978,12 +1047,48 @@ async function dueExternalSites(db: Database, now: Date): Promise<RefreshCandida
 
 type RefreshOutcome = "unchanged" | "changed" | "failed" | "skipped";
 
-/** Date du contrôle inscrite, sans rien changer d'autre : la lecture précédente reste la référence. */
-async function recordCheck(db: Database, rowId: string, now: Date): Promise<void> {
+/**
+ * Date du contrôle inscrite, sans rien changer à ce qui a été lu : la lecture
+ * précédente reste la référence. `readable` : le site vient d'être relu sans
+ * encombre — l'échec d'une lecture antérieure, s'il en restait un, n'a plus
+ * lieu d'être montré au praticien.
+ */
+async function recordCheck(db: Database, rowId: string, now: Date, readable = false): Promise<void> {
   await db
     .update(externalSites)
-    .set({ checkedAt: now, updatedAt: now })
+    .set({ checkedAt: now, updatedAt: now, ...(readable ? { error: null, errorDetail: null } : {}) })
     .where(and(eq(externalSites.id, rowId), eq(externalSites.status, "ready")));
+}
+
+/** Détail technique inscrit quand la tâche planifiée solde une lecture restée « en cours ». */
+const INTERRUPTED_DETAIL = "Lecture interrompue avant la fin";
+
+/**
+ * Lectures interrompues (processus arrêté en route) : restées « en cours »
+ * au-delà de EXTERNAL_SITE_LIMITS.readStaleMs, elles sont soldées comme un
+ * échec `internal` ordinaire — site « prêt » si une lecture avait déjà
+ * abouti, « en erreur » sinon. L'écran et les outils s'accommodent d'une
+ * lecture interrompue, mais la ligne resterait « en lecture » pour toujours
+ * et le site ne serait plus jamais relu. Rend le nombre de lectures soldées.
+ */
+async function settleInterruptedReads(db: Database, now: Date): Promise<number> {
+  const staleBefore = new Date(now.getTime() - EXTERNAL_SITE_LIMITS.readStaleMs);
+  const interrupted = and(eq(externalSites.status, "reading"), or(isNull(externalSites.readStartedAt), lte(externalSites.readStartedAt, staleBefore)));
+  const failure = { error: "internal", errorDetail: INTERRUPTED_DETAIL, updatedAt: now } as const;
+  // D'abord les sites qui gardent une lecture aboutie ; ceux qui restent n'en ont jamais eu
+  const kept = await db
+    .update(externalSites)
+    .set({ status: "ready", ...failure })
+    .where(and(interrupted, isNotNull(externalSites.readAt), isNotNull(externalSites.profile)))
+    .returning({ siteId: externalSites.siteId });
+  const never = await db
+    .update(externalSites)
+    .set({ status: "error", ...failure })
+    .where(interrupted)
+    .returning({ siteId: externalSites.siteId });
+  for (const row of kept) console.warn(`${LOG} lecture du site ${row.siteId} interrompue : soldée en échec (lecture précédente conservée)`);
+  for (const row of never) console.warn(`${LOG} lecture du site ${row.siteId} interrompue : soldée en échec`);
+  return kept.length + never.length;
 }
 
 async function refreshFailed(db: Database, row: Pick<ExternalSiteRow, "id" | "siteId">, reason: string, now: Date): Promise<RefreshOutcome> {
@@ -992,7 +1097,12 @@ async function refreshFailed(db: Database, row: Pick<ExternalSiteRow, "id" | "si
   return "failed";
 }
 
-/** Relecture d'un site : contrôle inscrit si rien n'a changé, sinon profil extrait de nouveau et enregistré. */
+/**
+ * Relecture d'un site : contrôle inscrit si rien n'a changé, sinon profil
+ * extrait de nouveau et enregistré. Une relecture aboutie efface l'échec
+ * qu'une lecture du praticien aurait laissé ; une relecture en échec ne
+ * touche à rien d'autre que la date du contrôle.
+ */
 async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, extractor: ExternalProfileExtractor, deps: ExternalSiteDeps): Promise<RefreshOutcome> {
   const clock = () => deps.now ?? new Date();
   let row: ExternalSiteRow | null = null;
@@ -1008,7 +1118,7 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
     const facts = completeFacts(outcome.facts);
     const contentHash = externalContentHash(outcome.pages, facts);
     if (contentHash === row.contentHash) {
-      await recordCheck(db, row.id, clock());
+      await recordCheck(db, row.id, clock(), true);
       return "unchanged";
     }
     const url = servedAddress(row.url, outcome.url, hostedHostsOf({ domain: site?.domain ?? null }, env));
@@ -1022,7 +1132,7 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
       await lockExternalSite(tx, siteId);
       const updated = await tx
         .update(externalSites)
-        .set({ url, pages: outcome.pages, facts, profile, contentHash, readAt: now, checkedAt: now, updatedAt: now })
+        .set({ url, pages: outcome.pages, facts, profile, contentHash, readAt: now, checkedAt: now, error: null, errorDetail: null, updatedAt: now })
         // Une lecture du praticien commencée ou terminée entre-temps l'emporte sur la relecture automatique
         .where(and(eq(externalSites.id, previous.id), eq(externalSites.status, "ready"), eq(externalSites.source, "crawl"), sameInstant(externalSites.readAt, previous.readAt)))
         .returning({ id: externalSites.id });
@@ -1057,13 +1167,19 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
  * lecture précédente reste la référence des outils. Ces relectures ne sont
  * pas comptées dans le quota du praticien. `checked` : sites relus ;
  * `changed` : profils mis à jour ; `failed` : relectures en échec.
+ *
+ * Le passage commence par solder les lectures interrompues
+ * (`settleInterruptedReads`) : un site resté « en lecture » retrouve un état
+ * stable et, s'il avait déjà été lu, redevient éligible à la relecture.
  */
 export async function refreshExternalSites(db: Database, deps: ExternalSiteDeps = {}): Promise<{ checked: number; changed: number; failed: number }> {
   const report = { checked: 0, changed: 0, failed: 0 };
   const until = Math.min(Date.now() + EXTERNAL_REFRESH_BUDGET_MS, deps.deadline?.getTime() ?? Infinity);
   let due: RefreshCandidate[];
   try {
-    due = await dueExternalSites(db, deps.now ?? new Date());
+    const now = deps.now ?? new Date();
+    await settleInterruptedReads(db, now);
+    due = await dueExternalSites(db, now);
   } catch (err) {
     if (!isSchemaMissing(err)) throw err;
     return report;

@@ -60,8 +60,9 @@ export function PageHeader({
       )}
     >
       <span aria-hidden className={clsx("-z-10", vivid && !def.lightGradient ? "ds-band-art-deep" : "ds-band-art")} />
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-start gap-4">
+      {/* L'action passe sous le titre d'elle-même quand la place manque : aucun point de rupture */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 flex-[1_1_24rem] items-start gap-4">
           <span
             aria-hidden
             className={clsx(
@@ -88,7 +89,7 @@ export function PageHeader({
           </div>
         </div>
         {action || secondary ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 max-lg:pl-[4.5rem] max-sm:pl-0">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {action}
             {secondary}
           </div>

@@ -83,7 +83,8 @@ const asRecord = (value: unknown): Record<string, unknown> | null => (value !== 
 function plainText(value: unknown, max: number): string {
   if (typeof value !== "string" && typeof value !== "number") return "";
   const raw = String(value);
-  return cleanLineMax(/[&<]/.test(raw) ? load(raw).root().text() : raw, max);
+  // Balises remplacées par des espaces, puis entités décodées par l'analyseur HTML
+  return cleanLineMax(/[&<]/.test(raw) ? load(raw.replace(/<[^>]{0,200}>/g, " ")).root().text() : raw, max);
 }
 
 function unique<T>(values: readonly T[], keyOf: (value: T) => string): T[] {

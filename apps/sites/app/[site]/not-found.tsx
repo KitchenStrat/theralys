@@ -4,6 +4,7 @@ import Link from "next/link";
 import { NOT_FOUND_SPECIALTIES } from "@theralys/shared";
 import { resolveNotFound } from "@/lib/not-found";
 import { getMotifPages, getSiteByKey } from "@/lib/site-data";
+import { homePath, publicPathPrefix } from "@/lib/site-paths";
 
 export const metadata: Metadata = {
   title: "Page introuvable",
@@ -37,7 +38,7 @@ export default async function SiteNotFound() {
   const specialties = settings.showSpecialties
     ? (await getMotifPages(site)).slice(0, NOT_FOUND_SPECIALTIES)
     : [];
-  const prefix = `/${siteKey}`;
+  const prefix = publicPathPrefix(siteKey);
 
   return (
     <main className="relative overflow-hidden">
@@ -60,7 +61,7 @@ export default async function SiteNotFound() {
         </h1>
         {settings.message ? <p className="mt-5 max-w-xl text-xl opacity-80">{settings.message}</p> : null}
         <Link
-          href={prefix}
+          href={homePath(prefix)}
           className="btn-glow mt-9 inline-flex items-center justify-center rounded-[var(--r-pill)] bg-[var(--site-primary)] px-7 py-3.5 text-[1.05rem] font-semibold text-white transition-colors hover:bg-[var(--site-primary-dark)]"
         >
           {settings.buttonLabel}

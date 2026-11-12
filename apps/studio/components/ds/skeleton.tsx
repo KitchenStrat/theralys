@@ -70,13 +70,13 @@ export function PageSkeleton({ tiles = 4, cards = 2 }: { tiles?: number; cards?:
         </div>
       </div>
       {tiles > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           {Array.from({ length: tiles }, (_, i) => (
             <KpiTileSkeleton key={i} />
           ))}
         </div>
       ) : null}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         {Array.from({ length: cards }, (_, i) => (
           <CardSkeleton key={i} lines={4} />
         ))}

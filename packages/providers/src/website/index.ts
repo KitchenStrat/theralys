@@ -32,12 +32,13 @@ const BROWSER_LIKE = /mozilla|chrome|chromium|safari|firefox|gecko|webkit|opera|
 /** Adresse https sans identifiants ni ancre, bornée ; `null` sinon. */
 function botPageUrl(value: string | undefined): string | null {
   const raw = (value ?? "").trim();
-  if (raw === "" || raw.length > 200) return null;
+  // Caractères imprimables seulement : l'analyseur d'adresses retirerait en silence un saut de ligne glissé dans la valeur
+  if (raw.length > 200 || !/^[\x21-\x7e]+$/.test(raw)) return null;
   try {
     const url = new URL(raw);
     if (url.protocol !== "https:" || url.username !== "" || url.password !== "") return null;
     url.hash = "";
-    return /^[\x21-\x7e]+$/.test(url.href) ? url.href : null;
+    return url.href;
   } catch {
     return null;
   }

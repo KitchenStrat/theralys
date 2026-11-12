@@ -43,12 +43,13 @@ export function GreetingBand({
       data-ds-section={section}
       data-ds-ambient={ambient ? "" : undefined}
       className={clsx(
-        "relative isolate overflow-hidden rounded-ds-band bg-ds-section-gradient-deep p-6 text-white shadow-ds-card sm:p-8 lg:p-10",
+        "relative isolate overflow-hidden rounded-ds-band bg-ds-section-gradient-deep p-6 text-white shadow-ds-card sm:p-8 xl:p-10",
         className,
       )}
     >
       <span aria-hidden className="ds-band-art-deep -z-10" />
-      <div className={clsx("grid items-center gap-7", aside ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] lg:gap-10" : "")}>
+      {/* Deux colonnes à partir de `xl` : dans la coquille, le contenu fait alors au moins 920 px */}
+      <div className={clsx("grid items-center gap-7", aside ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] xl:gap-10" : "")}>
         <div className="min-w-0">
           {eyebrow ? (
             <p className="flex items-center gap-2.5 text-ds-body font-semibold">

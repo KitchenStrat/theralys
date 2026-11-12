@@ -132,8 +132,8 @@ export default function HomePreviewPage() {
         </section>
 
         {/* Deux piles indépendantes : mesure et agenda à gauche, mise en route et travail accompli à droite */}
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-          <div className="space-y-6 max-lg:order-last">
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <div className="space-y-6 max-xl:order-last">
             <VisitsCard week={VISITS_7} month={VISITS_30} />
             <Card section="publications">
               <CardHeader
@@ -210,8 +210,8 @@ export default function HomePreviewPage() {
           <Stagger as="ul" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {SHORTCUTS.map((shortcut) => (
               <li key={shortcut.section}>
-                <InteractiveCard href={PREVIEW_HREFS[shortcut.section] ?? "/"} section={shortcut.section} padding="sm" className="h-full justify-center">
-                  <span className="flex items-center gap-3">
+                <InteractiveCard href={PREVIEW_HREFS[shortcut.section] ?? "/"} section={shortcut.section} padding="sm" className="h-full">
+                  <span className="my-auto flex items-center gap-3">
                     <SectionBadge section={shortcut.section} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="block text-base font-semibold text-ds-ink-900">{shortcut.label}</span>

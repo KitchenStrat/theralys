@@ -48,10 +48,30 @@ export const ANALYTICS_SOURCE_LABELS: Record<AnalyticsSource, string> = {
 };
 
 /**
- * Lien à placer dans la bio d'un réseau : l'URL publique du site avec `src`.
- * Les visites ainsi tracées apparaissent dans la provenance du studio.
+ * Façon de composer un lien vers le site du praticien (lien de bio, lien des
+ * légendes Facebook et LinkedIn).
  */
-export function bioLinkFor(siteUrl: string, network: SocialNetwork): string {
+export type SiteLinkOptions = {
+  /**
+   * Ajouter le paramètre `src` (`ig`, `fb`, `li`) à l'adresse ? Oui par
+   * défaut : le site hébergé le lit pour ranger la visite sous le bon réseau.
+   * `false` quand le lien mène au site du client : le code de mesure qui y
+   * est installé ne lit jamais les paramètres de l'adresse (règles de
+   * consentement) et reconnaît le réseau au site d'où vient le visiteur. Un
+   * `src` n'y servirait à rien : le lien est alors l'adresse seule, telle
+   * qu'elle est donnée.
+   */
+  sourceParam?: boolean;
+};
+
+/**
+ * Lien à placer dans la bio d'un réseau : l'URL publique du site avec `src`.
+ * Les visites ainsi tracées apparaissent dans la provenance du studio. Avec
+ * `sourceParam: false` (site du client), l'adresse est rendue telle quelle :
+ * le même lien vaut pour tous les réseaux.
+ */
+export function bioLinkFor(siteUrl: string, network: SocialNetwork, options: SiteLinkOptions = {}): string {
+  if (options.sourceParam === false) return siteUrl;
   const param = network === "instagram" ? "ig" : network === "facebook" ? "fb" : "li";
   try {
     const url = new URL(siteUrl);
@@ -130,15 +150,16 @@ export function mentionsSiteUrl(caption: string, siteUrl: string): boolean {
  *   les hashtags ;
  * - Facebook et LinkedIn : tout paragraphe « lien dans ma bio » (détection
  *   souple, la ligne exacte du générateur `bioLine` comprise) remplacé par le
- *   lien du site (avec `src`) ; sans ligne bio, le lien est ajouté en fin de
- *   légende sauf si une URL du site y figure déjà ; au plus 3 hashtags.
+ *   lien du site (avec `src`, ou l'adresse seule avec `sourceParam: false` —
+ *   site du client) ; sans ligne bio, le lien est ajouté en fin de légende
+ *   sauf si une URL du site y figure déjà ; au plus 3 hashtags.
  */
-export function captionFor(network: SocialNetwork, content: CaptionSource, siteUrl: string, bioLine: string): string {
+export function captionFor(network: SocialNetwork, content: CaptionSource, siteUrl: string, bioLine: string, options: SiteLinkOptions = {}): string {
   const hashtags = content.hashtags.filter((h) => h.trim() !== "");
   if (network === "instagram") {
     return [content.caption.trim(), hashtags.join(" ")].filter((p) => p !== "").join("\n\n");
   }
-  const linkLine = `Pour prendre rendez-vous : ${bioLinkFor(siteUrl, network)}`;
+  const linkLine = `Pour prendre rendez-vous : ${bioLinkFor(siteUrl, network, options)}`;
   const isBioLine = (p: string) => p.trim() !== "" && (p.trim() === bioLine.trim() || BIO_LINE_RE.test(p));
   let replaced = false;
   const body = content.caption

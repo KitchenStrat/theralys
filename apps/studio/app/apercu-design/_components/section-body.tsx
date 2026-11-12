@@ -47,7 +47,7 @@ export function SectionBody({ section, sample }: { section: SectionKey; sample: 
   const tabs = sample.tabs.map((label, index) => ({
     id: `t${index}`,
     label,
-    icon: TAB_ICONS[index],
+    icon: section === "reseaux-sociaux" ? TAB_ICONS[index] : undefined,
     badge:
       index === 0 ? (
         <Badge tone="section" className="px-2 py-0.5">
@@ -111,7 +111,7 @@ export function SectionBody({ section, sample }: { section: SectionKey; sample: 
               })}
             </ul>
 
-            <div className="grid items-start gap-6 lg:grid-cols-2">
+            <div className="grid items-start gap-6 md:grid-cols-2">
               <Card>
                 <GenerationDemo
                   title={sample.generationTitle}
@@ -143,7 +143,7 @@ export function SectionBody({ section, sample }: { section: SectionKey; sample: 
               description="Dans l'aperçu, seul le premier onglet est détaillé. Voici l'état de chargement d'une vue : des squelettes à la forme du contenu."
             />
           </Card>
-          <div className="mt-6 grid gap-6 lg:grid-cols-2" role="status">
+          <div className="mt-6 grid gap-6 md:grid-cols-2" role="status">
             <span className="sr-only">Chargement…</span>
             <CardSkeleton lines={4} />
             <CardSkeleton lines={4} />

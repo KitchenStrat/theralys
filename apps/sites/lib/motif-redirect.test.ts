@@ -1,6 +1,6 @@
 import { LEGAL_PAGES } from "@theralys/shared";
 import { describe, expect, it } from "vitest";
-import { legacyMotifRedirect, publicPathPrefix, searchString } from "./motif-redirect";
+import { legacyMotifRedirect, searchString } from "./motif-redirect";
 
 // Pages de spécialité en ligne du site (la page « sommeil » existe en base mais elle est désactivée : absente d'ici)
 const ONLINE = ["gestion-du-stress", "confiance-en-soi"];
@@ -68,26 +68,5 @@ describe("searchString", () => {
     const parsed = new URLSearchParams(text);
     expect(parsed.get("utm_campaign")).toBe("Rentrée 2026 & stress");
     expect(parsed.get("next")).toBe("https://exemple.fr/?a=1#x");
-  });
-});
-
-describe("publicPathPrefix", () => {
-  it("hôte des démos : le site vit sous /<slug>", () => {
-    expect(publicPathPrefix("claire-dupont-sophrologue-albi", "demo.harmony-web.fr")).toBe(PREFIX);
-    expect(publicPathPrefix("claire-dupont-sophrologue-albi", "localhost:3000")).toBe(PREFIX);
-    // Site désigné par son domaine depuis l'hôte des démos : le domaine reste dans le chemin
-    expect(publicPathPrefix("claire-sophrologie.fr", "demo.harmony-web.fr")).toBe("/claire-sophrologie.fr");
-  });
-
-  it("domaine du client (chemin réécrit par le middleware) : pas de préfixe", () => {
-    expect(publicPathPrefix("claire-sophrologie.fr", "claire-sophrologie.fr")).toBe("");
-    expect(publicPathPrefix("claire-sophrologie.fr", "Claire-Sophrologie.fr:443")).toBe("");
-    expect(publicPathPrefix("www.claire-sophrologie.fr", "www.claire-sophrologie.fr")).toBe("");
-  });
-
-  it("hôte absent ou clé mal encodée : préfixe par défaut", () => {
-    expect(publicPathPrefix("claire-dupont-sophrologue-albi", null)).toBe(PREFIX);
-    expect(publicPathPrefix("claire-dupont-sophrologue-albi", "")).toBe(PREFIX);
-    expect(publicPathPrefix("%E0%A4%A", "demo.harmony-web.fr")).toBe("/%E0%A4%A");
   });
 });

@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { NavAnchor } from "@/lib/nav";
+import { homePath } from "@/lib/site-paths";
 import { RdvButton } from "./rdv-button";
 
 export type MobileNavProps = {
   siteId: string;
   bookingUrl: string | null;
-  /** Préfixe des liens internes (segment [site]) */
+  /** Préfixe public des chemins du site (`publicPathPrefix`) : vide sur le domaine d'un client */
   prefix: string;
   /** Ancres de l'accueil (sections existantes et visibles) */
   anchors: NavAnchor[];
@@ -39,7 +40,7 @@ export function MobileNav({ siteId, bookingUrl, prefix, anchors, motifPages, blo
   const toggleRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
-  const home = prefix || "/";
+  const home = homePath(prefix);
 
   // Navigation interne (lien du menu) : le panneau se referme
   useEffect(() => {

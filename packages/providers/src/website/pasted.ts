@@ -42,17 +42,22 @@ function cleanLines(text: string): string[] {
   return out;
 }
 
-/** Une ligne courte, sans ponctuation de fin de phrase, qui introduit du texte : un intertitre probable. */
-function headingOf(line: string, next: string | undefined): string | null {
+/**
+ * Une ligne courte, sans ponctuation de fin de phrase, qui introduit du
+ * texte : un intertitre probable. Elle doit être détachée de ce qui précède
+ * (première ligne, ou après une ligne vide) ou suivie d'un vrai paragraphe ;
+ * les lignes de coordonnées, de prix et « libellé : valeur » n'en sont pas.
+ */
+function headingOf(line: string, detached: boolean, next: string | undefined): string | null {
   const markdown = /^#{1,6}\s+(.+)$/.exec(line);
   if (markdown) return cleanLineMax(markdown[1]!.replace(/\s+#+$/, ""), HEADING_MAX);
   if (next === undefined || next === "" || BULLET.test(line)) return null;
   const candidate = line.replace(/\s*:$/, "");
   if (candidate.length < 3 || candidate.length > HEADING_MAX || candidate.split(" ").length > HEADING_WORDS_MAX) return null;
   if (/[.,;…]$/.test(candidate) || !/^[\p{Lu}\p{N}«"“]/u.test(candidate)) return null;
-  // Coordonnées et prix : des lignes courtes qui ne sont pas des titres
-  if (/@|https?:|www\./i.test(candidate) || candidate.replace(/\D/g, "").length * 2 >= candidate.length) return null;
-  return candidate;
+  if (/@|https?:|www\.|:\s|[€$£]|\beuros?\b|\d{4}/i.test(candidate) || candidate.replace(/\D/g, "").length * 2 >= candidate.length) return null;
+  const introducesParagraph = next.length >= 60 && next.length >= candidate.length * 2;
+  return detached || introducesParagraph ? candidate : null;
 }
 
 /** Découpe une suite de lignes en morceaux d'au plus `max` caractères, de préférence entre deux paragraphes. */
@@ -129,7 +134,8 @@ export function pastedTextToPages(text: string, url: string, now: Date = new Dat
     const blocks = chunk.filter((line) => line !== "");
     const headings: string[] = [];
     const body = chunk.map((line, position) => {
-      const heading = line === "" ? null : headingOf(line, chunk[position + 1] === "" ? chunk[position + 2] : chunk[position + 1]);
+      const detached = position === 0 || chunk[position - 1] === "";
+      const heading = line === "" ? null : headingOf(line, detached, chunk[position + 1] === "" ? chunk[position + 2] : chunk[position + 1]);
       if (heading !== null && heading !== "" && headings.length < HEADINGS_MAX && !headings.includes(heading)) headings.push(heading);
       // Une ligne de titre « # Titre » est gardée sans son balisage
       return heading !== null && /^#{1,6}\s/.test(line) ? heading : line;

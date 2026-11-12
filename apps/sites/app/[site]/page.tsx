@@ -13,6 +13,7 @@ import {
   siteBaseUrl,
 } from "@/lib/site-data";
 import { localBusinessJsonLd } from "@/lib/seo";
+import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = { params: Promise<{ site: string }> };
 
@@ -91,7 +92,7 @@ export default async function HomePage({ params }: Props) {
         preview={preview}
         ctx={{
           site,
-          prefix: `/${siteKey}`,
+          prefix: publicPathPrefix(siteKey),
           reviews,
           googleRating,
           googleReviewCount,

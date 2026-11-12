@@ -16,6 +16,7 @@ import {
 import { getSocialRegenerationUsage, type SocialRegenerationUsage } from "@/lib/social/regen";
 import { swatchesFor } from "@/lib/social/render/theme";
 import { getSocialSettings, type SocialSettingsView } from "@/lib/social/settings";
+import { socialSiteLink } from "@/lib/social/site-link";
 import { SocialClient } from "./social-client";
 
 export const metadata = { title: "Réseaux sociaux" };
@@ -82,6 +83,8 @@ export default async function SocialPage({ searchParams }: Props) {
   const { startIso, endIso } = monthRange(year, month);
   const firstInMonth = startIso > min ? startIso : min;
   const wanted = data.state.freeSlots[0]?.date ?? (firstInMonth < endIso ? firstInMonth : min);
+  // Lien de bio et légendes : le site du client s'il est la référence (adresse seule), sinon le site hébergé (avec `src`)
+  const siteLink = socialSiteLink(siteUrl(site), site.theme);
 
   return (
     <SocialClient
@@ -92,7 +95,7 @@ export default async function SocialPage({ searchParams }: Props) {
       usage={usage}
       swatches={swatchesFor(site.theme)}
       siteName={site.name}
-      siteUrl={siteUrl(site)}
+      siteLink={siteLink}
       bioLine={SOCIAL_BIO_LINE}
       regenRemaining={regen.remaining}
       initialPostId={initialPostId}

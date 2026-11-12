@@ -74,8 +74,9 @@ export type GoogleRequestUsage = { used: number; remaining: number; resetsOn: st
 
 type CalendarRow = Omit<GooglePost, "assets">;
 
-function toCalendarItem(post: CalendarRow, accentColor: string): GoogleCalendarItem {
-  const { content } = post;
+function toCalendarItem(post: CalendarRow, accentColor: string, addresses: GooglePostAddresses): GoogleCalendarItem {
+  // Bouton d'action montré au praticien : il suit l'adresse de référence tant que le post n'est pas publié
+  const content = deliveredGoogleContent(post, addresses);
   return {
     id: post.id,
     date: post.scheduledFor,
@@ -134,7 +135,8 @@ export async function getGoogleMonth(siteId: string, year: number, month: number
   const db = getDb();
   const { startIso, endIso } = monthRange(year, month);
   const [site, posts] = await Promise.all([
-    db.query.sites.findFirst({ where: eq(sites.id, siteId), columns: { theme: true } }),
+    // Ligne entière : le thème (couleur d'accent) et de quoi calculer les deux adresses du site (bouton d'action)
+    db.query.sites.findFirst({ where: eq(sites.id, siteId) }),
     db.query.googlePosts.findMany({
       where: and(eq(googlePosts.siteId, siteId), gte(googlePosts.scheduledFor, startIso), lt(googlePosts.scheduledFor, endIso)),
       columns: { assets: false },
@@ -143,9 +145,10 @@ export async function getGoogleMonth(siteId: string, year: number, month: number
   ]);
   const state = computeGoogleMonthState({ year, month, now, posts });
   if (!site) return { items: [], state };
+  const addresses = googlePostAddresses(site);
   const items = posts
     .filter((post) => post.status !== "archived")
-    .map((post) => toCalendarItem(post, resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent));
+    .map((post) => toCalendarItem(post, resolveSocialTheme(site.theme, post.accentColor, post.content.accentRole).accent, addresses));
   return { items, state };
 }
 

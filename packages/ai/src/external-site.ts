@@ -33,7 +33,7 @@ import {
 } from "@theralys/shared";
 import { completeStructured, type AnthropicClientOptions } from "./anthropic";
 import { mockExternalProfile } from "./external-site-mock";
-import { externalProfileSystemPrompt, externalProfileUserPrompt, selectProfilePages, type ProfilePromptPage } from "./external-site-prompt";
+import { externalProfileSystemPrompt, externalProfileUserPrompt, selectExternalProfilePages, type ExternalProfilePromptPage } from "./external-site-prompt";
 import {
   addressGrounded,
   emailAppears,
@@ -53,7 +53,7 @@ import { resolveAiMode, type AiMode } from "./generate-site";
 import { checkEthicalCompliance } from "./guardrails";
 
 export { mockExternalProfile, type ExternalProfileDraft } from "./external-site-mock";
-export { EXTERNAL_PROFILE_PROMPT_BUDGET, externalProfileSystemPrompt, externalProfileUserPrompt, selectProfilePages, type ProfilePromptPage } from "./external-site-prompt";
+export { EXTERNAL_PROFILE_PROMPT_BUDGET, externalProfileSystemPrompt, externalProfileUserPrompt, selectExternalProfilePages, type ExternalProfilePromptPage } from "./external-site-prompt";
 
 // ─── Contrat ─────────────────────────────────────────────────────────────────
 
@@ -176,7 +176,7 @@ const fair = (text: string): boolean => checkEthicalCompliance(text).ok;
  * écrite en toutes lettres par le modèle est laissée telle quelle : le
  * contrôle des pages lues en décide ensuite.
  */
-function withPageAddresses(answer: Record<string, unknown>, promptPages: readonly ProfilePromptPage[]): Record<string, unknown> {
+function withPageAddresses(answer: Record<string, unknown>, promptPages: readonly ExternalProfilePromptPage[]): Record<string, unknown> {
   const addresses = new Map(promptPages.map((page) => [page.ref, page.url] as const));
   const referred = (value: unknown): string | undefined => (typeof value === "string" ? addresses.get(value.trim().toLowerCase()) : undefined);
   const written = (value: unknown): string | undefined => (typeof value === "string" && /^https?:\/\//i.test(value.trim()) ? value : undefined);
@@ -222,7 +222,7 @@ function bookingAppears(url: string, corpus: SiteCorpus): boolean {
  * `promptPages` : les pages telles qu'elles ont été transmises (références
  * « p1 »…) ; recalculées à l'identique si elles ne sont pas fournies.
  */
-export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInput, promptPages?: readonly ProfilePromptPage[]): ExternalSiteProfile {
+export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInput, promptPages?: readonly ExternalProfilePromptPage[]): ExternalSiteProfile {
   const pages = Array.isArray(input.pages) ? input.pages : [];
   const clean = (value: unknown): ExternalSiteProfile => cleanExternalProfile(value, input.url);
   /** Entrées d'une liste, nettoyées une à une */
@@ -230,7 +230,7 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
 
   // Même tolérance que pour une réponse du modèle, d'où que vienne la valeur
   const parsed = externalProfileSchema.safeParse(raw);
-  const answer = withPageAddresses(parsed.success ? parsed.data : record(raw), promptPages ?? selectProfilePages(pages));
+  const answer = withPageAddresses(parsed.success ? parsed.data : record(raw), promptPages ?? selectExternalProfilePages(pages));
   const about = record(answer.about);
 
   const found = readFacts(input.facts);
@@ -338,7 +338,7 @@ export function createExternalProfileExtractor(env: NodeJS.ProcessEnv = process.
   return {
     mode,
     extract: async (input) => {
-      const pages = selectProfilePages(input.pages);
+      const pages = selectExternalProfilePages(input.pages);
       if (pages.every((page) => page.text === "")) return finalizeExternalProfile({}, input, pages);
 
       // `completeStructured` ne rend pas la réponse qu'il refuse : le schéma la retient au passage

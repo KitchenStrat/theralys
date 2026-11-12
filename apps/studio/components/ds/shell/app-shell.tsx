@@ -53,7 +53,7 @@ export function AppShell({ supportName, brand = "Harmony", children, ...nav }: A
 
       {/* Mobile et tablette : barre du haut (marque, accès au site) */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-ds-ink-200 bg-white px-4 lg:hidden">
-        <Link href={homeHref} className="ds-brand-word rounded-lg text-2xl ds-focus">
+        <Link href={homeHref} className="ds-brand-word inline-flex min-h-11 items-center rounded-lg text-2xl ds-focus">
           {brand}
         </Link>
         <LinkButton href={nav.siteHref} external variant="secondary" size="sm" icon={<ExternalLink size={16} aria-hidden />}>
@@ -75,6 +75,7 @@ export function AppShell({ supportName, brand = "Harmony", children, ...nav }: A
         </aside>
 
         <div role="main" id="contenu" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+          {/* Pas de `@container` ici : il ferait de ce bloc le repère des éléments `position: fixed` (la Modal partagée) */}
           <div className="mx-auto w-full max-w-[1200px] px-4 pt-5 pb-28 sm:px-6 lg:px-10 lg:pt-9 lg:pb-16">{children}</div>
         </div>
       </div>

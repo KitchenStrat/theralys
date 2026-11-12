@@ -14,6 +14,7 @@ import {
   hasBlogAccess,
   siteBaseUrl,
 } from "@/lib/site-data";
+import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = {
   params: Promise<{ site: string; slug: string }>;
@@ -80,6 +81,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
   const authorLine = [prospect?.profession, prospect?.city].filter(Boolean).join(" · ");
 
   const { body, faq } = splitArticleFaq(article.content);
+  const prefix = publicPathPrefix(siteKey);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
@@ -189,7 +191,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
             {related.map((item) => (
               <Link
                 key={item.id}
-                href={`/${siteKey}/blog/${item.slug}`}
+                href={`${prefix}/blog/${item.slug}`}
                 className="group overflow-hidden rounded-[var(--r-md)] bg-[var(--site-surface)] shadow-sm transition-transform hover:-translate-y-0.5"
               >
                 {item.imageUrl ? (
@@ -211,7 +213,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
       ) : null}
 
       <p className="mt-10 text-sm">
-        <Link href={`/${siteKey}/blog`} className="text-[var(--site-primary)] underline">
+        <Link href={`${prefix}/blog`} className="text-[var(--site-primary)] underline">
           ← Tous les articles
         </Link>
       </p>

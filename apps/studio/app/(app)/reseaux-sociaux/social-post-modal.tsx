@@ -17,6 +17,7 @@ import {
 import { formatDayFr } from "@/lib/calendar";
 import { SOCIAL_CAPTION_MAX } from "@/lib/social/caption";
 import type { SocialCalendarItem } from "@/lib/social/data";
+import { linkOptionsOf, type SocialSiteLink } from "@/lib/social/site-link";
 import {
   archiveSocialPost,
   markSocialPostPublished,
@@ -53,7 +54,7 @@ function networksFor(format: SocialCalendarItem["format"]) {
 export function SocialPostModal({
   item,
   todayIso,
-  siteUrl,
+  siteLink,
   bioLine,
   regenRemaining,
   defaultTone,
@@ -62,8 +63,8 @@ export function SocialPostModal({
 }: {
   item: SocialCalendarItem | null;
   todayIso: string;
-  /** URL publique du site (lien tracé des légendes Facebook et LinkedIn) */
-  siteUrl: string;
+  /** Site de référence (lien des légendes Facebook et LinkedIn) : adresse, et lien avec ou sans `src` */
+  siteLink: SocialSiteLink;
   /** Ligne « lien dans ma bio » exacte insérée par le générateur */
   bioLine: string;
   /** Régénérations (instructions + ton) restantes ce mois-ci */
@@ -81,7 +82,7 @@ export function SocialPostModal({
       key={item.id}
       item={item}
       todayIso={todayIso}
-      siteUrl={siteUrl}
+      siteLink={siteLink}
       bioLine={bioLine}
       regenRemaining={regenRemaining}
       defaultTone={defaultTone}
@@ -94,7 +95,7 @@ export function SocialPostModal({
 function PostModalBody({
   item,
   todayIso,
-  siteUrl,
+  siteLink,
   bioLine,
   regenRemaining,
   defaultTone,
@@ -103,7 +104,7 @@ function PostModalBody({
 }: {
   item: SocialCalendarItem;
   todayIso: string;
-  siteUrl: string;
+  siteLink: SocialSiteLink;
   bioLine: string;
   regenRemaining: number;
   defaultTone: SocialVoice["tone"];
@@ -161,7 +162,9 @@ function PostModalBody({
   const loading = loadedUrl !== previewUrl && errorUrl !== previewUrl;
   const failed = errorUrl === previewUrl;
   const captionSource = { caption, hashtags: item.hashtags };
-  const networkCaption = captionFor(network, captionSource, siteUrl, bioLine);
+  // Lien des légendes Facebook et LinkedIn : avec `src` vers le site hébergé, l'adresse seule vers le site du client
+  const captionOf = (target: SocialNetwork) => captionFor(target, captionSource, siteLink.url, bioLine, linkOptionsOf(siteLink));
+  const networkCaption = captionOf(network);
   const networkLabel = SOCIAL_NETWORKS.find((n) => n.id === network)?.label ?? network;
 
   const statusBadge = published
@@ -445,15 +448,16 @@ function PostModalBody({
                   key={n.id}
                   variant={n.id === network ? "primary" : "secondary"}
                   size="sm"
-                  onClick={() => copy(captionFor(n.id, captionSource, siteUrl, bioLine), n.id)}
+                  onClick={() => copy(captionOf(n.id), n.id)}
                 >
                   {copied === n.id ? "✓ Légende copiée !" : `Copier pour ${n.label}`}
                 </Button>
               ))}
             </div>
             <FieldHint>
-              Instagram : « lien dans ma bio » et tous les hashtags. Facebook et LinkedIn : le lien de votre site
-              (tracé dans vos statistiques) et 3 hashtags.
+              {siteLink.sourceParam
+                ? "Instagram : « lien dans ma bio » et tous les hashtags. Facebook et LinkedIn : le lien de votre site (tracé dans vos statistiques) et 3 hashtags."
+                : "Instagram : « lien dans ma bio » et tous les hashtags. Facebook et LinkedIn : l'adresse de votre site et 3 hashtags."}
             </FieldHint>
             <details className="mt-2 text-sm">
               <summary className="cursor-pointer text-ink-700">Texte alternatif</summary>

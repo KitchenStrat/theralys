@@ -7,9 +7,12 @@
  *
  * Tout ce qu'il rend est recopié du site, jamais rédigé : c'est moins fin
  * qu'un résumé du modèle, mais rien n'y est inventé, et la même entrée donne
- * toujours la même sortie. Sa sortie est un brouillon : elle passe ensuite
- * par `finalizeExternalProfile`, comme une réponse du modèle (mêmes
- * garde-fous, coordonnées relevées dans le code des pages comprises).
+ * toujours la même sortie. La fiche du praticien n'est pas consultée : il
+ * n'y a ici aucune ambiguïté qu'elle aiderait à lever.
+ *
+ * Sa sortie est un brouillon : elle passe ensuite par
+ * `finalizeExternalProfile`, comme une réponse du modèle (mêmes garde-fous,
+ * coordonnées relevées dans le code des pages comprises).
  */
 
 import { EXTERNAL_PROFILE_LIMITS, type ExternalPageKind, type ExternalSitePage } from "@theralys/shared";
@@ -48,7 +51,9 @@ const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text
  * Page découpée en blocs (une ligne du texte = un bloc) et en rubriques (un
  * intertitre et ce qui le suit). Un bloc est un intertitre s'il est marqué
  * « # » ou s'il reprend l'un des intertitres relevés par le lecteur : les
- * deux écritures existent selon la façon dont le texte a été extrait.
+ * deux écritures existent selon la façon dont le texte a été extrait. Les
+ * marques de liste sont retirées, et les cellules d'une ligne de tableau
+ * (« Séance | 1 h | 60 € », écriture du lecteur) séparées par un tiret.
  */
 function outlineOf(page: ExternalSitePage): Outline {
   const headings = (Array.isArray(page.headings) ? page.headings : []).map((heading) => sanitizeSiteText(heading)).filter((heading) => heading !== "");
@@ -59,6 +64,7 @@ function outlineOf(page: ExternalSitePage): Outline {
     const text = raw
       .replace(/^#{1,6}\s+/, "")
       .replace(/^(?:[-*•–·▪◦‣]|\d{1,2}[.)])\s+/, "")
+      .replace(/\s\|\s/g, " – ")
       .trim();
     if (text !== "") blocks.push({ text, heading: marked || known.has(foldText(text)) });
   }
@@ -296,7 +302,8 @@ function processOf(outlines: readonly Outline[]): ExternalProfileDraft["process"
 }
 
 const PHONE_RE = /(?<!\d)(?:\+33|0033|0)\s?[1-9](?:[\s.-]?\d{2}){4}\b/;
-const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/i;
+// Recherche amorcée au début d'un mot seulement : sur un texte tiers, une longue suite de lettres ne doit pas coûter une recherche par caractère
+const EMAIL_RE = /(?<![a-z0-9._%+-])[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/i;
 const STREET_RE = /\b\d{1,4}(?:\s?(?:bis|ter))?,?\s+(?:rue|avenue|boulevard|bd|place|chemin|all[ée]e|impasse|route|quai|cours|square|faubourg|passage)\b[^\n]{2,90}?\b\d{5}\s+\p{L}[\p{L}' -]{1,40}/iu;
 
 /**

@@ -76,17 +76,17 @@ export function KpiTile({
     <>
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3">
         <IconBadge icon={icon} size="md" />
-        {/* Tuile étroite (deux par rangée sur mobile) : le libellé passe sur deux lignes, la précision s'efface */}
-        <h3 className="col-span-2 row-start-2 mt-3.5 truncate text-ds-body font-semibold text-ds-ink-800 @max-[13rem]/kpi:line-clamp-2 @max-[13rem]/kpi:min-h-12 @max-[13rem]/kpi:whitespace-normal">
+        {/* Tuile étroite (moins de 240 px : deux par rangée sur mobile) : libellé sur deux lignes, précision masquée */}
+        <h3 className="col-span-2 row-start-2 mt-3.5 truncate text-ds-body font-semibold text-ds-ink-800 @max-[15rem]/kpi:line-clamp-2 @max-[15rem]/kpi:min-h-12 @max-[15rem]/kpi:whitespace-normal">
           {label}
         </h3>
         {caption ? (
-          <p className="col-start-2 row-start-1 justify-self-end text-right text-ds-meta text-ds-ink-600 text-balance @max-[13rem]/kpi:hidden">
+          <p className="col-start-2 row-start-1 justify-self-end text-right text-ds-meta text-ds-ink-600 text-balance @max-[15rem]/kpi:hidden">
             {caption}
           </p>
         ) : null}
       </div>
-      <p className="mt-1 text-ds-kpi font-bold text-ds-ink-900 @max-[13rem]/kpi:text-[1.75rem]">
+      <p className="mt-1 text-ds-kpi font-bold text-ds-ink-900 @max-[15rem]/kpi:text-[1.75rem]">
         <AnimatedNumber value={value} format={format} prefix={prefix} suffix={suffix} />
       </p>
       {delta && tone ? (

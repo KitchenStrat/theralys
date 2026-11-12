@@ -24,6 +24,7 @@ import { RdvButton } from "./rdv-button";
 
 export type SectionContext = {
   site: Site;
+  /** Préfixe public des chemins du site (`publicPathPrefix`) : vide sur le domaine d'un client */
   prefix: string;
   reviews: PublicReview[];
   googleRating: number | null;

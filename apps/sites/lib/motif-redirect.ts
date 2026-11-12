@@ -31,24 +31,6 @@ export function searchString(params: PageSearchParams): string {
 }
 
 /**
- * Préfixe des chemins du site tels que le visiteur les voit. Sur l'hôte des
- * démos, le site vit sous `/<slug>` ; sur le domaine d'un client, le
- * middleware réécrit `/<chemin>` en `/<domaine>/<chemin>` : la clé du segment
- * `[site]` est alors l'hôte de la requête, et le chemin public n'a pas de
- * préfixe. Une redirection doit viser le chemin public, pas le chemin réécrit.
- */
-export function publicPathPrefix(siteKey: string, requestHost: string | null | undefined): string {
-  const host = (requestHost ?? "").split(":")[0]?.trim().toLowerCase() ?? "";
-  let key = siteKey;
-  try {
-    key = decodeURIComponent(siteKey);
-  } catch {
-    // Clé mal encodée : comparée telle quelle
-  }
-  return host !== "" && key.toLowerCase() === host ? "" : `/${siteKey}`;
-}
-
-/**
  * Adresse vers laquelle rediriger un chemin à un seul segment (`/<segment>`
  * sous le site), ou `null` s'il doit garder son comportement habituel :
  * - page légale → `null` (elle est servie à ce niveau) ;
@@ -63,7 +45,7 @@ export function legacyMotifRedirect(input: {
   segment: string;
   /** Slugs des pages de spécialité en ligne du site */
   motifSlugs: readonly string[];
-  /** Préfixe public des chemins du site (`publicPathPrefix`) */
+  /** Préfixe public des chemins du site (`publicPathPrefix`, lib/site-paths.ts) : la redirection vise le chemin que voit le visiteur */
   prefix: string;
   searchParams: PageSearchParams;
 }): string | null {

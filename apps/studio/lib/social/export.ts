@@ -6,7 +6,14 @@
  * ICS (lignes ≤ 75 octets), calendrier complet.
  */
 
-import { captionFor, SOCIAL_NETWORKS, type CaptionSource, type SocialFormat, type SocialNetwork } from "@theralys/shared";
+import {
+  captionFor,
+  SOCIAL_NETWORKS,
+  type CaptionSource,
+  type SiteLinkOptions,
+  type SocialFormat,
+  type SocialNetwork,
+} from "@theralys/shared";
 
 /** Heure de publication proposée au planificateur (Europe/Paris). */
 export const EXPORT_HOUR = "09:00";
@@ -79,16 +86,19 @@ export function buildPlannerCsv(rows: readonly PlannerRow[]): string {
 
 /**
  * Une ligne par contenu et par réseau (dans l'ordre Instagram, Facebook,
- * LinkedIn), avec la légende propre au réseau (`captionFor`).
+ * LinkedIn), avec la légende propre au réseau (`captionFor`). `siteUrl` :
+ * adresse de référence du site ; `linkOptions` : avec ou sans `src` dans les
+ * liens (défaut : avec — site hébergé ; sans pour le site du client, cf.
+ * `socialSiteLink`).
  */
-export function plannerRows(posts: readonly ExportablePost[], siteUrl: string, bioLine: string): PlannerRow[] {
+export function plannerRows(posts: readonly ExportablePost[], siteUrl: string, bioLine: string, linkOptions: SiteLinkOptions = {}): PlannerRow[] {
   const rows: PlannerRow[] = [];
   for (const post of posts) {
     for (const network of networksFor(post.format)) {
       rows.push({
         date: post.scheduledFor,
         time: EXPORT_HOUR,
-        text: captionFor(network, post.content, siteUrl, bioLine),
+        text: captionFor(network, post.content, siteUrl, bioLine, linkOptions),
         imageUrl: post.imageUrl,
         network: NETWORK_LABEL[network],
       });

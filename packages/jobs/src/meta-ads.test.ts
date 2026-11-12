@@ -2274,6 +2274,8 @@ describe("site du client : analyse et régénération Meta Ads (base simulée, r
     // Pixel repéré : campagne en conversions ; la mesure du site du client ne lit aucun paramètre d'adresse
     expect(metaPlanIssues(plan, true)).toEqual([]);
     expect(plan.objective.type).toBe("conversions_site");
+    // Le Pixel est seulement repéré : le plan demande de vérifier que l'événement est bien reçu avant de lancer
+    expect(plan.objective.rationale).toContain("vérifiez d'abord, dans le Gestionnaire d'événements de Meta, qu'il reçoit bien l'événement Schedule");
     expect("landingSuffix" in plan.campaign).toBe(false);
     expect(JSON.stringify(plan)).not.toMatch(/src=meta|Paramétrage|bloc Résultats/);
     // Les termes de veille viennent des spécialités du site du client, pas des pages du site hébergé

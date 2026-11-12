@@ -11,6 +11,7 @@ import {
   type SiteTheme,
 } from "@theralys/shared";
 import { loadGoogleBrief, publicSiteUrl, siteUrl } from "./google-brief";
+import * as jobs from "./index";
 
 // Le lecteur de site réel n'a rien à faire dans ces tests : son module n'est pas chargé
 vi.mock("@theralys/providers/website", () => ({
@@ -200,6 +201,16 @@ describe("publicSiteUrl (jobs)", () => {
   });
 });
 
+describe("index du paquet", () => {
+  it("expose `publicSiteUrl` à côté de `loadGoogleBrief`, et la règle commune des briefs", () => {
+    expect(jobs.publicSiteUrl).toBe(publicSiteUrl);
+    expect(jobs.loadGoogleBrief).toBe(loadGoogleBrief);
+    expect(typeof jobs.briefPagesFor).toBe("function");
+    // `siteUrl` (adresse du site hébergé) reste interne au paquet : chaque application a la sienne
+    expect("siteUrl" in jobs).toBe(false);
+  });
+});
+
 describe("loadGoogleBrief", () => {
   it("sans site du client : exactement le brief d'avant, sans aucune lecture de plus", async () => {
     const { db, log } = fakeDb(seed());
@@ -246,6 +257,9 @@ describe("loadGoogleBrief", () => {
     // Liens des sources : le site du client ; les articles restent sur le blog hébergé
     expect(refsById["section:home:hero"]?.href).toBe(EXTERNAL_URL);
     expect(refsById["page:ext-gestion-du-stress"]?.href).toBe(`${EXTERNAL_URL}/gestion-du-stress`);
+    // Spécialité sans page à elle sur le site du client : sa source est l'accueil de ce site
+    expect(refsById["page:ext-preparation-aux-examens"]?.href).toBe(EXTERNAL_URL);
+    expect(Object.values(refsById).some((ref) => ref.href?.includes("/motifs/"))).toBe(false);
     expect(refsById["article:a-ligne"]).toMatchObject({ href: "/publications/a-ligne", publicHref: `${HOSTED_URL}/blog/bien-dormir` });
     expect(brief.articles.map((a) => a.slug)).toEqual(["respirer", "bien-dormir"]);
     expect(brief.reviews.map((r) => r.authorName)).toEqual(["Jeanne M."]);
@@ -260,10 +274,19 @@ describe("loadGoogleBrief", () => {
     expect(brief.home.specialties.map((s) => s.slug)).toEqual(["preparation-aux-examens"]);
   });
 
-  it("réglage actif mais site pas prêt, profil inexploitable ou table absente : le brief du site hébergé, avec son adresse", async () => {
+  it("relecture en cours ou en échec : le brief reste celui du site du client, avec la dernière lecture aboutie", async () => {
+    const site: Site = { ...SITE, theme: { ...THEME, externalSite: ACTIVE } };
+    const expected = await loadGoogleBrief(fakeDb(seed(site), [externalRow()]).db, SITE_ID, NOW);
+    expect(expected.brief.domain).toBe("www.cabinet-dupont.fr");
+    for (const row of [externalRow({ status: "reading" }), externalRow({ status: "ready", error: "timeout" })]) {
+      expect(await loadGoogleBrief(fakeDb(seed(site), [row]).db, SITE_ID, NOW)).toEqual(expected);
+    }
+  });
+
+  it("réglage actif mais rien d'exploitable enregistré (première lecture en cours ou en échec) ou table absente : le brief du site hébergé, avec son adresse", async () => {
     const site: Site = { ...SITE, theme: { ...THEME, externalSite: ACTIVE } };
     const missing = new Error("Failed query", { cause: Object.assign(new Error('relation "external_sites" does not exist'), { code: "42P01" }) });
-    for (const external of [[], [externalRow({ status: "reading" })], [externalRow({ status: "error" })], [externalRow({ profile: null })], missing]) {
+    for (const external of [[], [externalRow({ status: "reading", profile: null })], [externalRow({ status: "error", profile: null })], [externalRow({ profile: null })], missing]) {
       const { db, log } = fakeDb(seed(site), external);
       expect(await loadGoogleBrief(db, SITE_ID, NOW)).toEqual(hostedBrief(site));
       expect(log).toContain("select external_sites");

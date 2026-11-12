@@ -20,6 +20,7 @@ import {
 } from "@/lib/social/render/bundle";
 import { renderSlideCached } from "@/lib/social/render/cache";
 import { loadRenderContext, loadReviewRating } from "@/lib/social/render/context";
+import { linkOptionsOf, socialSiteLink } from "@/lib/social/site-link";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,10 +82,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pos
 
   const name = (suffix: string, ext: string) =>
     downloadFilename({ scheduledFor: post.scheduledFor, topic: post.topic }, suffix, ext);
-  // Légende .txt : une variante par réseau (lien du site tracé sur Facebook et LinkedIn)
+  // Légende .txt : une variante par réseau ; sur Facebook et LinkedIn, le lien du site de référence
+  // (tracé par `src` vers le site hébergé, l'adresse seule vers le site du client)
+  const link = socialSiteLink(siteUrl(site), site.theme);
   const caption = () =>
     Buffer.from(
-      captionTxt(post.content, { siteUrl: siteUrl(site), bioLine: SOCIAL_BIO_LINE, format: post.format as SocialFormat }),
+      captionTxt(post.content, { siteUrl: link.url, bioLine: SOCIAL_BIO_LINE, format: post.format as SocialFormat, ...linkOptionsOf(link) }),
       "utf8",
     );
 

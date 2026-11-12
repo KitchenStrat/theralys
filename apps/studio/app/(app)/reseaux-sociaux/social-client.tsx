@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Badge, Button, Card, FieldHint, Spinner } from "@theralys/ui";
-import { bioLinkFor } from "@theralys/shared";
 import { WEEKDAYS, buildMonthGrid, formatDayFr, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
 import type { SocialCalendarItem, SocialMonthState, SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import type { SocialSettingsView } from "@/lib/social/settings";
+import { bioLinksOf, type SocialSiteLink } from "@/lib/social/site-link";
 import { planSocialMonth } from "./actions";
 import { DayModal, FORMAT_GLYPH, itemLabel, statusOf } from "./day-modal";
 import { RequestBar } from "./request-bar";
@@ -35,7 +35,7 @@ export function SocialClient({
   usage,
   swatches,
   siteName,
-  siteUrl,
+  siteLink,
   bioLine,
   regenRemaining,
   initialPostId,
@@ -50,8 +50,8 @@ export function SocialClient({
   usage: SocialRequestUsage;
   swatches: SocialSwatch[];
   siteName: string;
-  /** URL publique du site : lien de bio tracé et légendes Facebook/LinkedIn */
-  siteUrl: string;
+  /** Site de référence (lien de bio, légendes Facebook/LinkedIn) : adresse, et liens avec ou sans `src` */
+  siteLink: SocialSiteLink;
   /** Ligne « lien dans ma bio » exacte insérée par le générateur */
   bioLine: string;
   /** Régénérations (instructions + ton) restantes ce mois-ci */
@@ -142,7 +142,7 @@ export function SocialClient({
 
       <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <ExportToolbar monthParam={monthParam} count={items.length} />
-        <BioLinkCard siteUrl={siteUrl} />
+        <BioLinkCard siteLink={siteLink} />
       </div>
 
       {/* grid-cols-1 = minmax(0,1fr) : la liste en nowrap de la carte A ne doit pas élargir la colonne sur mobile */}
@@ -156,6 +156,7 @@ export function SocialClient({
           tooFar={tooFar}
           nextMonthParam={shiftMonthParam(year, month, 1)}
           siteName={siteName}
+          ownSite={!siteLink.sourceParam}
           settings={settings}
           onOpenSettings={() => setSettingsOpen(true)}
           onSelect={openItem}
@@ -229,7 +230,7 @@ export function SocialClient({
       <SocialPostModal
         item={selected}
         todayIso={todayIso}
-        siteUrl={siteUrl}
+        siteLink={siteLink}
         bioLine={bioLine}
         regenRemaining={regenRemaining}
         defaultTone={settings.voice.tone}
@@ -310,18 +311,21 @@ function ExportToolbar({ monthParam, count }: { monthParam: string; count: numbe
 }
 
 /**
- * « Votre lien de bio » : l'URL du site avec `?src=ig` (Instagram ; `fb`
- * pour Facebook), pour que les visites venues des réseaux apparaissent dans
- * la provenance des statistiques.
+ * « Votre lien de bio ». Site hébergé : l'URL du site avec `?src=ig`
+ * (Instagram ; `fb` pour Facebook), pour que les visites venues des réseaux
+ * apparaissent dans la provenance des statistiques. Site du client en
+ * référence : son adresse seule, la même pour tous les réseaux — la
+ * provenance est alors relevée par le code de mesure installé sur son site,
+ * qui ne lit pas les paramètres d'une adresse.
  */
-function BioLinkCard({ siteUrl }: { siteUrl: string }) {
+function BioLinkCard({ siteLink }: { siteLink: SocialSiteLink }) {
   const [copied, setCopied] = useState<"instagram" | "facebook" | null>(null);
   const [failed, setFailed] = useState(false);
-  const links = { instagram: bioLinkFor(siteUrl, "instagram"), facebook: bioLinkFor(siteUrl, "facebook") } as const;
+  const { main, facebook } = bioLinksOf(siteLink);
 
-  async function copy(network: "instagram" | "facebook") {
+  async function copy(network: "instagram" | "facebook", link: string) {
     try {
-      await navigator.clipboard.writeText(links[network]);
+      await navigator.clipboard.writeText(link);
       setFailed(false);
       setCopied(network);
       setTimeout(() => setCopied((c) => (c === network ? null : c)), 2000);
@@ -334,20 +338,39 @@ function BioLinkCard({ siteUrl }: { siteUrl: string }) {
     <div className="min-w-0 rounded-2xl border border-cream-200 bg-white px-4 py-3 text-sm lg:max-w-md">
       <p className="font-semibold text-ink-900">Votre lien de bio</p>
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg bg-cream-100 px-2 py-1 text-xs text-ink-700" title={links.instagram}>
-          {links.instagram}
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-cream-100 px-2 py-1 text-xs text-ink-700" title={main}>
+          {main}
         </code>
-        <Button size="sm" variant="secondary" onClick={() => copy("instagram")} aria-label="Copier le lien de bio Instagram">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => copy("instagram", main)}
+          aria-label={facebook ? "Copier le lien de bio Instagram" : "Copier le lien de bio"}
+        >
           {copied === "instagram" ? "✓ Copié !" : "Copier"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => copy("facebook")} aria-label="Copier le lien de bio Facebook">
-          {copied === "facebook" ? "✓ Copié !" : "Version Facebook"}
-        </Button>
+        {facebook ? (
+          <Button size="sm" variant="ghost" onClick={() => copy("facebook", facebook)} aria-label="Copier le lien de bio Facebook">
+            {copied === "facebook" ? "✓ Copié !" : "Version Facebook"}
+          </Button>
+        ) : null}
       </div>
-      <p className="mt-1.5 text-xs text-ink-500">
-        Mettez ce lien dans votre bio Instagram : les visites qui en viennent apparaissent dans vos statistiques.
-        Même lien pour Facebook, avec <code>src=fb</code>.
-      </p>
+      {facebook ? (
+        <p className="mt-1.5 text-xs text-ink-500">
+          Mettez ce lien dans votre bio Instagram : les visites qui en viennent apparaissent dans vos statistiques.
+          Même lien pour Facebook, avec <code>src=fb</code>.
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-ink-500">
+          Mettez ce lien dans la bio de tous vos réseaux : c&apos;est l&apos;adresse de votre site, la même partout. La
+          provenance de vos visites apparaît dans vos statistiques une fois le code de mesure installé sur votre site
+          (rubrique{" "}
+          <Link href="/mon-site" className="font-medium text-primary-600 hover:underline">
+            Mon site
+          </Link>
+          ).
+        </p>
+      )}
       {failed ? (
         <p className="mt-1 text-xs text-danger-500" role="alert">
           Copie impossible — sélectionnez le lien et copiez-le manuellement.
@@ -386,6 +409,7 @@ function MonthCard({
   tooFar,
   nextMonthParam,
   siteName,
+  ownSite,
   settings,
   onOpenSettings,
   onSelect,
@@ -398,6 +422,8 @@ function MonthCard({
   tooFar: boolean;
   nextMonthParam: string;
   siteName: string;
+  /** Le site du client est la référence : ce qui est lu est son site, pas les pages du site hébergé */
+  ownSite: boolean;
   settings: SocialSettingsView;
   onOpenSettings: () => void;
   onSelect: (item: SocialCalendarItem) => void;
@@ -453,8 +479,8 @@ function MonthCard({
       <>
         <p className="mt-2 font-medium text-ink-900">Préparez votre mois en un clic</p>
         <p className="mt-1 text-sm text-ink-500">
-          Harmony lit votre site — vos spécialités, votre page À propos, vos articles — et prépare{" "}
-          {free} contenus prêts à poster, dans vos couleurs. Vous n&apos;avez plus qu&apos;à
+          Harmony lit votre site — vos spécialités, {ownSite ? "votre présentation" : "votre page À propos"}, vos
+          articles — et prépare {free} contenus prêts à poster, dans vos couleurs. Vous n&apos;avez plus qu&apos;à
           télécharger et coller la légende.
         </p>
         <div className="mt-4">

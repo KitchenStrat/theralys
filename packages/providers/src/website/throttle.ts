@@ -51,6 +51,7 @@ export function createThrottle(options: ThrottleOptions): Throttle {
   let serial = false;
   let active = 0;
   let nextStartAt = 0;
+  let lastEndAt = 0;
   /** File d'attente : chaque départ attend que le précédent ait pris sa place */
   let queue: Promise<void> = Promise.resolve();
   let wake: (() => void) | null = null;
@@ -89,7 +90,8 @@ export function createThrottle(options: ThrottleOptions): Throttle {
 
   function release(): void {
     active -= 1;
-    if (serial) nextStartAt = Math.max(nextStartAt, Date.now() + interval);
+    lastEndAt = Date.now();
+    if (serial) nextStartAt = Math.max(nextStartAt, lastEndAt + interval);
     const waiting = wake;
     wake = null;
     waiting?.();
@@ -108,6 +110,8 @@ export function createThrottle(options: ThrottleOptions): Throttle {
       if (!(delayMs > 0)) return;
       serial = true;
       interval = Math.max(interval, delayMs);
+      // Le délai vaut dès la requête suivante : il est connu à la lecture de robots.txt, la toute première requête
+      if (lastEndAt > 0) nextStartAt = Math.max(nextStartAt, lastEndAt + interval);
     },
   };
 }

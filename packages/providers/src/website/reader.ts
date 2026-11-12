@@ -441,8 +441,8 @@ async function readSite(config: Required<Omit<LiveReaderOptions, "policy">> & { 
 /**
  * Lecteur réel. Chaque lecture ouvre son propre agent HTTP, fermé à la fin,
  * et s'inscrit une fois au registre des appels API (fournisseur
- * `client_site`, opération `site_read`, gratuit, unités = pages lues ; en
- * échec, le code de l'échec).
+ * `client_site`, opération `site_read`, gratuit, unités = pages lues,
+ * requêtes = requêtes HTTP tentées ; en échec, le code de l'échec).
  */
 export function createLiveWebsiteReader(options: LiveReaderOptions): WebsiteReader {
   const config = {

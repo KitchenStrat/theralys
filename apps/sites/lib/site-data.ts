@@ -155,15 +155,12 @@ export async function getProspect(prospectId: string | null) {
   return prospect ?? null;
 }
 
-/** URL publique canonique d'un site (domaine custom ou chemin de démo). */
+/**
+ * URL publique canonique d'un site (domaine custom ou chemin de démo). Pour
+ * les liens internes, voir `publicPathPrefix` (lib/site-paths.ts).
+ */
 export function siteBaseUrl(site: Site): string {
   if (site.domain) return `https://${site.domain}`;
   const base = process.env.SITES_BASE_URL ?? "http://localhost:3000";
   return `${base.replace(/\/$/, "")}/${site.slug}`;
-}
-
-/** Préfixe des liens internes relatifs au segment [site]. */
-export function sitePathPrefix(site: Site, siteKey: string): string {
-  void site;
-  return `/${siteKey}`;
 }

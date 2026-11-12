@@ -10,6 +10,7 @@ import {
   captionFor,
   SOCIAL_NETWORKS,
   slugify,
+  type SiteLinkOptions,
   type SocialFormat,
   type SocialPostContent,
   type SocialSize,
@@ -39,8 +40,8 @@ export async function buildPdf(pages: PdfPage[], title?: string): Promise<Uint8A
   return pdf.save({ useObjectStreams: false });
 }
 
-export type CaptionTxtOptions = {
-  /** URL publique du site (lien tracé sur Facebook et LinkedIn) */
+export type CaptionTxtOptions = SiteLinkOptions & {
+  /** Adresse de référence du site (lien des légendes Facebook et LinkedIn) */
   siteUrl: string;
   /** Ligne « lien dans ma bio » exacte insérée par le générateur (`SOCIAL_BIO_LINE`) */
   bioLine: string;
@@ -51,16 +52,18 @@ export type CaptionTxtOptions = {
 /**
  * Fichier .txt prêt à coller : une variante de légende par réseau
  * (`captionFor` : Instagram avec tous les hashtags, Facebook et LinkedIn avec
- * le lien du site tracé et 3 hashtags), séparées par des titres, puis le
- * texte alternatif du visuel.
+ * le lien du site — tracé par `src`, ou l'adresse seule avec
+ * `sourceParam: false` pour le site du client — et 3 hashtags), séparées par
+ * des titres, puis le texte alternatif du visuel.
  */
 export function captionTxt(
   content: { caption: string; hashtags: readonly string[]; altText: string },
   options: CaptionTxtOptions,
 ): string {
   const networks = SOCIAL_NETWORKS.filter((n) => options.format !== "story" || n.id !== "linkedin");
+  const linkOptions: SiteLinkOptions = { sourceParam: options.sourceParam };
   const parts = networks.map(
-    (network) => `=== ${network.label} ===\n${captionFor(network.id, content, options.siteUrl, options.bioLine)}`,
+    (network) => `=== ${network.label} ===\n${captionFor(network.id, content, options.siteUrl, options.bioLine, linkOptions)}`,
   );
   if (content.altText.trim() !== "") parts.push(`=== Texte alternatif ===\n${content.altText.trim()}`);
   return `${parts.join("\n\n")}\n`;

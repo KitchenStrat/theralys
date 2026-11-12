@@ -7,7 +7,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, googleReviews, type Prospect, type Site } from "@theralys/db";
 import type { SocialPostContent } from "@theralys/shared";
-import { getProspect, getSite, siteUrl } from "@/lib/data";
+import { getProspect, getSite, publicSiteUrl } from "@/lib/data";
 import type { BrandInfo } from "./chrome";
 import type { RenderContext } from "./render";
 
@@ -25,9 +25,16 @@ export function brandOf(site: Pick<Site, "name">, prospect: Prospect | null): Br
   return { firstName: name.trim(), lastName: "", profession: "", city: "" };
 }
 
-/** Domaine public sans protocole (« claire-dupont.harmony-web.fr »). */
+/**
+ * Domaine imprimé sur les visuels, sans protocole (« claire-dupont.harmony-web.fr »,
+ * ou « www.mon-cabinet.fr » quand le site du client est la référence) : c'est
+ * l'adresse que le lecteur d'un carrousel recopie, donc l'adresse de
+ * référence (`publicSiteUrl`), jamais celle d'un site hébergé mis en retrait.
+ * Le domaine entre dans la clé de cache des rendus : changer de site de
+ * référence refait les visuels.
+ */
 export function domainOf(site: Site): string {
-  return siteUrl(site).replace(/^https?:\/\//, "");
+  return publicSiteUrl(site).replace(/^https?:\/\//, "");
 }
 
 /** Adresse du cabinet : premier cabinet saisi, sinon adresse de la fiche Google. */

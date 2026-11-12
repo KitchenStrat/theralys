@@ -12,6 +12,7 @@ import {
   getSiteByKey,
   siteBaseUrl,
 } from "@/lib/site-data";
+import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = { params: Promise<{ site: string; slug: string }> };
 
@@ -71,7 +72,7 @@ export default async function MotifPage({ params }: Props) {
         preview={preview}
         ctx={{
           site,
-          prefix: `/${siteKey}`,
+          prefix: publicPathPrefix(siteKey),
           reviews,
           googleRating,
           googleReviewCount,

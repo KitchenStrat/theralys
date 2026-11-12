@@ -734,8 +734,13 @@ export function metaPlanUserPrompt(brief: SocialSiteBrief, input: MetaAdsPlanInp
   const event = booking ? "Schedule" : "Contact";
   // Site du client : le Pixel s'installe sur ce site ; l'onglet Paramétrage & suivi n'agit que sur le site hébergé
   const pixelPlace = input.diagnostic.externalSite ? "sur le site du praticien, dit « votre site »" : "onglet Paramétrage & suivi";
+  // Site du client : le Pixel y a été repéré, mais ce qu'il envoie n'est pas connu (le site hébergé, lui, envoie ces événements)
+  const pixelState = input.diagnostic.externalSite ? "le Pixel a été repéré sur le site du praticien, sans que ses événements soient connus" : "le Pixel est installé";
+  const rationaleRule = input.diagnostic.externalSite
+    ? `"rationale" en 2 phrases, qui demande de vérifier d'abord, dans le Gestionnaire d'événements de Meta, que cet événement est bien reçu depuis le site.`
+    : `"rationale" en 2 phrases.`;
   const objective = hasPixel
-    ? `le Pixel est installé : "objective.type" = "conversions_site" (l'objectif de campagne est toujours les conversions sur le site mesurées par le Pixel), "pixelEvent" = "${event}" (${booking ? "clic « Prendre rendez-vous »" : "appel ou e-mail depuis le site"}), "rationale" en 2 phrases.`
+    ? `${pixelState} : "objective.type" = "conversions_site" (l'objectif de campagne est toujours les conversions sur le site mesurées par le Pixel), "pixelEvent" = "${event}" (${booking ? "clic « Prendre rendez-vous »" : "appel ou e-mail depuis le site"}), ${rationaleRule}`
     : `le Pixel n'est PAS installé : "objective.type" = "traffic" en repli, "pixelEvent" = "${event}" (l'événement à viser dès que le Pixel sera posé), "rationale" qui demande d'installer le Pixel d'abord (${pixelPlace}) puis de passer la campagne en conversions.`;
   return `${metaSiteBlock(brief, input.landingPages)}${instructionsBlock(brief)}${metaInstructionsBlock(input.instructions)}
 
@@ -1231,13 +1236,20 @@ function eventLabel(event: MetaPixelEvent): string {
 /**
  * Justification de l'objectif écrite par le code. Sans Pixel, elle dit où
  * l'installer : dans l'onglet Paramétrage & suivi pour le site hébergé (qui
- * le charge alors), sur le site lui-même quand c'est celui du client.
+ * le charge alors), sur le site lui-même quand c'est celui du client. Avec
+ * le Pixel, le site hébergé envoie lui-même les prises de contact ; sur le
+ * site du client, seul le Pixel a été repéré — ce qu'il envoie n'est pas
+ * connu —, la justification demande donc de le vérifier avant de lancer.
  */
 function defaultRationale(ctx: PlanContext): string {
-  const pixelPlace = ctx.input.diagnostic.externalSite ? "sur votre site" : "(onglet Paramétrage & suivi, identifiant du Pixel)";
-  return ctx.hasPixel
-    ? `Le Pixel est installé : la campagne est optimisée sur les prises de contact réelles (${eventLabel(ctx.event)}), pas sur les clics. Meta apprend sur ces événements et montre les annonces aux personnes les plus susceptibles de contacter le cabinet.`
-    : `Le Pixel n'est pas installé : installez-le d'abord ${pixelPlace}, vérifiez un événement ${ctx.event} de test, puis créez la campagne en objectif « conversions sur le site ». En attendant, une campagne « Trafic » ne mesure que des clics et n'apprend rien des prises de contact.`;
+  const external = ctx.input.diagnostic.externalSite === true;
+  if (!ctx.hasPixel) {
+    const pixelPlace = external ? "sur votre site" : "(onglet Paramétrage & suivi, identifiant du Pixel)";
+    return `Le Pixel n'est pas installé : installez-le d'abord ${pixelPlace}, vérifiez un événement ${ctx.event} de test, puis créez la campagne en objectif « conversions sur le site ». En attendant, une campagne « Trafic » ne mesure que des clics et n'apprend rien des prises de contact.`;
+  }
+  return external
+    ? `Le Pixel a été repéré sur votre site : vérifiez d'abord, dans le Gestionnaire d'événements de Meta, qu'il reçoit bien l'événement ${ctx.event} (${eventLabel(ctx.event)}) ; sinon, faites-le ajouter sur votre site. La campagne s'optimise alors sur ces prises de contact réelles, pas sur les clics.`
+    : `Le Pixel est installé : la campagne est optimisée sur les prises de contact réelles (${eventLabel(ctx.event)}), pas sur les clics. Meta apprend sur ces événements et montre les annonces aux personnes les plus susceptibles de contacter le cabinet.`;
 }
 
 function defaultGeoNote(): string {
@@ -1872,7 +1884,9 @@ function withLandingTip(tips: readonly string[], externalSite = false): string[]
  * Sortie validée du modèle (ou du mock) → plan stocké, conforme au contrat
  * (`metaPlanIssues` vide) : objectif imposé par le Pixel du bilan
  * (conversions dès que le check « pixel » est ok, sinon trafic avec une
- * rationale qui demande d'installer le Pixel), événement Schedule si prise de
+ * rationale qui demande d'installer le Pixel ; sur le site du client, où le
+ * Pixel est seulement repéré, une rationale qui demande de vérifier que
+ * l'événement est bien reçu), événement Schedule si prise de
  * rendez-vous en ligne sinon Contact, géo = ville du modèle + rayon 15 km,
  * âges 18–65 (25–65 par défaut), placements Advantage+, langue fr, ensembles
  * « large » et « retargeting » toujours présents avec des identifiants de
@@ -1888,7 +1902,10 @@ export function finalizeMetaPlan(raw: MetaPlanOutput, input: MetaAdsPlanInput, g
   let ages = { min: Math.round(clampNumber(raw.campaign.ages.min, 18, 64)), max: Math.round(clampNumber(raw.campaign.ages.max, 19, 65)) };
   if (ages.min >= ages.max) ages = { min: 25, max: 65 };
   const rationaleRaw = cleanPlanText(raw.objective.rationale, RATIONALE_MAX, 10);
-  const rationale = ctx.hasPixel ? (rationaleRaw ?? defaultRationale(ctx)) : rationaleRaw !== null && /pixel/i.test(rationaleRaw) ? rationaleRaw : defaultRationale(ctx);
+  // La justification du modèle n'est gardée que si elle dit l'essentiel : installer le Pixel quand il manque ; sur le site du
+  // client, vérifier les événements d'un Pixel seulement repéré (le site hébergé les envoie lui-même, rien à vérifier)
+  const rationaleFits = (text: string): boolean => (ctx.hasPixel ? input.diagnostic.externalSite !== true || /[ée]v[ée]nement/i.test(text) : /pixel/i.test(text));
+  const rationale = rationaleRaw !== null && rationaleFits(rationaleRaw) ? rationaleRaw : defaultRationale(ctx);
 
   const defaults = defaultAdSets(ctx, city, ages);
   const known = new Set(ctx.creativeIds);

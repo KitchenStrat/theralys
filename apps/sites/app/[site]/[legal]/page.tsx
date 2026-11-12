@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { buildLegalPage, isLegalPageSlug, LEGAL_PAGES } from "@theralys/shared";
 import { Markdown } from "@/components/markdown";
 import { robotsMetadata } from "@/lib/indexing";
 import { buildLegalInput } from "@/lib/legal-input";
-import { legacyMotifRedirect, publicPathPrefix, type PageSearchParams } from "@/lib/motif-redirect";
+import { legacyMotifRedirect, type PageSearchParams } from "@/lib/motif-redirect";
 import { NOT_FOUND_METADATA } from "@/lib/not-found";
 import { getHomePage, getMotifPages, getProspect, getSiteByKey, siteBaseUrl } from "@/lib/site-data";
+import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = {
   params: Promise<{ site: string; legal: string }>;
@@ -51,7 +51,7 @@ async function redirectLegacyMotifLink(siteKey: string, segment: string, searchP
   const target = legacyMotifRedirect({
     segment,
     motifSlugs: (await getMotifPages(site)).map((page) => page.slug),
-    prefix: publicPathPrefix(siteKey, (await headers()).get("host")),
+    prefix: publicPathPrefix(siteKey),
     searchParams,
   });
   if (target) permanentRedirect(target);
@@ -77,7 +77,7 @@ export default async function LegalPage({ params, searchParams }: Props) {
     }),
   );
   const others = LEGAL_PAGES.filter((p) => p.slug !== slug);
-  const prefix = `/${siteKey}`;
+  const prefix = publicPathPrefix(siteKey);
 
   return (
     <main className="legal-page relative overflow-hidden">

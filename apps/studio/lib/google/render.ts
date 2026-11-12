@@ -46,6 +46,37 @@ export function ctaLabel(type: GooglePostContent["cta"]["type"]): string {
   return GOOGLE_POST_CTAS.find((c) => c.id === type)?.label ?? type;
 }
 
+/** Les deux adresses d'un site dont dépend le bouton d'action d'un post. */
+export type GooglePostAddresses = {
+  /** Adresse du site hébergé (`siteUrl(site)`) */
+  hostedUrl: string;
+  /** Adresse de référence (`publicSiteUrl(site)`) : celle du site du client s'il est la référence, sinon la même que `hostedUrl` */
+  referenceUrl: string;
+};
+
+const withoutTrailingSlash = (url: string): string => url.trim().replace(/\/+$/, "");
+
+/**
+ * Contenu d'un post tel qu'il est remis au praticien (modale, fichier texte).
+ *
+ * Un post garde le bouton d'action avec lequel il a été préparé. S'il l'a été
+ * avant que le site du client ne devienne la référence, son bouton « En
+ * savoir plus » porte encore l'adresse du site hébergé : tant que le post
+ * n'est pas publié, c'est l'adresse de référence qui est montrée à la place —
+ * sinon le praticien collerait sur sa fiche l'adresse d'un site qu'il a mis
+ * en retrait. Ne changent jamais : le lien de rendez-vous, le lien d'un
+ * article (les articles vivent sur le blog hébergé) et le bouton d'un post
+ * déjà publié (il dit ce qui a été mis en ligne). Sans site du client en
+ * référence, les deux adresses sont égales et le contenu est rendu tel quel.
+ */
+export function deliveredGoogleContent(post: { status: string; content: GooglePostContent }, addresses: GooglePostAddresses): GooglePostContent {
+  const { cta } = post.content;
+  const hosted = withoutTrailingSlash(addresses.hostedUrl);
+  if (post.status === "published" || cta.type !== "LEARN_MORE" || !cta.url) return post.content;
+  if (withoutTrailingSlash(addresses.referenceUrl) === hosted || withoutTrailingSlash(cta.url) !== hosted) return post.content;
+  return { ...post.content, cta: { ...cta, url: addresses.referenceUrl } };
+}
+
 /** Texte prêt à coller sur Google : texte du post, puis bouton d'action et texte alternatif en mémo. */
 export function googlePostTxt(content: GooglePostContent): string {
   const parts = [content.summary.trim()];

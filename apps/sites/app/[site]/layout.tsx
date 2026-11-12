@@ -15,6 +15,7 @@ import { robotsMetadata } from "@/lib/indexing";
 import { navAnchors } from "@/lib/nav";
 import { findSection } from "@/lib/page-sections";
 import { getHomePage, getMotifPages, getProspect, getSiteByKey, isDemoExpired } from "@/lib/site-data";
+import { publicPathPrefix } from "@/lib/site-paths";
 import { themeCssVars } from "@/lib/theme";
 
 type Props = { children: ReactNode; params: Promise<{ site: string }> };
@@ -31,9 +32,9 @@ export async function generateMetadata({ params }: Omit<Props, "children">): Pro
   return {
     title: { default: site.name, template: `%s — ${site.name}` },
     icons: { icon: [{ url: faviconUrl }] },
-    // Jamais indexés (noindex + robots.txt + plan du site vide) : les démos, et le site hébergé d'un client
-    // tant que son propre site est la référence. Vaut pour toutes les pages qui ne fixent pas leur directive
-    // (accueil, spécialités, blog, articles) ; les pages légales reprennent la même règle.
+    // Jamais indexés : les démos, et le site hébergé d'un client tant que son propre site est la référence
+    // (cf. lib/indexing.ts). Vaut pour toutes les pages qui ne fixent pas leur directive (accueil, spécialités,
+    // blog, articles) ; les pages légales reprennent la même règle.
     robots: robotsMetadata(site),
   };
 }
@@ -82,7 +83,8 @@ export default async function SiteLayout({ children, params }: Props) {
     getHomePage(site.id),
     getProspect(site.prospectId),
   ]);
-  const prefix = `/${siteKey}`;
+  // Liens internes : `/<slug>/…` sur l'hôte des démos, à la racine sur le domaine du client
+  const prefix = publicPathPrefix(siteKey);
   const anchors = navAnchors(home?.sections);
   const contact = findSection(home?.sections, "contact");
   const phone = contact?.phone?.trim() || null;

@@ -254,11 +254,19 @@ describe("ensureEditorialCalendars : d'où viennent les sujets du blog", () => {
     expect(new Set(planned(handle).map((t) => t.motifSlug))).toEqual(new Set(["gestion-des-emotions"]));
   });
 
-  it("réglage actif mais site pas prêt, ou réglage éteint : les pages du site hébergé, comme avant", async () => {
+  it("relecture en cours ou en échec : les sujets viennent toujours du site du client (dernière lecture aboutie)", async () => {
+    for (const row of [externalRow({ status: "reading" }), externalRow({ status: "ready", error: "timeout" })]) {
+      const handle = fakeDb({ site: connected(), external: [row] });
+      await ensureEditorialCalendars(NOW);
+      expect(planned(handle)).toEqual(expected(externalSpecialties(PROFILE)));
+    }
+  });
+
+  it("réglage actif mais rien d'exploitable enregistré, ou réglage éteint : les pages du site hébergé, comme avant", async () => {
     for (const seed of [
       { site: connected(), external: [] },
-      { site: connected(), external: [externalRow({ status: "reading" })] },
-      { site: connected(), external: [externalRow({ status: "error" })] },
+      { site: connected(), external: [externalRow({ status: "reading", profile: null })] },
+      { site: connected(), external: [externalRow({ status: "error", profile: null })] },
       { site: connected(), external: [externalRow({ profile: null })] },
       { site: connected({ url: EXTERNAL_URL, active: false }), external: [externalRow()] },
     ]) {

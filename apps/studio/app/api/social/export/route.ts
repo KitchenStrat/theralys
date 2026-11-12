@@ -20,6 +20,7 @@ import {
 import { contentDisposition } from "@/lib/social/render/bundle";
 import { assetSlot, renderSlideCached } from "@/lib/social/render/cache";
 import { loadRenderContext, loadReviewRating } from "@/lib/social/render/context";
+import { linkOptionsOf, socialSiteLink } from "@/lib/social/site-link";
 import { monthLabelFr, parisDay } from "@/lib/calendar";
 
 export const runtime = "nodejs";
@@ -94,9 +95,11 @@ async function exportMonth(site: Awaited<ReturnType<typeof getSite>>, mois: stri
   });
   const started = Date.now();
 
+  // Adresse de référence (site du client s'il l'est, sinon site hébergé) et mode des liens : avec `src` vers le site hébergé seulement
+  const link = socialSiteLink(siteUrl(site), site.theme);
+
   if (format === "ics") {
     const base = process.env.STUDIO_BASE_URL ?? STUDIO_DEFAULT_BASE_URL;
-    const publicUrl = siteUrl(site);
     const ics = buildIcs(
       posts.map((post) => ({
         uid: post.id,
@@ -106,7 +109,7 @@ async function exportMonth(site: Awaited<ReturnType<typeof getSite>>, mois: stri
         description: [post.content.caption.trim(), post.content.hashtags.join(" ")].filter((p) => p !== "").join("\n\n"),
         url: socialPostDeepLink(base, mois, post.id),
       })),
-      { name: `Réseaux sociaux — ${monthLabelFr(year, month)} (${publicUrl.replace(/^https?:\/\//, "")})`, now: new Date() },
+      { name: `Réseaux sociaux — ${monthLabelFr(year, month)} (${link.url.replace(/^https?:\/\//, "")})`, now: new Date() },
     );
     console.info("[social] export", { siteId: site.id, month: mois, format, posts: posts.length, ms: Date.now() - started });
     return file(ics, "text/calendar; charset=utf-8", exportFilename(mois, "ics"));
@@ -148,7 +151,7 @@ async function exportMonth(site: Awaited<ReturnType<typeof getSite>>, mois: stri
     content: post.content,
     imageUrl: imageUrls.get(post.id) ?? "",
   }));
-  const csv = buildPlannerCsv(plannerRows(rows, siteUrl(site), SOCIAL_BIO_LINE));
+  const csv = buildPlannerCsv(plannerRows(rows, link.url, SOCIAL_BIO_LINE, linkOptionsOf(link)));
   console.info("[social] export", {
     siteId: site.id,
     month: mois,

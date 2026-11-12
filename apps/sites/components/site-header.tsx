@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Page, Site } from "@theralys/db";
 import type { NavAnchor } from "@/lib/nav";
 import { hasBlogAccess } from "@/lib/site-data";
+import { homePath } from "@/lib/site-paths";
 import { MobileNav } from "./mobile-nav";
 import { RdvButton } from "./rdv-button";
 
@@ -20,11 +21,12 @@ export function SiteHeader({
 }: {
   site: Site;
   motifPages: Page[];
+  /** Préfixe public des chemins du site (`publicPathPrefix`) : vide sur le domaine d'un client */
   prefix: string;
   anchors: NavAnchor[];
   phone: string | null;
 }) {
-  const home = `${prefix}`;
+  const home = homePath(prefix);
   const blog = hasBlogAccess(site);
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">

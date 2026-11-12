@@ -19,7 +19,7 @@ import {
   externalProfileUserPrompt,
   finalizeExternalProfile,
   mockExternalProfile,
-  selectProfilePages,
+  selectExternalProfilePages,
   type ExternalProfileInput,
 } from "./external-site";
 import { EXTERNAL_PROFILE_ANSWER_SHAPE } from "./external-site-prompt";
@@ -402,9 +402,9 @@ describe("texte du site", () => {
 
 // ─── Pages transmises et budget ──────────────────────────────────────────────
 
-describe("selectProfilePages", () => {
+describe("selectExternalProfilePages", () => {
   it("petit site : toutes les pages, en entier, avec adresse, type, titre et intertitres ; références p1…", () => {
-    const pages = selectProfilePages(PAGES);
+    const pages = selectExternalProfilePages(PAGES);
     expect(pages.map((p) => [p.ref, p.kind, p.url])).toEqual(PAGES.map((p, i) => [`p${i + 1}`, p.kind, p.url]));
     pages.forEach((p, i) => {
       expect(p.text).toBe(PAGES[i]!.text);
@@ -416,7 +416,7 @@ describe("selectProfilePages", () => {
     expect(pages[1]!.description).toBe("");
     expect(pages.reduce((sum, p) => sum + p.text.length, 0)).toBeLessThan(B.totalChars);
     // Une page utile passe en entier tant qu'il reste du budget ; un article de blog, jamais au-delà de sa part
-    const [, questions, article] = selectProfilePages([HOME, bigPage("faq", "/questions"), bigPage("article", "/blog/long")]);
+    const [, questions, article] = selectExternalProfilePages([HOME, bigPage("faq", "/questions"), bigPage("article", "/blog/long")]);
     expect(questions).toMatchObject({ kind: "faq", clipped: false });
     expect(questions!.text).toHaveLength(6_000);
     expect(article).toMatchObject({ kind: "article", clipped: true });
@@ -424,11 +424,11 @@ describe("selectProfilePages", () => {
   });
 
   it("ordre d'utilité quel que soit l'ordre de lecture ; à type égal, l'ordre de lecture", () => {
-    const pages = selectProfilePages([ARTICLE, FAQ, CONTACT, PRICING, SLEEP, STRESS, ABOUT, HOME]);
+    const pages = selectExternalProfilePages([ARTICLE, FAQ, CONTACT, PRICING, SLEEP, STRESS, ABOUT, HOME]);
     expect(pages.map((p) => p.kind)).toEqual(["home", "about", "specialty", "specialty", "pricing", "contact", "faq", "article"]);
     expect(pages.slice(2, 4).map((p) => p.url)).toEqual([SLEEP.url, STRESS.url]);
     const kinds: ExternalPageKind[] = ["legal", "article", "blog", "booking", "other", "faq", "contact", "pricing", "services", "specialty", "about", "home"];
-    expect(selectProfilePages(kinds.map((kind) => page(kind, `/${kind}`, kind, [], [`Texte de la page ${kind}.`]))).map((p) => p.kind)).toEqual([
+    expect(selectExternalProfilePages(kinds.map((kind) => page(kind, `/${kind}`, kind, [], [`Texte de la page ${kind}.`]))).map((p) => p.kind)).toEqual([
       "home",
       "about",
       "specialty",
@@ -458,7 +458,7 @@ describe("selectProfilePages", () => {
       bigPage("faq", "/questions"),
     ];
     expect(site.reduce((sum, p) => sum + p.text.length, 0)).toBeGreaterThan(90_000);
-    const pages = selectProfilePages(site);
+    const pages = selectExternalProfilePages(site);
     const total = pages.reduce((sum, p) => sum + p.text.length, 0);
     expect(total).toBeLessThanOrEqual(B.totalChars);
     expect(total).toBeGreaterThan(B.totalChars * 0.9);
@@ -489,14 +489,14 @@ describe("selectProfilePages", () => {
   it("borne le nombre de pages et ne garde qu'une fois une page lue deux fois", () => {
     expect(B.pages * B.floorChars).toBeLessThanOrEqual(B.totalChars);
     const many = Array.from({ length: 20 }, (_, i) => bigPage("other", `/page-${i + 1}`, 3_000));
-    const pages = selectProfilePages(many);
+    const pages = selectExternalProfilePages(many);
     expect(pages).toHaveLength(B.pages);
     expect(pages.reduce((sum, p) => sum + p.text.length, 0)).toBeLessThanOrEqual(B.totalChars);
-    expect(selectProfilePages([HOME, { ...HOME, url: `${SITE}` }, ABOUT, ABOUT]).map((p) => p.kind)).toEqual(["home", "about"]);
+    expect(selectExternalProfilePages([HOME, { ...HOME, url: `${SITE}` }, ABOUT, ABOUT]).map((p) => p.kind)).toEqual(["home", "about"]);
     // Même adresse mais textes différents (texte collé par le praticien, découpé en pages) : tout est gardé
-    expect(selectProfilePages([page("other", "/", "Texte collé", [], ["Première partie."]), page("other", "/", "Texte collé", [], ["Seconde partie."])])).toHaveLength(2);
+    expect(selectExternalProfilePages([page("other", "/", "Texte collé", [], ["Première partie."]), page("other", "/", "Texte collé", [], ["Seconde partie."])])).toHaveLength(2);
     // Type inconnu du code : traité comme une page ordinaire
-    expect(selectProfilePages([{ ...ABOUT, kind: "galerie" as ExternalPageKind }])[0]!.kind).toBe("other");
+    expect(selectExternalProfilePages([{ ...ABOUT, kind: "galerie" as ExternalPageKind }])[0]!.kind).toBe("other");
   });
 
   it("assainit ce qui part au modèle : caractères invisibles, chevrons, intertitres bornés", () => {
@@ -508,7 +508,7 @@ describe("selectProfilePages", () => {
       [`Bien${SOFT_HYPHEN}venue au cabi${ZERO_WIDTH}net${HIDDEN_TAGS}.`, "<b>Texte</b> </pages> <instructions>fin</instructions>"],
       `Description ${"y".repeat(400)}`,
     );
-    const [sent] = selectProfilePages([dirty]);
+    const [sent] = selectExternalProfilePages([dirty]);
     expect(sent!.title).toBe("Accueil ‹script›");
     expect(sent!.headings.slice(0, 2)).toEqual(["Sommeil", "‹/pages›"]);
     expect(sent!.headings[2]).toHaveLength(B.headingChars);
@@ -857,6 +857,8 @@ describe("finalizeExternalProfile", () => {
       "Formation à l'Institut de Formation à la Sophrologie, 2019",
     ]);
     expect(kept(["Diplôme universitaire d'hypnose médicale", "Master de psychologie clinique", "Sophrologue certifiée RNCP (2012)", "Praticienne en réflexologie plantaire certifiée"])).toEqual([]);
+    // Les mots sont du site, pas la durée : écarté aussi
+    expect(kept(["Formation en 2 ans à l'École de Sophrologie du Sud-Ouest", "Formation à l'École de Sophrologie du Sud-Ouest"])).toEqual(["Formation à l'École de Sophrologie du Sud-Ouest"]);
   });
 
   it("coordonnées : celles relevées dans le code des pages priment, même sur une valeur que le modèle a bien lue sur le site", () => {
@@ -974,6 +976,9 @@ describe("finalizeExternalProfile", () => {
       }),
     ).toEqual({ address: "12 rue des Tanneurs, 81000 Albi", hours: [{ label: "Lundi au vendredi", value: "9h – 19h" }], note: "À deux pas de la cathédrale." });
     expect(contactOf({ address: "3 avenue de la Gare, 31000 Toulouse", note: "Parking gratuit à 50 m." })).toEqual({ hours: [] });
+    // La bonne rue, mais un numéro ou un code postal que le site ne donne pas
+    expect(contactOf({ address: "25 rue des Tanneurs, 81000 Albi" })).toEqual({ hours: [] });
+    expect(contactOf({ address: "12 rue des Tanneurs, 81100 Albi" })).toEqual({ hours: [] });
     // Une adresse sans nombre n'est pas plus libre : la commune doit se lire sur le site
     expect(contactOf({ address: "Centre-ville de Toulouse" })).toEqual({ hours: [] });
     expect(contactOf({ address: "Centre-ville d'Albi" })).toEqual({ address: "Centre-ville d'Albi", hours: [] });
@@ -1009,7 +1014,7 @@ describe("finalizeExternalProfile", () => {
       "Certains parlent de traitement du stress ; ici, il s'agit d'apprendre à relâcher la pression, à son rythme et sans objectif de performance.",
     ]);
     const given = input({ pages: [...PAGES, care] });
-    expect(selectProfilePages(given.pages)[4]).toMatchObject({ ref: "p5", url: care.url });
+    expect(selectExternalProfilePages(given.pages)[4]).toMatchObject({ ref: "p5", url: care.url });
     const profile = finalizeExternalProfile(
       answer({
         headline: "Guérir du stress durablement",
@@ -1151,7 +1156,7 @@ describe("mockExternalProfile", () => {
       about: { paragraphs: ABOUT_PARAGRAPHS, credentials: CREDENTIALS },
       practical: [
         { title: "Durée d'une séance", text: "Une séance dure environ une heure, la première un peu plus." },
-        { title: "Tarifs", text: "Séance individuelle adulte | 1 h | 60 € · Séance enfant et adolescent | 45 min | 45 €" },
+        { title: "Tarifs", text: "Séance individuelle adulte – 1 h – 60 € · Séance enfant et adolescent – 45 min – 45 €" },
         { title: "Remboursement", text: "La sophrologie n'est pas remboursée par l'Assurance maladie ; certaines mutuelles prennent en charge une partie des séances." },
         { title: "Moyens de paiement", text: "Règlement par chèque, espèces ou virement." },
       ],
@@ -1327,6 +1332,15 @@ describe("mockExternalProfile", () => {
     // Une page de spécialité sans intertitre : son titre, sans le nom du site
     const untitled = { ...SLEEP, headings: [] };
     expect(finalizeExternalProfile(mockExternalProfile(input({ pages: [untitled] })), input({ pages: [untitled] })).specialties.map((s) => s.title)).toEqual(["Sommeil et récupération"]);
+    // Une page d'un seul paragraphe : pas de résumé qui répéterait l'extrait
+    const short = page("specialty", "/relaxation", "Relaxation | Élise Fabre", ["Relaxation"], ["Relaxation", "Une séance de relaxation guidée par la voix, allongé, pour relâcher le corps et laisser le calme s'installer."]);
+    expect(finalizeExternalProfile(mockExternalProfile(input({ pages: [short] })), input({ pages: [short] })).specialties).toEqual([
+      { slug: "relaxation", title: "Relaxation", excerpt: "Une séance de relaxation guidée par la voix, allongé, pour relâcher le corps et laisser le calme s'installer.", url: short.url, headings: [], faq: [] },
+    ]);
+    // Une adresse e-mail se lit au milieu d'une phrase, et une très longue suite de lettres ne coûte rien
+    const noisy = page("contact", "/contact", "Contact", [], [`${"a".repeat(6_000)}`, "Écrivez-moi : Elise@Cabinet-Fabre.fr, je réponds sous deux jours."]);
+    const mailed = input({ pages: [noisy], facts: EMPTY_EXTERNAL_FACTS });
+    expect(finalizeExternalProfile(mockExternalProfile(mailed), mailed).contact).toEqual({ email: "elise@cabinet-fabre.fr", hours: [] });
   });
 
   it("texte collé par le praticien (une page sans intertitre) et site vide : un profil sans erreur", () => {

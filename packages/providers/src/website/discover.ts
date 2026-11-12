@@ -136,8 +136,9 @@ export function classifyPage(url: URL, linkText: string, scope: SiteScope): Clas
   if (url.protocol !== "https:" && url.protocol !== "http:") return skip();
   if (!isInScope(url, scope)) return skip();
   const path = trimPath(url.pathname);
-  if (path === scope.basePath || path === trimPath(scope.homePath)) return { kind: "home", skip: false };
+  // Une adresse à paramètres n'est pas lue — pas même « /?page_id=12 », qui n'est pas la page d'accueil
   if (url.search !== "") return skip();
+  if (path === scope.basePath || path === trimPath(scope.homePath)) return { kind: "home", skip: false };
   if (FILE_EXTENSION.test(path) || SYSTEM_PATH.test(path) || PAGINATION.test(url.pathname)) return skip();
 
   const segments = path

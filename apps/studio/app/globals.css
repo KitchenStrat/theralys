@@ -875,7 +875,9 @@ html:has(.ds-app) {
     }
   }
 
-  /* Décor des bandeaux : halos et anneaux statiques aux couleurs de la section. Sur teinte
+  /* Décor des bandeaux : halos et anneaux statiques aux couleurs de la section. (Tailles en
+     `min(rem, vw)` : Chromium refuse un `min()` qui mêle longueur et pourcentage dans la taille
+     d'un dégradé radial, et la déclaration entière serait ignorée.) Sur teinte
      douce, le texte posé dessus est foncé (encre de section, ink-700 et plus) : ≥ 4,5:1 même
      au cœur du halo. */
   .ds-band-art {
@@ -885,8 +887,8 @@ html:has(.ds-app) {
     pointer-events: none;
     border-radius: inherit;
     background:
-      radial-gradient(min(26rem, 72%) 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 38%, transparent), transparent 70%),
-      radial-gradient(min(20rem, 60%) 12rem at 80% 125%, color-mix(in oklab, var(--ds-s-to) 32%, transparent), transparent 70%);
+      radial-gradient(min(26rem, 64vw) 15rem at 100% 0%, color-mix(in oklab, var(--ds-s-from) 38%, transparent), transparent 70%),
+      radial-gradient(min(20rem, 52vw) 12rem at 80% 125%, color-mix(in oklab, var(--ds-s-to) 32%, transparent), transparent 70%);
   }
   .ds-band-art::before,
   .ds-band-art::after,
@@ -914,7 +916,8 @@ html:has(.ds-app) {
       display: none;
     }
     .ds-band-art::after {
-      right: -9rem;
+      top: -11rem;
+      right: -11rem;
     }
   }
   /* Sur un dégradé profond, halos et anneau ne font que foncer ou déplacer la teinte (L ≤ 0,55) :
@@ -926,9 +929,8 @@ html:has(.ds-app) {
     pointer-events: none;
     border-radius: inherit;
     background:
-      radial-gradient(min(30rem, 80%) 20rem at 100% -10%, oklch(55% 0.097 185 / 0.75), transparent 68%),
-      radial-gradient(min(26rem, 70%) 18rem at 8% 130%, oklch(50% 0.19 295 / 0.7), transparent 70%),
-      radial-gradient(18rem 12rem at 55% -30%, oklch(47% 0.16 262 / 0.55), transparent 70%);
+      radial-gradient(min(38rem, 90vw) 24rem at 94% -4%, oklch(55% 0.097 188), transparent 64%),
+      radial-gradient(min(34rem, 80vw) 24rem at 2% 110%, oklch(50% 0.2 298), transparent 64%);
   }
   .ds-band-art-deep::after {
     top: -9rem;

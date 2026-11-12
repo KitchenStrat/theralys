@@ -96,6 +96,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Tout sauf les assets Next et fichiers statiques
-  matcher: ["/((?!_next/|api/|favicon.ico|robots.txt).*)"],
+  // Tout sauf les assets Next et les fichiers statiques. Les icônes de `public/favicons/` en font partie :
+  // réécrites vers /<domaine>/favicons/…, elles seraient introuvables sur le domaine d'un client.
+  matcher: ["/((?!_next/|api/|favicons/|favicon.ico|robots.txt).*)"],
 };
