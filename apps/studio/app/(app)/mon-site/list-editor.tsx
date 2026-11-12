@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@theralys/ui";
+import { frenchSpacing } from "@/lib/external-site/format";
 
 let uidCount = 0;
 
@@ -78,7 +79,7 @@ export function ListEditor<T extends { uid: string }>({
   return (
     <fieldset className="min-w-0" disabled={disabled}>
       <legend className="text-sm font-semibold text-ink-900">{legend}</legend>
-      {hint ? <p className="mt-0.5 text-xs text-ink-500">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs text-ink-500">{frenchSpacing(hint)}</p> : null}
       {items.length > 0 ? (
         <ul className="mt-2 space-y-3">
           {items.map((item, index) => (

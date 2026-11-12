@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ROOT_WRAPPER, type DomElement, type DomNode, closestElement, eachText, firstDescendant, hasClass, isElement, isTextNode, isWithin, loadMarkup, textOf, walkTree } from "./dom";
 import { MARKUP_LIMITS, MarkupTooComplexError, measureMarkup } from "./markup-guard";
+import { cpuNow } from "./test-timing";
 
 const first = ($: ReturnType<typeof loadMarkup>, selector: string): DomElement => {
   const element = $(selector).get(0);
@@ -82,9 +83,9 @@ describe("loadMarkup — bornes et racine", () => {
     expect($("title").text()).toBe("T");
     expect(textOf(wrapper, 10)).toBe("TUnDeuxUnD");
     // Les recherches restent rapides
-    const start = performance.now();
+    const start = cpuNow();
     for (let i = 0; i < 20; i++) $("p, title, [class]").toArray();
-    expect(performance.now() - start).toBeLessThan(3_000);
+    expect(cpuNow() - start).toBeLessThan(3_000);
   });
 
   it("document ordinaire ou petit fragment : racine inchangée", () => {
@@ -160,8 +161,8 @@ describe("parcours de l'arbre", () => {
 
   it("texte d'éléments imbriqués par centaines autour d'un long texte : lu sans parcourir le texte entier", () => {
     const deep = loadMarkup(`${"<a>".repeat(390)}${"mot ".repeat(1_000_000)}${"</a>".repeat(390)}`);
-    const start = performance.now();
+    const start = cpuNow();
     for (const element of deep("a").toArray()) expect(textOf(element, 12)).toBe("mot mot mot ");
-    expect(performance.now() - start).toBeLessThan(2_000);
+    expect(cpuNow() - start).toBeLessThan(2_000);
   });
 });

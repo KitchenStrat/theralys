@@ -173,10 +173,23 @@ function dayIndex(value: unknown): number | null {
   return DAY_INDEX[key] ?? null;
 }
 
-/** « 09:00 », « 9:30:00 » → minutes depuis minuit ; `null` si illisible. */
+/*
+ * Bornes des valeurs lues avant tout examen par une expression régulière : ces
+ * valeurs viennent du site lu, et une expression où deux suites d'espaces se
+ * touchent passe un temps quadratique (ou pire) sur une longue suite d'espaces
+ * — de quoi figer le processus au-delà de toute échéance. Une heure, une ligne
+ * d'horaires ou une couleur tiennent en quelques dizaines de caractères.
+ */
+const TIME_MAX = 16;
+const OPENING_HOURS_TEXT_MAX = 200;
+const COLOR_MAX = 64;
+
+/** « 09:00 », « 9:30:00 », « 9h » → minutes depuis minuit ; `null` si illisible. */
 function minutesOf(value: unknown): number | null {
   if (typeof value !== "string") return null;
-  const match = /^\s*(\d{1,2})[:h.](\d{2})(?::\d{2})?\s*$/i.exec(value) ?? /^\s*(\d{1,2})()\s*h?\s*$/i.exec(value);
+  const text = value.trim();
+  if (text.length > TIME_MAX) return null;
+  const match = /^(\d{1,2})[:h.](\d{2})(?::\d{2})?$/i.exec(text) ?? /^(\d{1,2})()\s*h?$/i.exec(text);
   if (!match) return null;
   const hours = Number(match[1]);
   const minutes = Number(match[2] || 0);
@@ -194,7 +207,9 @@ function addRange(week: DayRanges[], day: number, opens: number, closes: number)
 
 /** « Mo-Fr 09:00-19:00 », « Mo,We 9:00-12:00 14:00-18:00 » (propriété `openingHours`). */
 function readOpeningHoursText(week: DayRanges[], value: string): void {
-  const match = /^\s*((?:mo|tu|we|th|fr|sa|su)(?:\s*[-,]\s*(?:mo|tu|we|th|fr|sa|su))*)\s+(.+)$/i.exec(value);
+  const text = value.trim();
+  if (text.length > OPENING_HOURS_TEXT_MAX) return;
+  const match = /^((?:mo|tu|we|th|fr|sa|su)(?:\s*[-,]\s*(?:mo|tu|we|th|fr|sa|su))*)\s+(\S.*)$/i.exec(text);
   if (!match) return;
   const days = new Set<number>();
   for (const part of match[1]!.split(",")) {
@@ -543,6 +558,7 @@ export function detectCms($: CheerioAPI, html: string, pageUrl: string): Externa
 /** Couleur CSS simple (#rgb, #rrggbb, #rrggbbaa, rgb()) → #rrggbb ; `undefined` sinon. */
 export function normalizeColor(value: string | undefined): string | undefined {
   const raw = (value ?? "").trim().toLowerCase();
+  if (raw.length > COLOR_MAX) return undefined;
   const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(raw);
   if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
   const long = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/.exec(raw);

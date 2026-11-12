@@ -283,6 +283,37 @@ export function documentLanguage($: CheerioAPI): string | undefined {
 }
 
 /**
+ * Valeur d'une redirection par balise meta (« 0; url=/accueil », « 3,'/fr/' ») :
+ * délai en secondes et destination, ou `null` si ce n'en est pas une.
+ *
+ * Lue caractère par caractère, sans expression régulière : la valeur vient du
+ * site lu, et une expression qui hésite entre plusieurs découpages des espaces
+ * y passerait des minutes sur quelques centaines de caractères — le temps de
+ * figer le processus au-delà de toute échéance.
+ */
+export function parseMetaRefresh(content: string): { delay: number; target: string } | null {
+  // Valeur démesurée : pas une redirection
+  if (content.length > META_REFRESH_MAX) return null;
+  const text = content.trim();
+  let digits = 0;
+  while (digits < 3 && text.charCodeAt(digits) >= 48 && text.charCodeAt(digits) <= 57) digits++;
+  if (digits === 0) return null;
+  let rest = text.slice(digits).trimStart();
+  if (rest[0] !== ";" && rest[0] !== ",") return null;
+  rest = rest.slice(1).trimStart();
+  // « url = » facultatif
+  if (rest.slice(0, 3).toLowerCase() === "url") {
+    const afterName = rest.slice(3).trimStart();
+    if (afterName.startsWith("=")) rest = afterName.slice(1).trimStart();
+  }
+  // Destination entre guillemets, ouverts ou fermés sans leur pendant sur de vieux sites
+  if (rest.startsWith('"') || rest.startsWith("'")) rest = rest.slice(1).trimStart();
+  if (rest.endsWith('"') || rest.endsWith("'")) rest = rest.slice(0, -1).trimEnd();
+  if (rest === "" || rest.includes('"') || rest.includes("'")) return null;
+  return { delay: Number(text.slice(0, digits)), target: rest };
+}
+
+/**
  * Redirection par balise meta (`<meta http-equiv="refresh" content="0; url=…">`)
  * vers une autre adresse, quand elle est immédiate (5 secondes au plus) : de
  * vieux sites redirigent ainsi leur page d'accueil. Celle d'un bloc
@@ -291,13 +322,10 @@ export function documentLanguage($: CheerioAPI): string | undefined {
 export function metaRefreshTarget($: CheerioAPI, pageUrl: string): string | null {
   for (const element of $("meta[http-equiv='refresh' i]").toArray()) {
     if (!isElement(element) || closestElement(element, (ancestor) => ancestor.name === "noscript") !== null) continue;
-    const content = element.attribs.content ?? "";
-    // Valeur démesurée : pas une redirection (et l'expression ci-dessous ne doit pas s'y attarder)
-    if (content.length > META_REFRESH_MAX) continue;
-    const match = /^\s*(\d{1,3})\s*[;,]\s*(?:url\s*=\s*)?["']?\s*([^"'\s][^"']*?)\s*["']?\s*$/i.exec(content);
-    if (!match || Number(match[1]) > 5) continue;
+    const refresh = parseMetaRefresh(element.attribs.content ?? "");
+    if (!refresh || refresh.delay > 5) continue;
     try {
-      const target = new URL(match[2]!, pageUrl);
+      const target = new URL(refresh.target, pageUrl);
       target.hash = "";
       const current = new URL(pageUrl);
       current.hash = "";

@@ -116,12 +116,12 @@ export function ReadingPanel({ address, hasPrevious }: { address: string; /** Un
         </ol>
 
         <p className="mt-5 max-w-2xl text-base text-ink-700">
-          Cela prend jusqu&apos;à une minute environ. Vous pouvez quitter cette page : la lecture continue, et le résultat vous attendra ici.
+          Cela prend jusqu&apos;à une minute environ. Vous pouvez quitter cette page&nbsp;: la lecture continue, et le résultat vous attendra ici.
           {hasPrevious ? " En attendant, votre profil actuel et vos corrections restent en place." : ""}
         </p>
         {/* Région vivante permanente : l'avancement y est annoncé sans déplacer le focus */}
         <p className="mt-2 text-sm text-ink-700" role="status">
-          {long ? "C'est un peu plus long que d'habitude : la lecture continue." : <span className="sr-only">{`Étape ${step + 1} sur ${STEPS.length} : ${STEPS[step]}.`}</span>}
+          {long ? "C'est un peu plus long que d'habitude\u00a0: la lecture continue." : <span className="sr-only">{`Étape ${step + 1} sur ${STEPS.length} : ${STEPS[step]}.`}</span>}
         </p>
       </Card>
     </section>

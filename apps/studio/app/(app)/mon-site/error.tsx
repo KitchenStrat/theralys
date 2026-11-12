@@ -21,7 +21,7 @@ export default function MonSiteError({ error, reset }: { error: Error & { digest
       <h1 className="text-4xl font-bold">Mon site</h1>
       <Card className="mt-6 p-10 text-center">
         <p className="text-base font-medium text-ink-900">Cette section est momentanément indisponible.</p>
-        <p className="mt-1 text-sm text-ink-700">Réessayez dans un instant : votre site, son profil et vos corrections ne sont pas perdus.</p>
+        <p className="mt-1 text-sm text-ink-700">Réessayez dans un instant&nbsp;: votre site, son profil et vos corrections ne sont pas perdus.</p>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
           <Button onClick={reset}>Réessayer</Button>
           <Link href="/" className={`text-sm ${TEXT_LINK}`}>

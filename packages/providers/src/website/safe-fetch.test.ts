@@ -189,6 +189,19 @@ describe("checkUrl — politique de production", () => {
     expect(codeFor(`https://${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.${"e".repeat(20)}.fr/`)).toBe("bad_host");
   });
 
+  it("points finaux en trop, étiquette vide : refusés — ils ne font passer ni une adresse littérale ni un nom réservé", () => {
+    // Un seul point final est la forme complète d'un nom : il est retiré, puis le nom est contrôlé
+    expect(checkUrl("https://www.mon-cabinet.fr./", PRODUCTION_POLICY).hostname).toBe("www.mon-cabinet.fr");
+    // Deux points : une fois le premier retiré, l'analyseur d'adresse aurait relu « 127.0.0.1. » comme l'adresse 127.0.0.1
+    for (const url of ["https://127.0.0.1../", "https://2130706433../", "https://0x7f.1../", "https://169.254.169.254../latest/meta-data/", "https://localhost../", "https://x.internal../", "https://app.localhost../", "https://www..mon-cabinet.fr/", "https://mon-cabinet.fr.../"]) {
+      expect(codeFor(url), url).toBe("bad_host");
+    }
+    // Politique qui admet les adresses littérales : la liste de refus s'applique toujours, quelle que soit l'écriture
+    const lab = createNetworkPolicy({ protocols: ["http:", "https:"], allowExplicitPort: true, allowIpLiteral: true });
+    for (const url of ["http://127.0.0.1..:8080/", "http://10.0.0.1../", "http://localhost..:8080/"]) expect(() => checkUrl(url, lab), url).toThrowError(expect.objectContaining({ code: "bad_host" }));
+    expect(() => checkUrl("http://127.0.0.1.:8080/", lab)).toThrowError(expect.objectContaining({ code: "private_address" }));
+  });
+
   it("politique de laboratoire : http, port et adresse littérale admis seulement si la politique le dit", () => {
     const lab = createNetworkPolicy({ protocols: ["http:", "https:"], allowExplicitPort: true, allowIpLiteral: true });
     expect(checkUrl("http://www.cabinet-test.fr:8080/a", lab).href).toBe("http://www.cabinet-test.fr:8080/a");
@@ -708,5 +721,17 @@ describe("décodage", () => {
     expect(decodeHtml(new TextEncoder().encode("été"), "text/html; charset=klingon")).toBe("été");
     expect(decodeHtml(Uint8Array.of(0xef, 0xbb, 0xbf, 0x6f, 0x6b), "text/html; charset=utf-8")).toBe("ok");
     expect(decodeText(Uint8Array.of(0xef, 0xbb, 0xbf, 0x6f, 0x6b))).toBe("ok");
+  });
+
+  it("balises meta fabriquées pour faire hésiter la recherche du jeu de caractères : jugées en un passage", () => {
+    const head = `${"<meta ".repeat(30)}charset=${" ".repeat(3_800)}!`;
+    const started = process.cpuUsage();
+    for (let i = 0; i < 20; i++) expect(decodeHtml(Buffer.from(`${head}<p>ok</p>`), null)).toContain("<p>ok</p>");
+    const spent = process.cpuUsage(started);
+    // Vingt lectures : quelques millisecondes ; l'ancienne expression en demandait plusieurs centaines par lecture
+    expect((spent.user + spent.system) / 1_000).toBeLessThan(1_000);
+    // Espaces et guillemets autour du signe égal : l'étiquette est toujours lue
+    const latin1 = Uint8Array.of(0x63, 0x61, 0x66, 0xe9);
+    expect(decodeHtml(Buffer.concat([Buffer.from(`<meta charset = ' iso-8859-15 '>`), latin1]), null)).toContain("café");
   });
 });

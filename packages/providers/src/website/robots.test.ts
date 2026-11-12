@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EXTERNAL_BOT_NAME } from "@theralys/shared";
 import robotsParser from "robots-parser";
 import { MAX_CRAWL_DELAY_MS, ROBOTS_ABSENT, ROBOTS_MAX_BYTES, ROBOTS_UNAVAILABLE, ROBOTS_URL_MAX, parseRobots, robotsFromResponse } from "./robots";
+import { timed } from "./test-timing";
 
 const ORIGIN = "https://www.mon-cabinet.fr";
 const rules = (body: string) => parseRobots(`${ORIGIN}/robots.txt`, body);
@@ -151,12 +152,6 @@ describe("parseRobots — tri des groupes avant l'analyse", () => {
 });
 
 describe("parseRobots — fichiers piégés", () => {
-  const timed = <T>(run: () => T): { value: T; ms: number } => {
-    const start = performance.now();
-    const value = run();
-    return { value, ms: performance.now() - start };
-  };
-
   it("des milliers de robots nommés devant des milliers de règles : analysé sans multiplier les règles", () => {
     // L'analyseur seul recopierait chaque règle pour chaque ligne User-agent du groupe : des centaines de millions d'objets
     const body = `${"User-agent: *\n".repeat(12_000)}${"User-agent: Robot\n".repeat(4_000)}${"Disallow: /prive\n".repeat(12_000)}`;

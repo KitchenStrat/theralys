@@ -60,10 +60,10 @@ export default async function MonSitePage() {
         <section aria-labelledby="connect-title" data-testid="connect-card">
           <Card className="p-6 md:p-7">
             <h2 id="connect-title" className="text-xl font-semibold">
-              Vous avez déjà un site ?
+              Vous avez déjà un site&nbsp;?
             </h2>
             <p className="mt-1 max-w-2xl text-base text-ink-700">
-              Indiquez son adresse : nous lisons ses pages pour comprendre votre activité. Tous vos outils s&apos;appuient ensuite sur lui : vos contenus reprennent ce que vous
+              Indiquez son adresse&nbsp;: nous lisons ses pages pour comprendre votre activité. Tous vos outils s&apos;appuient ensuite sur lui&nbsp;: vos contenus reprennent ce que vous
               proposez vraiment, vos liens y mènent et vos statistiques comptent ses visites.
             </p>
             <div className="mt-5">
@@ -128,7 +128,7 @@ function Screen({ state, children }: { state: ReadScreenState; children: ReactNo
     <div className="mx-auto max-w-4xl space-y-6">
       <header>
         <h1 className="text-4xl font-bold">Mon site</h1>
-        <p className="mt-1 text-base text-ink-700">Le site sur lequel s&apos;appuient vos outils : contenus, liens et statistiques.</p>
+        <p className="mt-1 text-base text-ink-700">Le site sur lequel s&apos;appuient vos outils&nbsp;: contenus, liens et statistiques.</p>
         <ReadAnnouncer state={state} />
       </header>
       {children}

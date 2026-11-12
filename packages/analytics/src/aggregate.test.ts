@@ -273,6 +273,17 @@ describe("validation des événements entrants", () => {
     ).toThrow();
   });
 
+  it("rejette un chemin qui porte un caractère de contrôle (la base refuserait le caractère nul)", () => {
+    const event = { siteId: "3f1d4c9a-0b6e-4a1e-9f6a-2d3b4c5d6e7f", type: "pageview" };
+    for (const code of [0x00, 0x0a, 0x1b, 0x7f]) {
+      expect(() => trackEventSchema.parse({ ...event, path: `/tarifs${String.fromCharCode(code)}` }), `U+${code.toString(16)}`).toThrow();
+    }
+    // Chemin ordinaire, accents et espaces encodés compris : accepté ; absent : « / »
+    expect(trackEventSchema.parse({ ...event, path: "/motifs/arr%C3%AAt-du-tabac" }).path).toBe("/motifs/arr%C3%AAt-du-tabac");
+    expect(trackEventSchema.parse({ ...event, path: "/séances d'hypnose" }).path).toBe("/séances d'hypnose");
+    expect(trackEventSchema.parse(event).path).toBe("/");
+  });
+
   it("rejette un type inconnu ou un siteId invalide", () => {
     expect(() => trackEventSchema.parse({ siteId: "nope", type: "pageview" })).toThrow();
     expect(() =>

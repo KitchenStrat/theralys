@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
 import { EXTERNAL_PASTE_FALLBACK_ERRORS, EXTERNAL_READ_ERRORS, type ExternalReadError } from "@theralys/shared";
-import { readsRemaining, readsRemainingLabel, siteAddressLabel } from "@/lib/external-site/format";
+import { frenchSpacing, readsRemaining, readsRemainingLabel, siteAddressLabel } from "@/lib/external-site/format";
 import { disconnectExternalSiteAction, rereadExternalSite } from "./actions";
 import { ConnectForm } from "./connect-form";
 import { ActionMessage } from "./fields";
@@ -55,12 +55,12 @@ export function ReadErrorPanel({
           <span aria-hidden className="text-warning-500">
             ⚠
           </span>
-          {title}
+          {frenchSpacing(title)}
         </h2>
         <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="site-url">
           {siteAddressLabel(url)}
         </p>
-        <p className="mt-2 max-w-2xl text-base text-ink-700">{hint}</p>
+        <p className="mt-2 max-w-2xl text-base text-ink-700">{frenchSpacing(hint)}</p>
 
         {canPaste ? (
           <div className="mt-6 border-t border-cream-200 pt-5">
@@ -76,7 +76,7 @@ export function ReadErrorPanel({
         ) : null}
 
         <div className="mt-6 border-t border-cream-200 pt-5">
-          <h3 className="text-lg font-semibold">{canPaste ? "Ou réessayer autrement" : "Que souhaitez-vous faire ?"}</h3>
+          <h3 className="text-lg font-semibold">{canPaste ? "Ou réessayer autrement" : "Que souhaitez-vous faire\u00a0?"}</h3>
           {changing ? (
             <div className="mt-3">
               <p className="mb-3 text-base text-ink-700">Indiquez la bonne adresse, puis relancez la lecture.</p>
@@ -96,7 +96,7 @@ export function ReadErrorPanel({
                 </Button>
               </div>
               <p className="mt-3 text-sm text-ink-700" data-testid="reads-remaining">
-                {readsRemainingLabel(reads)}
+                {frenchSpacing(readsRemainingLabel(reads))}
               </p>
             </>
           )}

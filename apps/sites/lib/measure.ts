@@ -5,7 +5,9 @@ import {
   EXTERNAL_MEASURE_EVENTS,
   bareHost,
   externalHosts,
+  isUnderSitePath,
   parseExternalMeasure,
+  sharedHostSitePath,
   sourceFromReferrer,
   type AnalyticsSource,
   type ExternalMeasurePayload,
@@ -167,6 +169,10 @@ export type MeasureDecision =
  * aucun site, si le site est archivé (abonnement arrêté), ou si la page qui
  * l'envoie n'est pas sur le site du client : la clé est publique, n'importe
  * quelle page pourrait sinon gonfler les chiffres d'un praticien.
+ *
+ * Sur un hôte partagé (« sites.google.com/view/<nom> »), l'hôte ne suffit pas
+ * à désigner le site : la page comptée doit aussi se trouver dans son dossier,
+ * sans quoi n'importe quel autre site du même hôte passerait le contrôle.
  */
 export function decideMeasureEvent(
   payload: ExternalMeasurePayload,
@@ -177,6 +183,7 @@ export function decideMeasureEvent(
   if (target.siteStatus === "archived") return { ok: false, reason: "archived" };
   const host = senderHost(sender.origin, sender.referer);
   if (!host || !isExternalSiteHost(host, target.url)) return { ok: false, reason: "origin" };
+  if (!isUnderSitePath(payload.p, sharedHostSitePath(target.url))) return { ok: false, reason: "origin" };
   return {
     ok: true,
     event: {

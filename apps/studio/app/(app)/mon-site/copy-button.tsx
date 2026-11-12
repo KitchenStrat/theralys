@@ -44,7 +44,7 @@ export function CopyButton({ text, label, copiedLabel = "Copié", testId }: { te
             {copiedLabel}
           </>
         ) : state === "failed" ? (
-          "Copie impossible : sélectionnez le texte, puis copiez-le."
+          "Copie impossible\u00a0: sélectionnez le texte, puis copiez-le."
         ) : null}
       </span>
     </span>

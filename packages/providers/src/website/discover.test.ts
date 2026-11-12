@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EXTERNAL_PAGE_KINDS, type ExternalPageKind } from "@theralys/shared";
 import { classifyPage, collectLinks, isInScope, pageKey, parseSitemap, pickChildSitemaps, planPages, toCandidates, type PageLink, type SiteScope } from "./discover";
 import { loadDocument } from "./extract";
+import { cpuNow } from "./test-timing";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const ORIGIN = "https://www.mon-cabinet.fr";
@@ -187,16 +188,16 @@ describe("collectLinks", () => {
   it("page piégée : adresses démesurées ignorées, liens examinés en nombre borné, sans y passer des secondes", () => {
     const long = `<a href="/${"x".repeat(3_000)}">Trop longue</a>`;
     const offsite = `<a href="https://www.autre-site.fr/page">Ailleurs</a>`.repeat(20_000);
-    const start = performance.now();
+    const start = cpuNow();
     const links = collectLinks(loadDocument(`${long}<a href="/avant">Avant</a>${offsite}<a href="/apres">Après</a>`), `${ORIGIN}/`, ROOT);
-    expect(performance.now() - start).toBeLessThan(5_000);
+    expect(cpuNow() - start).toBeLessThan(5_000);
     // Le lien placé après vingt mille liens vers un autre site n'est pas examiné : une vraie page n'en compte pas tant
     expect(paths(links)).toEqual(["/avant"]);
     // Balise base démesurée : ignorée, les liens sont résolus par rapport à la page
     const based = `<base href="/${"x".repeat(1_000_000)}/">${`<a href="tarifs">Tarifs</a>`.repeat(4_000)}`;
-    const again = performance.now();
+    const again = cpuNow();
     expect(paths(collectLinks(loadDocument(based), `${ORIGIN}/fr/`, ROOT))[0]).toBe("/fr/tarifs");
-    expect(performance.now() - again).toBeLessThan(3_000);
+    expect(cpuNow() - again).toBeLessThan(3_000);
   });
 });
 
@@ -291,13 +292,13 @@ describe("plan de site", () => {
   });
 
   it("parseSitemap : plan trop imbriqué ou trop touffu, adresse démesurée : rien, sans erreur ni attente", () => {
-    const start = performance.now();
+    const start = cpuNow();
     expect(parseSitemap(`<urlset>${"<url>".repeat(100_000)}<loc>https://www.mon-cabinet.fr/</loc>`)).toEqual({ pages: [], sitemaps: [] });
     expect(parseSitemap(`<urlset>${"<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(60_000)}</urlset>`)).toEqual({ pages: [], sitemaps: [] });
     expect(parseSitemap(`<urlset><url><loc>https://www.mon-cabinet.fr/${"x".repeat(5_000)}</loc></url><url><loc>https://www.mon-cabinet.fr/ok</loc></url></urlset>`)).toEqual({ pages: ["https://www.mon-cabinet.fr/ok"], sitemaps: [] });
     // Sans élément racine : des milliers d'entrées à la racine du document
     expect(parseSitemap("<url><loc>https://www.mon-cabinet.fr/p</loc></url>".repeat(20_000)).pages).toHaveLength(500);
-    expect(performance.now() - start).toBeLessThan(5_000);
+    expect(cpuNow() - start).toBeLessThan(5_000);
   });
 
   it("pickChildSitemaps : les plans des pages d'abord, jamais ceux des articles, étiquettes, auteurs ou produits", () => {

@@ -2097,6 +2097,33 @@ describe("refreshExternalSites", () => {
     expect(again.calls).toEqual([]);
   });
 
+  it("le contrôle est daté avant la lecture : un site dont la relecture ne rend jamais la main ne reste pas en tête de file", async () => {
+    // Pendant la lecture, le contrôle est déjà inscrit
+    const handle = memoryDb({ external: [due()], sites: [activeSiteRow()] });
+    let checkedDuringRead: unknown = "non lu";
+    const watching = fakeReader(() => {
+      checkedDuringRead = external(handle)?.checkedAt;
+      return okRead();
+    });
+    expect(await refresh(handle, watching.reader, fakeExtractor().extractor)).toEqual({ checked: 1, changed: 0, failed: 0 });
+    expect(checkedDuringRead).toEqual(NOW);
+
+    // Lecture qui ne se termine pas (page qui fige le calcul, processus arrêté par la plateforme) : rien d'autre n'est écrit…
+    const before = due();
+    const frozen = memoryDb({ external: [before], sites: [activeSiteRow()] });
+    const stuck = fakeReader(() => new Promise<ExternalReadOutcome>(() => {}));
+    void refresh(frozen, stuck.reader, fakeExtractor().extractor);
+    await vi.waitFor(() => expect(stuck.calls).toHaveLength(1));
+    expect(external(frozen)).toEqual({ ...before, checkedAt: NOW, updatedAt: NOW });
+    // … et au passage du lendemain le site n'est plus dû : les autres sites ne sont pas retenus derrière lui
+    const next = fakeReader();
+    const tomorrow = new Date(NOW.getTime() + DAY_MS);
+    expect(await refreshExternalSites(frozen.db, { reader: next.reader, extractor: fakeExtractor().extractor, now: tomorrow, env: ENV })).toEqual({ checked: 0, changed: 0, failed: 0 });
+    expect(next.calls).toEqual([]);
+    // La lecture précédente reste la référence des outils
+    expect(external(frozen)).toMatchObject({ status: "ready", profile: before.profile, readAt: before.readAt });
+  });
+
   it("échecs en route : lecteur ou extracteur qui lève, trop peu de texte, code inconnu — toujours la lecture précédente", async () => {
     const cases: [WebsiteReader, ExternalProfileExtractor, RegExp][] = [
       [{ mode: "live", read: () => Promise.reject(new TypeError(`fetch failed ${PAGE_SECRET}`)) }, fakeExtractor().extractor, /interrompue \(TypeError\)/],
@@ -2311,7 +2338,8 @@ describe("refreshExternalSites", () => {
       return okRead({ pages: NEW_PAGES });
     });
     expect(await refresh(restarted, during.reader, fakeExtractor(() => NEW_PROFILE).extractor)).toEqual({ checked: 0, changed: 0, failed: 0 });
-    expect(external(restarted)).toMatchObject({ status: "reading", pages: PAGES, profile: PROFILE, checkedAt: null });
+    // Seule la date du contrôle, inscrite avant la lecture, a été écrite
+    expect(external(restarted)).toMatchObject({ status: "reading", pages: PAGES, profile: PROFILE, checkedAt: NOW });
 
     // Lecture du praticien terminée entre-temps : la relecture, partie d'un état plus ancien, n'est pas inscrite
     const finished = memoryDb({ external: [due()], sites: [activeSiteRow()] });
@@ -2321,7 +2349,7 @@ describe("refreshExternalSites", () => {
       return okRead({ pages: NEW_PAGES });
     });
     expect(await refresh(finished, after.reader, fakeExtractor(() => NEW_PROFILE).extractor)).toEqual({ checked: 0, changed: 0, failed: 0 });
-    expect(external(finished)).toMatchObject({ ...fresh, pages: PAGES, checkedAt: null });
+    expect(external(finished)).toMatchObject({ ...fresh, pages: PAGES, checkedAt: NOW });
   });
 
   it("site déconnecté ou passé en texte collé depuis la sélection : ignoré", async () => {
@@ -2374,7 +2402,8 @@ describe("refreshExternalSites", () => {
     });
     await expect(refresh(handle, reader, fakeExtractor().extractor)).resolves.toEqual({ checked: 1, changed: 0, failed: 1 });
     handle.failWith(undefined);
-    expect(external(handle)).toMatchObject({ profile: PROFILE, checkedAt: null });
+    // Le contrôle était déjà daté quand la base a lâché : le site ne repassera pas en tête de file au prochain passage
+    expect(external(handle)).toMatchObject({ profile: PROFILE, checkedAt: NOW });
     // Le journal porte le code de l'erreur, jamais son message (une erreur de base recopie la requête et ses paramètres)
     expect(logged()).toMatch(/relecture du site .* interrompue \(08006\)/);
     expect(logged()).not.toContain("connection terminated");

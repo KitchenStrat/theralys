@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@theralys/ui";
-import { siteAddressLabel } from "@/lib/external-site/format";
+import { frenchSpacing, siteAddressLabel } from "@/lib/external-site/format";
 import { PILL_PRIMARY, PILL_SECONDARY } from "./styles";
 
 /**
@@ -31,7 +31,7 @@ export function HostedSiteCard({ url, role }: { url: string; role: HostedSiteRol
             <p className="mt-1 wrap-anywhere text-base font-medium text-ink-900" data-testid="hosted-site-url">
               {siteAddressLabel(url)}
             </p>
-            <p className="mt-2 text-base text-ink-700">{ROLE_TEXT[role]}</p>
+            <p className="mt-2 text-base text-ink-700">{frenchSpacing(ROLE_TEXT[role])}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <Link href="/editor" className={role === "reference" ? PILL_PRIMARY : PILL_SECONDARY} data-testid="hosted-site-edit">

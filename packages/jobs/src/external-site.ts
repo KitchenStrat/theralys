@@ -1142,7 +1142,9 @@ async function refreshFailed(db: Database, row: Pick<ExternalSiteRow, "id" | "si
  * Relecture d'un site : contrôle inscrit si rien n'a changé, sinon profil
  * extrait de nouveau et enregistré. Une relecture aboutie efface l'échec
  * qu'une lecture du praticien aurait laissé ; une relecture en échec ne
- * touche à rien d'autre que la date du contrôle.
+ * touche à rien d'autre que la date du contrôle. Cette date est inscrite dès
+ * avant la lecture : une relecture qui n'aboutit jamais (processus arrêté en
+ * route) compte comme un contrôle, le site n'est repris qu'au mois suivant.
  */
 async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, extractor: ExternalProfileExtractor, deps: ExternalSiteDeps): Promise<RefreshOutcome> {
   const clock = () => deps.now ?? new Date();
@@ -1153,6 +1155,9 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
     if (!row || row.status !== "ready" || row.source !== "crawl") return "skipped";
     const env = deps.env ?? process.env;
     const site = await loadSiteContext(db, siteId);
+    // Contrôle inscrit avant la lecture : si elle emporte le processus (page qui épuise la mémoire ou fige le
+    // calcul au-delà de toute échéance), ce site ne reste pas en tête de file à chaque passage, devant tous les autres
+    await recordCheck(db, row.id, clock());
     const outcome = await reader.read(row.url, { deadlineMs: EXTERNAL_READ_DEADLINE_MS });
     if (!outcome.ok) return await refreshFailed(db, row, isExternalReadError(outcome.error) ? outcome.error : "internal", clock());
     if (textLength(outcome.pages) < EXTERNAL_SITE_LIMITS.minChars) return await refreshFailed(db, row, "empty", clock());

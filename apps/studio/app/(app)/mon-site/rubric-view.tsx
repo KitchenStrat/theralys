@@ -49,7 +49,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
                 {profile.highlights.map((item, index) => (
                   <li key={index}>
                     <span className="font-medium text-ink-900">{item.title}</span>
-                    {item.text ? ` : ${item.text}` : ""}
+                    {item.text ? `\u00a0: ${item.text}` : ""}
                   </li>
                 ))}
               </ul>
@@ -66,7 +66,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
               {specialty.excerpt !== "" ? <p>{specialty.excerpt}</p> : null}
               {specialty.url ? (
                 <p className="text-sm">
-                  Page de votre site : <ExternalLink href={specialty.url}>{siteAddressLabel(specialty.url)}</ExternalLink>
+                  Page de votre site&nbsp;: <ExternalLink href={specialty.url}>{siteAddressLabel(specialty.url)}</ExternalLink>
                 </p>
               ) : null}
             </li>
@@ -104,7 +104,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
         <ol className="list-decimal space-y-2 pl-5">
           {profile.process.map((step, index) => (
             <li key={index}>
-              <span className="font-medium text-ink-900">{step.title}</span> : {step.description}
+              <span className="font-medium text-ink-900">{step.title}</span>&nbsp;: {step.description}
             </li>
           ))}
         </ol>
@@ -149,7 +149,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
                 <ul>
                   {hours.map((line, index) => (
                     <li key={index}>
-                      {line.label} : {line.value}
+                      {line.label}&nbsp;: {line.value}
                     </li>
                   ))}
                 </ul>
@@ -174,7 +174,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
         </p>
       ) : (
         <p>
-          {booking.platform ? `Sur ${booking.platform} : ` : "En ligne : "}
+          {booking.platform ? `Sur ${booking.platform}\u00a0: ` : "En ligne\u00a0: "}
           <ExternalLink href={booking.href}>{siteAddressLabel(booking.href)}</ExternalLink>
         </p>
       );
@@ -184,7 +184,7 @@ export function RubricView({ rubric, profile }: { rubric: RubricId; profile: Ext
         <ul className="space-y-1.5">
           {SOCIAL_NETWORKS.filter((network) => profile.social[network.key]).map((network) => (
             <li key={network.key}>
-              <span className="font-medium text-ink-900">{network.label} :</span> <ExternalLink href={profile.social[network.key] ?? ""}>{siteAddressLabel(profile.social[network.key] ?? "")}</ExternalLink>
+              <span className="font-medium text-ink-900">{network.label}&nbsp;:</span> <ExternalLink href={profile.social[network.key] ?? ""}>{siteAddressLabel(profile.social[network.key] ?? "")}</ExternalLink>
             </li>
           ))}
         </ul>

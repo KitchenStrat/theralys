@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
+import { frenchSpacing } from "@/lib/external-site/format";
 import { measureStatusLabel, type InstallGuide, type MeasureState } from "@/lib/external-site/measure";
 import { CopyButton } from "./copy-button";
 import { Pill } from "./pill";
@@ -61,7 +62,7 @@ export function MeasureCard({
         </div>
         <p className="mt-2 max-w-2xl text-base text-ink-700">
           Pour suivre ici les visites de votre site, collez-y le petit code ci-dessous. Il compte les visites, le site d&apos;où viennent vos visiteurs, et les clics sur vos liens de
-          rendez-vous et sur votre numéro de téléphone. Il ne dépose aucun cookie et ne fait aucun suivi publicitaire : il ne demande donc pas de bandeau de consentement.
+          rendez-vous et sur votre numéro de téléphone. Il ne dépose aucun cookie et ne fait aucun suivi publicitaire&nbsp;: il ne demande donc pas de bandeau de consentement.
         </p>
 
         <div className="mt-5">
@@ -86,7 +87,7 @@ export function MeasureCard({
             <p className="mt-1 text-sm text-ink-700">Choisissez l&apos;outil avec lequel votre site a été créé.</p>
           )}
           <div className="mt-3">
-            {detected ? <p className="text-sm font-medium text-ink-700">Avec un autre outil :</p> : null}
+            {detected ? <p className="text-sm font-medium text-ink-700">Avec un autre outil&nbsp;:</p> : null}
             <ul className="mt-1 divide-y divide-cream-200 border-y border-cream-200">
               {others.map((guide) => (
                 <li key={guide.id}>
@@ -111,8 +112,8 @@ export function MeasureCard({
         <div className="mt-6">
           <h3 className="text-base font-semibold text-ink-900">3. Vérifiez que cela fonctionne</h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-700">
-            Une fois le code en place, ouvrez votre site dans un nouvel onglet, puis revenez ici et cliquez sur « Vérifier ». Si votre navigateur est réglé sur « Ne pas me pister », votre
-            propre visite n&apos;est pas comptée : c&apos;est voulu.
+            Une fois le code en place, ouvrez votre site dans un nouvel onglet, puis revenez ici et cliquez sur «&nbsp;Vérifier&nbsp;». Si votre navigateur est réglé sur «&nbsp;Ne pas me pister&nbsp;», votre
+            propre visite n&apos;est pas comptée&nbsp;: c&apos;est voulu.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <Button type="button" variant="secondary" size="sm" disabled={checking} onClick={() => startChecking(() => router.refresh())} data-testid="measure-check">
@@ -120,7 +121,7 @@ export function MeasureCard({
             </Button>
             {/* Région vivante permanente : le résultat de la vérification y est annoncé */}
             <p className="text-sm font-medium text-ink-900" role="status" data-testid="measure-check-result">
-              {checking ? "Vérification en cours…" : checked ? `Vérifié à l'instant : ${status.charAt(0).toLowerCase()}${status.slice(1)}.` : null}
+              {checking ? "Vérification en cours…" : checked ? `Vérifié à l'instant\u00a0: ${status.charAt(0).toLowerCase()}${status.slice(1)}.` : null}
             </p>
           </div>
         </div>
@@ -128,8 +129,8 @@ export function MeasureCard({
         <div className="mt-6 border-t border-cream-200 pt-5">
           <h3 className="text-base font-semibold text-ink-900">À ajouter à votre politique de confidentialité</h3>
           <p className="mt-1 max-w-2xl text-sm text-ink-700">
-            Vos visiteurs doivent être informés de cette mesure et pouvoir la refuser. Copiez ce paragraphe dans la page « Politique de confidentialité » (ou « Mentions légales ») de
-            votre site : il donne l&apos;adresse à ouvrir pour refuser la mesure.
+            Vos visiteurs doivent être informés de cette mesure et pouvoir la refuser. Copiez ce paragraphe dans la page «&nbsp;Politique de confidentialité&nbsp;» (ou «&nbsp;Mentions légales&nbsp;») de
+            votre site&nbsp;: il donne l&apos;adresse à ouvrir pour refuser la mesure.
           </p>
           <blockquote className="mt-2 max-w-3xl whitespace-pre-line wrap-anywhere rounded-xl border border-cream-300 bg-cream-50 px-4 py-3 text-sm text-ink-900" data-testid="privacy-paragraph">
             {privacyText}
@@ -146,15 +147,15 @@ export function MeasureCard({
 function GuideBody({ guide }: { guide: InstallGuide }) {
   return (
     <div className="mt-2 max-w-2xl text-sm text-ink-700">
-      {guide.requirement ? <p className="mb-2">{guide.requirement}</p> : null}
+      {guide.requirement ? <p className="mb-2">{frenchSpacing(guide.requirement)}</p> : null}
       {guide.steps.length > 0 ? (
         <ol className="list-decimal space-y-1.5 pl-5">
           {guide.steps.map((step) => (
-            <li key={step}>{step}</li>
+            <li key={step}>{frenchSpacing(step)}</li>
           ))}
         </ol>
       ) : null}
-      {guide.note ? <p className={guide.steps.length > 0 ? "mt-2" : undefined}>{guide.note}</p> : null}
+      {guide.note ? <p className={guide.steps.length > 0 ? "mt-2" : undefined}>{frenchSpacing(guide.note)}</p> : null}
     </div>
   );
 }

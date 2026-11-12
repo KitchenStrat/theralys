@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_EXTERNAL_FACTS, type ExternalSiteFacts } from "@theralys/shared";
 import { loadDocument } from "./extract";
 import { cleanEmail, collectPageFacts, detectCms, detectTags, displayPhone, mergeSiteFacts, normalizeColor, openingHoursLabels, postalAddressLine, readJsonLd, socialProfileOf, type PageFacts } from "./facts";
+import { timed } from "./test-timing";
 
 const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 const SITE = "https://www.mon-cabinet.fr/";
@@ -452,12 +453,6 @@ describe("balises, outil de création, couleur", () => {
 });
 
 describe("pages piégées", () => {
-  const timed = <T>(run: () => T): { value: T; ms: number } => {
-    const start = performance.now();
-    const value = run();
-    return { value, ms: performance.now() - start };
-  };
-
   it("données structurées démesurées : listes, entités et blocs lus en nombre borné", () => {
     const business = { "@type": "LocalBusiness", name: "Cabinet", telephone: Array.from({ length: 2_000 }, (_, i) => `04 72 00 ${String(i % 100).padStart(2, "0")} ${String(Math.floor(i / 100)).padStart(2, "0")}`), sameAs: Array.from({ length: 2_000 }, (_, i) => `https://www.instagram.com/compte${i}/`) };
     const crowd = { "@graph": Array.from({ length: 200 }, (_, i) => ({ "@type": "Person", name: `Personne ${i}` })) };
@@ -485,8 +480,40 @@ describe("pages piégées", () => {
     expect(value.emails).toEqual([]);
     expect(value.social).toEqual({});
     expect(value.address!.length).toBeLessThanOrEqual(160);
-    expect(value.hours).toEqual([{ label: "Lundi et mardi", value: "9h – 12h" }]);
+    // Une ligne d'horaires de plusieurs milliers de caractères n'en est pas une
+    expect(value.hours).toEqual([]);
     expect(ms).toBeLessThan(3_000);
+  });
+
+  it("valeurs fabriquées pour faire hésiter la lecture (heure, horaires, couleur) : écartées sans attente", () => {
+    // Longues suites d'espaces terminées par un caractère qui fait échouer la lecture : examinées par une expression
+    // régulière, elles occupaient le processus plus de dix secondes chacune, au-delà de toute échéance
+    const spaces = " ".repeat(150_000);
+    const { value, ms } = timed(() => ({
+      color: normalizeColor(`rgb(1${spaces}x`),
+      colorTwice: normalizeColor(`rgb(1${" ".repeat(20_000)}2${" ".repeat(20_000)}x`),
+      opens: openingHoursLabels([{ dayOfWeek: "Monday", opens: `1${spaces}x`, closes: "18:00" }], undefined),
+      closes: openingHoursLabels([{ dayOfWeek: "Monday", opens: "09:00", closes: `18${spaces}h${spaces}x` }], undefined),
+      hours: openingHoursLabels(undefined, `mo${spaces}\r`),
+      days: openingHoursLabels(undefined, `mo${" ,".repeat(60_000)} 9:00-12:00`),
+      page: siteFacts(`<meta name="theme-color" content="rgb(1${spaces}x">${jsonLd({ "@type": "LocalBusiness", name: "Cabinet", openingHours: `mo${" ".repeat(100_000)}\r`, openingHoursSpecification: [{ dayOfWeek: "Monday", opens: `1${" ".repeat(50_000)}x`, closes: "18:00" }] })}`),
+    }));
+    expect(value.color).toBeUndefined();
+    expect(value.colorTwice).toBeUndefined();
+    expect(value.opens).toEqual([]);
+    expect(value.closes).toEqual([]);
+    expect(value.hours).toEqual([]);
+    expect(value.days).toEqual([]);
+    expect(value.page.name).toBe("Cabinet");
+    expect(value.page.hours).toEqual([]);
+    expect(value.page).not.toHaveProperty("themeColor");
+    expect(ms).toBeLessThan(1_000);
+  });
+
+  it("heures, horaires et couleur ordinaires entourés d'espaces : toujours lus", () => {
+    expect(openingHoursLabels([{ dayOfWeek: "Monday", opens: "  09:00 ", closes: " 18 h " }], undefined)).toEqual([{ label: "Lundi", value: "9h – 18h" }]);
+    expect(openingHoursLabels(undefined, "  Mo - Fr   09:00 - 12:30  ")).toEqual([{ label: "Lundi au vendredi", value: "9h – 12h30" }]);
+    expect(normalizeColor("  RGB( 58 , 125 , 107 )  ")).toBe("#3a7d6b");
   });
 
   it("bloc JSON-LD de plus de 200 000 caractères : ignoré ; au-delà de cinquante blocs : ignorés", () => {

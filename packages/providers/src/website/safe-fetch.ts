@@ -297,9 +297,14 @@ export function checkUrl(input: string | URL, policy: NetworkPolicy): URL {
     if (!policy.allowIpLiteral) throw new SafeFetchError("ip_literal", "adresse IP littérale refusée");
     if (!policy.isAddressAllowed(literal)) throw new SafeFetchError("private_address", "adresse non publique");
   } else {
-    if (host.length > 253 || !host.includes(".")) throw new SafeFetchError("bad_host", "nom d'hôte refusé");
+    // Étiquette vide (« exemple..fr », deux points finaux) : ce n'est pas un nom. Sans ce refus, « 127.0.0.1.. »
+    // perd un point ici, puis l'analyseur d'adresse en fait l'adresse IP 127.0.0.1 — qui n'aurait été contrôlée
+    // ni comme adresse littérale, ni comme nom réservé (« localhost.. », « x.internal.. »)
+    if (host.length > 253 || !host.includes(".") || host.split(".").includes("")) throw new SafeFetchError("bad_host", "nom d'hôte refusé");
     if (host === "localhost" || RESERVED_SUFFIXES.some((suffix) => host.endsWith(suffix))) throw new SafeFetchError("bad_host", "nom d'hôte réservé");
     url.hostname = host;
+    // L'analyseur relit l'hôte qu'on lui donne : s'il en fait autre chose que le nom contrôlé, l'adresse est refusée
+    if (url.hostname !== host || net.isIP(url.hostname) !== 0) throw new SafeFetchError("bad_host", "nom d'hôte refusé");
   }
   url.hash = "";
   return url;
@@ -649,7 +654,8 @@ export function decodeText(body: Uint8Array): string {
 export function decodeHtml(body: Uint8Array, contentTypeHeader: string | null): string {
   const fromHeader = /charset\s*=\s*["']?([\w.:-]+)/i.exec(contentTypeHeader ?? "")?.[1];
   const head = new TextDecoder("latin1").decode(body.subarray(0, 4096));
-  const fromMeta = /<meta[^>]{0,200}?charset\s*=\s*["']?\s*([\w.:-]+)/i.exec(head)?.[1];
+  // Une seule classe pour les espaces et les guillemets qui suivent le signe égal : deux suites d'espaces côte à côte coûteraient un temps quadratique
+  const fromMeta = /<meta[^>]{0,200}?charset\s*=[\s"']*([\w.:-]+)/i.exec(head)?.[1];
   for (const label of [fromHeader, fromMeta]) {
     if (!label) continue;
     try {

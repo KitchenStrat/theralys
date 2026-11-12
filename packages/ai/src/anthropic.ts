@@ -19,6 +19,15 @@ export type AnthropicClientOptions = {
    * une relance avec le détail des oublis si le modèle les a omis en masse.
    */
   emphasis?: boolean;
+  /**
+   * Le prompt porte un texte venu d'un tiers (pages d'un site lu), que le
+   * modèle peut reprendre dans sa réponse : la relance ne cite alors rien de
+   * la réponse précédente — ni extrait des formulations refusées, ni détail de
+   * l'erreur de format. Sans cela, quelques dizaines de caractères du site lu
+   * sortiraient de leur bloc de données et se présenteraient au modèle, au
+   * second appel, à la suite de nos propres consignes.
+   */
+  untrustedInput?: boolean;
 };
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -106,10 +115,11 @@ export async function completeStructured<T>(
       const parsed = schema.parse(raw);
       const compliance = checkEthicalComplianceDeep(parsed);
       if (!compliance.ok) {
-        feedback = `ATTENTION : ta précédente réponse contenait des formulations interdites (marketing éthique). Corrige impérativement :\n${compliance.violations
-          .slice(0, 8)
-          .map((v) => `- [${v.rule}] ${v.excerpt}`)
-          .join("\n")}`;
+        // Texte d'un tiers dans le prompt : seules les règles enfreintes sont nommées (libellés de notre liste), sans extrait
+        const details = opts.untrustedInput
+          ? [...new Set(compliance.violations.map((v) => v.rule))].map((rule) => `- ${rule}`)
+          : compliance.violations.slice(0, 8).map((v) => `- [${v.rule}] ${v.excerpt}`);
+        feedback = `ATTENTION : ta précédente réponse contenait des formulations interdites (marketing éthique). Corrige impérativement :\n${details.join("\n")}`;
         lastError = new Error(
           `Contenu non conforme au marketing éthique : ${compliance.violations[0]?.rule}`,
         );
@@ -126,7 +136,10 @@ export async function completeStructured<T>(
       return parsed;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      feedback = `Ta précédente réponse n'était pas un JSON valide conforme au format demandé (${lastError.message.slice(0, 300)}). Recommence en respectant strictement le format.`;
+      // Le message d'une erreur de lecture cite la réponse (JSON.parse en reprend un extrait) : il n'est pas transmis quand le prompt porte le texte d'un tiers
+      feedback = opts.untrustedInput
+        ? "Ta précédente réponse n'était pas un JSON valide conforme au format demandé. Recommence en respectant strictement le format."
+        : `Ta précédente réponse n'était pas un JSON valide conforme au format demandé (${lastError.message.slice(0, 300)}). Recommence en respectant strictement le format.`;
     }
   }
 

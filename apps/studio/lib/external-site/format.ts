@@ -13,6 +13,16 @@ const PARIS_TZ = "Europe/Paris";
 /** Espace insécable : « 10 h 32 », « 3 lectures » ne se coupent pas en fin de ligne. */
 const NBSP = " ";
 
+/**
+ * Typographie française d'un texte d'interface : espace insécable avant
+ * « : ; ? ! » et à l'intérieur des guillemets, pour qu'une ligne ne commence
+ * jamais par un signe de ponctuation sur un écran étroit. Les adresses web ne
+ * sont pas touchées (leurs deux-points ne suivent pas une espace).
+ */
+export function frenchSpacing(text: string): string {
+  return text.replace(/ ([:;?!»])/g, `${NBSP}$1`).replace(/« /g, `«${NBSP}`);
+}
+
 /** Adresse telle qu'on la lit : sans protocole ni barre finale (`www.mon-cabinet.fr`). */
 export function siteAddressLabel(url: string): string {
   return url.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");

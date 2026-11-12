@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeEntities } from "./entities";
+import { cpuNow } from "./test-timing";
 
 const cp = (...codes: number[]): string => String.fromCodePoint(...codes);
 
@@ -79,9 +80,9 @@ describe("decodeEntities — XML", () => {
 describe("decodeEntities — robustesse", () => {
   it("texte long et truffé d'esperluettes : un passage, quelques millisecondes", () => {
     const text = "a&b&amp;c&#233;&eacute&unknown;&".repeat(100_000);
-    const start = performance.now();
+    const start = cpuNow();
     const decoded = decodeEntities(text);
-    expect(performance.now() - start).toBeLessThan(2_000);
+    expect(cpuNow() - start).toBeLessThan(2_000);
     expect(decoded.startsWith("a&b&céé&unknown;&a&b&céé&unknown;&")).toBe(true);
   });
 

@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { EXTERNAL_PAGE_KINDS } from "@theralys/shared";
-import { PAGE_KIND_LABELS, detectedItems, formatDayParis, formatMomentParis, plural, readsRemaining, readsRemainingLabel, siteAddressLabel } from "./format";
+import { PAGE_KIND_LABELS, detectedItems, formatDayParis, formatMomentParis, frenchSpacing, plural, readsRemaining, readsRemainingLabel, siteAddressLabel } from "./format";
+
+describe("frenchSpacing", () => {
+  it("rend insécable l'espace avant « : ; ? ! » et à l'intérieur des guillemets", () => {
+    expect(frenchSpacing("Vous avez déjà un site ?")).toBe("Vous avez déjà un site\u00a0?");
+    expect(frenchSpacing("C'est noté : cliquez sur « Vérifier » ; puis patientez !")).toBe("C'est noté\u00a0: cliquez sur «\u00a0Vérifier\u00a0»\u00a0; puis patientez\u00a0!");
+  });
+
+  it("ne touche ni aux adresses web ni à un texte déjà mis en forme", () => {
+    expect(frenchSpacing("Nous lirons le site https://www.cabinet-exemple.fr")).toBe("Nous lirons le site https://www.cabinet-exemple.fr");
+    expect(frenchSpacing("Par exemple : www.mon-cabinet.fr/contact?page=2")).toBe("Par exemple\u00a0: www.mon-cabinet.fr/contact?page=2");
+    const once = frenchSpacing("Ouvrez « Paramètres » : c'est là.");
+    expect(frenchSpacing(once)).toBe(once);
+    expect(frenchSpacing("")).toBe("");
+  });
+});
 
 describe("siteAddressLabel", () => {
   it("retire le protocole et la barre finale", () => {

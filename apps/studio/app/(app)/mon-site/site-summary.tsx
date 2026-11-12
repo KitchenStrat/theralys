@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, Spinner } from "@theralys/ui";
 import { EXTERNAL_PASTE_FALLBACK_ERRORS, EXTERNAL_READ_ERRORS, type ExternalPageKind, type ExternalReadError, type ExternalSiteSource } from "@theralys/shared";
-import { PAGE_KIND_LABELS, plural, readsRemaining, readsRemainingLabel, siteAddressLabel, type DetectedItem } from "@/lib/external-site/format";
+import { PAGE_KIND_LABELS, frenchSpacing, plural, readsRemaining, readsRemainingLabel, siteAddressLabel, type DetectedItem } from "@/lib/external-site/format";
 import { rereadExternalSite } from "./actions";
 import { ActionMessage } from "./fields";
 import { PasteForm } from "./paste-form";
@@ -102,7 +102,7 @@ export function SiteSummary({
               {pending ? <Spinner /> : null} Relire mon site
             </Button>
             <p className="max-w-xs text-sm text-ink-700 sm:text-right" data-testid="reads-remaining">
-              {readsRemainingLabel(reads)}
+              {frenchSpacing(readsRemainingLabel(reads))}
             </p>
           </div>
         </div>
@@ -115,10 +115,10 @@ export function SiteSummary({
           <div className="mt-4 rounded-2xl bg-warning-100 px-4 py-3 text-sm text-ink-900" data-testid="read-warning" data-error={error}>
             <p className="font-semibold">
               <span aria-hidden>⚠ </span>
-              La dernière lecture n&apos;a pas abouti : le profil précédent est conservé.
+              La dernière lecture n&apos;a pas abouti&nbsp;: le profil précédent est conservé.
             </p>
             <p className="mt-1">
-              {EXTERNAL_READ_ERRORS[error].title}. {EXTERNAL_READ_ERRORS[error].hint}
+              {frenchSpacing(`${EXTERNAL_READ_ERRORS[error].title}. ${EXTERNAL_READ_ERRORS[error].hint}`)}
             </p>
           </div>
         ) : null}
@@ -129,7 +129,7 @@ export function SiteSummary({
               <div className="rounded-2xl border border-cream-300 p-4">
                 <h3 className="text-base font-semibold">Coller le texte de mon site</h3>
                 <p className="mb-3 mt-1 text-sm text-ink-700">
-                  Collez le texte à jour de vos pages : il remplace ce qui avait été lu. Vos corrections sont conservées.
+                  Collez le texte à jour de vos pages&nbsp;: il remplace ce qui avait été lu. Vos corrections sont conservées.
                 </p>
                 <PasteForm
                   idPrefix="repaste"
@@ -190,7 +190,7 @@ export function SiteSummary({
               <dl className="mt-3 space-y-1.5 text-sm">
                 {detected.map((item) => (
                   <div key={item.id} className="flex flex-wrap gap-x-2" data-testid={`detected-${item.id}`} data-found={item.found}>
-                    <dt className="text-ink-700">{item.label} :</dt>
+                    <dt className="text-ink-700">{item.label}&nbsp;:</dt>
                     <dd className={item.found ? "font-medium text-ink-900" : "text-ink-700"}>{item.detail}</dd>
                   </div>
                 ))}

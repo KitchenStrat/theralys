@@ -68,7 +68,8 @@ export default async function HomePage({ searchParams }: Props) {
 
   return (
     <div className="grid gap-7 lg:grid-cols-[1fr_420px]">
-      <div className="space-y-6">
+      {/* `min-w-0` : une colonne ne s'élargit jamais au-delà de l'écran (titre de publication tenu sur une ligne, adresse longue) */}
+      <div className="min-w-0 space-y-6">
         <Card className="p-6 md:p-7">
           <StatsPanel
             firstName={firstName}
@@ -96,7 +97,7 @@ export default async function HomePage({ searchParams }: Props) {
                   {siteAddressLabel(ownSite.url)}
                 </p>
                 <p className="mt-1 max-w-md text-base text-ink-500">
-                  Vos outils s&apos;appuient sur votre site : contenus, liens et statistiques.
+                  Vos outils s&apos;appuient sur votre site&nbsp;: contenus, liens et statistiques.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -130,7 +131,7 @@ export default async function HomePage({ searchParams }: Props) {
                 </p>
                 <p className="mt-2 text-sm">
                   <Link href="/mon-site" data-testid="site-card-connect-link" className="font-medium text-primary-700 hover:underline">
-                    Vous avez déjà un site ?
+                    Vous avez déjà un site&nbsp;?
                   </Link>
                 </p>
               </div>
@@ -155,7 +156,7 @@ export default async function HomePage({ searchParams }: Props) {
         )}
       </div>
 
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-6">
         {blog ? (
           <Card className="p-6">
             <div className="flex items-baseline justify-between gap-3">

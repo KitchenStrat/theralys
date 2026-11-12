@@ -2,6 +2,7 @@ import { load } from "cheerio/slim";
 import { describe, expect, it } from "vitest";
 import type { DomNode } from "./dom";
 import { MARKUP_LIMITS, MarkupTooComplexError, assertParsable, measureMarkup, type MarkupMeasure } from "./markup-guard";
+import { timed } from "./test-timing";
 
 const exact = (markup: string, xml = false): MarkupMeasure => measureMarkup(markup, { xml, maxDepth: Infinity, maxNodes: Infinity });
 
@@ -154,11 +155,6 @@ describe("measureMarkup — fidélité à l'analyseur", () => {
 });
 
 describe("bornes d'un document analysable", () => {
-  const timed = <T>(run: () => T): { value: T; ms: number } => {
-    const start = performance.now();
-    const value = run();
-    return { value, ms: performance.now() - start };
-  };
   const reasonOf = (markup: string, xml = false): string | null => {
     try {
       assertParsable(markup, { xml });

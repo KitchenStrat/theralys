@@ -106,8 +106,41 @@ const SOCIAL_HOSTS = [
   "g.page",
   "goo.gl",
 ];
-/** Sous-domaines de ces hôtes qui hébergent de vrais sites. */
+/**
+ * Sous-domaines de ces hôtes qui hébergent de vrais sites. Ce sont des hôtes
+ * partagés : des sites sans rapport y vivent chacun sous son propre chemin
+ * (« sites.google.com/view/<nom> »), l'hôte seul n'y désigne donc pas un site
+ * (cf. `sharedHostSitePath`).
+ */
 const SOCIAL_HOST_EXCEPTIONS = ["sites.google.com"];
+
+/**
+ * Dossier d'un site hébergé sur un hôte partagé (« /view/cabinet-dupont ») ;
+ * chaîne vide pour un site qui a son propre hôte, ou une adresse illisible.
+ * Sert à vérifier qu'une visite mesurée vient bien d'une page de ce site, et
+ * non d'un autre site du même hôte.
+ */
+export function sharedHostSitePath(siteUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(siteUrl);
+  } catch {
+    return "";
+  }
+  if (!SOCIAL_HOST_EXCEPTIONS.includes(parsed.hostname.toLowerCase())) return "";
+  const segments = parsed.pathname.split("/").filter((segment) => segment !== "");
+  // « /view/<nom> », « /site/<nom> », « /<domaine>/<nom> » ; « /a/<domaine>/<nom> » pour les anciens sites d'organisation
+  const depth = segments[0] === "a" ? 3 : 2;
+  return segments.length < depth ? "" : `/${segments.slice(0, depth).join("/")}`;
+}
+
+/** Le chemin d'une page est-il celui du site, ou d'une de ses pages ? `sitePath` vide : tout chemin convient. */
+export function isUnderSitePath(path: string, sitePath: string): boolean {
+  return sitePath === "" || path === sitePath || path.startsWith(`${sitePath}/`);
+}
+
+// Page d'accueil désignée par son nom (« /accueil », « /fr/index.php ») : c'est le dossier qui la contient qui est le site
+const HOME_PAGE_SEGMENT = /^(?:index|default|home|accueil|bienvenue|welcome)(?:\.(?:html?|php|aspx?|jsp))?$/i;
 
 /** Hôtes réservés ou locaux : jamais un site public. */
 const RESERVED_SUFFIXES = [".local", ".localhost", ".internal", ".intranet", ".lan", ".home", ".corp", ".test", ".example", ".invalid", ".onion", ".arpa"];
@@ -144,8 +177,9 @@ export function isSameSiteHost(a: string, b: string): boolean {
 
 /**
  * Adresse de site saisie par le praticien → adresse normalisée
- * (`https://hôte[/chemin]`, sans paramètre ni ancre ni barre finale) ou motif
- * de refus avec son message. Refusés : autre protocole que le web,
+ * (`https://hôte[/chemin]`, sans paramètre ni ancre ni barre finale, sans le
+ * nom d'une page d'accueil en fin de chemin) ou motif de refus avec son
+ * message. Refusés : autre protocole que le web,
  * identifiants, port, adresse IP, hôte local ou réservé, réseau social,
  * plateforme de rendez-vous ou annuaire, et les hôtes de `ownHosts` (le site
  * hébergé lui-même). Contrôle de forme seulement : la joignabilité et la
@@ -189,9 +223,15 @@ export function normalizeExternalSiteUrl(input: string | null | undefined, opts:
   if (!SOCIAL_HOST_EXCEPTIONS.includes(host) && SOCIAL_HOSTS.some((domain) => hostMatches(bare, domain))) return failUrl("social");
   if (bookingPlatformOf(`https://${host}/`) !== null || DIRECTORY_HOSTS.some((domain) => hostMatches(bare, domain))) return failUrl("directory");
 
-  const path = parsed.pathname.replace(/\/+$/, "");
+  let path = parsed.pathname.replace(/\/+$/, "");
+  // Adresse copiée depuis la page d'accueil (« /accueil », « /fr/index.php ») : le site est le dossier qui la
+  // contient — gardée telle quelle, elle réduirait la lecture, les liens et les pages d'atterrissage à cette seule page
+  const lastSlash = path.lastIndexOf("/");
+  if (HOME_PAGE_SEGMENT.test(path.slice(lastSlash + 1))) path = path.slice(0, lastSlash);
   const url = `https://${host}${path}`;
   if (url.length > EXTERNAL_URL_MAX) return failUrl("too_long");
+  // Hôte partagé donné sans le dossier du site : ce n'est l'adresse d'aucun site
+  if (SOCIAL_HOST_EXCEPTIONS.includes(host) && sharedHostSitePath(url) === "") return failUrl("invalid");
   return { ok: true, url, host };
 }
 
@@ -498,35 +538,66 @@ export const EMPTY_EXTERNAL_PROFILE: ExternalSiteProfile = {
  */
 export type ExternalProfileOverrides = Partial<Omit<ExternalSiteProfile, "contact">> & { contact?: Partial<ExternalSiteProfile["contact"]> };
 
-// Caractères de contrôle et caractères invisibles (largeur nulle, marques de sens d'écriture), écrits par leurs codes
-const INVISIBLE_CHARS = new RegExp(
-  "[" +
-    [
-      [0x00, 0x08],
-      [0x0b, 0x0c],
-      [0x0e, 0x1f],
-      [0x7f, 0x7f],
-      [0x200b, 0x200f],
-      [0x2028, 0x202e],
-      [0x2060, 0x206f],
-      [0xfeff, 0xfeff],
-    ]
-      .map(([from, to]) => `\\u${from!.toString(16).padStart(4, "0")}-\\u${to!.toString(16).padStart(4, "0")}`)
-      .join("") +
-    "]",
-  "g",
-);
+/*
+ * Caractères qu'un lecteur ne voit pas, retirés de tout texte venu d'un site
+ * tiers ou du modèle : contrôles, largeur nulle, marques de sens d'écriture,
+ * césure conditionnelle, sélecteurs de variante, « étiquettes » Unicode (elles
+ * servent à dissimuler des consignes dans un texte d'apparence anodine). Même
+ * liste que le lecteur de sites ; plages écrites par leurs codes, pour
+ * qu'aucun caractère invisible ne figure dans ce fichier.
+ */
+const INVISIBLE_RANGES: readonly (readonly [number, number])[] = [
+  [0x0000, 0x0008], // contrôles C0 (hors tabulation et sauts de ligne)
+  [0x000b, 0x000c],
+  [0x000e, 0x001f],
+  [0x007f, 0x009f], // DEL et contrôles C1
+  [0x00ad, 0x00ad], // césure conditionnelle
+  [0x034f, 0x034f], // liant de graphèmes
+  [0x061c, 0x061c], // marque de sens d'écriture arabe
+  [0x180e, 0x180e], // séparateur mongol
+  [0x200b, 0x200f], // largeur nulle, marques gauche-droite
+  [0x2028, 0x202e], // séparateurs de ligne Unicode, changements de sens d'écriture
+  [0x2060, 0x206f], // liant de mots, opérateurs invisibles, isolats
+  [0xd800, 0xdfff], // demi-codets isolés (avec le drapeau « u », une paire complète n'est pas concernée) : la base les refuse
+  [0xfe00, 0xfe0f], // sélecteurs de variante
+  [0xfeff, 0xfeff], // marque d'ordre des octets
+  [0xfff9, 0xfffc], // annotations interlinéaires, objet de remplacement
+  [0xe0000, 0xe007f], // étiquettes Unicode
+  [0xe0100, 0xe01ef], // sélecteurs de variante supplémentaires
+];
+const codePointEscape = (code: number): string => `\\u{${code.toString(16)}}`;
+const INVISIBLE_CHARS = new RegExp(`[${INVISIBLE_RANGES.map(([from, to]) => (from === to ? codePointEscape(from) : `${codePointEscape(from)}-${codePointEscape(to)}`)).join("")}]`, "gu");
 
 // Texte libre venu d'un site tiers : une ligne (ou un paragraphe), sans balise ni caractère de contrôle
 function cleanText(value: unknown, max: number, opts: { multiline?: boolean } = {}): string {
   if (typeof value !== "string") return "";
-  let text = value.replace(INVISIBLE_CHARS, "").replace(/<[^>]{0,200}>/g, " ").replace(/[<>]/g, " ");
-  text = opts.multiline ? text.replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n") : text.replace(/\s+/g, " ");
-  text = text.trim();
+  // Seul ce qui a la forme d'une balise est retiré (« < » suivi d'une lettre, de « / » ou de « ! ») : dans
+  // « Enfant (<12 ans) : 40 €, adulte (>12 ans) : 60 € », rien ne doit disparaître. Les chevrons restants
+  // deviennent ‹ › : aucune balise ne peut s'écrire dans un texte du profil.
+  let text = value
+    .replace(INVISIBLE_CHARS, "")
+    .replace(/<[a-z/!][^<>]{0,200}>/gi, " ")
+    .replace(/</g, "‹")
+    .replace(/>/g, "›");
+  // Plusieurs lignes : chacune nettoyée, les lignes vides retirées (ligne par ligne : une expression qui chercherait
+  // les sauts de ligne au milieu des espaces passerait un temps quadratique sur une longue suite d'espaces)
+  text = opts.multiline
+    ? text
+        .split("\n")
+        .map((line) => line.replace(/\s+/g, " ").trim())
+        .filter((line) => line !== "")
+        .join("\n")
+    : text.replace(/\s+/g, " ").trim();
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:–—-]+$/, "")}…`;
+  let kept = (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:–—-]+$/, "");
+  // Les points de suspension comptent dans la borne (un mot plus long que la borne ne se coupe sur aucune espace)
+  if (kept.length >= max) kept = kept.slice(0, Math.max(0, max - 1));
+  // Jamais de demi-paire de substitution en fin de coupe (emoji coupé en deux) : la base refuserait le texte
+  const last = kept.charCodeAt(kept.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) kept = kept.slice(0, -1);
+  return `${kept}…`;
 }
 
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -912,6 +983,9 @@ export type ExternalMeasureEventCode = keyof typeof EXTERNAL_MEASURE_EVENTS;
  */
 export type ExternalMeasurePayload = { k: string; t: ExternalMeasureEventCode; p: string; r?: string };
 
+// Contrôles C0, DEL et contrôles C1, écrits par leurs codes
+const CONTROL_CHARS = new RegExp(`[${codePointEscape(0x00)}-${codePointEscape(0x1f)}${codePointEscape(0x7f)}-${codePointEscape(0x9f)}]`, "u");
+
 /** Corps d'une requête du code de mesure → visite validée, ou `null`. */
 export function parseExternalMeasure(body: string | null | undefined): ExternalMeasurePayload | null {
   if (!body || body.length > 1_000) return null;
@@ -927,6 +1001,8 @@ export function parseExternalMeasure(body: string | null | undefined): ExternalM
   const rawPath = typeof row.p === "string" ? row.p : "/";
   // Le chemin seul : ni paramètres (ils peuvent porter des identifiants de campagne), ni ancre
   const path = (rawPath.split(/[?#]/)[0] ?? "/").slice(0, 300);
+  // Un navigateur n'envoie jamais de caractère de contrôle dans un chemin (ils y sont encodés) ; la base refuserait le caractère nul
+  if (CONTROL_CHARS.test(path)) return null;
   const referrer = typeof row.r === "string" ? row.r.trim().toLowerCase().slice(0, 120) : "";
   return {
     k: row.k,

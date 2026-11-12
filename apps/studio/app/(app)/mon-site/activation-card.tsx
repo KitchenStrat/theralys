@@ -116,7 +116,7 @@ export function ActivationCard({
               <div className="mt-4 rounded-2xl bg-warning-100 px-4 py-3 text-sm text-ink-900" data-testid="activation-gaps">
                 <p className="font-semibold">
                   <span aria-hidden>⚠ </span>
-                  Votre profil est incomplet : en attendant, vos contenus s&apos;appuient sur votre site Harmony.
+                  Votre profil est incomplet&nbsp;: en attendant, vos contenus s&apos;appuient sur votre site Harmony.
                 </p>
                 <GapList gaps={gaps} />
               </div>
@@ -164,7 +164,7 @@ export function ActivationCard({
               </>
             ) : (
               <div className="mt-1 max-w-2xl text-base text-ink-700" data-testid="activation-gaps">
-                <p>Vos outils ne peuvent pas encore s&apos;appuyer sur ce site : il manque des informations à son profil.</p>
+                <p>Vos outils ne peuvent pas encore s&apos;appuyer sur ce site&nbsp;: il manque des informations à son profil.</p>
                 <GapList gaps={gaps} />
                 <p className="mt-3">
                   <a href="#profil" className={TEXT_LINK}>
@@ -188,7 +188,7 @@ export function ActivationCard({
       <Modal
         open={confirming}
         onClose={closeConfirm}
-        title="Déconnecter mon site ?"
+        title={"Déconnecter mon site\u00a0?"}
         footer={
           <>
             <Button type="button" variant="secondary" disabled={pending} onClick={closeConfirm} data-testid="disconnect-cancel">
@@ -205,7 +205,7 @@ export function ActivationCard({
             Le profil lu sur <span className="wrap-anywhere font-medium text-ink-900">{address}</span> et toutes vos corrections seront supprimés.
           </p>
           <p>Vos outils s&apos;appuieront de nouveau sur votre site Harmony. Rien ne change sur votre propre site.</p>
-          <p className="text-sm">Vous pourrez le reconnecter plus tard : il sera relu, et les lectures déjà faites ce mois-ci restent comptées.</p>
+          <p className="text-sm">Vous pourrez le reconnecter plus tard&nbsp;: il sera relu, et les lectures déjà faites ce mois-ci restent comptées.</p>
           <ActionMessage error={failure} testId="disconnect-error" />
         </div>
       </Modal>

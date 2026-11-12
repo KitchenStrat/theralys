@@ -3,6 +3,7 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { Input, Label } from "@theralys/ui";
+import { frenchSpacing } from "@/lib/external-site/format";
 import { FOCUS_RING } from "./styles";
 
 /**
@@ -19,12 +20,15 @@ const INVALID_BORDER = "aria-invalid:border-danger-500";
 
 const describedBy = (...ids: (string | false | undefined)[]): string | undefined => ids.filter(Boolean).join(" ") || undefined;
 
+/** Texte d'interface reçu en propriété (libellé, aide, message du service) : mis à la typographie française. */
+const typeset = (content: ReactNode): ReactNode => (typeof content === "string" ? frenchSpacing(content) : content);
+
 /** Message d'erreur d'un champ : texte précédé d'un signe, relié au champ par son identifiant. */
 export function FieldError({ id, children, testId }: { id: string; children: ReactNode; testId?: string }) {
   return (
     <p id={id} className="mt-1 flex items-start gap-1.5 text-sm font-medium text-danger-500" data-testid={testId}>
       <span aria-hidden>⚠</span>
-      <span>{children}</span>
+      <span>{typeset(children)}</span>
     </p>
   );
 }
@@ -47,7 +51,7 @@ type FieldProps = {
 function FieldLabel({ id, label, optional }: { id: string; label: string; optional?: boolean }) {
   return (
     <Label htmlFor={id}>
-      {label}
+      {frenchSpacing(label)}
       {optional ? <span className="font-normal text-ink-500"> (facultatif)</span> : null}
     </Label>
   );
@@ -98,7 +102,7 @@ export function TextField({
       />
       {hint !== undefined ? (
         <p id={`${id}-hint`} className="mt-1 text-xs text-ink-500">
-          {hint}
+          {typeset(hint)}
         </p>
       ) : null}
       {error ? <FieldError id={`${id}-error`}>{error}</FieldError> : null}
@@ -138,7 +142,7 @@ export function TextAreaField({
       />
       {hint !== undefined || maxLength !== undefined ? (
         <p id={`${id}-hint`} className="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-ink-500">
-          <span>{hint}</span>
+          <span>{typeset(hint)}</span>
           {maxLength !== undefined ? (
             <span className="whitespace-nowrap">
               {value.length} sur {maxLength} caractères
@@ -189,11 +193,11 @@ export function CheckboxField({
         />
         <div className="min-w-0">
           <label htmlFor={id} className="text-sm font-medium text-ink-900">
-            {label}
+            {typeset(label)}
           </label>
           {hint !== undefined ? (
             <p id={`${id}-hint`} className="mt-0.5 text-xs text-ink-500">
-              {hint}
+              {typeset(hint)}
             </p>
           ) : null}
         </div>
@@ -209,7 +213,7 @@ export function ActionMessage({ error, notice, testId }: { error?: string | null
     return (
       <p className="flex items-start gap-1.5 text-sm font-medium text-danger-500" role="alert" data-testid={testId}>
         <span aria-hidden>⚠</span>
-        <span>{error}</span>
+        <span>{frenchSpacing(error)}</span>
       </p>
     );
   }
@@ -219,7 +223,7 @@ export function ActionMessage({ error, notice, testId }: { error?: string | null
         <span aria-hidden className="text-success-500">
           ✓
         </span>
-        <span>{notice}</span>
+        <span>{frenchSpacing(notice)}</span>
       </p>
     );
   }

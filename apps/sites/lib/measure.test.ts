@@ -49,6 +49,10 @@ describe("screenMeasureRequest", () => {
       JSON.stringify({ k: KEY, t: "x", p: "/" }),
       JSON.stringify({ k: KEY, t: "toString", p: "/" }),
       JSON.stringify({ k: KEY, t: "p", p: `/${"a".repeat(1000)}` }),
+      // Caractère de contrôle dans le chemin : un navigateur ne l'envoie jamais tel quel, et la base refuserait le caractère nul
+      JSON.stringify({ k: KEY, t: "p", p: `/tarifs${String.fromCharCode(0)}` }),
+      JSON.stringify({ k: KEY, t: "p", p: `/tarifs${String.fromCharCode(10)}suite` }),
+      JSON.stringify({ k: KEY, t: "p", p: `/${String.fromCharCode(0x1b)}[2J` }),
     ]) {
       expect(screenMeasureRequest(invalid, CHROME), String(invalid).slice(0, 40)).toEqual({ ok: false, reason: "invalid" });
     }
@@ -95,6 +99,19 @@ describe("decideMeasureEvent — visites ignorées", () => {
     ]) {
       expect(decideMeasureEvent(pageview(), target(), sender), JSON.stringify(sender)).toEqual({ ok: false, reason: "origin" });
     }
+  });
+
+  it("hôte partagé (Google Sites) : la page comptée doit être dans le dossier du site, pas dans celui d'un autre site du même hôte", () => {
+    const shared = target({ url: "https://sites.google.com/view/cabinet-dupont" });
+    const sender = from("https://sites.google.com");
+    for (const path of ["/view/cabinet-dupont", "/view/cabinet-dupont/tarifs", "/view/cabinet-dupont/seances/hypnose"]) {
+      expect(decideMeasureEvent(pageview({ p: path }), shared, sender), path).toMatchObject({ ok: true, event: { path } });
+    }
+    for (const path of ["/", "/view/site-d-un-tiers", "/view/site-d-un-tiers/tarifs", "/view/cabinet-dupont-bis", "/view", "/site/cabinet-dupont"]) {
+      expect(decideMeasureEvent(pageview({ p: path }), shared, sender), path).toEqual({ ok: false, reason: "origin" });
+    }
+    // Un site qui a son propre hôte n'est pas concerné, même enregistré sous un chemin
+    expect(decideMeasureEvent(pageview({ p: "/tarifs" }), target({ url: "https://www.mon-cabinet.fr/fr" }), from("https://www.mon-cabinet.fr")).ok).toBe(true);
   });
 
   it("adresse du site du client illisible en base : rien n'est accepté", () => {

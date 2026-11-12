@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { EXTERNAL_SITE_LIMITS } from "@theralys/shared";
 import { collectLinks, type SiteScope } from "./discover";
 import { ROOT_WRAPPER } from "./dom";
-import { documentLanguage, extractPage, isHiddenByStyle, loadDocument, metaContent, metaRefreshTarget } from "./extract";
+import { documentLanguage, extractPage, isHiddenByStyle, loadDocument, metaContent, metaRefreshTarget, parseMetaRefresh } from "./extract";
 import { collectPageFacts } from "./facts";
 import { MARKUP_LIMITS, MarkupTooComplexError } from "./markup-guard";
+import { timed } from "./test-timing";
 
 const SCOPE: SiteScope = { origin: "https://www.mon-cabinet.fr", basePath: "", homePath: "/" };
 
@@ -266,12 +267,6 @@ describe("extractPage — cas particuliers", () => {
 });
 
 describe("documents piégés", () => {
-  const timed = <T>(run: () => T): { value: T; ms: number } => {
-    const start = performance.now();
-    const value = run();
-    return { value, ms: performance.now() - start };
-  };
-
   it("imbrication profonde mais plausible (300 niveaux) : lue", () => {
     const deep = `${"<div>".repeat(300)}<p>Au fond.</p>${"</div>".repeat(300)}`;
     expect(extract(page(`<p>Surface.</p>${deep}`)).text).toBe("Surface.\nAu fond.");
@@ -360,6 +355,20 @@ describe("documents piégés", () => {
     expect(loadDocument("<title>Minimal</title><h1>Bonjour</h1><p>Un texte.</p>")(ROOT_WRAPPER).length).toBe(0);
   });
 
+  it("valeur de redirection fabriquée pour faire hésiter la lecture : jugée en un passage", () => {
+    // Suites d'espaces autour d'une lettre et de guillemets, sous la borne de 2 048 caractères : lue par une
+    // expression régulière, une telle valeur occupait le processus plusieurs minutes, au-delà de toute échéance
+    for (const [lead, middle, tail] of [[330, 650, 10], [300, 450, 450], [50, 990, 990], [1, 1_000, 1_000]] as const) {
+      const content = `0;${" ".repeat(lead)}a${" ".repeat(middle)}'${" ".repeat(tail)}'`;
+      expect(content.length).toBeLessThanOrEqual(2_048);
+      const { value, ms } = timed(() => metaRefreshTarget(loadDocument(`<meta http-equiv="refresh" content="${content}">`), "https://www.mon-cabinet.fr/"));
+      expect(value, `${lead}/${middle}/${tail}`).toBeNull();
+      expect(ms, `${lead}/${middle}/${tail}`).toBeLessThan(500);
+    }
+    // Même forme, destination valide : toujours lue
+    expect(metaRefreshTarget(loadDocument(`<meta http-equiv="refresh" content="0;${" ".repeat(900)}'${" ".repeat(900)}/accueil${" ".repeat(200)}'">`), "https://www.mon-cabinet.fr/")).toBe("https://www.mon-cabinet.fr/accueil");
+  });
+
   it("balise meta de redirection démesurée : ignorée", () => {
     const content = `0; url=/accueil${" ".repeat(50_000)}x${" ".repeat(50_000)}`;
     const { value, ms } = timed(() => metaRefreshTarget(loadDocument(`<meta http-equiv="refresh" content="${content}">`), "https://www.mon-cabinet.fr/"));
@@ -398,6 +407,20 @@ describe("balises du document", () => {
     expect(target("30; url=/accueil/")).toBeNull();
     expect(target("300")).toBeNull();
     expect(target("bientôt")).toBeNull();
+  });
+
+  it("parseMetaRefresh : délai et destination des formes courantes, avec ou sans « url= », avec ou sans guillemets", () => {
+    expect(parseMetaRefresh("0; url=/accueil/")).toEqual({ delay: 0, target: "/accueil/" });
+    expect(parseMetaRefresh("  5 , URL = '/fr/' ")).toEqual({ delay: 5, target: "/fr/" });
+    expect(parseMetaRefresh(`0;url="https://www.autre-site.fr/a b"`)).toEqual({ delay: 0, target: "https://www.autre-site.fr/a b" });
+    expect(parseMetaRefresh("3; accueil.html")).toEqual({ delay: 3, target: "accueil.html" });
+    expect(parseMetaRefresh("120;/plus-tard")).toEqual({ delay: 120, target: "/plus-tard" });
+    // « url » sans signe égal : c'est le début de la destination
+    expect(parseMetaRefresh("0; urlaub.html")).toEqual({ delay: 0, target: "urlaub.html" });
+    // Guillemet ouvert ou fermé sans son pendant
+    expect(parseMetaRefresh("0;url='/x")).toEqual({ delay: 0, target: "/x" });
+    expect(parseMetaRefresh("0;url=/x'")).toEqual({ delay: 0, target: "/x" });
+    for (const bad of ["", "0", "0;", "0; url=", "0; url=''", "1000; url=/x", "bientôt", "0 /x", "0; url=/a'b'c", "x; url=/x", `0; url=/x${" ".repeat(2_100)}`]) expect(parseMetaRefresh(bad), bad.slice(0, 20)).toBeNull();
   });
 
   it("metaRefreshTarget : la redirection d'un bloc noscript ne compte pas", () => {

@@ -34,7 +34,7 @@ export function ProfileSection({
           Ce que nous avons compris de votre site
         </h2>
         <p className="mt-1 max-w-2xl text-base text-ink-700">
-          Vos contenus s&apos;appuient sur ce profil : relisez-le et corrigez ce qui doit l&apos;être. Vos corrections sont conservées à chaque nouvelle lecture de votre site.
+          Vos contenus s&apos;appuient sur ce profil&nbsp;: relisez-le et corrigez ce qui doit l&apos;être. Vos corrections sont conservées à chaque nouvelle lecture de votre site.
         </p>
         <div className="mt-5 divide-y divide-cream-200 border-t border-cream-200">
           {RUBRICS.map((rubric) => (
@@ -123,7 +123,8 @@ function RubricBlock({
           </Pill>
         </div>
         {mode === "view" ? (
-          <div className="flex flex-wrap items-center gap-2">
+          // Sur un téléphone, les actions ont toujours leur ligne, sous le titre : même disposition d'une rubrique à l'autre
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {corrected ? (
               <Button
                 type="button"
@@ -166,7 +167,7 @@ function RubricBlock({
           {empty ? (
             <p>
               {corrected
-                ? "Vous avez vidé cette rubrique : vos outils n'en tiennent plus compte."
+                ? "Vous avez vidé cette rubrique\u00a0: vos outils n'en tiennent plus compte."
                 : pasted
                   ? "Nous n'avons rien trouvé à ce sujet dans votre texte. Vous pouvez compléter cette rubrique."
                   : "Nous n'avons rien trouvé à ce sujet sur votre site. Vous pouvez compléter cette rubrique."}

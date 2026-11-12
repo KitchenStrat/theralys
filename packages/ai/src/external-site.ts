@@ -307,6 +307,22 @@ export function finalizeExternalProfile(raw: unknown, input: ExternalProfileInpu
 // ─── createExternalProfileExtractor ──────────────────────────────────────────
 
 /**
+ * Nature d'un échec, pour les journaux. Jamais le message de l'erreur : celui
+ * d'une réponse illisible ou hors format cite la réponse du modèle, donc le
+ * texte du site lu, qui n'a rien à faire dans un journal.
+ */
+function failureKind(err: unknown): string {
+  if (err instanceof z.ZodError) return `réponse hors format (${[...new Set(err.issues.map((issue) => issue.code))].slice(0, 5).join(", ")})`;
+  if (err instanceof SyntaxError) return "réponse illisible (JSON invalide)";
+  if (!(err instanceof Error)) return "erreur inattendue";
+  // Messages de `completeStructured` : leur début est le nôtre, la suite peut venir de la réponse
+  for (const known of ["Contenu non conforme au marketing éthique", "Requête déclinée par les garde-fous du modèle", "Réponse tronquée"]) {
+    if (err.message.startsWith(known)) return known.toLowerCase();
+  }
+  return err.name;
+}
+
+/**
  * Extracteur du profil : mode choisi par `resolveAiMode(env)` (AI_MOCK=1 ou
  * clé absente → démonstration, sans appel au modèle). Dans les deux modes le
  * résultat passe par `finalizeExternalProfile`.
@@ -335,6 +351,8 @@ export function createExternalProfileExtractor(env: NodeJS.ProcessEnv = process.
     apiKey: env.ANTHROPIC_API_KEY!,
     model: env.ANTHROPIC_MODEL,
     effort: "medium",
+    // Le prompt porte le texte des pages lues : une relance ne doit rien citer de la réponse précédente
+    untrustedInput: true,
   };
   return {
     mode,
@@ -353,7 +371,7 @@ export function createExternalProfileExtractor(env: NodeJS.ProcessEnv = process.
         answer = await complete(options, externalProfileSystemPrompt(), externalProfileUserPrompt(input, pages), schema);
       } catch (err) {
         if (lastRead === undefined && err instanceof AnthropicError) throw err;
-        const reason = (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(0, 200);
+        const reason = failureKind(err);
         console.warn(
           `[external-site] ${lastRead === undefined ? "réponse du modèle inexploitable, profil réduit aux faits relevés" : "réponse du modèle refusée, seules ses parties conformes sont gardées"} : ${reason}`,
         );
