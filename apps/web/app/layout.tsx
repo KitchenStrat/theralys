@@ -4,13 +4,14 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://harmony-web.fr"),
-  title: "Harmony — Votre site de thérapeute, créé et référencé pour vous",
+  title: "Harmony, la solution digitale tout-en-un des thérapeutes",
   description:
-    "Harmony crée le site professionnel de votre cabinet et le fait grandir sur Google : pages de spécialités, blog SEO automatisé, avis Google synchronisés. Vous soignez, on s'occupe du reste.",
+    "Site internet, blog SEO, fiche Google, réseaux sociaux, Google Ads et Meta Ads : Harmony s'occupe de toute la présence en ligne de votre cabinet et vous montre ce qu'elle vous rapporte.",
+  alternates: { canonical: "/" },
   openGraph: {
-    title: "Harmony — Sites & SEO pour thérapeutes",
+    title: "Harmony, tout le digital de votre cabinet, enfin réuni",
     description:
-      "Un site élégant, référencé et vivant pour votre cabinet — livré clé en main, sans aucune technique de votre côté.",
+      "Un seul espace pour votre site, votre blog, votre fiche Google, vos réseaux sociaux et votre publicité. Le travail est préparé pour vous, vous gardez la main.",
     locale: "fr_FR",
     type: "website",
   },
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Figtree:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
       </head>

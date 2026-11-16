@@ -2,19 +2,20 @@
 
 import { useState, useTransition, type CSSProperties, type FormEvent } from "react";
 import { requestDemo } from "@/app/actions";
+import { fr } from "./typo";
 
 const STEPS = [
   {
     title: "Nous préparons votre démo",
-    text: "Un site complet, généré pour votre pratique et votre ville — pas une maquette générique.",
+    text: "Un site complet pour votre pratique et votre ville, et un aperçu de vos outils : pas une maquette générique.",
   },
   {
-    title: "Vous découvrez votre futur site",
-    text: "On ajuste ensemble les couleurs, les textes et les photos jusqu'à ce qu'il vous ressemble.",
+    title: "Nous vous la présentons",
+    text: "Vous découvrez votre futur espace, et nous ajustons ensemble ce qui doit l'être.",
   },
   {
     title: "Vous décidez, sereinement",
-    text: "La démo est gratuite et sans engagement. Si elle vous plaît, votre site part en ligne.",
+    text: "La démo est gratuite et sans engagement. Si elle vous plaît, tout peut partir en ligne.",
   },
 ];
 
@@ -36,26 +37,26 @@ export function DemoForm() {
   }
 
   const inputClass =
-    "w-full rounded-xl border border-cream-300 bg-white px-4 py-3 text-sm text-ink-900 placeholder:text-ink-300 outline-none transition focus:border-primary-400 focus:ring-4 focus:ring-primary-100";
+    "w-full rounded-xl border border-ink-300 bg-white px-4 py-3 text-base text-ink-900 placeholder:text-ink-500 outline-none transition focus:border-primary-600 focus:ring-4 focus:ring-primary-200";
 
   return (
     <section id="demo" className="relative overflow-hidden py-24">
       <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
         <div className="blob right-[-10rem] top-[-4rem] h-[26rem] w-[26rem] bg-primary-200/60" />
-        <div className="blob bottom-[-10rem] left-[-8rem] h-[24rem] w-[24rem] bg-[#dbeee6]" style={{ animationDelay: "-11s" }} />
+        <div className="blob bottom-[-10rem] left-[-8rem] h-[24rem] w-[24rem] bg-[#c9f1e6]/70" style={{ animationDelay: "-11s" }} />
       </div>
 
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
         <div>
-          <p data-reveal className="text-sm font-bold uppercase tracking-[0.2em] text-primary-600">
+          <p data-reveal className="text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
             Démo gratuite
           </p>
           <h2
             data-reveal
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl font-bold text-ink-900 md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            Voyez votre futur site avant de décider
+            Voyez ce que cela donne pour votre cabinet
           </h2>
           <div className="mt-10 space-y-7">
             {STEPS.map((step, i) => (
@@ -65,12 +66,12 @@ export function DemoForm() {
                 style={{ "--rv-delay": `${140 + i * 110}ms` } as CSSProperties}
                 className="flex gap-4"
               >
-                <span className="font-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-500 text-base font-bold text-white shadow-[0_10px_22px_-8px_rgb(14_151_221/0.7)]">
+                <span className="font-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-base font-bold text-white shadow-[0_10px_22px_-8px_rgb(3_123_189/0.7)]">
                   {i + 1}
                 </span>
                 <div>
                   <h3 className="font-display text-lg font-bold text-ink-900">{step.title}</h3>
-                  <p className="mt-1 leading-relaxed text-ink-700">{step.text}</p>
+                  <p className="mt-1 leading-relaxed text-ink-700">{fr(step.text)}</p>
                 </div>
               </div>
             ))}
@@ -83,7 +84,7 @@ export function DemoForm() {
           className="rounded-3xl border border-cream-200 bg-white p-8 shadow-[var(--shadow-pop)]"
         >
           {sent ? (
-            <div className="py-10 text-center">
+            <div role="status" className="py-10 text-center">
               <span className="pop-in mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-100">
                 <svg viewBox="0 0 24 24" className="h-8 w-8 text-success-500" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
                   <path
@@ -96,7 +97,7 @@ export function DemoForm() {
                 </svg>
               </span>
               <h3 className="font-display mt-5 text-2xl font-bold text-ink-900">
-                Demande bien reçue !
+                Demande bien reçue&nbsp;!
               </h3>
               <p className="mx-auto mt-2 max-w-sm leading-relaxed text-ink-700">
                 Nous préparons votre démo personnalisée et revenons vers vous très vite
@@ -111,9 +112,10 @@ export function DemoForm() {
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label htmlFor="lead-name" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Votre nom *
+                    Votre nom <span aria-hidden>*</span>
+                    <span className="sr-only"> (obligatoire)</span>
                   </label>
-                  <input id="lead-name" name="name" required placeholder="Claire Dupont" className={inputClass} />
+                  <input id="lead-name" name="name" required autoComplete="name" placeholder="Claire Dupont" className={inputClass} />
                 </div>
                 <div>
                   <label htmlFor="lead-profession" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -131,13 +133,19 @@ export function DemoForm() {
                   <label htmlFor="lead-email" className="mb-1.5 block text-sm font-medium text-ink-700">
                     E-mail
                   </label>
-                  <input id="lead-email" name="email" type="email" placeholder="vous@exemple.fr" className={inputClass} />
+                  <input id="lead-email" name="email" type="email" autoComplete="email" placeholder="vous@exemple.fr" className={inputClass} />
                 </div>
                 <div>
                   <label htmlFor="lead-phone" className="mb-1.5 block text-sm font-medium text-ink-700">
                     Téléphone
                   </label>
-                  <input id="lead-phone" name="phone" type="tel" placeholder="06 12 34 56 78" className={inputClass} />
+                  <input id="lead-phone" name="phone" type="tel" autoComplete="tel" placeholder="06 12 34 56 78" className={inputClass} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="lead-site" className="mb-1.5 block text-sm font-medium text-ink-700">
+                    Votre site actuel, si vous en avez un
+                  </label>
+                  <input id="lead-site" name="currentSite" inputMode="url" autoComplete="url" placeholder="www.mon-cabinet.fr" className={inputClass} />
                 </div>
                 <div className="sm:col-span-2">
                   <label htmlFor="lead-message" className="mb-1.5 block text-sm font-medium text-ink-700">
@@ -161,15 +169,19 @@ export function DemoForm() {
                   className="hidden"
                 />
               </div>
-              {error ? <p className="mt-4 text-sm font-medium text-[#dc2626]">{error}</p> : null}
+              {error ? (
+                <p role="alert" className="mt-4 text-base font-medium text-[#b91c1c]">
+                  {error}
+                </p>
+              ) : null}
               <button
                 type="submit"
                 disabled={busy}
-                className="mt-6 w-full rounded-full bg-primary-500 py-4 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(14_151_221/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-600 disabled:opacity-60"
+                className="focus-ring mt-6 w-full rounded-full bg-primary-600 py-4 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700 disabled:opacity-60"
               >
                 {busy ? "Envoi en cours…" : "Recevoir ma démo gratuite"}
               </button>
-              <p className="mt-3 text-center text-xs text-ink-500">
+              <p className="mt-3 text-center text-sm text-ink-500">
                 Gratuit, sans engagement. Vos coordonnées servent uniquement à vous recontacter.
               </p>
             </form>

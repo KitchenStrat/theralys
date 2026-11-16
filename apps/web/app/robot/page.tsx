@@ -29,7 +29,7 @@ export default function RobotPage() {
     <div className="min-h-screen bg-white text-ink-700">
       <header className="border-b border-cream-200">
         <div className="mx-auto flex h-16 max-w-3xl items-center px-5">
-          <a href="/" className="text-2xl" aria-label="Harmony — accueil">
+          <a href="/" className="focus-ring inline-flex min-h-11 items-center rounded-lg text-2xl" aria-label="Harmony, retour à l'accueil">
             <Brand />
           </a>
         </div>

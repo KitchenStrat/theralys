@@ -1,134 +1,143 @@
 import { type CSSProperties } from "react";
+import { ArrowRight, Check } from "lucide-react";
+import accueil from "@/assets/captures/accueil.webp";
+import mobileAccueil from "@/assets/captures/m-accueil.webp";
+import visuel from "@/assets/captures/visuel-reseaux.webp";
 import { Brand } from "./brand";
-import { Tilt } from "./tilt";
-import { MiniGauge, MiniKpi, MiniReview, MiniSite } from "./vignettes";
+import { BrowserFrame, Capture, PhoneFrame } from "./frames";
+import { ScrollTilt } from "./scroll-tilt";
+import { TOOLS } from "./tools";
 
-/* Photos d'illustration (banque d'images) en attendant les vrais retours clients */
-const AVATARS = [
-  "/avatars/cabinet-4.jpg",
-  "/avatars/therapist-1.jpg",
-  "/avatars/logo-cabinet-1.svg",
-  "/avatars/therapist-2.jpg",
-  "/avatars/cabinet-2.jpg",
-];
+const PROMISES = ["Démo personnalisée gratuite", "Sans engagement", "Aucune compétence technique"];
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pb-20 pt-32 md:pb-28 md:pt-40">
-      {/* Halos animés */}
-      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
-        <div className="blob left-[-10rem] top-[-6rem] h-[26rem] w-[26rem] bg-primary-200/70" />
-        <div
-          className="blob right-[-8rem] top-[4rem] h-[30rem] w-[30rem] bg-primary-300/50"
-          style={{ animationDelay: "-7s" }}
-        />
-        <div
-          className="blob bottom-[-12rem] left-[30%] h-[24rem] w-[24rem] bg-[#dbeee6]"
-          style={{ animationDelay: "-13s" }}
-        />
+    <section className="relative overflow-hidden pt-28 md:pt-36">
+      {/* Halos animés et trame discrète */}
+      <div aria-hidden data-parallax="0.05" className="absolute inset-0 -z-10">
+        <div className="hero-grid" />
+        <div className="blob top-[-8rem] left-[-10rem] h-[28rem] w-[28rem] bg-primary-200/70" />
+        <div className="blob top-[2rem] right-[-9rem] h-[30rem] w-[30rem] bg-[#cfc9f7]/55" style={{ animationDelay: "-7s" }} />
+        <div className="blob top-[26rem] left-[32%] h-[26rem] w-[26rem] bg-[#c9f1e6]/70" style={{ animationDelay: "-13s" }} />
       </div>
 
-      <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1.05fr_0.95fr]">
-        <div>
-          <p
-            data-reveal
-            className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white/80 px-4 py-1.5 text-xs font-semibold text-primary-700 shadow-sm backdrop-blur"
-          >
-            <span className="dot-live h-1.5 w-1.5 rounded-full bg-success-500" />
-            Sites &amp; référencement pour thérapeutes
-          </p>
-          <h1
-            data-reveal
-            style={{ "--rv-delay": "90ms" } as CSSProperties}
-            className="font-display mt-5 text-4xl font-bold leading-[1.08] text-ink-900 md:text-6xl"
-          >
-            Votre site de thérapeute,{" "}
-            <span className="shimmer-text shimmer-blue">créé et référencé</span> pour vous.
-          </h1>
-          <p
-            data-reveal
-            style={{ "--rv-delay": "180ms" } as CSSProperties}
-            className="mt-6 max-w-xl text-lg leading-relaxed text-ink-700"
-          >
-            Site professionnel élégant, pages de spécialités, blog optimisé SEO, avis Google
-            synchronisés : <Brand /> construit votre présence en ligne et la fait grandir —
-            pendant que vous restez concentré sur vos patients.
-          </p>
-          <div
-            data-reveal
-            style={{ "--rv-delay": "270ms" } as CSSProperties}
-            className="mt-8 flex flex-wrap items-center gap-3"
-          >
-            <a
-              href="#demo"
-              className="rounded-full bg-primary-500 px-7 py-3.5 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(14_151_221/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-600"
-            >
-              Demander une démo gratuite
-            </a>
-            <a
-              href="#tarifs"
-              className="rounded-full border border-ink-300 bg-white/70 px-7 py-3.5 text-base font-semibold text-ink-700 backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
-            >
-              Voir les tarifs
-            </a>
-          </div>
-          <p
-            data-reveal
-            style={{ "--rv-delay": "360ms" } as CSSProperties}
-            className="mt-6 flex items-center gap-2 text-sm text-ink-500"
-          >
-            <svg viewBox="0 0 16 16" className="h-4 w-4 text-success-500" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-              <circle cx="8" cy="8" r="6.5" />
-              <path d="m5.2 8.3 1.9 1.9 3.7-4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Livré clé en main — zéro technique de votre côté
-          </p>
-          <div
-            data-reveal
-            style={{ "--rv-delay": "440ms" } as CSSProperties}
-            className="mt-6 flex items-center gap-3.5"
-          >
-            <div className="flex -space-x-2.5">
-              {AVATARS.map((src) => (
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  loading="lazy"
-                  className="h-9 w-9 rounded-full bg-white object-cover ring-2 ring-cream-50"
-                />
-              ))}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-ink-900">
-                <span className="tracking-wider text-gold-400">★★★★★</span> 4,8/5
-              </p>
-              <p className="text-xs text-ink-500">Plus de 1 200 praticiens accompagnés</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Composition produit flottante */}
-        <div
+      <div className="mx-auto max-w-4xl px-5 text-center">
+        <p
           data-reveal
-          style={{ "--rv-delay": "220ms" } as CSSProperties}
-          className="relative mx-auto w-full max-w-md lg:max-w-none"
+          className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white/80 px-4 py-1.5 text-sm font-semibold text-primary-700 shadow-sm backdrop-blur"
         >
-          <Tilt>
-            <div className="float-slow">
-              <MiniSite />
-            </div>
-          </Tilt>
-          <div data-parallax="0.05" className="absolute -left-6 -bottom-8 hidden sm:block">
-            <MiniReview className="float-slower" />
+          <span aria-hidden className="dot-live h-1.5 w-1.5 rounded-full bg-success-500" />
+          La solution digitale tout-en-un des thérapeutes
+        </p>
+        <h1
+          data-reveal
+          style={{ "--rv-delay": "80ms" } as CSSProperties}
+          className="font-display mt-6 text-[2.5rem] leading-[1.06] font-extrabold text-balance text-ink-900 sm:text-5xl md:text-[4.1rem]"
+        >
+          Tout le digital de votre cabinet, <span className="shimmer-text shimmer-blue">enfin réuni.</span>
+        </h1>
+        <p
+          data-reveal
+          style={{ "--rv-delay": "160ms" } as CSSProperties}
+          className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-ink-700 md:text-xl"
+        >
+          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand /> s&apos;occupe de toute votre présence en
+          ligne et vous montre ce qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
+        </p>
+
+        {/* Les outils, d'un coup d'œil : chaque pastille ouvre l'outil dans la visite guidée */}
+        <ul
+          data-reveal
+          style={{ "--rv-delay": "240ms" } as CSSProperties}
+          aria-label="Les outils de Harmony"
+          className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2"
+        >
+          {TOOLS.map((tool, index) => (
+            <li key={tool.id}>
+              <a
+                href="#outils"
+                data-tool={tool.id}
+                style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to, "--chip-delay": `${index * 70}ms` } as CSSProperties}
+                className="chip-pop focus-ring group inline-flex min-h-11 items-center gap-2 rounded-full border border-cream-200 bg-white/90 py-1.5 pr-3.5 pl-1.5 text-sm font-semibold text-ink-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md"
+              >
+                <span className="tool-chip grid h-7 w-7 place-items-center rounded-full">
+                  <tool.icon size={15} strokeWidth={2.25} aria-hidden />
+                </span>
+                {tool.short}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <div data-reveal style={{ "--rv-delay": "320ms" } as CSSProperties} className="mt-9 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="#demo"
+            className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700"
+          >
+            Demander ma démo gratuite
+            <ArrowRight size={18} aria-hidden />
+          </a>
+          <a
+            href="#outils"
+            className="focus-ring rounded-full border border-ink-300 bg-white/70 px-7 py-3.5 text-base font-semibold text-ink-900 backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
+          >
+            Découvrir les outils
+          </a>
+        </div>
+        <ul
+          data-reveal
+          style={{ "--rv-delay": "400ms" } as CSSProperties}
+          className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-ink-700"
+        >
+          {PROMISES.map((promise) => (
+            <li key={promise} className="inline-flex items-center gap-1.5">
+              <Check size={16} strokeWidth={2.5} className="text-success-600" aria-hidden />
+              {promise}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* L'espace client, en vrai : l'accueil du studio, un visuel prêt à poster, la version téléphone */}
+      <div data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="relative mx-auto mt-14 max-w-6xl px-5 md:mt-16">
+        {/* Ordinateur et tablette */}
+        <div className="relative hidden md:block">
+          <ScrollTilt>
+            <BrowserFrame>
+              <Capture
+                src={accueil}
+                priority
+                sizes="(min-width: 1200px) 1112px, (min-width: 768px) 94vw, 1px"
+                alt="L'accueil de l'espace client Harmony : les visiteurs de la semaine, les clics de rendez-vous, la provenance des visites et la prochaine étape proposée."
+              />
+            </BrowserFrame>
+          </ScrollTilt>
+          <div data-parallax="0.06" className="absolute -bottom-10 -left-2 hidden w-44 lg:block xl:-left-10 xl:w-52">
+            <figure className="float-slow -rotate-6 overflow-hidden rounded-2xl border-4 border-white bg-white shadow-[0_30px_60px_-25px_rgb(7_21_34/0.55)]">
+              <Capture src={visuel} sizes="208px" alt="Un visuel de carrousel Instagram préparé par Harmony aux couleurs du cabinet." />
+              <figcaption className="px-3 py-2 text-xs font-semibold text-ink-700">Prêt à poster</figcaption>
+            </figure>
           </div>
-          <div data-parallax="-0.07" className="absolute -right-4 -top-8 hidden sm:block">
-            <MiniKpi className="float-slow" />
-          </div>
-          <div data-parallax="0.1" className="absolute -right-8 bottom-20 hidden lg:block">
-            <MiniGauge className="float-slower" />
+          <div data-parallax="-0.05" className="absolute -right-2 -bottom-16 hidden w-48 lg:block xl:-right-8 xl:w-56">
+            <PhoneFrame className="float-slower">
+              <Capture src={mobileAccueil} sizes="224px" alt="Le même accueil sur un téléphone." />
+            </PhoneFrame>
           </div>
         </div>
+        {/* Téléphone : l'application telle qu'elle s'y affiche */}
+        <div className="mx-auto w-64 md:hidden">
+          <PhoneFrame>
+            <Capture
+              src={mobileAccueil}
+              eager
+              sizes="(min-width: 768px) 1px, 256px"
+              alt="L'accueil de l'espace client Harmony sur un téléphone : les visiteurs de la semaine et la prochaine étape proposée."
+            />
+          </PhoneFrame>
+        </div>
+        <p className="mt-8 pb-4 text-center text-sm text-ink-500 md:mt-10 lg:mt-24">
+          Captures réelles de l&apos;espace client <Brand />, sur un compte de démonstration.
+        </p>
       </div>
     </section>
   );

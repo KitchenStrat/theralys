@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /*
- * Vitrine Harmony (harmony-web.fr) — thème bleu ciel du design system,
- * page marketing autonome : dégradés, halos, apparitions en cascade,
- * marquees, compteurs et micro-animations. Tout est auto-contenu
- * (aucune image externe), avec respect de prefers-reduced-motion.
+ * Vitrine Harmony (harmony-web.fr) — thème bleu ciel du design system, et les
+ * dégradés des sections du studio pour chaque outil. Page marketing autonome :
+ * halos, apparitions en cascade, faisceaux, visite guidée, frise, marquee.
+ * Rien ne bouge si l'utilisateur demande moins de mouvement (fin du fichier).
  */
 @theme {
   --color-primary-50: #f0f8ff;
@@ -13,7 +13,7 @@
   --color-primary-300: #7bccf7;
   --color-primary-400: #38b3f0;
   --color-primary-500: #0e97dd;
-  --color-primary-600: #037bbd;
+  --color-primary-600: #037bbd; /* 4,6:1 sous un texte blanc (AA) : fond des boutons */
   --color-primary-700: #07619b;
   --color-primary-800: #0b5280;
   --color-primary-900: #0f456a;
@@ -34,15 +34,16 @@
   --color-night-800: #0a1e30;
   --color-night-700: #10304a;
 
+  --color-success-600: #15803d;
   --color-success-500: #16a34a;
   --color-success-100: #dcfce7;
-  --color-gold-400: #fbbc04;
 
   --shadow-card: 0 1px 2px rgb(12 74 110 / 0.05), 0 12px 32px -16px rgb(12 74 110 / 0.18);
   --shadow-pop: 0 24px 60px -20px rgb(12 74 110 / 0.35);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Même police de titre que le studio */
+  --font-display: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 html {
@@ -71,9 +72,9 @@ body {
   background-image: linear-gradient(
     100deg,
     var(--color-primary-700),
-    var(--color-primary-500) 38%,
-    var(--color-primary-200) 50%,
-    var(--color-primary-500) 62%,
+    var(--color-primary-600) 42%,
+    var(--color-primary-400) 50%,
+    var(--color-primary-600) 58%,
     var(--color-primary-700)
   );
   background-size: 250% 100%;
@@ -130,14 +131,7 @@ body {
   100% { box-shadow: 0 0 0 0 rgb(22 163 74 / 0); }
 }
 .dot-live { animation: ping-soft 2.2s ease-out infinite; }
-@keyframes ping-blue {
-  0%   { box-shadow: 0 0 0 0 rgb(14 151 221 / 0.45); }
-  70%  { box-shadow: 0 0 0 10px rgb(14 151 221 / 0); }
-  100% { box-shadow: 0 0 0 0 rgb(14 151 221 / 0); }
-}
-.dot-blue { animation: ping-blue 2.4s ease-out infinite; }
-
-/* ── Marquee (plateformes + témoignages) ───────────────────────────────────── */
+/* ── Marquee (bandeau des plateformes) ───────────────────────────────────── */
 @keyframes marquee-x {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
@@ -154,40 +148,6 @@ body {
   mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
 }
 
-/* ── Vignettes : tracé de la sparkline + barres qui poussent ───────────────── */
-.spark-path {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-}
-.is-in .spark-path {
-  animation: spark-draw 1.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  animation-delay: 0.35s;
-}
-@keyframes spark-draw {
-  to { stroke-dashoffset: 0; }
-}
-.spark-fill {
-  opacity: 0;
-  transition: opacity 0.8s ease 1.4s;
-}
-.is-in .spark-fill { opacity: 1; }
-
-.grow-bar {
-  transform: scaleY(0);
-  transform-origin: bottom;
-  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--bar-delay, 0.3s);
-}
-.is-in .grow-bar { transform: scaleY(1); }
-
-.grow-x {
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--bar-delay, 0.3s);
-}
-.is-in .grow-x { transform: scaleX(1); }
-
 /* ── Bande CTA : dégradé animé ─────────────────────────────────────────────── */
 @keyframes gradient-pan {
   0%   { background-position: 0% 50%; }
@@ -195,8 +155,8 @@ body {
   100% { background-position: 0% 50%; }
 }
 .band-animated {
-  /* Plafonné à #0e97dd : le blanc du titre garde ≥ 3:1 sur tout le cycle */
-  background: linear-gradient(115deg, #07619b, #0e97dd, #07619b, #0e97dd, #07619b);
+  /* Plafonné à #037bbd : le texte blanc garde au moins 4,6:1 sur tout le cycle (AA) */
+  background: linear-gradient(115deg, #0b5280, #037bbd, #0b5280, #037bbd, #0b5280);
   background-size: 240% 240%;
   animation: gradient-pan 14s ease infinite;
 }
@@ -272,13 +232,6 @@ body {
 .faq-panel.open { grid-template-rows: 1fr; }
 .faq-panel > div { overflow: hidden; }
 
-/* ── Lignes de texte factices des maquettes produit ────────────────────────── */
-.skeleton-line {
-  border-radius: 9999px;
-  background: currentColor;
-  opacity: 0.16;
-}
-
 /* ── Shimmer : un reflet lumineux traverse les lettres ─────────────────────── */
 @keyframes shimmer-sweep {
   0%   { background-position: 150% 0; }
@@ -294,11 +247,11 @@ body {
 .shimmer-blue {
   background-image: linear-gradient(
     100deg,
-    var(--color-primary-500),
-    var(--color-primary-700) 38%,
-    var(--color-primary-300) 50%,
-    var(--color-primary-700) 62%,
-    var(--color-primary-500)
+    var(--color-primary-600),
+    var(--color-primary-700) 40%,
+    var(--color-primary-400) 50%,
+    var(--color-primary-700) 60%,
+    var(--color-primary-600)
   );
 }
 .shimmer-white {
@@ -391,26 +344,6 @@ body {
   opacity: 0.7;
 }
 
-/* ── Toast de preuve sociale (avis qui apparaissent en bas à gauche) ───────── */
-@keyframes toast-in {
-  from { opacity: 0; translate: -14px 18px; scale: 0.94; }
-  to   { opacity: 1; translate: 0 0; scale: 1; }
-}
-@keyframes toast-out {
-  from { opacity: 1; translate: 0 0; scale: 1; }
-  to   { opacity: 0; translate: -14px 18px; scale: 0.94; }
-}
-.toast-in { animation: toast-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.toast-out { animation: toast-out 0.4s ease-in both; }
-
-/* ── Jauge circulaire (score SEO) : l'arc se remplit à l'apparition ────────── */
-.gauge-arc {
-  stroke-dasharray: var(--gauge-c);
-  stroke-dashoffset: var(--gauge-c);
-  transition: stroke-dashoffset 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.4s;
-}
-.is-in .gauge-arc { stroke-dashoffset: var(--gauge-off); }
-
 /* ── Spotlight : un halo suit le curseur sur les cartes ────────────────────── */
 .spotlight { position: relative; }
 .spotlight::after {
@@ -441,19 +374,6 @@ body {
   background: linear-gradient(90deg, var(--color-primary-400), var(--color-primary-600));
 }
 
-/* ── Inclinaison 3D de la maquette du hero ─────────────────────────────────── */
-.tilt {
-  transition: transform 0.2s ease-out;
-  transform-style: preserve-3d;
-}
-
-/* ── Carrousel de citation : la nouvelle citation glisse en fondu ──────────── */
-@keyframes quote-in {
-  from { opacity: 0; translate: 0 16px; filter: blur(4px); }
-  to   { opacity: 1; translate: 0 0; filter: blur(0); }
-}
-.quote-in { animation: quote-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
-
 /* ── Entrée du header au chargement ────────────────────────────────────────── */
 @keyframes header-in {
   from { translate: 0 -110%; opacity: 0; }
@@ -483,12 +403,16 @@ body {
   appearance: none;
   display: block;
   width: 100%;
+  /* Piste de 8 px, zone de saisie de 44 px : le fond ne peint que la piste */
+  box-sizing: content-box;
   height: 8px;
+  padding-block: 18px;
+  background-clip: content-box;
   border-radius: 9999px;
-  background: linear-gradient(
+  background-image: linear-gradient(
     to right,
-    var(--color-primary-500) var(--range-pct, 50%),
-    var(--color-cream-200) var(--range-pct, 50%)
+    var(--color-primary-600) var(--range-pct, 50%),
+    var(--color-cream-300) var(--range-pct, 50%)
   );
   cursor: pointer;
 }
@@ -498,7 +422,7 @@ body {
   width: 22px;
   border-radius: 9999px;
   background: #fff;
-  border: 3px solid var(--color-primary-500);
+  border: 3px solid var(--color-primary-600);
   box-shadow: 0 4px 14px rgb(14 151 221 / 0.45);
   transition: transform 0.15s ease;
 }
@@ -508,14 +432,258 @@ body {
   width: 22px;
   border-radius: 9999px;
   background: #fff;
-  border: 3px solid var(--color-primary-500);
+  border: 3px solid var(--color-primary-600);
   box-shadow: 0 4px 14px rgb(14 151 221 / 0.45);
   transition: transform 0.15s ease;
 }
 .range::-moz-range-thumb:hover { transform: scale(1.15); }
 .range:focus-visible {
-  outline: 2px solid var(--color-primary-400);
-  outline-offset: 4px;
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: -8px;
+  border-radius: 0.75rem;
+}
+
+/* ── Clavier : un anneau visible partout, clair sur fond sombre ────────────── */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary-600);
+  outline-offset: 3px;
+}
+.focus-ring-dark:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 70;
+  translate: 0 -200%;
+  border-radius: 9999px;
+  background: var(--color-ink-900);
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+  color: #fff;
+}
+.skip-link:focus-visible {
+  translate: 0 0;
+  outline: 2px solid var(--color-primary-300);
+  outline-offset: 3px;
+}
+
+/* ── Outils : chaque outil porte le dégradé de sa section du studio
+   (variables posées par le composant : --t-from, --t-to, --t-deep-*) ─────── */
+.tool-chip {
+  background-image: linear-gradient(135deg, var(--t-from), var(--t-to));
+  color: #fff;
+  box-shadow: 0 8px 18px -10px color-mix(in oklab, var(--t-to) 80%, transparent);
+}
+/* Sous un texte blanc : les arrêts profonds du dégradé (contraste AA) */
+.tool-deep {
+  background-image: linear-gradient(135deg, var(--t-deep-from), var(--t-deep-to));
+}
+
+/* ── Haut de page : trame discrète, pastilles d'outil qui arrivent une à une ─ */
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgb(14 151 221 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(14 151 221 / 0.07) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, black, transparent);
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, black, transparent);
+}
+@keyframes chip-pop {
+  from { opacity: 0; scale: 0.85; translate: 0 8px; }
+  to   { opacity: 1; scale: 1; translate: 0 0; }
+}
+.is-in .chip-pop {
+  animation: chip-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(0.35s + var(--chip-delay, 0ms));
+}
+
+/* ── Capture du haut de page : arrive inclinée, se redresse au défilement
+   (--tilt et --lift sont tenues à jour par ScrollTilt) ──────────────────── */
+.scroll-tilt { perspective: 2200px; }
+.scroll-tilt-body {
+  transform-origin: 50% 100%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-tilt-body {
+    transform: rotateX(var(--tilt, 7deg)) scale(calc(1 - var(--lift, 0.02)));
+    transition: transform 0.12s linear;
+    will-change: transform;
+  }
+}
+
+/* ── Schéma « tout au même endroit » : orbites, faisceaux, cœur qui pulse ──── */
+.hub-orbit {
+  fill: none;
+  stroke: var(--color-cream-300);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 9;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: hub-spin 90s linear infinite;
+}
+.hub-orbit--inner { animation-duration: 60s; animation-direction: reverse; }
+@keyframes hub-spin { to { rotate: 360deg; } }
+.hub-line {
+  fill: none;
+  stroke: var(--color-cream-300);
+  stroke-width: 1.5;
+}
+/* Un trait de lumière part de Harmony et rejoint chaque outil */
+.hub-beam {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 14 86;
+  stroke-dashoffset: 14;
+  opacity: 0;
+  animation: hub-beam 3.5s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+}
+@keyframes hub-beam {
+  0%   { stroke-dashoffset: 14; opacity: 0; }
+  12%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { stroke-dashoffset: -86; opacity: 0; }
+}
+.hub-core {
+  position: relative;
+  background: linear-gradient(135deg, #0e97dd, #2f6dd3 55%, #5b4fc9);
+  box-shadow:
+    0 0 0 6px rgb(255 255 255 / 0.9),
+    0 22px 50px -18px rgb(47 109 211 / 0.75);
+}
+.hub-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgb(14 151 221 / 0.45);
+  animation: hub-pulse 2.6s ease-out infinite;
+}
+@keyframes hub-pulse {
+  from { scale: 1; opacity: 0.9; }
+  to   { scale: 1.9; opacity: 0; }
+}
+@keyframes hub-bob {
+  from { translate: 0 -4px; }
+  to   { translate: 0 4px; }
+}
+.hub-node { animation: hub-bob 4.5s ease-in-out infinite alternate; }
+
+/* ── Visite guidée : onglets, barre de l'onglet actif, fondu des panneaux ──── */
+.tour-strip { scrollbar-width: none; }
+.tour-strip::-webkit-scrollbar { display: none; }
+.tour-track { background: color-mix(in oklab, var(--t-from) 16%, transparent); opacity: 0; }
+.tour-tab[aria-selected="true"] .tour-track { opacity: 1; }
+.tour-progress {
+  transform-origin: left;
+  transform: scaleX(0);
+  background-image: linear-gradient(90deg, var(--t-deep-from), var(--t-deep-to));
+  animation: tour-fill var(--tour-step, 9s) linear forwards;
+}
+@keyframes tour-fill { to { transform: scaleX(1); } }
+/* Hors de l'écran, au survol ou au focus : la barre attend */
+.tour[data-running="false"] .tour-progress { animation-play-state: paused; }
+/* Visite arrêtée : une barre pleine marque simplement l'onglet ouvert */
+.tour[data-auto="false"] .tour-progress { animation: none; transform: scaleX(1); }
+.tour-panel {
+  opacity: 0;
+  visibility: hidden;
+  translate: 0 10px;
+  transition:
+    opacity 0.45s ease,
+    translate 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.45s;
+}
+.tour-panel.is-active {
+  opacity: 1;
+  visibility: visible;
+  translate: 0 0;
+  transition-delay: 0s;
+}
+
+/* ── « Vous gardez la main » : cartes sombres, éventail de visuels ─────────── */
+.bento {
+  border-radius: 1.5rem;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.025));
+  padding: 1.5rem;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.35s ease, translate 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (min-width: 48rem) {
+  .bento { padding: 1.75rem; }
+}
+.bento:hover { border-color: rgb(123 204 247 / 0.45); translate: 0 -4px; }
+.bento-icon {
+  display: grid;
+  height: 2.75rem;
+  width: 2.75rem;
+  place-items: center;
+  border-radius: 0.9rem;
+  background: rgb(14 151 221 / 0.18);
+  color: var(--color-primary-300);
+  box-shadow: inset 0 0 0 1px rgb(56 179 240 / 0.35);
+}
+.visual-fan-card {
+  position: absolute;
+  bottom: 0;
+  width: 46%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  border: 3px solid #fff;
+  background: #fff;
+  box-shadow: 0 22px 40px -18px rgb(0 0 0 / 0.65);
+  transition: translate 0.45s cubic-bezier(0.22, 1, 0.36, 1), rotate 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Au survol de la carte, l'éventail s'ouvre */
+.bento:hover .visual-fan-card:first-child { translate: -8px -4px; rotate: -4deg; }
+.bento:hover .visual-fan-card:last-child { translate: 8px -4px; rotate: 4deg; }
+
+/* ── Frise de la méthode : le trait se remplit au défilement (--fill) ──────── */
+.timeline-track,
+.timeline-fill {
+  position: absolute;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  left: calc(1.375rem - 1.5px);
+  width: 3px;
+  border-radius: 9999px;
+}
+.timeline-track { background: var(--color-cream-300); }
+.timeline-fill {
+  transform-origin: top;
+  transform: scaleY(var(--fill, 0));
+  background: linear-gradient(180deg, var(--color-primary-400), var(--color-primary-700));
+}
+.timeline-dot {
+  background: #fff;
+  color: var(--color-primary-700);
+  box-shadow: 0 0 0 3px var(--color-cream-300);
+  transition: background-color 0.5s ease, color 0.5s ease, box-shadow 0.5s ease;
+  transition-delay: calc(var(--rv-delay, 0ms) + 0.2s);
+}
+.is-in > .timeline-dot {
+  background: var(--color-primary-600);
+  color: #fff;
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 6px var(--color-primary-200),
+    0 12px 22px -10px rgb(3 123 189 / 0.8);
+}
+
+/* ── Semaine type : les contenus arrivent l'un après l'autre ───────────────── */
+@keyframes week-in {
+  from { opacity: 0; translate: -10px 0; scale: 0.94; }
+  to   { opacity: 1; translate: 0 0; scale: 1; }
+}
+.week.is-in .week-item {
+  animation: week-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(0.45s + var(--week-delay, 0ms));
 }
 
 /* ── Accessibilité : tout se calme si l'utilisateur le demande ─────────────── */
@@ -530,25 +698,37 @@ body {
   .float-slow,
   .float-slower,
   .dot-live,
-  .dot-blue,
   .band-animated,
   .card-gradient-border,
-  .marquee-track {
-    animation: none;
-  }
-  .spark-path { stroke-dashoffset: 0; animation: none; }
-  .spark-fill { opacity: 1; transition: none; }
-  .grow-bar { transform: scaleY(1); transition: none; }
-  .grow-x { transform: scaleX(1); transition: none; }
-
+  .marquee-track,
   .shimmer-text,
   .brand-word,
-  .toast-in,
-  .toast-out,
-  .quote-in,
   .header-in,
-  .pop-in {
+  .pop-in,
+  .hub-orbit,
+  .hub-node,
+  .hub-pulse,
+  .is-in .chip-pop,
+  .week.is-in .week-item {
     animation: none;
+  }
+  /* Le bandeau des plateformes ne défile plus : il tient sur plusieurs lignes, centré */
+  .marquee { mask-image: none; }
+  .marquee-track {
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-inline: 1.25rem;
+  }
+  .marquee-track > :nth-child(n + 8) { display: none; }
+  .hub-pulse { opacity: 0; }
+  /* Faisceaux : des traits pleins, aux couleurs des outils */
+  .hub-beam {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 0.55;
+    stroke-width: 2;
   }
   .grid-wave-layer,
   .glow-ring,
@@ -559,12 +739,6 @@ body {
   .glow-ring::before { animation: none; }
   .card-comet { display: none; }
   .wr > span { transition: none; }
-  .tilt { transition: none; }
-  .gauge-arc,
-  .is-in .gauge-arc {
-    transition: none;
-    stroke-dashoffset: var(--gauge-off);
-  }
   .check-draw {
     animation: none;
     stroke-dashoffset: 0;
@@ -572,4 +746,13 @@ body {
   .spotlight::after { display: none; }
   .range::-webkit-slider-thumb { transition: none; }
   .range::-moz-range-thumb { transition: none; }
+  .lift,
+  .bento,
+  .visual-fan-card,
+  .tour-panel,
+  .timeline-dot { transition: none; }
+  .lift:hover,
+  .bento:hover { transform: none; translate: 0 0; }
+  .tour-progress { animation: none; transform: scaleX(1); }
+  .timeline-fill { transform: scaleY(1); }
 }

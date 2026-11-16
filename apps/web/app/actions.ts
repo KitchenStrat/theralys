@@ -10,6 +10,8 @@ const demoRequestSchema = z.object({
   email: z.string().trim().email("E-mail invalide").max(200).optional().or(z.literal("")),
   phone: z.string().trim().max(30).optional().default(""),
   message: z.string().trim().max(2000).optional().default(""),
+  // Site que le praticien a déjà (facultatif) : simple texte, jamais ouvert ni lu par cette action
+  currentSite: z.string().trim().max(200).optional().default(""),
   // Champ piège anti-robots : rempli uniquement par les bots
   website: z.string().max(0).optional().or(z.literal("")),
 });
@@ -34,6 +36,7 @@ export async function requestDemo(
 
   const notes = [
     [data.profession, data.city].filter(Boolean).join(" à "),
+    data.currentSite ? `Site actuel : ${data.currentSite}` : "",
     data.message,
   ]
     .filter(Boolean)

@@ -3,39 +3,48 @@
 import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { brandify } from "./brand";
+import { fr } from "./typo";
 
 const QUESTIONS = [
+  {
+    q: "Harmony, c'est un site internet ou plus que cela ?",
+    a: "Les deux. Harmony crée et héberge votre site, puis s'occupe de ce qui le fait vivre : articles de blog, fiche Google, contenus pour vos réseaux sociaux, accompagnement publicitaire et statistiques. Tout se retrouve dans un seul espace, avec un seul abonnement.",
+  },
+  {
+    q: "J'ai déjà un site : puis-je utiliser Harmony ?",
+    a: "Oui, et vous le gardez. Vous indiquez son adresse dans votre espace : Harmony lit ses pages publiques pour comprendre votre activité, et vos contenus pour les réseaux sociaux, votre fiche Google et vos publicités s'appuient ensuite sur lui. Un petit code à coller permet de suivre ses visites. Les articles de blog restent rédigés dans votre espace : vous les copiez sur votre site en un clic.",
+  },
   {
     q: "Dois-je m'occuper de la technique ?",
     a: "Non, de rien du tout. Nom de domaine, hébergement, certificat de sécurité, mises à jour : Harmony gère l'intégralité de la technique. Vous validez votre site, nous le mettons en ligne, et il reste maintenu en permanence.",
   },
   {
+    q: "Qui publie sur mes réseaux sociaux ?",
+    a: "Vous. Harmony prépare chaque mois vos visuels, carrousels et stories avec leur légende ; vous téléchargez, vous collez, vous postez depuis vos propres comptes. Rien n'est publié à votre place, et vous pouvez modifier chaque légende avant de la poster.",
+  },
+  {
+    q: "Les articles du blog sont-ils écrits par une IA ?",
+    a: "Oui, par une IA spécialisée, à partir de vos spécialités, de votre ville et des thématiques que vous choisissez. Chaque article est rédigé sept jours avant sa date : vous pouvez le relire, le modifier, le reporter ou le retirer. Dans votre espace, un contenu rédigé par l'IA est toujours signalé.",
+  },
+  {
+    q: "La publicité est-elle comprise dans l'abonnement ?",
+    a: "L'accompagnement, oui, avec la formule Scale : diagnostic, mots-clés à viser, annonces prêtes à diffuser et plan d'action, pour Google comme pour Facebook et Instagram. Le budget publicitaire, lui, est réglé directement à Google ou à Meta depuis vos propres comptes. Et rien ne vous oblige à en faire.",
+  },
+  {
     q: "Combien de temps faut-il pour être en ligne ?",
-    a: "Quelques jours suffisent. Nous préparons d'abord une démo personnalisée de votre futur site. Une fois validée avec vous (textes, couleurs, photos), la mise en ligne est immédiate.",
+    a: "Quelques jours suffisent le plus souvent. Nous préparons d'abord une démo personnalisée de votre futur site. Une fois validée avec vous (textes, couleurs, photos), la mise en ligne est immédiate.",
   },
   {
     q: "Puis-je utiliser mon nom de domaine actuel ?",
-    a: "Oui. Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet (DNS, certificat). Sinon, nous achetons pour vous le domaine de votre choix — il est inclus dans l'abonnement.",
-  },
-  {
-    q: "Comment fonctionne le blog automatisé ?",
-    a: "Avec la formule Scale, jusqu'à 4 articles par semaine sont rédigés et publiés automatiquement sur les thématiques de votre pratique et les recherches locales de vos patients. Vous pouvez orienter les sujets, relire ou modifier chaque article depuis votre espace.",
-  },
-  {
-    q: "Puis-je modifier mon site moi-même ?",
-    a: "Oui, très simplement. Votre espace client vous permet de changer vos textes, photos, horaires, tarifs ou couleurs en quelques clics, sans aucune compétence technique. Et si vous préférez, nous le faisons pour vous.",
+    a: "Oui. Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet. Sinon, nous achetons pour vous le domaine de votre choix : il est inclus dans l'abonnement.",
   },
   {
     q: "Y a-t-il un engagement ?",
     a: "Vous choisissez : une formule mensuelle sans engagement, résiliable à tout moment, ou une formule annuelle environ 30 % moins chère. Dans les deux cas, il n'y a aucun frais de création.",
   },
   {
-    q: "Les avis Google apparaissent-ils sur mon site ?",
-    a: "Oui, automatiquement. Vos avis Google sont synchronisés régulièrement et présentés sur votre site avec leur note et leur date — un élément de réassurance décisif pour les nouveaux patients.",
-  },
-  {
-    q: "Comment suivez-vous mes résultats ?",
-    a: "Votre tableau de bord montre les visites, les appels et les demandes d'itinéraire générés par votre site. Avec la formule Scale, vous suivez aussi la position de votre cabinet sur vos mots-clés Google, semaine après semaine.",
+    q: "Comment savoir ce que cela me rapporte ?",
+    a: "Votre espace montre vos visiteurs, les clics sur votre prise de rendez-vous, les appels et la provenance de chaque visite : Google, Instagram, Facebook, publicité. Avec la formule Scale, une carte vous montre aussi votre place dans Google Maps face aux cabinets voisins, mot-clé par mot-clé.",
   },
 ];
 
@@ -44,13 +53,13 @@ export function Faq() {
 
   return (
     <section id="faq" className="mx-auto max-w-3xl px-5 py-24">
-      <p data-reveal className="text-center text-sm font-bold uppercase tracking-[0.2em] text-primary-600">
-        FAQ
+      <p data-reveal className="text-center text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
+        Questions fréquentes
       </p>
       <h2
         data-reveal
         style={{ "--rv-delay": "80ms" } as CSSProperties}
-        className="font-display mt-3 text-center text-3xl font-bold text-ink-900 md:text-5xl"
+        className="font-display mt-3 text-center text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
       >
         Tout ce que vous devez savoir
       </h2>
@@ -75,13 +84,14 @@ export function Faq() {
                   type="button"
                   onClick={() => setOpen(isOpen ? null : i)}
                   aria-expanded={isOpen}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                  aria-controls={`faq-reponse-${i}`}
+                  className="focus-ring flex w-full items-center justify-between gap-4 rounded-2xl px-6 py-5 text-left"
                 >
-                  <span className="font-semibold text-ink-900">{item.q}</span>
+                  <span className="text-lg font-semibold text-ink-900">{fr(item.q)}</span>
                   <span
                     className={clsx(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-300",
-                      isOpen ? "rotate-45 bg-primary-500 text-white" : "bg-primary-100 text-primary-600",
+                      isOpen ? "rotate-45 bg-primary-600 text-white" : "bg-primary-100 text-primary-700",
                     )}
                   >
                     <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -89,9 +99,9 @@ export function Faq() {
                     </svg>
                   </span>
                 </button>
-                <div className={clsx("faq-panel", isOpen && "open")}>
+                <div id={`faq-reponse-${i}`} inert={!isOpen} className={clsx("faq-panel", isOpen && "open")}>
                   <div>
-                    <p className="px-6 pb-5 leading-relaxed text-ink-700">{brandify(item.a)}</p>
+                    <p className="px-6 pb-5 text-base leading-relaxed text-ink-700">{brandify(fr(item.a))}</p>
                   </div>
                 </div>
               </div>
@@ -106,29 +116,22 @@ export function Faq() {
         className="mt-10 flex flex-col items-center justify-between gap-5 rounded-2xl border border-cream-200 bg-white px-6 py-5 shadow-[var(--shadow-card)] sm:flex-row"
       >
         <div className="flex items-center gap-4">
-          <div className="flex -space-x-2.5">
-            {["/avatars/therapist-7.jpg", "/avatars/therapist-6.jpg", "/avatars/therapist-11.jpg"].map(
-              (src) => (
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  loading="lazy"
-                  className="h-10 w-10 rounded-full object-cover ring-2 ring-white"
-                />
-              ),
-            )}
-          </div>
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-100 text-primary-700">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+              <path d="M4 5.5h16v10.5H9.5L5.5 19.5V16H4V5.5Z" strokeLinejoin="round" />
+              <path d="M8 9.5h8M8 12.5h5" strokeLinecap="round" />
+            </svg>
+          </span>
           <div>
-            <p className="font-semibold text-ink-900">Une question supplémentaire&nbsp;?</p>
-            <p className="text-sm text-ink-500">Notre équipe est là pour vous accompagner.</p>
+            <p className="text-lg font-semibold text-ink-900">Une autre question&nbsp;?</p>
+            <p className="text-base text-ink-700">Posez-la dans votre demande de démo : nous y répondons.</p>
           </div>
         </div>
         <a
           href="#demo"
-          className="group flex items-center gap-2 whitespace-nowrap rounded-full bg-ink-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-primary-600"
+          className="focus-ring group flex items-center gap-2 whitespace-nowrap rounded-full bg-ink-900 px-6 py-3 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-primary-700"
         >
-          Nous contacter
+          Demander ma démo
           <svg
             viewBox="0 0 16 16"
             className="h-4 w-4 transition-transform group-hover:translate-x-1"
