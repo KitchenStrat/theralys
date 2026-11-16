@@ -387,7 +387,7 @@ function AdGroupCard({ group, index, analysisSite }: { group: GoogleAdsAdGroup; 
               <span className="inline-flex min-w-0 items-start gap-1.5">
                 <Link2 size={16} aria-hidden className="mt-1 shrink-0 text-ds-section-accent" />
                 <span className="min-w-0">
-                  Page d&apos;arrivée :{" "}
+                  Page d&apos;atterrissage :{" "}
                   <span className="font-semibold break-all text-ds-ink-800">{landingDisplay(analysisSite, group.landingPath) ?? LANDING_UNAVAILABLE}</span>
                 </span>
               </span>

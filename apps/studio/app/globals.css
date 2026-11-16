@@ -1409,6 +1409,21 @@ html:has(.ds-app) {
   outline: 2px solid var(--color-ds-brand-600);
   outline-offset: 1px;
 }
+/* Texte indicatif des champs : nettement plus clair que la valeur saisie (4,9:1 sur blanc), pour qu'un exemple
+   (« mon-cabinet.fr ») ne passe jamais pour une saisie. Hors couche : vaut pour les champs hérités comme pour les nouveaux. */
+:is(.ds-app, .ds-scope) :is(input, textarea)::placeholder {
+  color: var(--color-ds-ink-500);
+  opacity: 1;
+}
+/* Au doigt, un champ fait au moins 44 px de haut et son texte 16 px (en dessous, iOS zoome sur le champ à la saisie).
+   Les champs hérités de packages/ui (38 px, 14 px) restent tels quels à la souris et dans le back-office. */
+@media (pointer: coarse) {
+  :is(.ds-app, .ds-scope)
+    :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]), select, textarea) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
 @layer base {
   /* Tout élément focalisable sans style propre reçoit l'anneau du design system
      (couche `base` : les utilitaires `ds-focus-*` des composants gardent la main). */

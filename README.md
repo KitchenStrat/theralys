@@ -170,6 +170,27 @@ ce site, et non plus sur le site inclus dans la formule.
   les 30 jours (`refresh-external-sites`). Une relecture qui échoue, ou qui rendrait un
   profil inexploitable, ne remplace jamais la précédente.
 
+## Interface du studio (design system)
+
+Toute l'interface du praticien (connexion, accueil, sections, fenêtres) repose sur un
+design system propre au studio, « un ciel vivant » : une famille de bleus voisins, un
+dégradé par section, un seul accent chaud.
+
+- **Où** : composants dans `apps/studio/components/ds` (import unique `@/components/ds`),
+  jetons `ds-` et utilitaires dans `apps/studio/app/globals.css`, mode d'emploi dans
+  `apps/studio/components/ds/README.md`. La page `/apercu-design` du studio montre chaque
+  composant et les écrans modèles ; elle n'existe qu'en développement (404 en production).
+- **Structure d'un écran** : la coquille (`AppShell`, navigation latérale et barre basse
+  sur téléphone) est montée dans `app/(app)/layout.tsx` ; chaque page commence par un
+  `PageHeader` à la couleur de sa section et pose une seule cascade d'entrée (`Stagger`).
+- **Règles tenues** : texte en AA partout, cibles de 44 px au doigt, un seul `h1` par
+  écran, aucun débordement de 320 à 1440 px, icônes Lucide à la place des émojis. Le
+  mouvement est en CSS (`transform` et `opacity`), sous `prefers-reduced-motion:
+  no-preference` ; rien ne tourne en boucle hors indicateurs de chargement.
+- **Composants hérités** : les `Button`, `Input`, `Modal`… de `packages/ui`, partagés
+  avec le back-office, prennent les couleurs du design system là où la coquille est
+  montée (`.ds-app`) ou sur une page qui porte `.ds-scope` — sans effet sur le back-office.
+
 ## Ce que couvre la Phase 4
 
 - **Vue d'ensemble** (accueil de l&apos;admin) : MRR (actifs + impayés, au tarif de

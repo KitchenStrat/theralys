@@ -95,7 +95,7 @@ function ModalBody({ onClose, remaining: initialRemaining, currentInstructions }
       }
     >
       <p className="text-ds-body text-ds-ink-700">
-        Facultatif : ce que vous voulez changer (une spécialité à mettre en avant, un ton, une page d&apos;arrivée, des expressions à
+        Facultatif : ce que vous voulez changer (une spécialité à mettre en avant, un ton, une page d&apos;atterrissage, des expressions à
         éviter — par exemple « sans tarif »). Les mots-clés et le diagnostic sont conservés ; seul le plan est réécrit.
       </p>
       <label htmlFor="ads-plan-instructions" className="mt-4 block text-ds-body font-semibold text-ds-ink-900">
