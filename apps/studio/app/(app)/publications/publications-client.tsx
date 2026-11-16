@@ -27,6 +27,23 @@ import { BlogSettingsModal, type BlogSettingsValue } from "./blog-settings-modal
 
 const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
+/** Rang du samedi et du dimanche dans une semaine de la grille (lundi = 0). */
+const SATURDAY = 5;
+const SUNDAY = 6;
+
+/**
+ * Colonnes de la grille. Un samedi ou un dimanche sans aucun article dans le
+ * mois se replie en colonne étroite (le numéro du jour seul) : les jours de
+ * semaine y gagnent la largeur qu'il faut pour le statut et la marque de l'IA
+ * sur une même ligne. Classes écrites en entier : Tailwind ne lit que celles-là.
+ */
+function gridColumns(narrowSaturday: boolean, narrowSunday: boolean): string {
+  if (narrowSaturday && narrowSunday) return "xl:grid-cols-[repeat(5,minmax(0,1fr))_3rem_3rem]";
+  if (narrowSaturday) return "xl:grid-cols-[repeat(5,minmax(0,1fr))_3rem_minmax(0,1fr)]";
+  if (narrowSunday) return "xl:grid-cols-[repeat(6,minmax(0,1fr))_3rem]";
+  return "xl:grid-cols-7";
+}
+
 /**
  * Site du client quand il est la référence des outils : les articles
  * paraissent toujours sur le blog du site Harmony, le praticien les reprend
@@ -77,6 +94,13 @@ export function PublicationsClient({
     }
     return map;
   }, [items]);
+
+  // Grille : une colonne de week-end sans article dans le mois se replie (voir `gridColumns`)
+  const narrowColumns = useMemo(() => {
+    const empty = (column: number) => weeks.every((week) => !byDate.has(week[column] ?? ""));
+    return { [SATURDAY]: empty(SATURDAY), [SUNDAY]: empty(SUNDAY) } as Record<number, boolean>;
+  }, [weeks, byDate]);
+  const columns = gridColumns(narrowColumns[SATURDAY] === true, narrowColumns[SUNDAY] === true);
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const prev = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
@@ -202,19 +226,21 @@ export function PublicationsClient({
                   {/* Dans le calendrier, la marque de l'IA est abrégée : la légende la déplie */}
                   {hasAi ? (
                     <li className="flex items-center gap-1.5">
-                      <AiBadge>IA</AiBadge>
+                      <AiMark />
                       <span className="text-ds-meta text-ds-ink-600">Rédigé par l&apos;IA</span>
                     </li>
                   ) : null}
                 </ul>
 
-                <div aria-hidden className="mt-5 hidden grid-cols-7 gap-2 xl:grid">
+                <div aria-hidden className={clsx("mt-5 hidden gap-2 xl:grid", columns)}>
                   {WEEKDAYS.map((weekday, index) => (
                     <span
                       key={weekday}
                       className={clsx(
-                        "px-2.5 text-xs font-semibold tracking-wider uppercase",
-                        index >= 5 ? "text-ds-ink-500" : "text-ds-section-accent",
+                        "text-xs font-semibold tracking-wider uppercase",
+                        index >= SATURDAY ? "text-ds-ink-500" : "text-ds-section-accent",
+                        // Colonne repliée : le nom du jour se centre sur le numéro
+                        narrowColumns[index] ? "text-center" : "px-2.5",
                       )}
                     >
                       {weekday}
@@ -223,7 +249,7 @@ export function PublicationsClient({
                 </div>
 
                 {/* Une seule liste : une ligne par jour sous 1 280 px, une grille de sept colonnes au-delà */}
-                <ol className="mt-4 grid gap-2 xl:mt-2 xl:grid-cols-7">
+                <ol className={clsx("mt-4 grid gap-2 xl:mt-2", columns)}>
                   {weeks.flat().map((day, index) =>
                     day === null ? (
                       <li key={`hors-mois-${index}`} aria-hidden className="hidden xl:block" />
@@ -232,6 +258,7 @@ export function PublicationsClient({
                         key={day}
                         iso={day}
                         isToday={day === todayIso}
+                        narrow={narrowColumns[index % 7] === true}
                         items={byDate.get(day) ?? []}
                         onSelect={setSelected}
                       />
@@ -351,45 +378,76 @@ function EmptyMonth({
   );
 }
 
-/** Repère « Aujourd'hui » : un mot dans la liste, une étiquette posée sur le bord de la case dans la grille. */
+/**
+ * Repère « Aujourd'hui ». Dans la liste, un mot au-dessus du titre ; dans la
+ * grille, ce mot reste lu par les lecteurs d'écran et l'étiquette visible est
+ * posée sur le bord de la case (`TodayTag`).
+ */
+function TodayWord() {
+  return <span className="block text-ds-meta font-semibold text-ds-section-accent xl:sr-only">Aujourd&apos;hui</span>;
+}
+
+/** Étiquette « Aujourd'hui » de la grille, à cheval sur le bord haut de la case. */
 function TodayTag() {
   return (
-    <span className="block text-ds-meta font-semibold text-ds-section-accent xl:absolute xl:-top-2.5 xl:left-2 xl:z-10 xl:rounded-full xl:bg-ds-section-gradient-deep xl:px-2 xl:py-0.5 xl:text-xs xl:text-ds-section-on-deep xl:shadow-sm">
+    <span
+      aria-hidden
+      className="absolute -top-2.5 left-2 z-10 hidden rounded-full bg-ds-section-gradient-deep px-2 py-0.5 text-xs font-semibold text-ds-section-on-deep shadow-sm xl:block"
+    >
       Aujourd&apos;hui
     </span>
   );
 }
 
 /**
- * Marque de l'IA dans le calendrier : abrégée à l'œil (la légende la déplie),
- * dite en entier aux lecteurs d'écran — un sujet pas encore rédigé le « sera ».
+ * Marque de l'IA dans le calendrier : « IA » dans la liste, l'étincelle seule
+ * dans la grille (la légende la déplie). `label` la dit en entier aux lecteurs
+ * d'écran et au survol — un sujet pas encore rédigé le « sera » ; sans `label`
+ * (légende), le texte voisin la nomme déjà.
  */
-function AiMark({ planned }: { planned: boolean }) {
+function AiMark({ label }: { label?: string }) {
   return (
-    <AiBadge>
-      <span aria-hidden>IA</span>
-      <span className="sr-only">{planned ? "Sera rédigé par l'IA" : "Rédigé par l'IA"}</span>
-    </AiBadge>
+    <span title={label} className="inline-flex shrink-0">
+      <AiBadge className="xl:size-6 xl:justify-center xl:p-0">
+        <span aria-hidden={label ? true : undefined} className="xl:hidden">
+          IA
+        </span>
+        {label ? <span className="sr-only">{label}</span> : null}
+      </AiBadge>
+    </span>
   );
 }
 
-/** Le jour : une tuile datée dans la liste (numéro et jour de la semaine), un simple numéro dans la grille. */
-function DayMark({ iso, isToday }: { iso: string; isToday: boolean }) {
+/** Le jour dans la liste : une tuile datée, numéro et jour de la semaine. */
+function DayTile({ iso, isToday }: { iso: string; isToday: boolean }) {
   const weekday = new Intl.DateTimeFormat("fr-FR", { weekday: "short", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
   return (
     <span
       aria-hidden
       className={clsx(
-        "grid size-12 shrink-0 place-items-center rounded-ds-sm text-center leading-none xl:size-7 xl:rounded-full",
-        isToday
-          ? "bg-ds-section-gradient-deep text-ds-section-on-deep"
-          : "bg-ds-section-tint-2 text-ds-section-ink xl:bg-transparent xl:text-ds-ink-700",
+        "grid size-12 shrink-0 place-items-center rounded-ds-sm text-center leading-none xl:hidden",
+        isToday ? "bg-ds-section-gradient-deep text-ds-section-on-deep" : "bg-ds-section-tint-2 text-ds-section-ink",
       )}
     >
       <span>
-        <span className="block text-lg/5 font-bold ds-tnum xl:text-ds-meta xl:font-semibold">{Number(iso.slice(8, 10))}</span>
-        <span className="mt-0.5 block text-xs font-medium xl:hidden">{weekday}</span>
+        <span className="block text-lg/5 font-bold ds-tnum">{Number(iso.slice(8, 10))}</span>
+        <span className="mt-0.5 block text-xs font-medium">{weekday}</span>
       </span>
+    </span>
+  );
+}
+
+/** Le jour dans la grille : son numéro, seul en tête de case — une pastille pleine pour aujourd'hui. */
+function DayNumber({ iso, isToday }: { iso: string; isToday: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={clsx(
+        "hidden size-7 shrink-0 place-items-center rounded-full text-ds-meta leading-none font-semibold ds-tnum xl:grid",
+        isToday ? "bg-ds-section-gradient-deep text-ds-section-on-deep" : "text-ds-ink-700",
+      )}
+    >
+      {Number(iso.slice(8, 10))}
     </span>
   );
 }
@@ -397,11 +455,14 @@ function DayMark({ iso, isToday }: { iso: string; isToday: boolean }) {
 function CalendarDay({
   iso,
   isToday,
+  narrow,
   items,
   onSelect,
 }: {
   iso: string;
   isToday: boolean;
+  /** Grille : la colonne de ce jour est repliée (week-end sans article), il n'y a place que pour le numéro */
+  narrow: boolean;
   items: CalendarItem[];
   onSelect: (item: CalendarItem) => void;
 }) {
@@ -412,7 +473,7 @@ function CalendarDay({
     if (!isToday) {
       return (
         <li aria-hidden className="hidden min-h-16 rounded-ds-md bg-ds-section-tint p-2.5 ring-1 ring-ds-section-line/50 xl:block">
-          <DayMark iso={iso} isToday={false} />
+          <DayNumber iso={iso} isToday={false} />
         </li>
       );
     }
@@ -421,9 +482,12 @@ function CalendarDay({
         aria-current="date"
         className="relative flex min-h-16 items-center gap-3 rounded-ds-md bg-ds-section-tint p-3 ring-2 ring-ds-section-accent xl:block xl:p-2.5"
       >
-        <DayMark iso={iso} isToday />
-        <span className="min-w-0 xl:mt-1.5 xl:block">
-          <TodayTag />
+        <DayTile iso={iso} isToday />
+        <DayNumber iso={iso} isToday />
+        {/* Colonne repliée : la pastille pleine et le contour suffisent à l'œil, le texte reste lu */}
+        {narrow ? null : <TodayTag />}
+        <span className={clsx("min-w-0 xl:mt-1.5 xl:block", narrow && "xl:sr-only")}>
+          <TodayWord />
           <span className="sr-only">{fullDate}. </span>
           <span className="block text-ds-body text-ds-ink-700 xl:text-ds-meta">Pas d&apos;article ce jour.</span>
         </span>
@@ -435,51 +499,55 @@ function CalendarDay({
     <li
       aria-current={isToday ? "date" : undefined}
       className={clsx(
-        "relative flex flex-col rounded-ds-md bg-white shadow-ds-card xl:min-h-36 xl:ds-lift",
+        // `@container` : la rangée des repères se règle sur la largeur de la case (voir plus bas)
+        "@container relative flex flex-col rounded-ds-md bg-white shadow-ds-card xl:min-h-36 xl:ds-lift",
         isToday ? "ring-2 ring-ds-section-accent" : "ring-1 ring-ds-ink-900/5",
       )}
     >
-      {items.map((item, index) => (
-        <button
-          key={item.articleId ?? item.entryId ?? `${item.date}-${index}`}
-          type="button"
-          onClick={() => onSelect(item)}
-          className={clsx(
-            "flex w-full flex-1 items-center gap-3 p-3 text-left ds-focus ds-press hover:bg-ds-section-tint xl:flex-col xl:items-stretch xl:gap-0 xl:p-2.5 xl:hover:bg-transparent",
-            index === 0 ? "rounded-t-ds-md" : "border-t border-ds-ink-200",
-            index === items.length - 1 && "rounded-b-ds-md",
-          )}
-        >
-          <span className="sr-only">{fullDate}. </span>
-          {/* Dans la grille, cette rangée porte le numéro du jour et la marque de l'IA ; dans la liste, la tuile datée seule */}
-          <span className="flex shrink-0 items-center justify-between gap-1">
-            {/* Un second article le même jour ne répète pas le numéro dans la case */}
-            <span className={clsx(index > 0 && "xl:hidden")}>
-              <DayMark iso={iso} isToday={isToday} />
-            </span>
-            {item.aiGenerated ? (
-              <span className="hidden xl:inline-flex">
-                <AiMark planned={item.kind === "planned"} />
+      {/* Grille : le numéro du jour seul en tête de case, quel que soit le nombre d'articles */}
+      <span aria-hidden className="hidden px-2.5 pt-2.5 xl:flex">
+        <DayNumber iso={iso} isToday={isToday} />
+      </span>
+      {isToday ? <TodayTag /> : null}
+      {items.map((item, index) => {
+        const last = index === items.length - 1;
+        return (
+          <button
+            key={item.articleId ?? item.entryId ?? `${item.date}-${index}`}
+            type="button"
+            onClick={() => onSelect(item)}
+            className={clsx(
+              // Grille : en colonne, contenu en haut — un bouton étiré centrerait de lui-même son contenu ;
+              // l'anneau du clavier reste à l'intérieur de la case, autour du seul article visé
+              "flex w-full items-center gap-3 p-3 text-left ds-focus ds-press hover:bg-ds-section-tint xl:flex-col xl:items-stretch xl:justify-start xl:gap-0 xl:px-2.5 xl:pt-1.5 xl:pb-2.5 xl:focus-visible:-outline-offset-2",
+              // Liste : la première ligne épouse le haut de la carte ; grille : le numéro du jour est au-dessus
+              index === 0 ? "rounded-t-ds-md xl:rounded-t-none" : "border-t border-ds-ink-200 xl:pt-2.5",
+              // Le dernier article prend le reste de la case : toute la case se clique, le contenu reste en haut
+              last && "flex-1 rounded-b-ds-md",
+            )}
+          >
+            <span className="sr-only">{fullDate}. </span>
+            <DayTile iso={iso} isToday={isToday} />
+            {/* Le même bloc pour chaque article. Liste : le titre puis ses repères ; grille : les repères
+                d'abord (`xl:order-first`), pour qu'ils s'alignent d'une case à l'autre quelle que soit la
+                longueur du titre. Dans la grille, le statut et la marque de l'IA partagent une ligne dès que
+                la case fait 9rem (le plus long statut y tient) ; en dessous — un week-end porte un article
+                et la fenêtre est étroite — ils se superposent dans toutes les cases, jamais dans certaines */}
+            <span className="min-w-0 flex-1 xl:flex xl:flex-none xl:flex-col">
+              {isToday && index === 0 ? <TodayWord /> : null}
+              <span className="line-clamp-2 text-base font-semibold text-ds-ink-900 xl:line-clamp-3 xl:text-ds-meta">
+                {frenchSpacing(item.title)}
               </span>
-            ) : null}
-          </span>
-          <span className="min-w-0 flex-1 xl:mt-1.5 xl:flex xl:flex-col">
-            {isToday && index === 0 ? <TodayTag /> : null}
-            <span className="line-clamp-2 text-base font-semibold text-ds-ink-900 xl:line-clamp-3 xl:text-ds-meta">
-              {frenchSpacing(item.title)}
+              <span className="mt-1.5 flex flex-wrap items-center gap-1.5 xl:order-first xl:mt-0 xl:mb-1.5 xl:justify-between xl:gap-1 xl:@max-[9rem]:flex-col xl:@max-[9rem]:items-start xl:@max-[9rem]:justify-start">
+                <ArticleStatusPill status={item.status} />
+                {item.aiGenerated ? (
+                  <AiMark label={item.kind === "planned" ? "Sera rédigé par l'IA" : "Rédigé par l'IA"} />
+                ) : null}
+              </span>
             </span>
-            <span className="mt-1.5 flex flex-wrap items-center gap-1.5 xl:mt-auto xl:pt-2">
-              <ArticleStatusPill status={item.status} />
-              {/* Dans la liste, la marque de l'IA suit le statut : la case de la grille est trop étroite pour les deux */}
-              {item.aiGenerated ? (
-                <span className="inline-flex xl:hidden">
-                  <AiMark planned={item.kind === "planned"} />
-                </span>
-              ) : null}
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </li>
   );
 }
