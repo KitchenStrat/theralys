@@ -19,6 +19,8 @@ import {
 } from "@/components/ds";
 import { buildMonthGrid, formatDayFr, monthNameFr } from "@/lib/calendar";
 import type { CalendarItem } from "@/lib/data";
+import { useOpenFromHash } from "@/lib/open-from-hash";
+import { BLOG_SETTINGS_HASH } from "@/lib/settings-hash";
 import { ArticleModal } from "./article-modal";
 import { ArticleStatusPill, frenchSpacing } from "./article-status";
 import { BlogSettingsModal, type BlogSettingsValue } from "./blog-settings-modal";
@@ -58,6 +60,8 @@ export function PublicationsClient({
 }) {
   const [selected, setSelected] = useState<CalendarItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Arrivée depuis la mise en route de l'accueil (« Régler mon blog ») : les paramètres s'ouvrent d'eux-mêmes
+  useOpenFromHash(BLOG_SETTINGS_HASH, () => setSettingsOpen(true));
 
   const monthLabel = new Intl.DateTimeFormat("fr-FR", {
     month: "long",

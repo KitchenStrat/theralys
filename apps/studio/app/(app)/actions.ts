@@ -62,6 +62,11 @@ import { attributeApiUsage } from "@theralys/shared/usage-runtime";
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
+/**
+ * Coche une tâche de `onboarding_tasks` quand elle existe (données de
+ * démonstration). L'accueil ne lit plus cette table : sa mise en route se lit
+ * sur l'état réel du compte (`lib/accueil.ts`).
+ */
 export async function completeOnboardingTask(key: string): Promise<void> {
   const session = await requireClient();
   const db = getDb();

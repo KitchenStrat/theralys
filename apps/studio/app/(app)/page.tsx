@@ -2,7 +2,7 @@ import { getDb, hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSocialMe
 import { loadExternalSite } from "@theralys/jobs";
 import { activeExternalSite } from "@theralys/shared";
 import { allowedSections } from "@/components/ds";
-import { availableSetupTasks, getSetupTasks, pickNextStep } from "@/lib/accueil";
+import { deriveSetupTasks, pickNextStep, readSetupSignals, type SetupAccess } from "@/lib/accueil";
 import { requireClient } from "@/lib/auth";
 import {
   getDashboardStats,
@@ -60,19 +60,21 @@ export default async function HomePage({ searchParams }: Props) {
   // Site de référence des outils : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony
   const ownSite = activeExternalSite(site.theme);
   const referenceUrl = publicSiteUrl(site);
-  const [stats, upcoming, ownSiteState, setupTasks] = await Promise.all([
+  const [stats, upcoming, ownSiteState] = await Promise.all([
     // Les visites lues sont celles du site de référence : jamais les deux mesures additionnées
     getDashboardStats(site.id, period, ownSite ? "external" : "hosted"),
     blog ? getUpcoming(site.id) : Promise.resolve([]),
     ownSite ? loadExternalSite(getDb(), site) : Promise.resolve(null),
-    getSetupTasks(site.id),
   ]);
+  // État lisible du site du praticien, quand il est la référence (`null` : site Harmony, ou section pas encore activée)
+  const ownSiteRow = ownSite !== null && ownSiteState?.available === true ? ownSiteState.site : null;
   // Le code de mesure n'a encore envoyé aucune visite du site du praticien : rien à tracer, l'accueil dit quoi faire
-  const awaitingMeasure = ownSite !== null && ownSiteState?.available === true && ownSiteState.site !== null && ownSiteState.site.measure.seenAt === null;
+  const awaitingMeasure = ownSiteRow !== null && ownSiteRow.measure.seenAt === null;
   const measure = awaitingMeasure && ownSite ? { address: siteAddressLabel(ownSite.url) } : null;
 
-  // Mise en route : seulement les étapes que ce compte peut mener à bien (l'éditeur n'est proposé que pour le site Harmony)
-  const setup = availableSetupTasks(setupTasks, { google: googleAccess, blog, editor: ownSite === null });
+  // Mise en route : lue sur l'état réel du compte, limitée aux étapes que la formule et le site de référence permettent
+  const access: SetupAccess = { reference: ownSite ? "external" : "hosted", google: googleAccess, blog, social: socialAccess };
+  const setup = deriveSetupTasks(await readSetupSignals(site, access, ownSiteRow ? ownSiteRow.measure.seenAt !== null : null), access);
 
   return (
     <HomeView

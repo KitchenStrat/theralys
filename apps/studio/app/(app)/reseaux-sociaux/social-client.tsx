@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { Button, LinkButton, PageHeader, Stagger } from "@/components/ds";
 import { buildMonthGrid, monthLabelFr, shiftMonthParam } from "@/lib/calendar";
+import { useOpenFromHash } from "@/lib/open-from-hash";
+import { SOCIAL_SETTINGS_HASH } from "@/lib/settings-hash";
 import type { SocialCalendarItem, SocialMonthState, SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import type { SocialSettingsView } from "@/lib/social/settings";
@@ -77,6 +79,8 @@ export function SocialClient({
   const [dayOpen, setDayOpen] = useState<string | null>(null);
   const [fromDay, setFromDay] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Arrivée depuis la mise en route de l'accueil (« Régler mes réseaux ») : le paramétrage s'ouvre de lui-même
+  useOpenFromHash(SOCIAL_SETTINGS_HASH, () => setSettingsOpen(true));
   // Contenu créé par la barre, ou désigné par `?post=` : la modale s'ouvre dès qu'il figure dans `items`
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(initialPostId);
   // Lien profond (e-mail, agenda) vers un contenu absent du mois affiché : un message, pas une erreur, décidé au chargement

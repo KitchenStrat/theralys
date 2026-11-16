@@ -183,6 +183,12 @@ dégradé par section, un seul accent chaud.
 - **Structure d'un écran** : la coquille (`AppShell`, navigation latérale et barre basse
   sur téléphone) est montée dans `app/(app)/layout.tsx` ; chaque page commence par un
   `PageHeader` à la couleur de sa section et pose une seule cascade d'entrée (`Stagger`).
+- **Mise en route de l'accueil** (`apps/studio/lib/accueil.ts`) : les étapes proposées et
+  leur état se lisent sur le compte lui-même — une page enregistrée depuis l'éditeur, un
+  lien de prise de rendez-vous, la fiche Google reliée, les paramètres du blog et des
+  réseaux sociaux enregistrés, une première visite mesurée quand le site du praticien est
+  la référence. Rien n'est coché à la main : l'étape disparaît de ce qu'il reste à faire
+  dès que l'action est faite, et la liste n'est plus affichée une fois tout terminé.
 - **Règles tenues** : texte en AA partout, cibles de 44 px au doigt, un seul `h1` par
   écran, aucun débordement de 320 à 1440 px, icônes Lucide à la place des émojis. Le
   mouvement est en CSS (`transform` et `opacity`), sous `prefers-reduced-motion:

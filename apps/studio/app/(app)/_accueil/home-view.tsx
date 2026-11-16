@@ -31,7 +31,7 @@ export type HomeViewProps = {
   socialAccess: boolean;
   /** Prochains contenus du calendrier ; `null` : la formule n'ouvre pas le blog, la carte n'est pas montrée */
   upcoming: readonly CalendarItem[] | null;
-  /** Étapes de mise en route proposées à ce compte (`availableSetupTasks`) */
+  /** Étapes de mise en route proposées à ce compte, lues sur son état réel (`deriveSetupTasks`) */
   setup: readonly SetupTask[];
   /** La prochaine étape choisie (`pickNextStep`) ; `null` : pas de carte */
   nextStep: NextStep | null;
@@ -91,7 +91,7 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
               : "min-w-0 space-y-6"
           }
         >
-          {remainingSetupTasks(setup) > 0 ? <SetupChecklist steps={checklistSteps(setup)} section="accueil" /> : null}
+          {remainingSetupTasks(setup) > 0 ? <SetupChecklist steps={checklistSteps(setup, awaitingMeasure ? "install_measure" : null)} section="accueil" /> : null}
           <SiteCard {...site} emphasis={nextStep === null} />
           {upcoming ? <UpcomingCard items={upcoming} /> : null}
         </div>
