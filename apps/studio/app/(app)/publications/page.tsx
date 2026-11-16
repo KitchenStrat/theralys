@@ -10,7 +10,7 @@ import { getBlogSettings, getEditablePages, getMonthItems, getSite, type Calenda
 import { withReferenceSpecialties, type MotifSlugs } from "@/lib/social/blog-specialties";
 import { PublicationsClient } from "./publications-client";
 
-export const metadata = { title: "Publications" };
+export const metadata = { title: "Blog SEO" };
 export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ mois?: string }> };

@@ -34,7 +34,7 @@ export function Shortcuts({ sections }: { sections: readonly SectionKey[] }) {
                       <span className="text-base font-semibold text-ds-ink-900">{section.label}</span>
                       <ArrowRight size={16} aria-hidden className="shrink-0 text-ds-section-accent" />
                     </span>
-                    {/* Séparateur lu, invisible : le nom du lien est « Publications : Les articles de votre blog… » */}
+                    {/* Séparateur lu, invisible : le nom du lien est « Blog SEO : Les articles de votre blog… » */}
                     <span className="sr-only"> : </span>
                     {/* Espaces insécables : dans une carte étroite, une ligne ne commence jamais par un deux-points */}
                     <span className="mt-0.5 block text-ds-body text-ds-ink-600">{frenchSpacing(section.purpose)}</span>

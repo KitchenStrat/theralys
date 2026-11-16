@@ -78,8 +78,9 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
   },
   publications: {
     key: "publications",
-    label: "Publications",
-    shortLabel: "Publications",
+    // Nom affiché de la section du blog ; sa clé et son adresse (`/publications`) ne changent pas
+    label: "Blog SEO",
+    shortLabel: "Blog SEO",
     href: "/publications",
     icon: Newspaper,
     // En publication automatique, un article paraît à sa date même sans relecture : la phrase ne promet pas de validation préalable

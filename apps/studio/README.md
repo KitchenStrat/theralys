@@ -5,7 +5,7 @@ fiche Google, Google Ads, Meta Ads, académie et éditeur de site (WYSIWYG).
 
 ## Structure
 
-- `app/(app)/` — pages avec la barre latérale : Accueil, Publications,
+- `app/(app)/` — pages avec la barre latérale : Accueil, Blog SEO (`/publications`),
   Réseaux sociaux, Fiche Google, Google Ads, Meta Ads, Académie, Compte. L'éditeur
   n'apparaît pas dans la navigation : on y accède depuis la carte « Votre
   site » de l'Accueil. L'ancienne route `/mots-cles` redirige vers

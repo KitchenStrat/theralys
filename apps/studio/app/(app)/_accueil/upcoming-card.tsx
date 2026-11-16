@@ -30,11 +30,11 @@ export function UpcomingCard({ items }: { items: readonly CalendarItem[] }) {
           title="Rien de planifié pour l'instant"
           action={
             <LinkButton href="/publications" variant="secondary" iconRight={<ArrowRight size={18} aria-hidden />}>
-              Ouvrir Publications
+              Ouvrir Blog SEO
             </LinkButton>
           }
         >
-          Le calendrier se remplit depuis la section Publications. Vos prochains articles apparaîtront ici, avec leur date de parution.
+          Le calendrier se remplit depuis la section Blog SEO. Vos prochains articles apparaîtront ici, avec leur date de parution.
         </EmptyState>
       </Card>
     );

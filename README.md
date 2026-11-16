@@ -296,7 +296,7 @@ un environnement de préproduction sans aucun compte externe.
   de la propriété, total mensuel vs mois précédent à durée égale, chips des
   requêtes principales + « +N non détaillées » ; cartes Consulteo/BoostTonCab et
   parrainage.
-- **Publications** : calendrier mensuel (Publié vert plein · Brouillon vert
+- **Blog SEO** (section `/publications`) : calendrier mensuel (Publié vert plein · Brouillon vert
   pointillé · Planifié bleu pointillé · Retiré jaune, badge IA, légende),
   modale d'article (statut daté, spécialité, temps de lecture, image, « Voir sur
   le site » avec preview token, « Modifier l'article »), édition complète
