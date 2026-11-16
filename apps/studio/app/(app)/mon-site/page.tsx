@@ -10,7 +10,6 @@ import { detectedItems, formatDayParis, formatMomentParis, siteAddressLabel } fr
 import { installGuides, measureState, privacyParagraph } from "@/lib/external-site/measure";
 import { ActivationCard } from "./activation-card";
 import { ConnectForm } from "./connect-form";
-import { HashAnchor } from "./hash-anchor";
 import { HostedSiteCard, type HostedSiteRole } from "./hosted-site-card";
 import { currentStep, journeyOf, type Journey } from "./journey";
 import { JourneyAside, JourneyOutline } from "./journey-aside";
@@ -167,7 +166,6 @@ function Screen({ state, journey, rows = 1, children }: { state: ReadScreenState
       <div className="min-w-0 xl:col-span-2">
         <PageHeader section="mon-site" />
         <ReadAnnouncer state={state} />
-        <HashAnchor />
       </div>
       {journey ? <JourneyAside journey={journey} rows={rows} /> : null}
       {children}

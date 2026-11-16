@@ -86,7 +86,7 @@ Composants serveur sauf mention **client**. Tous acceptent `className` ; `sectio
 | `SetupChecklist` | `steps: { id, label, description?, done, href?, actionLabel? }[]`, `title?`, `summary?`, `defaultOpen?` | Mise en route repliable avec anneau de progression ; seule l'étape en cours propose son action. |
 | `NextStepCard` | `title`, `action`, `eyebrow?`, `children?`, `duration?`, `secondary?`, `icon?`, `section?`, `as?` | La « prochaine étape » : une par écran, avec sa durée et une seule action. |
 | `EmptyState` | `icon`, `title`, `children`, `action?`, `secondary?`, `tone?: "plain" \| "tinted"`, `as?` | Dit pourquoi c'est vide, ce qui apparaîtra, et propose une action. Jamais pendant un chargement. |
-| `Skeleton`, `SkeletonText`, `KpiTileSkeleton`, `CardSkeleton`, `PageSkeleton` | `lines?` · `tiles?`, `cards?` | `PageSkeleton` est prêt pour un `loading.tsx`. Le squelette reprend la forme du contenu attendu. |
+| `Skeleton`, `SkeletonText`, `KpiTileSkeleton`, `CardSkeleton`, `PageSkeleton` | `lines?` · `tiles?`, `cards?` | Le squelette reprend la forme du contenu attendu, à l'intérieur d'un écran (carte dont les données arrivent). **Pas de `loading.tsx`** : voir la règle sous ce tableau. |
 | `Tabs`, `TabPanel` **client** | `tabs: { id, label, icon?, badge?, href? }[]`, `value`, `onChange?`, `label`, `idBase`, `variant?: "underline" \| "pill"` | Onglets de page (trait qui glisse) ou sélecteur à segments (pastille qui glisse). Flèches, Début, Fin. Avec `href`, ce sont des liens. |
 | `StepProgress` | `title`, `steps: { label }[]`, `current`, `status?: "running" \| "done" \| "error"`, `estimate?`, `elapsed?`, `detail?`, `hint?`, `doneMessage?`, `errorMessage?`, `footer?` | Attente d'une génération longue : étapes nommées, durée annoncée, temps écoulé — pas de pourcentage inventé. |
 | `GenerationProgress`, `useStepTimeline` **client** | `steps: { label, seconds, details? }[]`, `running`, `done?`, `failed?` + props de `StepProgress` | Fait avancer `StepProgress` d'après les durées typiques quand la tâche ne remonte pas son avancement ; s'arrête sur la dernière étape tant que `done` n'est pas vrai. |
@@ -94,6 +94,15 @@ Composants serveur sauf mention **client**. Tous acceptent `className` ; `sectio
 | `Stagger`, `Reveal` | `as?` · `order?` | Entrée en cascade des enfants directs (racine de page, grille) · entrée d'un élément isolé. |
 | `Spinner` | `label?` | Prend la couleur du texte ; taille par `className` (`size-4` par défaut). |
 | Utilitaires | `SECTIONS`, `SECTION_ORDER`, `SECTION_GROUPS`, `allowedSections`, `sectionForPath`, `formatNumber`, `formatDelta`, `plural`, `formatElapsed`, `NBSP` | Registre et mise en forme française des nombres. |
+
+### Pas de `loading.tsx`
+
+Aucun segment du studio ne porte de `loading.tsx`. Avec un tel fichier, Next.js (15.5) enveloppe la page dans une
+limite de chargement, et en production une action serveur qui change l'état de la page ne rend plus la main : la
+réponse de l'action arrive, la base est à jour, mais l'écran ne se met pas à jour et le bouton reste en attente
+jusqu'au rechargement. Constaté sur « Mon site » (activer le site du praticien, revenir au site Harmony), seulement
+avec `next build` puis `next start` — jamais en développement. Avant de réintroduire un état de chargement de page,
+rejouer ce parcours sur une version compilée.
 
 ## 4. Mouvement
 
@@ -209,6 +218,6 @@ Ce qu'il reste à faire, dans l'ordre :
 2. **Polices** — `app/layout.tsx`, dans l'adresse Google Fonts : `Inter:wght@400;500;600` devient `Inter:wght@400;500;600;700` et `Figtree:wght@600` devient `Figtree:wght@600;700;800`. Retirer ensuite le `<link>` de `app/apercu-design/layout.tsx`.
 3. **Éléments fixes des pages** — `app/(app)/meta-ads/market-feedback.tsx` : ligne 42, `md:pl-[296px]` devient `lg:pl-[296px]` et `pb-5` devient `pb-24 lg:pb-5` ; ligne 102, `bottom-4` devient `bottom-24 lg:bottom-4` (au-dessus de la barre basse). La barre latérale apparaissant désormais à 1 024 px et non 768, vérifier chaque page entre ces deux largeurs.
 4. **Aplats que la correspondance assombrit** — les jetons `-500` servent aussi de fonds décoratifs : `fiche-google/reviews-tab.tsx:116` (`bg-warning-500`, barres des avis) passe à `bg-ds-warning-500` ; les points d'état `bg-success-500` de `meta-ads/market-card.tsx:138`, `market-detail.tsx:120` et `market-toolbar.tsx:208` passent à `bg-ds-success-600`.
-5. **Page par page** — remplacer le `<h1 className="text-4xl font-bold">` et son paragraphe d'introduction par `<PageHeader section="…" />` (19 emplois, fichiers `page.tsx`, `*-client.tsx` et `error.tsx` de chaque section ; `stats-panel.tsx` prend `GreetingBand`) ; envelopper la racine de la page dans `<Stagger className="space-y-6">` (la montée héritée ne s'applique plus sous `role="main"`) ; ajouter un `loading.tsx` qui rend `<PageSkeleton />` (il n'en existe aucun) ; échanger l'import de `Button`, `Card`, `Badge`, `Spinner` de `@theralys/ui` vers `@/components/ds` — mêmes props, mais un bouton `md` fait 44 px de haut (36 avant), un badge 13 px (12 avant) : à vérifier à l'œil. `Input`, `Label`, `Select`, `FieldHint`, `Segmented` et `Modal` restent ceux de `@theralys/ui`, restylés par la coquille.
+5. **Page par page** — remplacer le `<h1 className="text-4xl font-bold">` et son paragraphe d'introduction par `<PageHeader section="…" />` (19 emplois, fichiers `page.tsx`, `*-client.tsx` et `error.tsx` de chaque section ; `stats-panel.tsx` prend `GreetingBand`) ; envelopper la racine de la page dans `<Stagger className="space-y-6">` (la montée héritée ne s'applique plus sous `role="main"`) ; ne pas ajouter de `loading.tsx` (voir « Pas de `loading.tsx` ») ; échanger l'import de `Button`, `Card`, `Badge`, `Spinner` de `@theralys/ui` vers `@/components/ds` — mêmes props, mais un bouton `md` fait 44 px de haut (36 avant), un badge 13 px (12 avant) : à vérifier à l'œil. `Input`, `Label`, `Select`, `FieldHint`, `Segmented` et `Modal` restent ceux de `@theralys/ui`, restylés par la coquille.
 
 Hors coquille : les pages `login` et `creer-mot-de-passe` prennent les mêmes couleurs en posant `ds-scope` sur leur élément racine ; l'éditeur `(editor)` garde sa propre mise en page.

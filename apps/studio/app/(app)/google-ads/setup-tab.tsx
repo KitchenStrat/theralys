@@ -463,7 +463,7 @@ function TrackingForm({ initial, cookieBanner, siteDomain }: { initial: AdsTrack
             disabled={pending}
             className="max-w-xs font-mono"
           />
-          <FieldHint>Dans l&apos;extrait d&apos;événement d&apos;une action de conversion : send_to: &apos;AW-1234567890/…&apos; → la partie avant la barre oblique.</FieldHint>
+          <FieldHint>Dans l&apos;extrait d&apos;événement d&apos;une action de conversion (send_to: &apos;AW-1234567890/…&apos;), c&apos;est la partie avant la barre oblique.</FieldHint>
         </div>
         {GOOGLE_ADS_CONVERSION_KINDS.map((kind) => (
           <div key={kind.id}>
