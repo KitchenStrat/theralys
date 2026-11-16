@@ -1,7 +1,10 @@
 "use client";
 
 import {
+  createContext,
+  useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ClipboardEvent,
@@ -10,6 +13,25 @@ import {
   type ReactNode,
 } from "react";
 import { clsx } from "clsx";
+import {
+  ArrowDown,
+  ArrowUp,
+  Bold,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Heading,
+  ImageUp,
+  Link2,
+  List,
+  ListOrdered,
+  Plus,
+  RefreshCw,
+  SquareCheckBig,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import {
   SECTION_ICONS,
   SECTION_ICON_CATEGORIES,
@@ -25,9 +47,24 @@ import {
   type SectionIconCategory,
   type SectionIconName,
 } from "@theralys/shared";
+import { Button } from "@/components/ds";
 import { moveItem } from "@/lib/editor/move-item";
 import { regenerateMotifPage } from "../../(app)/actions";
 import { CropModal } from "./crop-modal";
+import {
+  ActionMessage,
+  ADD_BUTTON,
+  DANGER_LINK,
+  FIELD_BOX,
+  FIELD_FOCUS,
+  FieldError,
+  HINT,
+  ICON_BUTTON,
+  INPUT,
+  LABEL,
+  Note,
+  ToolRef,
+} from "./editor-ui";
 
 /** Libellés des sections : source partagée avec le site public (étiquettes de l'aperçu). */
 export { SECTION_LABELS };
@@ -93,7 +130,7 @@ export function SectionFields({
               onChange={(showGoogleRating) => onChange({ showGoogleRating })}
             />
           ) : null}
-          <p className="text-xs font-medium text-ink-700">Badges chiffrés sur la photo</p>
+          <GroupTitle>Badges chiffrés sur la photo</GroupTitle>
           {stats.map((stat, i) => (
             <ListItem
               key={i}
@@ -133,7 +170,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter un badge chiffré"
+            label="Ajouter un badge chiffré"
             onClick={() => onChange({ stats: [...stats, { icon: "etoile", value: "", label: "" }] })}
           />
         </SectionBox>
@@ -182,7 +219,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter un point fort"
+            label="Ajouter un point fort"
             onClick={() =>
               onChange({ items: [...section.items, { icon: "etoile", title: "", text: "" }] })
             }
@@ -278,7 +315,13 @@ export function SectionFields({
             limit={SECTION_LIMITS.body}
             value={futureBodyText(section)}
             onChange={(body) => onChange({ body })}
-            hint="💡 Une ligne par bénéfice via le bouton liste à puces · B : le début de ligne en gras · la première ligne sert d'introduction"
+            hint={
+              <>
+                La première ligne sert d&apos;introduction. Ensuite, une ligne par bénéfice avec{" "}
+                <ToolRef icon={List}>Liste à puces</ToolRef>, et le début de chaque ligne en{" "}
+                <ToolRef icon={Bold}>Gras</ToolRef>.
+              </>
+            }
           />
           <ImageField
             label="Photo (séance avec un(e) patient(e)…)"
@@ -315,7 +358,7 @@ export function SectionFields({
             value={section.imageUrl ?? ""}
             onChange={(imageUrl) => onChange({ imageUrl: imageUrl || undefined })}
           />
-          <p className="text-xs font-medium text-ink-700">Cartes infos pratiques (durée, tarifs…)</p>
+          <GroupTitle>Cartes infos pratiques (durée, tarifs…)</GroupTitle>
           {cards.map((card, i) => (
             <ListItem
               key={i}
@@ -349,7 +392,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter une carte info"
+            label="Ajouter une carte info"
             onClick={() => onChange({ infoCards: [...cards, { icon: "horloge", title: "", text: "" }] })}
           />
         </SectionBox>
@@ -372,9 +415,7 @@ export function SectionFields({
             value={section.intro ?? ""}
             onChange={(intro) => onChange({ intro })}
           />
-          <p className="text-xs text-ink-500">
-            Les avis sont synchronisés depuis votre fiche Google.
-          </p>
+          <Note tone="info">Les avis sont synchronisés depuis votre fiche Google.</Note>
         </SectionBox>
       );
 
@@ -424,7 +465,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter une étape"
+            label="Ajouter une étape"
             onClick={() => onChange({ steps: [...section.steps, { title: "", description: "" }] })}
           />
         </SectionBox>
@@ -474,7 +515,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter une question"
+            label="Ajouter une question"
             onClick={() => onChange({ items: [...section.items, { question: "", answer: "" }] })}
           />
         </SectionBox>
@@ -506,12 +547,12 @@ export function SectionFields({
             value={section.note ?? ""}
             onChange={(note) => onChange({ note })}
           />
-          <p className="text-xs text-ink-500">
+          <Note tone="info">
             La carte interactive et l&apos;encart « Le cabinet » utilisent votre fiche Google
             (onglet Paramètres) ou, à défaut, l&apos;adresse ci-dessus.
-          </p>
+          </Note>
 
-          <p className="text-xs font-medium text-ink-700">Horaires</p>
+          <GroupTitle>Horaires</GroupTitle>
           {hours.map((slot, i) => (
             <ListItem
               key={i}
@@ -543,11 +584,11 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter un horaire"
+            label="Ajouter un horaire"
             onClick={() => onChange({ hours: [...hours, { label: "", value: "" }] })}
           />
 
-          <p className="text-xs font-medium text-ink-700">Cartes de rappel (expérience, accès…)</p>
+          <GroupTitle>Cartes de rappel (expérience, accès…)</GroupTitle>
           {cards.map((card, i) => (
             <ListItem
               key={i}
@@ -580,7 +621,7 @@ export function SectionFields({
             </ListItem>
           ))}
           <AddButton
-            label="+ Ajouter une carte"
+            label="Ajouter une carte"
             onClick={() => onChange({ infoCards: [...cards, { icon: "medaille", title: "", text: "" }] })}
           />
         </SectionBox>
@@ -603,7 +644,12 @@ export function SectionFields({
             multiline
             headings
             minHeight="min-h-96"
-            hint="💡 T : ligne en titre de section · B (Ctrl+B) : gras · 🔗 (Ctrl+K) : lien · boutons listes : puces ou numéros · ✅ : coche · une ligne vide sépare deux paragraphes"
+            hint={
+              <>
+                <ToolRef icon={Heading}>Titre</ToolRef> transforme la ligne en titre de section.{" "}
+                <FormattingHelp />
+              </>
+            }
             value={section.body}
             onChange={(body) => onChange({ body })}
           />
@@ -643,7 +689,29 @@ export function SectionFields({
 
 /** Le titre est porté par l'accordéon de l'éditeur (SiteEditor). */
 function SectionBox({ children }: { children: ReactNode }) {
-  return <div className="space-y-3">{children}</div>;
+  return <div className="space-y-4">{children}</div>;
+}
+
+/** Intertitre d'un groupe d'éléments dans le formulaire d'une section (badges, horaires, cartes). */
+function GroupTitle({ children }: { children: ReactNode }) {
+  return (
+    <h4 className="border-t border-ds-ink-200 pt-4 font-ds-display text-ds-body font-bold text-ds-ink-900">{children}</h4>
+  );
+}
+
+/**
+ * Mode d'emploi de la barre de mise en forme, sous un champ de texte long :
+ * chaque bouton est rappelé par son pictogramme et son nom.
+ */
+function FormattingHelp() {
+  return (
+    <>
+      Sélectionnez un passage, puis <ToolRef icon={Bold}>Gras</ToolRef> (Ctrl+B) ou{" "}
+      <ToolRef icon={Link2}>Lien</ToolRef> (Ctrl+K). <ToolRef icon={SquareCheckBig}>Coche</ToolRef> ajoute une coche en
+      début de ligne ; <ToolRef icon={List}>Puces</ToolRef> et <ToolRef icon={ListOrdered}>Numéros</ToolRef> créent une
+      liste. Entrée passe à la ligne, une ligne vide sépare deux paragraphes.
+    </>
+  );
 }
 
 /**
@@ -663,9 +731,14 @@ export function CharCounter({ length, limit }: { length: number; limit: number }
   return (
     <span
       aria-live="polite"
-      className={clsx("shrink-0 text-[11px] tabular-nums", over ? "font-semibold text-amber-600" : "text-ink-500")}
+      className={clsx(
+        "inline-flex shrink-0 items-center gap-1 text-xs font-normal ds-tnum",
+        // Au-delà du repère : un pictogramme et la graisse doublent la couleur
+        over ? "font-semibold text-ds-warning-700" : "text-ds-ink-600",
+      )}
       title={over ? `Au-delà de la longueur conseillée (${limit} caractères)` : `Longueur conseillée : ${limit} caractères`}
     >
+      {over ? <TriangleAlert size={12} strokeWidth={2.5} aria-hidden /> : null}
       {length} / {limit}
     </span>
   );
@@ -691,6 +764,8 @@ export function ToggleSwitch({
   className?: string;
 }) {
   const small = size === "sm";
+  // Le bouton porte la cible (44 px au doigt) ; la piste est dessinée à l'intérieur. Trois indices
+  // pour « activé » : la position du curseur, sa coche, la couleur de la section.
   return (
     <button
       type="button"
@@ -703,20 +778,24 @@ export function ToggleSwitch({
         onChange(!checked);
       }}
       className={clsx(
-        "relative shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300",
-        small ? "h-5 w-9" : "h-6 w-11",
-        checked ? "bg-primary-500" : "bg-ink-300",
+        "inline-grid shrink-0 place-items-center rounded-full ds-focus pointer-coarse:min-h-11 pointer-coarse:min-w-11",
         className,
       )}
     >
       <span
         aria-hidden
-        className={clsx(
-          "absolute top-0.5 rounded-full bg-white shadow transition-[left]",
-          small ? "h-4 w-4" : "h-5 w-5",
-          checked ? (small ? "left-[18px]" : "left-[22px]") : "left-0.5",
-        )}
-      />
+        className={clsx("relative block rounded-full", small ? "h-6 w-10" : "h-7 w-12", checked ? "bg-ds-section-accent" : "bg-ds-ink-450")}
+      >
+        <span
+          className={clsx(
+            "absolute left-0.5 top-0.5 grid place-items-center rounded-full bg-white text-ds-section-accent shadow-sm motion-safe:transition-transform motion-safe:duration-ds-base motion-safe:ease-ds-out",
+            small ? "size-5" : "size-6",
+            checked && (small ? "translate-x-4" : "translate-x-5"),
+          )}
+        >
+          {checked ? <Check size={small ? 12 : 14} strokeWidth={3} /> : null}
+        </span>
+      </span>
     </button>
   );
 }
@@ -734,10 +813,10 @@ function SwitchRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-cream-100 px-3 py-2">
+    <div className="flex items-center gap-3 rounded-ds-sm bg-ds-ink-50 px-3 py-2.5 ring-1 ring-ds-ink-200">
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-ink-700">{label}</p>
-        {hint ? <p className="mt-0.5 text-[11px] text-ink-500">{hint}</p> : null}
+        <p className={LABEL}>{label}</p>
+        {hint ? <p className={clsx("mt-0.5", HINT)}>{hint}</p> : null}
       </div>
       <ToggleSwitch checked={checked} label={label} onChange={onChange} size="sm" />
     </div>
@@ -765,14 +844,13 @@ function ListItem({
   onRemove?: () => void;
   children: ReactNode;
 }) {
-  const arrow =
-    "flex h-6 w-6 items-center justify-center rounded-md border border-ink-300 bg-white text-xs text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-ink-300 disabled:hover:text-ink-700";
+  const arrow = clsx(ICON_BUTTON, "bg-white inset-ring inset-ring-ds-ink-300 hover:bg-ds-brand-50 disabled:hover:bg-white");
   return (
-    <div className="space-y-3 rounded-xl bg-cream-100 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-ink-700">{label}</p>
+    <div className="space-y-3 rounded-ds-sm bg-ds-ink-50 p-3 ring-1 ring-ds-ink-200">
+      <div className="flex min-h-9 items-center justify-between gap-2">
+        <p className="text-ds-body font-bold text-ds-ink-900">{label}</p>
         {count > 1 ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               aria-label={`Monter : ${label}`}
@@ -781,7 +859,7 @@ function ListItem({
               onClick={() => onMove(index - 1)}
               className={arrow}
             >
-              ↑
+              <ArrowUp size={16} aria-hidden />
             </button>
             <button
               type="button"
@@ -791,7 +869,7 @@ function ListItem({
               onClick={() => onMove(index + 1)}
               className={arrow}
             >
-              ↓
+              <ArrowDown size={16} aria-hidden />
             </button>
           </div>
         ) : null}
@@ -893,15 +971,17 @@ export function IconField({
           aria-expanded={open}
           aria-label={`${label} : ${SECTION_ICON_LABELS[current]} — changer`}
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center gap-2.5 rounded-xl border border-ink-300 bg-white px-3 py-2 text-left text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+          className={clsx(FIELD_BOX, FIELD_FOCUS, "flex min-h-11 items-center gap-2.5 py-1.5 text-left")}
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+          <span className="grid size-8 shrink-0 place-items-center rounded-[0.625rem] bg-ds-section-tint-2 text-ds-section-accent">
             <IconGlyph name={current} size={18} />
           </span>
           <span className="min-w-0 flex-1 truncate">{SECTION_ICON_LABELS[current]}</span>
-          <span aria-hidden className={clsx("text-ink-500 transition-transform", open && "rotate-180")}>
-            ⌄
-          </span>
+          {open ? (
+            <ChevronUp size={18} aria-hidden className="shrink-0 text-ds-ink-600" />
+          ) : (
+            <ChevronDown size={18} aria-hidden className="shrink-0 text-ds-ink-600" />
+          )}
         </button>
         {open ? (
           <IconPickerPopover
@@ -927,17 +1007,21 @@ function IconPickerPopover({
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<SectionIconCategory | null>(null);
   const results = searchSectionIcons(query, category);
+  // Catégorie active : le fond plein, la graisse et une coche (jamais la couleur seule)
   const chip = (active: boolean) =>
     clsx(
-      "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-      active ? "bg-ink-900 text-white" : "bg-cream-100 text-ink-700 hover:bg-cream-200",
+      "inline-flex min-h-8 items-center gap-1 rounded-full px-3 text-ds-meta ds-focus pointer-coarse:min-h-11",
+      active
+        ? "bg-ds-section-ink font-semibold text-white"
+        : "bg-ds-ink-100 font-medium text-ds-ink-700 hover:bg-ds-ink-200 hover:text-ds-ink-900",
     );
+  const chipMark = (active: boolean) => (active ? <Check size={13} strokeWidth={3} aria-hidden /> : null);
 
   return (
     <div
       role="dialog"
       aria-label="Choisir une icône"
-      className="absolute -left-1 -right-1 top-full z-30 mt-1 rounded-xl border border-cream-300 bg-white p-3 shadow-lg"
+      className="absolute -left-1 -right-1 top-full z-30 mt-1.5 rounded-ds-md bg-white p-3 shadow-ds-pop ring-1 ring-ds-ink-200 ds-fade-in"
     >
       <input
         autoFocus
@@ -945,10 +1029,11 @@ function IconPickerPopover({
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Rechercher (sommeil, tarif, dos…)"
         aria-label="Rechercher une icône"
-        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+        className={INPUT}
       />
-      <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Catégories">
+      <div className="mt-2.5 flex flex-wrap gap-1.5" role="group" aria-label="Catégories">
         <button type="button" aria-pressed={category === null} onClick={() => setCategory(null)} className={chip(category === null)}>
+          {chipMark(category === null)}
           Toutes
         </button>
         {SECTION_ICON_CATEGORIES.map((c) => (
@@ -959,12 +1044,13 @@ function IconPickerPopover({
             onClick={() => setCategory(category === c.id ? null : c.id)}
             className={chip(category === c.id)}
           >
+            {chipMark(category === c.id)}
             {c.label}
           </button>
         ))}
       </div>
       {results.length > 0 ? (
-        <div className="mt-2 grid grid-cols-6 gap-1" role="listbox" aria-label="Icônes">
+        <div className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5" role="listbox" aria-label="Icônes">
           {results.map((name) => (
             <button
               key={name}
@@ -975,10 +1061,11 @@ function IconPickerPopover({
               title={`${SECTION_ICON_LABELS[name]} · ${SECTION_ICON_CATEGORIES.find((c) => c.id === SECTION_ICON_CATEGORY[name])?.label ?? ""}`}
               onClick={() => onSelect(name)}
               className={clsx(
-                "flex aspect-square items-center justify-center rounded-xl border transition-colors",
+                "grid aspect-square min-h-11 place-items-center rounded-ds-sm ds-focus",
+                // Icône choisie : fond teinté et liseré épais à l'accent de la section
                 name === value
-                  ? "border-primary-500 bg-primary-50 text-primary-600 ring-2 ring-primary-100"
-                  : "border-cream-300 text-ink-700 hover:border-primary-300 hover:bg-cream-50 hover:text-primary-600",
+                  ? "bg-ds-section-tint-2 text-ds-section-ink inset-ring-2 inset-ring-ds-section-accent"
+                  : "text-ds-ink-700 inset-ring inset-ring-ds-ink-200 hover:bg-ds-section-tint hover:text-ds-section-ink hover:inset-ring-ds-section-line",
               )}
             >
               <IconGlyph name={name} size={22} />
@@ -986,7 +1073,7 @@ function IconPickerPopover({
           ))}
         </div>
       ) : (
-        <p className="mt-3 text-center text-xs text-ink-500">Aucune icône ne correspond à « {query.trim()} ».</p>
+        <p className={clsx("mt-3 text-center", HINT)}>Aucune icône ne correspond à « {query.trim()} ».</p>
       )}
     </div>
   );
@@ -1037,29 +1124,23 @@ function ImageField({
   return (
     <Field label={label}>
       {value ? (
-        <img
-          src={value}
-          alt=""
-          className="mb-2 h-28 w-full rounded-xl border border-cream-300 object-cover"
-        />
+        <img src={value} alt="" className="mb-2.5 h-32 w-full rounded-ds-sm object-cover ring-1 ring-ds-ink-200" />
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button
           type="button"
-          disabled={uploading}
+          variant="secondary"
+          size="sm"
+          loading={uploading}
+          icon={<ImageUp size={16} aria-hidden />}
           onClick={() => inputRef.current?.click()}
-          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
         >
-          {uploading ? "Envoi en cours…" : "📷 Téléverser une photo"}
-        </button>
+          {uploading ? "Envoi en cours…" : "Téléverser une photo"}
+        </Button>
         {value ? (
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
-          >
+          <Button type="button" variant="quiet" size="sm" icon={<X size={16} aria-hidden />} onClick={() => onChange("")}>
             Retirer
-          </button>
+          </Button>
         ) : null}
       </div>
       <input
@@ -1086,10 +1167,15 @@ function ImageField({
           }}
         />
       ) : null}
-      <div className="mt-2">
-        <TextInput value={value} placeholder="ou collez une URL https://…" onChange={onChange} />
+      <div className="mt-2.5">
+        <TextInput
+          value={value}
+          placeholder="ou collez une URL https://…"
+          ariaLabel={`${label} : adresse de l'image (URL)`}
+          onChange={onChange}
+        />
       </div>
-      {error ? <p className="mt-1 text-xs text-danger-500">{error}</p> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </Field>
   );
 }
@@ -1112,10 +1198,13 @@ function RegenerateMotifButton({
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   return (
-    <div className="space-y-1.5">
-      <button
+    <div className="space-y-2">
+      <Button
         type="button"
-        disabled={busy}
+        variant="secondary"
+        size="sm"
+        loading={busy}
+        icon={<RefreshCw size={16} aria-hidden />}
         onClick={async () => {
           setBusy(true);
           setStatus("Régénération en cours… (environ une minute, la page reste en ligne)");
@@ -1132,11 +1221,14 @@ function RegenerateMotifButton({
             setBusy(false);
           }
         }}
-        className="w-full rounded-xl border border-primary-300 px-3 py-2 text-sm font-medium text-primary-600 transition hover:bg-primary-50 disabled:opacity-50"
+        className="w-full"
       >
-        {busy ? "Régénération en cours…" : "↻ Re-générer la page de spécialité"}
-      </button>
-      {status ? <p className="text-xs text-ink-500">{status}</p> : null}
+        {busy ? "Régénération en cours…" : "Re-générer la page de spécialité"}
+      </Button>
+      {/* En cours : une information ; ensuite, la réussite (« Page régénérée ✓ … ») ou l'erreur rendue par le service */}
+      {status ? (
+        <ActionMessage tone={busy ? "info" : status.startsWith("Page régénérée") ? "success" : "error"}>{status}</ActionMessage>
+      ) : null}
     </div>
   );
 }
@@ -1144,8 +1236,9 @@ function RegenerateMotifButton({
 /** Lien discret de suppression d'un élément de liste (étape, question, paragraphe). */
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <div className="text-right">
-      <button type="button" onClick={onClick} className="text-xs text-danger-500 hover:underline">
+    <div className="flex justify-end">
+      <button type="button" onClick={onClick} className={DANGER_LINK}>
+        <Trash2 size={15} aria-hidden />
         {label}
       </button>
     </div>
@@ -1155,15 +1248,15 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 /** Bouton pointillé d'ajout d'un élément de liste. */
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
-    >
+    <button type="button" onClick={onClick} className={ADD_BUTTON}>
+      <Plus size={18} aria-hidden />
       {label}
     </button>
   );
 }
+
+/** Identifiant du libellé du `Field` englobant : le champ qu'il contient s'en sert comme nom accessible. */
+const FieldLabelContext = createContext<string | undefined>(undefined);
 
 function Field({
   label,
@@ -1177,13 +1270,16 @@ function Field({
   limit?: number;
   children: ReactNode;
 }) {
+  const labelId = useId();
   return (
     <div>
-      <div className="mb-1 flex items-baseline justify-between gap-2">
-        <p className="text-xs font-medium text-ink-700">{label}</p>
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <p id={labelId} className={LABEL}>
+          {label}
+        </p>
         {limit !== undefined && length !== undefined ? <CharCounter length={length} limit={limit} /> : null}
       </div>
-      {children}
+      <FieldLabelContext.Provider value={labelId}>{children}</FieldLabelContext.Provider>
     </div>
   );
 }
@@ -1192,21 +1288,27 @@ function TextInput({
   value,
   placeholder,
   limit,
+  ariaLabel,
   onChange,
 }: {
   value: string;
   placeholder?: string;
   /** Longueur conseillée : la saisie est plafonnée à 1,5 × cette valeur */
   limit?: number;
+  /** Nom accessible propre au champ ; sans lui, celui du `Field` englobant */
+  ariaLabel?: string;
   onChange: (value: string) => void;
 }) {
+  const labelId = useContext(FieldLabelContext);
   return (
     <input
       value={value}
       placeholder={placeholder}
       maxLength={limit !== undefined ? softMaxLength(limit) : undefined}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabel ? undefined : labelId}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
+      className={INPUT}
     />
   );
 }
@@ -1611,43 +1713,12 @@ function toggleCheckCmd(el: HTMLElement | null): boolean {
   return true;
 }
 
-function ListUlIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-      {[3.5, 8, 12.5].map((y) => (
-        <g key={y}>
-          <circle cx="2.6" cy={y} r="1.3" fill="currentColor" />
-          <line x1="6" y1={y} x2="14.5" y2={y} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-function ListOlIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-      {(
-        [
-          [5.5, "1"],
-          [10.5, "2"],
-          [15.5, "3"],
-        ] as const
-      ).map(([baseline, digit]) => (
-        <g key={digit}>
-          <text x="0" y={baseline} fontSize="5.4" fontFamily="ui-sans-serif, system-ui, sans-serif" fill="currentColor">
-            {digit}
-          </text>
-          <line x1="6" y1={baseline - 2} x2="14.5" y2={baseline - 2} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </g>
-      ))}
-    </svg>
-  );
-}
-
 /** Styles des éléments riches à l'intérieur des zones d'édition. */
 const EDITABLE_RICH_CLASSES =
-  "[&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:text-base [&_h3]:font-bold [&_a]:cursor-text [&_a]:text-primary-600 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5";
+  "[&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-bold [&_h3]:mt-2 [&_h3]:text-base [&_h3]:font-bold [&_a]:cursor-text [&_a]:text-ds-brand-700 [&_a]:underline [&_b]:font-semibold [&_strong]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5";
+
+/** Zone d'édition (`contentEditable`) : la boîte d'un champ, interligne aéré. */
+const EDITABLE_BOX = clsx(FIELD_BOX, FIELD_FOCUS, "leading-relaxed", EDITABLE_RICH_CLASSES);
 
 /**
  * Barre d'outils commune des champs riches : gras, coche ✅, lien, listes.
@@ -1667,7 +1738,7 @@ function RichToolbar({
   headings?: boolean;
 }) {
   const btn =
-    "flex h-7 w-8 items-center justify-center rounded-lg border border-ink-300 bg-white text-sm text-ink-700 transition-colors hover:border-primary-400 hover:text-primary-600";
+    "inline-grid h-8 w-9 shrink-0 place-items-center rounded-[0.625rem] bg-white text-ds-ink-700 inset-ring inset-ring-ds-ink-300 ds-focus ds-press hover:bg-ds-section-tint hover:text-ds-section-ink hover:inset-ring-ds-section-line pointer-coarse:size-11";
   const apply =
     (command: (el: HTMLElement | null) => boolean) =>
     (event: { preventDefault: () => void; button: number }) => {
@@ -1676,16 +1747,16 @@ function RichToolbar({
       if (command(getEl())) onApplied();
     };
   return (
-    <div className="flex gap-1">
+    <div className="flex flex-wrap gap-1" role="group" aria-label="Mise en forme">
       {headings ? (
         <button
           type="button"
           title="Transformer la ligne en titre de section"
           aria-label="Transformer la ligne en titre de section"
           onMouseDown={apply(toggleHeadingCmd)}
-          className={`${btn} font-serif font-bold`}
+          className={btn}
         >
-          T
+          <Heading size={16} strokeWidth={2.5} aria-hidden />
         </button>
       ) : null}
       <button
@@ -1693,18 +1764,19 @@ function RichToolbar({
         title="Mettre la sélection en gras (Ctrl+B)"
         aria-label="Mettre la sélection en gras"
         onMouseDown={apply(toggleBoldCmd)}
-        className={`${btn} font-bold`}
+        className={btn}
       >
-        B
+        <Bold size={16} strokeWidth={2.75} aria-hidden />
       </button>
+      {/* Le bouton porte une icône ; le caractère inséré dans le texte du site reste « ✅ » (toggleCheckCmd) */}
       <button
         type="button"
-        title="Transformer la ligne en coche ✅"
+        title="Transformer la ligne en coche"
         aria-label="Transformer la ligne en coche"
         onMouseDown={apply(toggleCheckCmd)}
         className={btn}
       >
-        ✅
+        <SquareCheckBig size={16} strokeWidth={2.25} aria-hidden />
       </button>
       <button
         type="button"
@@ -1713,7 +1785,7 @@ function RichToolbar({
         onMouseDown={apply(toggleLinkCmd)}
         className={btn}
       >
-        🔗
+        <Link2 size={16} strokeWidth={2.25} aria-hidden />
       </button>
       {lists ? (
         <>
@@ -1724,7 +1796,7 @@ function RichToolbar({
             onMouseDown={apply((el) => toggleListCmd(el, false))}
             className={btn}
           >
-            <ListUlIcon />
+            <List size={16} strokeWidth={2.25} aria-hidden />
           </button>
           <button
             type="button"
@@ -1733,7 +1805,7 @@ function RichToolbar({
             onMouseDown={apply((el) => toggleListCmd(el, true))}
             className={btn}
           >
-            <ListOlIcon />
+            <ListOrdered size={16} strokeWidth={2.25} aria-hidden />
           </button>
         </>
       ) : null}
@@ -1808,8 +1880,8 @@ function ParagraphsField({
 
   return (
     <div>
-      <div className="mb-1 flex items-end justify-between gap-2">
-        <p className="text-xs font-medium text-ink-700">Paragraphe</p>
+      <div className="mb-1.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
+        <p className={LABEL}>Paragraphe</p>
         <RichToolbar getEl={() => ref.current} onApplied={emit} lists />
       </div>
       <div
@@ -1825,14 +1897,11 @@ function ParagraphsField({
         onDrop={(event) => {
           if (dropAsPlainText(event, ref.current, false)) emit();
         }}
-        className={`min-h-36 w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${EDITABLE_RICH_CLASSES}`}
+        className={clsx("min-h-36", EDITABLE_BOX)}
       />
-      <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-        💡 Sélectionnez un passage puis <strong>B</strong> (Ctrl+B) : gras ·{" "}
-        <strong>🔗</strong> (Ctrl+K) : lien · <strong>✅</strong> : coche en début de ligne ·
-        boutons listes : puces ou numéros · Entrée passe à la ligne, une ligne vide sépare
-        deux paragraphes
-      </p>
+      <Note className="mt-2">
+        <FormattingHelp />
+      </Note>
     </div>
   );
 }
@@ -1851,16 +1920,16 @@ function RichField({
   multiline = false,
   headings = false,
   hint,
-  minHeight = "min-h-10",
+  minHeight = "min-h-11",
   limit,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   multiline?: boolean;
-  /** true : lignes « ## … » éditées comme de vrais titres (bouton T) */
+  /** true : lignes « ## … » éditées comme de vrais titres (bouton Titre) */
   headings?: boolean;
-  hint?: string;
+  hint?: ReactNode;
   minHeight?: string;
   /** Longueur conseillée : affiche un compteur (sans bloquer la saisie) */
   limit?: number;
@@ -1927,8 +1996,8 @@ function RichField({
 
   return (
     <div>
-      <div className="mb-1 flex flex-wrap items-end justify-between gap-x-2 gap-y-1">
-        <p className="flex items-baseline gap-2 text-xs font-medium text-ink-700">
+      <div className="mb-1.5 flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
+        <p className={clsx("flex flex-wrap items-baseline gap-x-2", LABEL)}>
           {label}
           {limit !== undefined ? <CharCounter length={visibleLength(value)} limit={limit} /> : null}
         </p>
@@ -1947,11 +2016,9 @@ function RichField({
         onDrop={(event) => {
           if (dropAsPlainText(event, ref.current, !multiline)) emit();
         }}
-        className={`${minHeight} w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm leading-relaxed focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 ${EDITABLE_RICH_CLASSES}`}
+        className={clsx(minHeight, EDITABLE_BOX)}
       />
-      {hint ? (
-        <p className="mt-1.5 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">{hint}</p>
-      ) : null}
+      {hint ? <Note className="mt-2">{hint}</Note> : null}
     </div>
   );
 }

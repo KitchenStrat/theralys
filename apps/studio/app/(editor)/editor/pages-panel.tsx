@@ -2,7 +2,29 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Button, Modal, Spinner } from "@theralys/ui";
+import {
+  ArrowRight,
+  ChevronDown,
+  CircleCheck,
+  CircleOff,
+  Ellipsis,
+  EyeOff,
+  FileQuestion,
+  FileText,
+  House,
+  Lock,
+  PenLine,
+  Plus,
+  Replace,
+  RotateCw,
+  Scale,
+  Search,
+  Trash2,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { Modal } from "@theralys/ui";
+import { Badge, Button, Spinner } from "@/components/ds";
 import type { PlanId } from "@theralys/db/plans";
 import { DEFAULT_NOT_FOUND, LEGAL_PAGES, type GeneratingMotif, type SiteNotFound } from "@theralys/shared";
 import {
@@ -22,6 +44,7 @@ import {
   type MotifRow,
 } from "@/lib/editor/page-groups";
 import type { PreviewTarget } from "@/lib/editor/preview-path";
+import { ADD_BUTTON, DANGER_LINK, HINT, ICON_BUTTON, INPUT, LABEL, Note, TEXTAREA, TEXT_LINK } from "./editor-ui";
 import { CharCounter, ToggleSwitch, visibleLength } from "./section-fields";
 
 export type PagesPanelProps = {
@@ -107,25 +130,26 @@ export function PagesPanel(props: PagesPanelProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* ── Page principale ─────────────────────────────────────────────── */}
       <Group title="Page principale">
         {groups.home ? (
           <PageRow
             title="Accueil"
+            icon={House}
             selected={isPagePreview && groups.home.id === selectedPageId}
             onClick={() => onSelectPage(groups.home!)}
             trailing={
               <span
-                className="inline-flex items-center gap-1 text-[11px] text-ink-500"
+                className={clsx("inline-flex shrink-0 items-center gap-1.5 pr-1", HINT)}
                 title="La page d'accueil est toujours en ligne"
               >
-                <span aria-hidden>🔒</span> Toujours en ligne
+                <Lock size={14} aria-hidden /> Toujours en ligne
               </span>
             }
           />
         ) : (
-          <p className="px-3 text-xs text-ink-500">Aucune page d&apos;accueil.</p>
+          <p className={clsx("px-1", HINT)}>Aucune page d&apos;accueil.</p>
         )}
       </Group>
 
@@ -135,9 +159,7 @@ export function PagesPanel(props: PagesPanelProps) {
         counter={groups.motifCount > 0 ? motifCounterLabel(groups) : undefined}
       >
         {groups.motifs.length === 0 && !groups.canAdd ? (
-          <p className="px-3 py-1 text-xs text-ink-500">
-            Votre formule ne comprend pas de page de spécialité dédiée.
-          </p>
+          <p className={clsx("px-1 py-1", HINT)}>Votre formule ne comprend pas de page de spécialité dédiée.</p>
         ) : null}
         {groups.motifs.map((row) => {
           const { page, status } = row;
@@ -147,40 +169,41 @@ export function PagesPanel(props: PagesPanelProps) {
               <div
                 key={page.id}
                 className={clsx(
-                  "rounded-xl px-3 py-2",
-                  status === "error" ? "bg-danger-100/50" : "bg-cream-50",
+                  "rounded-ds-sm px-3 py-2.5",
+                  status === "error" ? "bg-ds-danger-100" : "bg-ds-section-tint inset-ring inset-ring-ds-section-line/70",
                 )}
                 data-page-status={status}
               >
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink-700">{page.title}</span>
+                <div className="flex min-h-7 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-ds-body font-medium text-ds-ink-800">{page.title}</span>
                   {status === "generating" ? (
-                    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-ink-500">
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-ds-meta font-medium text-ds-section-ink">
                       <Spinner /> En préparation…
                     </span>
                   ) : (
-                    <span className="shrink-0 text-xs font-medium text-danger-500">Échec</span>
+                    <Badge tone="danger" icon={TriangleAlert} className="shrink-0 bg-white!">
+                      Échec
+                    </Badge>
                   )}
                 </div>
                 {status === "error" ? (
                   <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-danger-500">
+                    <p className="text-ds-meta font-medium text-ds-danger-900">
                       {error ?? row.generating?.error ?? "La génération a échoué."}
                     </p>
-                    <div className="flex items-center gap-1">
-                      <button
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Button
                         type="button"
-                        disabled={retrying === page.slug}
+                        variant="secondary"
+                        size="sm"
+                        loading={retrying === page.slug}
+                        icon={<RotateCw size={15} aria-hidden />}
                         onClick={() => void retry(page.slug)}
-                        className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink-700 ring-1 ring-cream-300 hover:bg-cream-100 disabled:opacity-60"
                       >
                         {retrying === page.slug ? "Relance…" : "Réessayer"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void removeFailed(row)}
-                        className="rounded-full px-2.5 py-1 text-xs font-medium text-danger-500 hover:bg-danger-100"
-                      >
+                      </Button>
+                      <button type="button" onClick={() => void removeFailed(row)} className={clsx(DANGER_LINK, "hover:bg-white")}>
+                        <Trash2 size={15} aria-hidden />
                         Supprimer
                       </button>
                     </div>
@@ -193,33 +216,37 @@ export function PagesPanel(props: PagesPanelProps) {
             <PageRow
               key={page.id}
               title={page.title}
+              icon={row.enabled ? FileText : EyeOff}
               muted={!row.enabled}
               selected={isPagePreview && page.id === selectedPageId}
               onClick={() => onSelectPage(page)}
               trailing={
                 <>
-                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-                    <span
-                      aria-hidden
-                      className={clsx("h-2 w-2 rounded-full", row.enabled ? "bg-success-500" : "bg-danger-500")}
-                    />
+                  {/* L'état se lit dans le mot (« Activé », « Désactivé ») ; le pictogramme et sa couleur le doublent */}
+                  <label className="relative flex shrink-0 cursor-pointer items-center">
+                    {row.enabled ? (
+                      <CircleCheck size={16} aria-hidden className="pointer-events-none absolute left-2.5 text-ds-success-700" />
+                    ) : (
+                      <CircleOff size={16} aria-hidden className="pointer-events-none absolute left-2.5 text-ds-ink-600" />
+                    )}
                     <select
                       aria-label={`Activation de la page « ${page.title} »`}
                       value={row.enabled ? "on" : "off"}
                       onChange={(event) => void onToggle(page.slug, event.target.value === "on")}
-                      className="cursor-pointer rounded-md border-0 bg-transparent py-0.5 pr-1 text-xs font-medium text-ink-700 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                      className="min-h-9 cursor-pointer appearance-none rounded-full bg-white py-1 pl-8 pr-7 text-ds-meta font-semibold text-ds-ink-800 inset-ring inset-ring-ds-ink-300 pointer-coarse:min-h-11"
                     >
                       <option value="on">Activé</option>
                       <option value="off">Désactivé</option>
                     </select>
+                    <ChevronDown size={14} aria-hidden className="pointer-events-none absolute right-2.5 text-ds-ink-600" />
                   </label>
                   <RowMenu
                     label={`Actions pour « ${page.title} »`}
                     items={[
-                      { label: "Modifier le titre", onClick: () => setModal({ kind: "rename", row }) },
-                      { label: "Référencement", onClick: () => setModal({ kind: "seo", row }) },
-                      { label: "Changer de spécialité", onClick: () => setModal({ kind: "subject", row }) },
-                      { label: "Supprimer la page", danger: true, onClick: () => setModal({ kind: "delete", row }) },
+                      { label: "Modifier le titre", icon: PenLine, onClick: () => setModal({ kind: "rename", row }) },
+                      { label: "Référencement", icon: Search, onClick: () => setModal({ kind: "seo", row }) },
+                      { label: "Changer de spécialité", icon: Replace, onClick: () => setModal({ kind: "subject", row }) },
+                      { label: "Supprimer la page", icon: Trash2, danger: true, onClick: () => setModal({ kind: "delete", row }) },
                     ]}
                   />
                 </>
@@ -233,15 +260,13 @@ export function PagesPanel(props: PagesPanelProps) {
               type="button"
               disabled={!groups.canAdd}
               onClick={() => setModal({ kind: "add" })}
-              className="flex w-full items-center gap-2 rounded-xl border border-dashed border-ink-300 px-3 py-2 text-left text-sm font-medium text-ink-500 transition-colors hover:border-primary-400 hover:text-primary-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-ink-300 disabled:hover:text-ink-500"
+              className={ADD_BUTTON}
             >
-              <span aria-hidden className="text-base leading-none">
-                +
-              </span>
+              <Plus size={18} aria-hidden />
               Ajouter une page
             </button>
             {!groups.canAdd ? (
-              <p className="mt-1 px-3 text-[11px] leading-snug text-ink-500">
+              <p className={clsx("mt-1.5 px-1", HINT)}>
                 Votre formule comprend {groups.maxMotifPages} pages de spécialité : pour changer de sujet,
                 utilisez « Changer de spécialité » ou supprimez une page.
               </p>
@@ -254,47 +279,52 @@ export function PagesPanel(props: PagesPanelProps) {
       <Group title="Page introuvable">
         <PageRow
           title="Page introuvable (404)"
+          icon={FileQuestion}
           selected={previewTarget.kind === "notFound"}
           onClick={() => onPreview({ kind: "notFound" })}
           trailing={
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
+              icon={<PenLine size={15} aria-hidden />}
               onClick={(e) => {
                 e.stopPropagation();
                 setModal({ kind: "notFound" });
               }}
-              className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink-700 ring-1 ring-cream-300 hover:bg-cream-100"
             >
               Personnaliser
-            </button>
+            </Button>
           }
         />
       </Group>
 
       {/* ── Pages légales ───────────────────────────────────────────────── */}
-      <Group title="Pages légales">
+      <Group
+        title="Pages légales"
+        note={
+          <p className={clsx("mb-2 flex items-start gap-1.5 px-1", HINT)}>
+            <Lock size={14} aria-hidden className="mt-[3px] shrink-0" />
+            Générées automatiquement à partir de vos informations légales.
+          </p>
+        }
+      >
         {LEGAL_PAGES.map((legal) => (
           <PageRow
             key={legal.slug}
             title={legal.title}
+            icon={Scale}
             selected={previewTarget.kind === "legal" && previewTarget.slug === legal.slug}
             onClick={() => onPreview({ kind: "legal", slug: legal.slug })}
-            trailing={
-              <span
-                className="inline-flex shrink-0 items-center gap-1 text-[11px] text-ink-500"
-                title="Contenu généré à partir de vos informations légales"
-              >
-                <span aria-hidden>🔒</span> générée automatiquement
-              </span>
-            }
           />
         ))}
         <button
           type="button"
           onClick={() => onOpenSettings("legal")}
-          className="mt-1 px-3 text-left text-xs font-medium text-primary-600 hover:underline"
+          className={clsx(TEXT_LINK, "mt-1 inline-flex min-h-9 items-center gap-1.5 px-1 text-left text-ds-meta pointer-coarse:min-h-11")}
         >
-          Compléter mes informations légales →
+          Compléter mes informations légales
+          <ArrowRight size={14} aria-hidden className="shrink-0" />
         </button>
       </Group>
 
@@ -369,14 +399,26 @@ export function PagesPanel(props: PagesPanelProps) {
 
 // ─── Briques du panneau ───────────────────────────────────────────────────────
 
-function Group({ title, counter, children }: { title: string; counter?: string; children: ReactNode }) {
+function Group({
+  title,
+  counter,
+  note,
+  children,
+}: {
+  title: string;
+  counter?: string;
+  /** Mention commune à toutes les lignes du groupe, sous son titre */
+  note?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section aria-label={title}>
-      <div className="mb-1.5 flex items-baseline justify-between gap-2 px-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-500">{title}</h3>
-        {counter ? <span className="text-[11px] tabular-nums text-ink-500">{counter}</span> : null}
+      <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
+        <h3 className="font-ds-display text-ds-body font-bold text-ds-ink-900">{title}</h3>
+        {counter ? <span className="text-ds-meta text-ds-ink-600 ds-tnum">{counter}</span> : null}
       </div>
-      <div className="space-y-1">{children}</div>
+      {note}
+      <div className="space-y-1.5">{children}</div>
     </section>
   );
 }
@@ -384,35 +426,42 @@ function Group({ title, counter, children }: { title: string; counter?: string; 
 /** Ligne de page : titre cliquable + zone d'actions à droite. */
 function PageRow({
   title,
+  icon: Icon,
   selected,
   muted,
   onClick,
   trailing,
 }: {
   title: string;
+  icon: LucideIcon;
   selected: boolean;
+  /** Page désactivée : titre atténué (son état est dit par le sélecteur voisin) */
   muted?: boolean;
   onClick: () => void;
   trailing?: ReactNode;
 }) {
+  // Ligne affichée dans l'aperçu : fond teinté, trait en dégradé à gauche, graisse — plus `aria-current`
   return (
     <div
       className={clsx(
-        "flex items-center gap-2 rounded-xl px-3 py-1.5 transition-colors",
-        selected ? "bg-primary-50 ring-1 ring-primary-200" : "hover:bg-cream-100",
+        "relative flex items-center gap-2 rounded-ds-sm py-0.5 pl-3 pr-1.5",
+        selected
+          ? "bg-ds-section-tint-2 inset-ring inset-ring-ds-section-line"
+          : "bg-white inset-ring inset-ring-ds-ink-200 hover:bg-ds-ink-50",
       )}
       aria-current={selected ? "true" : undefined}
     >
+      {selected ? <span aria-hidden className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-ds-section-gradient" /> : null}
       <button
         type="button"
         onClick={onClick}
         className={clsx(
-          "min-w-0 flex-1 truncate py-0.5 text-left text-sm",
-          selected ? "font-semibold text-ink-900" : "text-ink-700",
-          muted && "text-ink-500 line-through decoration-ink-300",
+          "flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-ds-sm py-1 text-left text-ds-body ds-focus",
+          selected ? "font-semibold text-ds-section-ink" : muted ? "text-ds-ink-600" : "font-medium text-ds-ink-800",
         )}
       >
-        {title}
+        <Icon size={18} aria-hidden className={clsx("shrink-0", selected ? "text-ds-section-accent" : "text-ds-ink-600")} />
+        <span className="line-clamp-2 min-w-0">{title}</span>
       </button>
       {trailing}
     </div>
@@ -425,7 +474,7 @@ function RowMenu({
   items,
 }: {
   label: string;
-  items: { label: string; onClick: () => void; danger?: boolean }[];
+  items: { label: string; icon: LucideIcon; onClick: () => void; danger?: boolean }[];
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -474,15 +523,15 @@ function RowMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-7 w-7 items-center justify-center rounded-full text-base leading-none text-ink-500 hover:bg-cream-200 hover:text-ink-900"
+        className={ICON_BUTTON}
       >
-        ⋯
+        <Ellipsis size={18} aria-hidden />
       </button>
       {open ? (
         <div
           ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-xl border border-cream-300 bg-white py-1 shadow-lg"
+          className="absolute right-0 top-full z-30 mt-1 w-60 max-w-[calc(100vw-2rem)] overflow-hidden rounded-ds-md bg-white py-1.5 shadow-ds-pop ring-1 ring-ds-ink-200 ds-fade-in"
         >
           {items.map((item) => (
             <button
@@ -497,10 +546,11 @@ function RowMenu({
                 item.onClick();
               }}
               className={clsx(
-                "block w-full px-3 py-1.5 text-left text-sm hover:bg-cream-100",
-                item.danger ? "text-danger-500" : "text-ink-700",
+                "flex min-h-10 w-full items-center gap-2.5 px-3.5 py-1.5 text-left text-ds-body font-medium ds-focus-inset pointer-coarse:min-h-11",
+                item.danger ? "text-ds-danger-700 hover:bg-ds-danger-100" : "text-ds-ink-800 hover:bg-ds-ink-100",
               )}
             >
+              <item.icon size={16} aria-hidden className="shrink-0" />
               {item.label}
             </button>
           ))}
@@ -510,8 +560,7 @@ function RowMenu({
   );
 }
 
-const inputClass =
-  "w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100";
+const inputClass = INPUT;
 
 function ModalField({
   label,
@@ -530,27 +579,42 @@ function ModalField({
   return (
     <div>
       <label className="block">
-        <span className="mb-1 flex items-baseline justify-between gap-2">
-          <span className="text-sm font-medium">{label}</span>
+        <span className="mb-1.5 flex items-baseline justify-between gap-2">
+          <span className={LABEL}>{label}</span>
           {limit !== undefined && length !== undefined ? <CharCounter length={length} limit={limit} /> : null}
         </span>
         {children}
       </label>
-      {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
+      {hint ? <p className={clsx("mt-1.5", HINT)}>{hint}</p> : null}
     </div>
   );
 }
 
+/** Erreur rendue par le service à l'envoi d'une fenêtre : annoncée aussitôt, pictogramme et texte. */
 function ErrorLine({ message }: { message: string | null }) {
-  return message ? <p className="text-xs text-danger-500">{message}</p> : null;
+  return message ? (
+    <p role="alert" className="flex items-start gap-2 text-sm font-medium text-ds-danger-700">
+      <TriangleAlert size={16} aria-hidden className="mt-0.5 shrink-0" />
+      <span className="min-w-0">{message}</span>
+    </p>
+  ) : null;
 }
 
 function CancelButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
   return (
-    <Button variant="ghost" onClick={onClick} disabled={disabled}>
+    <Button variant="quiet" onClick={onClick} disabled={disabled}>
       Annuler
     </Button>
   );
+}
+
+/**
+ * Boutons du pied d'une fenêtre : alignés à droite, ils passent à la ligne sur
+ * un écran étroit au lieu de faire défiler la fenêtre (le pied de la `Modal`
+ * partagée ne le fait pas).
+ */
+function ModalActions({ children }: { children: ReactNode }) {
+  return <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-2">{children}</div>;
 }
 
 // ─── Modales ──────────────────────────────────────────────────────────────────
@@ -595,13 +659,12 @@ function RenameModal({
       onClose={() => !busy && onClose()}
       title="Modifier le titre"
       footer={
-        <>
+        <ModalActions>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button onClick={() => void submit()} disabled={busy || trimmed.length < 3 || trimmed === row.page.title}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button loading={busy} onClick={() => void submit()} disabled={trimmed.length < 3 || trimmed === row.page.title}>
             Enregistrer
           </Button>
-        </>
+        </ModalActions>
       }
     >
       <form
@@ -620,10 +683,10 @@ function RenameModal({
             className={inputClass}
           />
         </ModalField>
-        <p className="rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+        <Note tone="info">
           L&apos;adresse de cette page reste inchangée. Son contenu ne sera pas régénéré. Le titre de la carte
           correspondante sur l&apos;accueil est mis à jour.
-        </p>
+        </Note>
         <ErrorLine message={error} />
       </form>
     </Modal>
@@ -655,13 +718,12 @@ function SeoModal({ row, onClose, onDone }: { row: MotifRow; onClose: () => void
       onClose={() => !busy && onClose()}
       title={`Référencement — ${row.page.title}`}
       footer={
-        <>
+        <ModalActions>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button onClick={() => void submit()} disabled={busy}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button loading={busy} onClick={() => void submit()}>
             Enregistrer
           </Button>
-        </>
+        </ModalActions>
       }
     >
       <div className="space-y-4">
@@ -691,7 +753,7 @@ function SeoModal({ row, onClose, onDone }: { row: MotifRow; onClose: () => void
             maxLength={300}
             rows={3}
             onChange={(e) => setMetaDescription(e.target.value)}
-            className={clsx(inputClass, "resize-y")}
+            className={TEXTAREA}
           />
         </ModalField>
         <ErrorLine message={error} />
@@ -740,13 +802,12 @@ function ChangeSubjectModal({
       onClose={() => !busy && onClose()}
       title={`Changer de spécialité — ${row.page.title}`}
       footer={
-        <>
+        <ModalActions>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button onClick={() => void submit()} disabled={busy || trimmed.length < 3}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button loading={busy} onClick={() => void submit()} disabled={trimmed.length < 3}>
             {busy ? "Préparation en cours…" : "Régénérer la page"}
           </Button>
-        </>
+        </ModalActions>
       }
     >
       <div className="space-y-4">
@@ -761,17 +822,18 @@ function ChangeSubjectModal({
             className={inputClass}
           />
         </ModalField>
-        <div className="rounded-xl border border-warning-500/40 bg-warning-100 px-3 py-2.5 text-xs leading-relaxed text-ink-700">
-          <p className="font-semibold">⚠ Le contenu de la page sera entièrement régénéré.</p>
+        <Note tone="warning">
+          <p className="font-semibold">Le contenu de la page sera entièrement régénéré.</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-4">
             <li>Textes, questions et photo sont réécrits pour le nouveau sujet (environ une minute).</li>
             <li>La page est hors ligne pendant la préparation, puis remise en ligne si elle l&apos;était.</li>
             <li>La carte correspondante de l&apos;accueil est synchronisée ; l&apos;adresse de la page ne change pas.</li>
           </ul>
-        </div>
+        </Note>
         {busy ? (
-          <p className="flex items-center gap-2 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-700">
-            <Spinner /> Préparation en cours — cela prend environ une minute, ne fermez pas cette fenêtre.
+          <p role="status" className="flex items-start gap-2.5 rounded-ds-sm bg-ds-section-tint px-3 py-2.5 text-ds-meta font-medium text-ds-ink-700 ring-1 ring-ds-section-line/70">
+            <Spinner className="mt-0.5 size-4 text-ds-section-accent" />
+            <span className="min-w-0">Préparation en cours — cela prend environ une minute, ne fermez pas cette fenêtre.</span>
           </p>
         ) : null}
         <ErrorLine message={error} />
@@ -803,21 +865,20 @@ function DeleteModal({ row, onClose, onDone }: { row: MotifRow; onClose: () => v
       onClose={() => !busy && onClose()}
       title="Supprimer la page"
       footer={
-        <>
+        <ModalActions>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button variant="danger" onClick={() => void submit()} disabled={busy}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button variant="danger" loading={busy} icon={<Trash2 size={17} aria-hidden />} onClick={() => void submit()}>
             Supprimer définitivement
           </Button>
-        </>
+        </ModalActions>
       }
     >
-      <div className="space-y-3 text-sm text-ink-700">
+      <div className="space-y-3 text-ds-body text-ds-ink-800">
         <p>
           Supprimer la page <strong>« {row.page.title} »</strong> ? Cette action est{" "}
           <strong>irréversible</strong>.
         </p>
-        <ul className="list-disc space-y-0.5 pl-5 text-xs text-ink-500">
+        <ul className="list-disc space-y-1 pl-5 text-ds-meta text-ds-ink-600">
           <li>La page et son contenu sont effacés ; son adresse ne répond plus (page introuvable).</li>
           <li>Sa carte disparaît de l&apos;accueil et du menu.</li>
           <li>Les sujets d&apos;articles prévus pour cette spécialité sont retirés du calendrier.</li>
@@ -866,13 +927,12 @@ function AddPageModal({
       onClose={() => !busy && onClose()}
       title="Ajouter une page de spécialité"
       footer={
-        <>
+        <ModalActions>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button onClick={() => void submit()} disabled={busy || trimmed.length < 3}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button loading={busy} icon={<Plus size={18} aria-hidden />} onClick={() => void submit()} disabled={trimmed.length < 3}>
             Créer la page
           </Button>
-        </>
+        </ModalActions>
       }
     >
       <form
@@ -900,8 +960,8 @@ function AddPageModal({
         </ModalField>
         <label
           className={clsx(
-            "flex items-start gap-3 rounded-xl border px-3 py-2.5",
-            cardAvailable ? "cursor-pointer border-cream-300" : "border-cream-200 bg-cream-50",
+            "flex items-start gap-3 rounded-ds-sm px-3 py-3 inset-ring",
+            cardAvailable ? "cursor-pointer bg-white inset-ring-ds-ink-300" : "bg-ds-ink-50 inset-ring-ds-ink-200",
           )}
         >
           <input
@@ -909,13 +969,13 @@ function AddPageModal({
             disabled={!cardAvailable}
             checked={cardAvailable && showCard}
             onChange={(e) => setShowCard(e.target.checked)}
-            className="mt-0.5 h-4 w-4 accent-primary-500"
+            className="size-6 shrink-0 rounded accent-ds-brand-600"
           />
           <span className="min-w-0">
-            <span className={clsx("block text-sm font-medium", !cardAvailable && "text-ink-500")}>
+            <span className={clsx("block text-ds-body font-semibold", cardAvailable ? "text-ds-ink-900" : "text-ds-ink-600")}>
               Afficher une carte sur l&apos;accueil
             </span>
-            <span className="mt-0.5 block text-xs text-ink-500">
+            <span className={clsx("mt-0.5 block", HINT)}>
               {cardAvailable
                 ? "Ajoute la spécialité à la section « Spécialités » de la page d'accueil, une fois le contenu prêt."
                 : `Les ${homeSpecialtiesMax} emplacements de cartes sont occupés. Vous pourrez modifier les cartes existantes dans la section « Spécialités » de l'accueil.`}
@@ -971,20 +1031,19 @@ function NotFoundModal({
       title="Page introuvable"
       size="lg"
       footer={
-        <>
-          <Button variant="ghost" onClick={reset} disabled={busy} className="mr-auto">
+        <ModalActions>
+          <Button variant="quiet" size="sm" icon={<RotateCw size={15} aria-hidden />} onClick={reset} disabled={busy} className="mr-auto">
             Rétablir les valeurs par défaut
           </Button>
           <CancelButton onClick={onClose} disabled={busy} />
-          <Button onClick={() => void submit()} disabled={busy}>
-            {busy ? <Spinner className="text-white" /> : null}
+          <Button loading={busy} onClick={() => void submit()}>
             Enregistrer et voir la page
           </Button>
-        </>
+        </ModalActions>
       }
     >
       <div className="space-y-4">
-        <p className="text-sm text-ink-500">
+        <p className="text-ds-body text-ds-ink-700">
           Affichée quand un visiteur suit un lien qui n&apos;existe plus (ancienne page, faute de frappe). Elle
           le ramène vers votre site plutôt que vers une erreur brute.
         </p>
@@ -1004,7 +1063,7 @@ function NotFoundModal({
             maxLength={300}
             rows={2}
             onChange={(e) => setMessage(e.target.value)}
-            className={clsx(inputClass, "resize-y")}
+            className={TEXTAREA}
           />
         </ModalField>
         <ModalField label="Texte du bouton (retour à l'accueil)" length={visibleLength(buttonLabel)} limit={40}>
@@ -1016,12 +1075,10 @@ function NotFoundModal({
             className={clsx(inputClass, "max-w-xs")}
           />
         </ModalField>
-        <div className="flex items-center gap-3 rounded-xl bg-cream-100 px-3 py-2.5">
+        <div className="flex items-center gap-3 rounded-ds-sm bg-ds-ink-50 px-3 py-2.5 ring-1 ring-ds-ink-200">
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Afficher les spécialités</p>
-            <p className="mt-0.5 text-xs text-ink-500">
-              Propose des liens vers vos premières pages de spécialité activées.
-            </p>
+            <p className="text-ds-body font-semibold text-ds-ink-900">Afficher les spécialités</p>
+            <p className={clsx("mt-0.5", HINT)}>Propose des liens vers vos premières pages de spécialité activées.</p>
           </div>
           <ToggleSwitch checked={showSpecialties} label="Afficher les spécialités" onChange={setShowSpecialties} />
         </div>
