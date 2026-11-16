@@ -10,6 +10,15 @@ import { buttonClasses, type ButtonSize, type ButtonVariant } from "@/components
  * boutons gardent `aria-pressed`, numéro d'étape.
  */
 
+/**
+ * Ponctuation française gardée sur la ligne de son mot, pour les textes venus
+ * du service et affichés en titre : espace insécable avant « : ; ! ? » et à
+ * l'intérieur des guillemets. Le texte lui-même ne change pas.
+ */
+export function frTypo(text: string): string {
+  return text.replace(/ ([:;!?»])/g, "\u00a0$1").replace(/« /g, "«\u00a0");
+}
+
 /** Lien dans une phrase (bleu de marque, souligné), posé sur un `<a>` ou un `<button>` ; `ON_TINT` : variante lisible sur un encart teinté. */
 export const TEXT_LINK = "cursor-pointer rounded font-semibold text-ds-brand-700 underline underline-offset-2 ds-focus";
 export const TEXT_LINK_ON_TINT = "cursor-pointer rounded font-semibold text-ds-brand-800 underline underline-offset-2 ds-focus";

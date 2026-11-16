@@ -239,8 +239,15 @@ export function MonthCard({
             prêts à poster, dans vos couleurs. Vous n&apos;avez plus qu&apos;à télécharger et coller la légende.
           </EmptyState>
         )}
-        <div className="flex flex-wrap items-center justify-center gap-3 px-5 pb-6 sm:pb-8">
-          <Button icon={<Sparkles size={18} aria-hidden />} loading={preparing} data-focus="plan" onClick={plan}>
+        {/* Marges réduites sous 640 px : à 390 px, le libellé du bouton principal tient sur une ligne */}
+        <div className="flex flex-wrap items-center justify-center gap-3 px-2 pb-6 sm:px-5 sm:pb-8">
+          <Button
+            className="max-sm:px-4"
+            icon={<Sparkles size={18} aria-hidden />}
+            loading={preparing}
+            data-focus="plan"
+            onClick={plan}
+          >
             Préparer mon mois de contenus
           </Button>
           {/* Pendant l'attente, la durée est déjà annoncée au-dessus */}

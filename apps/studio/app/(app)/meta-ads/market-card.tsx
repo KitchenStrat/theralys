@@ -79,7 +79,7 @@ export function MarketCard({ ad, mode, index, now, canEdit, selecting, selected,
         className="relative block aspect-[4/5] w-full cursor-pointer overflow-hidden bg-ds-ink-100 ds-focus-inset"
       >
         {cover ? (
-          // Le visuel s'approche au survol (translation seule, absente en mouvement réduit)
+          // Le visuel s'approche au survol (léger agrandissement, sans effet quand les animations sont réduites)
           <span className="block h-full w-full motion-safe:transition-transform motion-safe:duration-ds-slow motion-safe:ease-ds-out motion-safe:group-hover:scale-[1.035]">
             <AdImage src={cover} alt={`Visuel de l'annonce de ${ad.pageName}`} fallback={poster} className="h-full w-full object-cover" />
           </span>

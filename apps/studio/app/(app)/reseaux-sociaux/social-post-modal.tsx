@@ -204,6 +204,9 @@ function PostModalBody({
   const [regenerating, startRegenerating] = useTransition();
   const [regenMessage, setRegenMessage] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(regenRemaining);
+  // La transition ne se clôt qu'une fois la page rafraîchie : à l'écran, l'attente s'arrête dès la
+  // réponse (réussite annoncée ou erreur), sans montrer à la fois « en préparation » et « régénéré »
+  const regenWaiting = regenerating && regenMessage === null;
   // « Régénérer », inactif pendant l'attente, a perdu le focus : il le retrouve à la réponse
   const wasRegenerating = useRef(false);
   const regenWaitingRef = useRef<HTMLDivElement>(null);
@@ -791,7 +794,7 @@ function PostModalBody({
                     variant="secondary"
                     size="sm"
                     icon={<Sparkles size={16} aria-hidden />}
-                    loading={regenerating}
+                    loading={regenWaiting}
                     data-focus="regen"
                     onClick={regenerate}
                     disabled={busy || regenBlocked !== undefined}
@@ -806,7 +809,7 @@ function PostModalBody({
                     {regenBlocked}
                   </p>
                 ) : null}
-                {regenerating && error === null ? (
+                {regenWaiting && error === null ? (
                   <div
                     ref={regenWaitingRef}
                     className="mt-3 scroll-mb-4 rounded-ds-sm bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-900/5 ds-fade-in"

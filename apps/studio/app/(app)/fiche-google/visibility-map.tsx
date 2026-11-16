@@ -5,7 +5,7 @@ import { clsx } from "clsx";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { rankTone, type GoogleGridPoint, type GoogleScanGrid } from "@theralys/shared";
-import { rankColor, rankOrdinal } from "@/lib/google/rank-colors";
+import { RANK_INK_DARK, rankColor, rankInk, rankOrdinal } from "@/lib/google/rank-colors";
 
 const TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const ATTRIBUTION = "© OpenStreetMap contributors";
@@ -36,9 +36,12 @@ function markerHtml(point: GoogleGridPoint, delayMs: number, size: number): stri
   const tone = point.missing ? "none" : rankTone(point.rank);
   const color = point.missing ? "var(--color-ink-300)" : rankColor(point.rank);
   const label = point.missing ? "?" : point.rank === null ? "20+" : String(point.rank);
-  const classes = ["vm", `vm-${tone}`, point.missing ? "vm-missing" : ""].filter(Boolean).join(" ");
+  // Chiffre sombre sur les couleurs vives (vert, oranges), où le blanc ne se lit pas
+  const darkInk = !point.missing && point.rank !== null && rankInk(point.rank) === "dark";
+  const classes = ["vm", `vm-${tone}`, point.missing ? "vm-missing" : "", darkInk ? "vm-ink-dark" : ""].filter(Boolean).join(" ");
   const fontSize = Math.max(9, Math.round(size * (tone === "none" ? 0.42 : 0.4)));
-  return `<span class="${classes}" style="--c:${color};--d:${delayMs}ms;--s:${size}px;--f:${fontSize}px"><span class="vm-glow"></span><span class="vm-dot">${label}</span></span>`;
+  const ink = darkInk ? `;--t:${RANK_INK_DARK}` : "";
+  return `<span class="${classes}" style="--c:${color};--d:${delayMs}ms;--s:${size}px;--f:${fontSize}px${ink}"><span class="vm-glow"></span><span class="vm-dot">${label}</span></span>`;
 }
 
 const HOME_SVG =
@@ -84,7 +87,7 @@ function tooltipFor(point: GoogleGridPoint): HTMLElement {
  * Carte Leaflet (tuiles OpenStreetMap adoucies) des emplacements d'un relevé :
  * une nappe colorée floutée dessine les zones où la fiche est visible, chaque
  * emplacement porte une pastille en relief colorée selon le rang (échelle
- * continue 1re → 20e), le cabinet au centre émet des ondes. Les pastilles
+ * continue 1re → 20e), le cabinet au centre émet deux ondes à l'apparition. Les pastilles
  * apparaissent en vague depuis le cabinet. Rendue côté client seulement
  * (import dynamique `ssr: false` par l'appelant) : aucun autre module ne doit
  * importer ce fichier statiquement (Leaflet lit `window` au chargement).
@@ -154,7 +157,8 @@ export function VisibilityMap({ grid, points, keyword }: { grid: GoogleScanGrid;
 
       const homeSize = Math.round(40 * Math.max(scale, 0.8));
       const centerIcon = L.divIcon({ html: centerHtml(homeSize), className: "", iconSize: [homeSize, homeSize], iconAnchor: [homeSize / 2, homeSize / 2] });
-      L.marker([grid.center.lat, grid.center.lng], { icon: centerIcon, zIndexOffset: 1000, alt: "Votre cabinet" })
+      // Hors du parcours au clavier, comme les pastilles : la légende dit déjà que le cabinet est au centre
+      L.marker([grid.center.lat, grid.center.lng], { icon: centerIcon, zIndexOffset: 1000, keyboard: false, alt: "Votre cabinet" })
         .bindTooltip("Votre cabinet", { className: "vm-tip", direction: "auto", offset: [homeSize / 2 + 6, 0], opacity: 1 })
         .addTo(group);
       animate = false;

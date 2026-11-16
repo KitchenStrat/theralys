@@ -85,8 +85,12 @@ export function RequestBar({
   const [sentTopic, setSentTopic] = useState("");
 
   const exhausted = usage.remaining === 0;
-  // Une erreur met fin à l'attente à l'écran, même si la transition se clôt un instant plus tard
-  const creating = pending && error === null;
+  // Contenu créé pour un autre mois que celui affiché : rien ne s'ouvrira ici, un lien y mène
+  const readyElsewhere = created !== null && created.date.slice(0, 7) !== monthParam ? created : null;
+  // La transition ne se clôt qu'une fois la page rafraîchie. À l'écran, l'attente s'arrête dès qu'une
+  // erreur est connue, ou dès que le contenu est annoncé prêt pour un autre mois ; elle dure jusqu'au
+  // rafraîchissement quand le contenu doit s'ouvrir ici.
+  const creating = pending && error === null && readyElsewhere === null;
   const disabled = exhausted || creating;
   // L'attente remplace les champs au-dessus du bouton : elle est amenée à l'écran si elle en dépasse (mobile)
   const waitingRef = useRef<HTMLDivElement>(null);
@@ -351,16 +355,16 @@ export function RequestBar({
         </div>
 
         {error ? <ErrorNote className="mt-4">{error}</ErrorNote> : null}
-        {created && created.date.slice(0, 7) !== monthParam ? (
+        {readyElsewhere ? (
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
             <InlineSuccess>Votre contenu est prêt.</InlineSuccess>
             <LinkButton
-              href={`/reseaux-sociaux?mois=${created.date.slice(0, 7)}`}
+              href={`/reseaux-sociaux?mois=${readyElsewhere.date.slice(0, 7)}`}
               variant="quiet"
               size="sm"
               iconRight={<ArrowRight size={16} aria-hidden />}
             >
-              Voir le {formatDayFr(created.date, "day")}
+              Voir le {formatDayFr(readyElsewhere.date, "day")}
             </LinkButton>
           </div>
         ) : null}

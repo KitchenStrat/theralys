@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { GalleryVerticalEnd, ImageOff, Lightbulb, RotateCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { AiBadge, Badge, Button, Card, CardHeader, EmptyState, GenerationProgress, InlineSuccess, Skeleton } from "@/components/ds";
@@ -25,7 +25,7 @@ import { metaCreativeDownloadUrl, metaCreativePreviewUrl } from "@/lib/meta-ads/
 import { regenerateMetaAds } from "./actions";
 import { GENERATION_STEPS } from "./analysis-progress";
 import { CopyButton } from "./copy-button";
-import { DownloadLink, MetaLine, Notice, PressedSegments, StepNumber } from "./parts";
+import { DownloadLink, MetaLine, Notice, PressedSegments, StepNumber, frTypo } from "./parts";
 import { RegenerateModal } from "./regenerate-modal";
 import type { MetaTab } from "./tabs";
 import { VideoPlanSection } from "./video-plan";
@@ -102,7 +102,7 @@ export function CreativesTab({
           title="Vos annonces"
           description={
             <>
-              {creatives.creatives.length} créas statiques, un angle différent chacune, rendues dans les trois formats Meta avec vos photos et{" "}
+              {creatives.creatives.length} annonces illustrées (vos « créas »), un angle différent chacune, rendues dans les trois formats Meta avec vos photos et{" "}
               {externalSite ? "vos couleurs" : "les couleurs de votre site"}. Téléchargez le visuel ou le kit complet, copiez les textes dans le
               Gestionnaire de publicités.
             </>
@@ -136,7 +136,7 @@ export function CreativesTab({
           <div className="flex min-w-[min(16rem,100%)] flex-1 items-start gap-3">
             <TriangleAlert size={20} aria-hidden className="mt-0.5 shrink-0 text-ds-warning-700" />
             <div className="min-w-0">
-              <p className="text-base font-semibold">{generationError?.trim() ? generationError.trim() : PLAN_FAILED_FALLBACK}</p>
+              <p className="text-base font-semibold">{frTypo(generationError?.trim() ? generationError.trim() : PLAN_FAILED_FALLBACK)}</p>
               <p className="mt-0.5 text-ds-body">
                 Vos créas et votre plan vidéo sont là ; régénérez les annonces pour obtenir le plan de campagne (onglet Plan et ciblage).
               </p>
@@ -215,7 +215,7 @@ function MissingCreativesCard({ error, remaining, onSelectTab }: { error: string
       <EmptyState
         as="h2"
         icon={ImageOff}
-        title={error?.trim() ? error.trim() : GENERATION_FAILED_FALLBACK}
+        title={frTypo(error?.trim() ? error.trim() : GENERATION_FAILED_FALLBACK)}
         action={
           <Button
             onClick={generate}
@@ -401,6 +401,11 @@ function Preview({ src, size, alt }: { src: string; size: MetaAdsFormat; alt: st
   const [state, setState] = useState<"loading" | "ok" | "failed">("loading");
   const url = retry ? `${src}&r=${retry}` : src;
   const { w, h } = SOCIAL_SIZES[size];
+  // Visuel déjà chargé quand la page prend vie (cache du navigateur) : son événement « load » est passé avant
+  // que `onLoad` soit branché — sans cette lecture, l'aperçu resterait masqué derrière son état d'attente.
+  const settled = useCallback((img: HTMLImageElement | null) => {
+    if (img?.complete) setState(img.naturalWidth > 0 ? "ok" : "failed");
+  }, []);
   return (
     <div className="relative overflow-hidden bg-ds-section-tint-2" style={{ aspectRatio: `${w} / ${h}` }}>
       {state === "loading" ? (
@@ -428,6 +433,7 @@ function Preview({ src, size, alt }: { src: string; size: MetaAdsFormat; alt: st
       ) : (
         <img
           key={url}
+          ref={settled}
           src={url}
           alt={alt}
           width={540}

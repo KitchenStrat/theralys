@@ -62,7 +62,7 @@ import type { MetaAdsAnalysisView, MetaAdsUsageView } from "@/lib/meta-ads/data"
 import { marketUnavailableNotice, type MarketUnavailableNotice } from "@/lib/meta-ads/market-status";
 import { AnalysisProgress } from "./analysis-progress";
 import type { MetaSiteInfo } from "./meta-client";
-import { MetaLine, Notice, TEXT_LINK_ON_TINT } from "./parts";
+import { MetaLine, Notice, TEXT_LINK_ON_TINT, frTypo } from "./parts";
 import type { MetaTab } from "./tabs";
 import type { AnalysisLaunch } from "./use-analysis-launch";
 
@@ -373,7 +373,7 @@ function VerdictCard({ diagnostic, hasCreatives, onSelectTab }: { diagnostic: Me
           <Badge tone={verdict.tone} icon={verdict.icon}>
             {verdict.label}
           </Badge>
-          <p className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
+          <p className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{frTypo(diagnostic.headline)}</p>
         </div>
       </div>
       <p className="mt-5 text-base text-ds-ink-700 text-pretty">{diagnostic.summary}</p>

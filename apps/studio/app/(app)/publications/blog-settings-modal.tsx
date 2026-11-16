@@ -275,7 +275,12 @@ export function BlogSettingsModal({
         {/* Pied collé au bas de la fenêtre : l'action de l'étape reste visible quand le contenu défile */}
         <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-b-3xl border-t border-ds-ink-200 bg-white px-5 py-4 sm:px-8 sm:py-5">
           {step > 0 ? (
-            <Button variant="quiet" icon={<ArrowLeft size={18} aria-hidden />} onClick={() => setStep(step - 1)}>
+            // Sous 360 px, la flèche s'efface : les deux boutons tiennent alors sur une seule ligne
+            <Button
+              variant="quiet"
+              icon={<ArrowLeft size={18} aria-hidden className="max-[359px]:hidden" />}
+              onClick={() => setStep(step - 1)}
+            >
               Retour
             </Button>
           ) : (

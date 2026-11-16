@@ -142,17 +142,20 @@ export function ActivationCard({
                 <p className="mt-2 max-w-[60ch] text-base text-pretty">
                   Vos contenus, vos liens et vos statistiques reposent sur <strong className="wrap-anywhere font-semibold">{address}</strong>. Votre site Harmony reste en ligne.
                 </p>
-                <ul className="mt-4 flex flex-wrap gap-2">
-                  <li>
-                    <GreetingChip icon={FileText}>Vos contenus</GreetingChip>
-                  </li>
-                  <li>
-                    <GreetingChip icon={Link2}>Vos liens</GreetingChip>
-                  </li>
-                  <li>
-                    <GreetingChip icon={ChartNoAxesColumn}>Vos statistiques</GreetingChip>
-                  </li>
-                </ul>
+                {/* Profil incomplet : les contenus retombent sur le site Harmony (l'avertissement plus bas le dit) — on ne les affiche pas comme acquis */}
+                {usable ? (
+                  <ul className="mt-4 flex flex-wrap gap-2">
+                    <li>
+                      <GreetingChip icon={FileText}>Vos contenus</GreetingChip>
+                    </li>
+                    <li>
+                      <GreetingChip icon={Link2}>Vos liens</GreetingChip>
+                    </li>
+                    <li>
+                      <GreetingChip icon={ChartNoAxesColumn}>Vos statistiques</GreetingChip>
+                    </li>
+                  </ul>
+                ) : null}
               </div>
             </div>
           </div>

@@ -484,7 +484,8 @@ function KeyFigures({ demand, budget }: { demand: GoogleAdsDemand; budget: Googl
       <h2 id="ads-key-figures" className="sr-only">
         Les chiffres clés de votre analyse
       </h2>
-      <div className={clsx("grid grid-cols-2 gap-3 sm:gap-4", hasCpc ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
+      {/* Sous 375 px, une tuile par rangée : à deux, les libellés (« Contacts attendus par mois ») seraient coupés */}
+      <div className={clsx("grid grid-cols-1 gap-3 min-[375px]:grid-cols-2 sm:gap-4", hasCpc ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
         <KpiTile
           icon={Search}
           label="Recherches par mois"
@@ -507,7 +508,7 @@ function KeyFigures({ demand, budget }: { demand: GoogleAdsDemand; budget: Googl
           caption="rendez-vous, appels, e-mails"
           prefix={`${num(budget.contactsMin)} – `}
           value={budget.contactsMax}
-          className={hasCpc ? undefined : "max-xl:col-span-2"}
+          className={hasCpc ? undefined : "min-[375px]:max-xl:col-span-2"}
         />
       </div>
     </section>
@@ -620,6 +621,9 @@ function ChecksCard({
   );
 }
 
+/** Action d'un point à régler : bouton de la largeur de la ligne sur petit écran, à sa taille naturelle au-delà. */
+const ACTION_WIDTH = "max-sm:w-full";
+
 function CheckRow({ check, externalSite, onSelectTab }: { check: GoogleAdsReadinessCheck; externalSite: boolean; onSelectTab: (tab: AdsTab) => void }) {
   const link = check.status === "ok" ? null : adsCheckLink(check.id, externalSite);
   const arrow = <ArrowRight size={16} aria-hidden />;
@@ -646,24 +650,25 @@ function CheckRow({ check, externalSite, onSelectTab }: { check: GoogleAdsReadin
         </div>
         <p className="mt-0.5 text-ds-body text-ds-ink-700">{check.detail}</p>
         {link ? (
-          <div className="mt-2.5">
+          // Petit écran : l'action prend toute la largeur de la ligne (retrait du repère compris), son libellé tient sur une ligne dès 360 px
+          <div className="mt-2.5 max-sm:-ml-[2.625rem]">
             {link === "fiche" ? (
-              <LinkButton href="/fiche-google" variant="secondary" size="sm" iconRight={arrow}>
+              <LinkButton href="/fiche-google" variant="secondary" size="sm" className={ACTION_WIDTH} iconRight={arrow}>
                 Ouvrir Fiche Google
               </LinkButton>
             ) : null}
             {link === "editor" ? (
-              <LinkButton href="/editor" variant="secondary" size="sm" iconRight={arrow}>
+              <LinkButton href="/editor" variant="secondary" size="sm" className={ACTION_WIDTH} iconRight={arrow}>
                 Modifier mon site
               </LinkButton>
             ) : null}
             {link === "site" ? (
-              <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" iconRight={arrow}>
+              <LinkButton href={MON_SITE_HREF} variant="secondary" size="sm" className={ACTION_WIDTH} iconRight={arrow}>
                 Ouvrir Mon site
               </LinkButton>
             ) : null}
             {link === "tab" ? (
-              <Button type="button" variant="secondary" size="sm" iconRight={arrow} onClick={() => onSelectTab("parametrage")}>
+              <Button type="button" variant="secondary" size="sm" className={ACTION_WIDTH} iconRight={arrow} onClick={() => onSelectTab("parametrage")}>
                 Ouvrir Paramétrage &amp; suivi
               </Button>
             ) : null}

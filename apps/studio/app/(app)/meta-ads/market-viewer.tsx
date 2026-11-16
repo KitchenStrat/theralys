@@ -95,7 +95,8 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
 
       {count > 1 ? (
         <div className="flex flex-col items-center gap-1.5 border-t border-ds-ink-200 bg-white px-4 py-3">
-          <div className="flex items-center gap-1" role="group" aria-label={media?.variants ? "Déclinaisons" : "Diapositives"}>
+          {/* Au doigt, chaque point offre une cible de 44 px ; la rangée passe à la ligne s'il y en a beaucoup */}
+          <div className="flex flex-wrap items-center justify-center gap-1" role="group" aria-label={media?.variants ? "Déclinaisons" : "Diapositives"}>
             {items.map((_, i) => (
               <button
                 key={i}
@@ -103,7 +104,7 @@ export function MediaViewer({ ad, now }: { ad: MetaGalleryAd; now: Date }) {
                 onClick={() => setPosition(i)}
                 aria-label={`Afficher la ${unit} ${i + 1}`}
                 aria-current={i === index ? "true" : undefined}
-                className={clsx("grid size-6 cursor-pointer place-items-center rounded-full", FOCUS_RING)}
+                className={clsx("grid size-6 cursor-pointer place-items-center rounded-full pointer-coarse:size-11", FOCUS_RING)}
               >
                 {/* Le point courant est plus large : la position se lit sans la couleur */}
                 <span className={clsx("block h-2 rounded-full", i === index ? "w-5 bg-ds-section-accent" : "w-2 bg-ds-ink-450")} />

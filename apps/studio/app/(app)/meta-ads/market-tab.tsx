@@ -12,6 +12,7 @@ import { MarketGallery } from "./market-gallery";
 import { MarketHeader, VisualsBanner } from "./market-header";
 import { Icon, type IconName } from "./market-icons";
 import { InsightsCard } from "./market-insights";
+import { frTypo } from "./parts";
 import type { MetaTab } from "./tabs";
 import type { AnalysisLaunch } from "./use-analysis-launch";
 import { useMarketLibrary } from "./use-market-library";
@@ -79,7 +80,7 @@ export function MarketTab({
         <EmptyState
           as="h2"
           icon={notice.retry ? SearchX : Hourglass}
-          title={notice.title}
+          title={frTypo(notice.title)}
           action={notice.retry ? <Button onClick={() => onSelectTab("diagnostic")}>Aller au diagnostic</Button> : undefined}
         >
           {notice.detail}
