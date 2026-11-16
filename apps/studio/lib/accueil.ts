@@ -192,10 +192,12 @@ export type NextStep =
   | { kind: "upcoming"; title: string; date: string };
 
 /**
- * Choisit la prochaine étape, de la plus bloquante à la plus facultative :
+ * Choisit la prochaine étape, de la plus pressante à la plus facultative :
  * 1. installer le code de mesure (sans lui, l'accueil n'a aucun chiffre) ;
- * 2. la première étape de mise en route non faite ;
- * 3. le premier article à venir déjà écrit (brouillon ou programmé), à relire ;
+ * 2. le premier article à venir déjà écrit (brouillon ou programmé), à relire :
+ *    il a une date de parution, il passe donc avant la mise en route, qui
+ *    n'en a pas et reste visible dans sa carte ;
+ * 3. la première étape de mise en route non faite ;
  * 4. à défaut, le prochain sujet planifié — une invitation à ouvrir Publications.
  * `null` quand rien de tout cela n'existe : l'accueil n'affiche alors pas de carte.
  *
@@ -209,9 +211,6 @@ export function pickNextStep(input: {
 }): NextStep | null {
   if (input.awaitingMeasure) return { kind: "measure", address: input.awaitingMeasure.address };
 
-  const todo = input.setup.find((task) => !task.done);
-  if (todo) return { kind: "setup", key: todo.key };
-
   for (const item of input.upcoming) {
     if (item.kind === "article" && item.articleId && (item.status === "draft" || item.status === "scheduled")) {
       return {
@@ -224,6 +223,9 @@ export function pickNextStep(input: {
       };
     }
   }
+
+  const todo = input.setup.find((task) => !task.done);
+  if (todo) return { kind: "setup", key: todo.key };
 
   const planned = input.upcoming.find((item) => item.status === "planned");
   if (planned) return { kind: "upcoming", title: planned.title, date: planned.date };

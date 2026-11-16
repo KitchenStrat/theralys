@@ -265,13 +265,8 @@ describe("pickNextStep : une seule prochaine étape, d'après l'état du compte"
     expect(pickNextStep({ awaitingMeasure: { address: "www.cabinet-exemple.fr" }, setup: todo, upcoming: [draft] })).toEqual({ kind: "measure", address: "www.cabinet-exemple.fr" });
   });
 
-  it("mise en route : la première étape non faite, dans l'ordre reçu", () => {
-    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [draft] })).toEqual({ kind: "setup", key: "booking_link" });
-  });
-
-  it("mise en route terminée : le premier article déjà écrit, même après un sujet seulement planifié", () => {
-    const done = todo.map((task) => ({ ...task, done: true }));
-    expect(pickNextStep({ awaitingMeasure: null, setup: done, upcoming: [planned, draft, scheduled] })).toEqual({
+  it("un article écrit attend sa parution : il passe avant la mise en route, même inachevée", () => {
+    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [planned, draft, scheduled] })).toEqual({
       kind: "review",
       articleId: "a1",
       title: "Sommeil léger",
@@ -279,17 +274,28 @@ describe("pickNextStep : une seule prochaine étape, d'après l'état du compte"
       status: "draft",
       readingTimeMin: 4,
     });
+    // Le premier article écrit dans l'ordre du calendrier, brouillon ou programmé
+    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [scheduled, draft] })).toMatchObject({ kind: "review", articleId: "a2", status: "scheduled" });
     expect(pickNextStep({ awaitingMeasure: null, setup: [], upcoming: [scheduled] })).toMatchObject({ kind: "review", articleId: "a2", status: "scheduled" });
   });
 
-  it("aucun article écrit : le prochain sujet planifié, pour information", () => {
+  it("aucun article écrit : la première étape de mise en route non faite, dans l'ordre reçu", () => {
+    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [] })).toEqual({ kind: "setup", key: "booking_link" });
+    // Un sujet seulement planifié n'est pas à relire : la mise en route passe avant lui
+    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [planned] })).toEqual({ kind: "setup", key: "booking_link" });
+  });
+
+  it("ni article écrit ni étape à faire : le prochain sujet planifié, pour information", () => {
+    const done = todo.map((task) => ({ ...task, done: true }));
+    expect(pickNextStep({ awaitingMeasure: null, setup: done, upcoming: [planned] })).toEqual({ kind: "upcoming", title: "Jambes lourdes", date: "2026-11-12" });
     expect(pickNextStep({ awaitingMeasure: null, setup: [], upcoming: [planned] })).toEqual({ kind: "upcoming", title: "Jambes lourdes", date: "2026-11-12" });
   });
 
-  it("un article publié ou retiré n'est ni à relire ni à venir", () => {
+  it("un article publié ou retiré n'est ni à relire ni à venir : il ne passe pas devant la mise en route", () => {
     const published = { ...draft, status: "published" } as const;
     const withdrawn = { ...scheduled, status: "withdrawn" } as const;
     expect(pickNextStep({ awaitingMeasure: null, setup: [], upcoming: [published, withdrawn] })).toBeNull();
+    expect(pickNextStep({ awaitingMeasure: null, setup: todo, upcoming: [published, withdrawn] })).toEqual({ kind: "setup", key: "booking_link" });
   });
 
   it("rien de tout cela : pas de carte", () => {
