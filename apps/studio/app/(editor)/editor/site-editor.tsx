@@ -1,10 +1,57 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
-import { Badge, Button, Segmented, Spinner, useDialogFocus } from "@theralys/ui";
+import {
+  AppWindow,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Camera,
+  ChartLine,
+  ChartNoAxesColumn,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  CloudUpload,
+  Cookie,
+  ExternalLink,
+  EyeOff,
+  FileText,
+  Files,
+  Image as ImageIcon,
+  ImageUp,
+  Info,
+  LayoutGrid,
+  LayoutTemplate,
+  Link2,
+  ListOrdered,
+  MapPin,
+  Megaphone,
+  MessageSquareQuote,
+  MousePointerClick,
+  Palette,
+  PanelBottom,
+  PenLine,
+  Phone,
+  Plus,
+  Scale,
+  Settings,
+  Share2,
+  Star,
+  Sunrise,
+  Tag,
+  Target,
+  Trash2,
+  TriangleAlert,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { Segmented, useDialogFocus } from "@theralys/ui";
+import { Badge, Button, IconBadge, LinkButton, Spinner, TabPanel, Tabs } from "@/components/ds";
 import type { PlanId } from "@theralys/db/plans";
 import {
   FOOTER_SOCIAL_NETWORKS,
@@ -40,6 +87,20 @@ import {
 import { isGenerationStale, type EditorPageRef } from "@/lib/editor/page-groups";
 import { previewPath, previewTargetForPage, type PreviewTarget } from "@/lib/editor/preview-path";
 import { socialUrlError, type SocialNetworkKey } from "@/lib/editor/social-links";
+import {
+  ActionMessage,
+  ADD_BUTTON,
+  DANGER_LINK,
+  FieldError,
+  HINT,
+  ICON_BUTTON,
+  INPUT,
+  LABEL,
+  Note,
+  SUB_TITLE,
+  TEXTAREA,
+  TEXT_LINK,
+} from "./editor-ui";
 import { PagesPanel } from "./pages-panel";
 import { CharCounter, SectionFields, ToggleSwitch } from "./section-fields";
 
@@ -147,34 +208,68 @@ type SettingsTab =
   | "social"
   | "footer";
 
-const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: string; label: string }[] }[] = [
-  { group: "Profil", items: [{ id: "identite", icon: "👤", label: "Identité" }] },
-  { group: "Apparence", items: [{ id: "logo", icon: "🖼", label: "Logo" }] },
+const SETTINGS_NAV: { group: string; items: { id: SettingsTab; icon: LucideIcon; label: string }[] }[] = [
+  { group: "Profil", items: [{ id: "identite", icon: UserRound, label: "Identité" }] },
+  { group: "Apparence", items: [{ id: "logo", icon: ImageIcon, label: "Logo" }] },
   {
     group: "Visibilité",
     items: [
-      { id: "apercu", icon: "🔗", label: "Aperçu du lien" },
-      { id: "favicon", icon: "🌐", label: "Icône du navigateur" },
+      { id: "apercu", icon: Link2, label: "Aperçu du lien" },
+      { id: "favicon", icon: AppWindow, label: "Icône du navigateur" },
     ],
   },
-  { group: "Contact", items: [{ id: "coordonnees", icon: "📞", label: "Rendez-vous & téléphone" }] },
+  { group: "Contact", items: [{ id: "coordonnees", icon: Phone, label: "Rendez-vous & téléphone" }] },
   {
     group: "Cabinets",
     items: [
-      { id: "google", icon: "⭐", label: "Fiche Google" },
-      { id: "cabinets", icon: "📍", label: "Cabinets" },
+      { id: "google", icon: Star, label: "Fiche Google" },
+      { id: "cabinets", icon: Building2, label: "Cabinets" },
     ],
   },
-  { group: "Suivi", items: [{ id: "tracking", icon: "📊", label: "Tracking" }] },
-  { group: "Légal", items: [{ id: "legal", icon: "⚖️", label: "Informations légales" }] },
+  { group: "Suivi", items: [{ id: "tracking", icon: ChartNoAxesColumn, label: "Tracking" }] },
+  { group: "Légal", items: [{ id: "legal", icon: Scale, label: "Informations légales" }] },
   {
     group: "Pied de page",
     items: [
-      { id: "social", icon: "📱", label: "Réseaux sociaux" },
-      { id: "footer", icon: "📝", label: "Texte du pied de page" },
+      { id: "social", icon: Share2, label: "Réseaux sociaux" },
+      { id: "footer", icon: PanelBottom, label: "Texte du pied de page" },
     ],
   },
 ];
+
+/** Pictogramme de chaque type de section, sur sa carte du panneau Contenu. */
+const SECTION_CARD_ICONS: Record<SectionType, LucideIcon> = {
+  hero: LayoutTemplate,
+  highlights: Star,
+  specialties: LayoutGrid,
+  future: Sunrise,
+  about: UserRound,
+  reviews: MessageSquareQuote,
+  process: ListOrdered,
+  faq: CircleHelp,
+  contact: MapPin,
+  richText: FileText,
+  cta: MousePointerClick,
+};
+
+/** Sous-onglets du panneau Style. */
+const STYLE_TABS: { id: StyleTab; label: string }[] = [
+  { id: "couleur", label: "Couleur" },
+  { id: "typo", label: "Typo" },
+  { id: "forme", label: "Style" },
+];
+
+/**
+ * Carte de choix du panneau Style (`aria-pressed`). Choix retenu : fond teinté,
+ * liseré épais à l'accent de la section et coche (`ChoiceMark`) — jamais la
+ * couleur seule.
+ */
+const choiceCard = (selected: boolean, className?: string) =>
+  clsx(
+    "relative rounded-ds-md ds-focus ds-press",
+    selected ? "bg-ds-section-tint ring-2 ring-ds-section-accent" : "bg-white ring-1 ring-ds-ink-300 hover:bg-ds-ink-50",
+    className,
+  );
 
 function isSettingsTab(value: string | null): value is SettingsTab {
   return value !== null && SETTINGS_NAV.some((g) => g.items.some((i) => i.id === value));
@@ -236,7 +331,7 @@ type TrackerKey = "googleAnalyticsId" | "googleTagManagerId" | "googleAdsId" | "
 
 const TRACKER_CARDS: {
   key: TrackerKey;
-  icon: string;
+  icon: LucideIcon;
   title: string;
   description: string;
   placeholder: string;
@@ -244,7 +339,7 @@ const TRACKER_CARDS: {
 }[] = [
   {
     key: "googleAnalyticsId",
-    icon: "📈",
+    icon: ChartLine,
     title: "Google Analytics",
     description: "Mesure d'audience via la balise Google.",
     placeholder: "G-XXXXXXXXXX",
@@ -252,7 +347,7 @@ const TRACKER_CARDS: {
   },
   {
     key: "googleTagManagerId",
-    icon: "🏷️",
+    icon: Tag,
     title: "Google Tag Manager",
     description: "Charge votre conteneur GTM selon le mode de bandeau choisi.",
     placeholder: "GTM-XXXXXXX",
@@ -260,7 +355,7 @@ const TRACKER_CARDS: {
   },
   {
     key: "googleAdsId",
-    icon: "📣",
+    icon: Megaphone,
     title: "Google Ads",
     description: "Mesure des conversions et remarketing Google Ads.",
     placeholder: "AW-1234567890",
@@ -268,7 +363,7 @@ const TRACKER_CARDS: {
   },
   {
     key: "metaPixelId",
-    icon: "✨",
+    icon: Target,
     title: "Meta Pixel",
     description: "Suivi publicitaire et audiences personnalisées Meta.",
     placeholder: "123456789012345",
@@ -747,6 +842,24 @@ export function SiteEditor({
   const settingsDialogRef = useRef<HTMLDivElement>(null);
   useDialogFocus(settingsOpen, settingsDialogRef);
 
+  // Présentation seulement : la catégorie active reste visible dans sa barre, qui défile
+  // (en largeur sur un écran étroit, en hauteur sinon). Seule la barre défile, rien d'autre.
+  const settingsNavRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const nav = settingsNavRef.current;
+    const current = nav?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!nav || !current) return;
+    const box = nav.getBoundingClientRect();
+    const item = current.getBoundingClientRect();
+    if (item.left < box.left || item.right > box.right) {
+      nav.scrollLeft += item.left - box.left - (box.width - item.width) / 2;
+    }
+    if (item.top < box.top || item.bottom > box.bottom) {
+      nav.scrollTop += item.top - box.top - (box.height - item.height) / 2;
+    }
+  }, [settingsOpen, settingsTab]);
+
   // Échap ferme la fenêtre Paramètres (comme « Annuler »)
   useEffect(() => {
     if (!settingsOpen) return;
@@ -993,58 +1106,88 @@ export function SiteEditor({
   return (
     <>
       {/* ── Barre supérieure ─────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between gap-4 border-b border-cream-300 bg-white px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <Link
+      {/* Une ligne à partir de 1 024 px ; en dessous, deux : la page en cours, puis les onglets
+          (qui défilent, avec un fondu aux bords, si l'écran est trop étroit pour les quatre). */}
+      <header className="relative flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ds-ink-200 bg-white px-3 pt-2.5 sm:px-4 lg:flex-nowrap lg:pt-0">
+        <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-ds-section-gradient" />
+        <h1 className="sr-only">Éditeur de votre site</h1>
+        <div className="flex w-full min-w-0 items-center gap-2 lg:w-auto lg:flex-none">
+          <LinkButton
             href="/"
+            variant="quiet"
+            size="sm"
+            icon={<ArrowLeft size={17} aria-hidden />}
             onClick={(e) => {
               // Même garde que le changement de page : la navigation Next ne
               // déclenche pas `beforeunload`
               if (!confirmLeavePage()) e.preventDefault();
             }}
-            className="inline-flex items-center gap-1.5 rounded-full bg-cream-100 px-4 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-200"
+            className="px-3!"
           >
-            ← Accueil
-          </Link>
+            Accueil
+          </LinkButton>
           <button
             type="button"
             onClick={() => setPanel("pages")}
             aria-label={`Page éditée : ${currentPageTitle} — ouvrir le panneau Pages`}
             title="Ouvrir le panneau Pages"
-            className="flex max-w-72 items-center gap-2 rounded-xl border border-ink-300 bg-white px-3 py-1.5 text-sm hover:border-primary-400"
+            className="inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[1.125rem] bg-white px-3.5 py-1.5 text-sm font-semibold text-ds-brand-800 shadow-sm inset-ring inset-ring-ds-ink-300 ds-focus ds-press hover:bg-ds-brand-50 pointer-coarse:min-h-11 pointer-coarse:rounded-[1.375rem] lg:max-w-64"
           >
-            <span aria-hidden>📄</span>
+            <FileText size={16} aria-hidden className="shrink-0 text-ds-section-accent" />
             <span className="truncate">{currentPageTitle}</span>
             {dirty ? (
               <span
+                role="img"
                 aria-label="Modifications non publiées"
                 title="Modifications non publiées"
-                className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                className="size-2.5 shrink-0 rounded-full bg-ds-warning-700 ring-2 ring-ds-warning-100"
               />
             ) : null}
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <PanelTab label="Pages" active={panel === "pages"} onClick={() => setPanel("pages")} />
-          <PanelTab label="Contenu" active={panel === "contenu"} onClick={() => setPanel("contenu")} />
-          <PanelTab label="🎨 Style" active={panel === "style"} onClick={() => setPanel("style")} />
-          <PanelTab label="⚙ Paramètres" active={settingsOpen} onClick={() => openSettings()} />
-          <a
-            href={site.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-600"
+        <div className="flex w-full min-w-0 items-center gap-2 lg:ml-auto lg:w-auto">
+          <div
+            role="group"
+            aria-label="Panneaux de l'éditeur"
+            className="-ml-3 flex min-w-0 flex-1 overflow-x-auto pl-3 ds-tabs-scroll max-lg:[mask-image:linear-gradient(to_right,transparent,#000_0.75rem,#000_calc(100%_-_1.75rem),transparent)] sm:-ml-4 sm:pl-4 lg:ml-0 lg:flex-none lg:overflow-visible lg:pl-0"
           >
-            ↗ Voir mon site
-          </a>
+            <PanelTab label="Pages" icon={Files} active={panel === "pages"} aria-pressed={panel === "pages"} onClick={() => setPanel("pages")} />
+            <PanelTab label="Contenu" icon={PenLine} active={panel === "contenu"} aria-pressed={panel === "contenu"} onClick={() => setPanel("contenu")} />
+            <PanelTab label="Style" icon={Palette} active={panel === "style"} aria-pressed={panel === "style"} onClick={() => setPanel("style")} />
+            <PanelTab label="Paramètres" icon={Settings} active={settingsOpen} aria-haspopup="dialog" onClick={() => openSettings()} />
+            {/* Marge de fin : le fondu du bord ne couvre jamais le dernier onglet une fois la rangée défilée */}
+            <span aria-hidden className="w-5 shrink-0 lg:hidden" />
+          </div>
+          <LinkButton
+            href={site.url}
+            external
+            variant="secondary"
+            size="sm"
+            icon={<ExternalLink size={16} aria-hidden />}
+            className="max-sm:px-3.5!"
+          >
+            {/* Sous 640 px, le bouton se réduit à son icône ; son nom reste lu */}
+            <span className="max-sm:sr-only">Voir mon site</span>
+          </LinkButton>
         </div>
       </header>
 
       {/* ── Panneau + prévisualisation ───────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-96 shrink-0 flex-col border-r border-cream-300 bg-white">
+      {/* Sous 768 px, l'aperçu passe au-dessus du panneau (ordre visuel seulement). `role="main"` et non
+          `<main>` : la feuille partagée anime les enfants d'un `<main>` par des règles hors couche. */}
+      <div role="main" className="flex min-h-0 flex-1 flex-col-reverse md:flex-row">
+        <aside
+          role="region"
+          aria-label="Panneau d'édition"
+          className="flex min-h-0 w-full flex-1 flex-col border-ds-ink-200 bg-white max-md:border-t md:w-96 md:flex-none md:border-r xl:w-[26rem]"
+        >
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {panel === "pages" ? (
+              <PanelIntro icon={Files} title="Pages">
+                Choisissez la page à modifier, ou affichez une page légale dans l&apos;aperçu.
+              </PanelIntro>
+            ) : null}
             {panel === "pages" ? (
               <PagesPanel
                 pages={pages}
@@ -1091,61 +1234,62 @@ export function SiteEditor({
             ) : null}
 
             {panel === "contenu" ? (
+              <PanelIntro icon={PenLine} title="Contenu">
+                Cliquez sur une section de l&apos;aperçu pour l&apos;ouvrir ici, puis modifiez textes et photos.
+                L&apos;interrupteur masque une section sans perdre son contenu.
+              </PanelIntro>
+            ) : null}
+            {panel === "contenu" ? (
               selectedPage?.generating ? (
-                <div className="rounded-2xl border border-cream-300 bg-cream-50 p-4 text-sm text-ink-700">
-                  <p className="flex items-center gap-2 font-semibold">
-                    <Spinner /> Page en préparation…
+                <div className="rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
+                  <p className="flex items-center gap-2.5 text-ds-body font-semibold text-ds-section-ink">
+                    <Spinner className="size-[1.125rem] text-ds-section-accent" /> Page en préparation…
                   </p>
-                  <p className="mt-1 text-xs text-ink-500">
+                  <p className="mt-1.5 text-ds-meta text-ds-ink-700">
                     Le contenu de cette page est en cours de rédaction (environ une minute). Ses sections
                     seront modifiables dès qu&apos;il sera prêt — vous pouvez suivre l&apos;avancement
                     dans le panneau Pages.
                   </p>
                 </div>
               ) : sections.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {sharedNotice ? (
-                    <div
-                      role="status"
-                      className="mb-3 flex items-start gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-ink-700"
-                    >
-                      <span aria-hidden>ℹ️</span>
-                      <div className="min-w-0 flex-1">
-                        <p>
-                          Cette section (<strong>{SECTION_LABELS[sharedNotice]}</strong>) est partagée avec la
-                          page d&apos;accueil : son contenu se modifie depuis l&apos;accueil.
-                        </p>
-                        {homePageId ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const home = pages.find((p) => p.id === homePageId);
-                              if (home) goToPage(home, sharedNotice);
-                            }}
-                            className="mt-1 font-medium text-primary-600 hover:underline"
-                          >
-                            Modifier sur l&apos;accueil →
-                          </button>
-                        ) : null}
+                    <Note tone="info" role="status" className="mb-3">
+                      <div className="flex items-start gap-1">
+                        <div className="min-w-0 flex-1">
+                          <p>
+                            Cette section (<strong>{SECTION_LABELS[sharedNotice]}</strong>) est partagée avec la
+                            page d&apos;accueil : son contenu se modifie depuis l&apos;accueil.
+                          </p>
+                          {homePageId ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const home = pages.find((p) => p.id === homePageId);
+                                if (home) goToPage(home, sharedNotice);
+                              }}
+                              className={clsx(TEXT_LINK, "mt-1 inline-flex min-h-8 items-center gap-1.5 pointer-coarse:min-h-11")}
+                            >
+                              Modifier sur l&apos;accueil
+                              <ArrowRight size={14} aria-hidden className="shrink-0" />
+                            </button>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Fermer ce message"
+                          onClick={() => setSharedNotice(null)}
+                          className={clsx(ICON_BUTTON, "-mr-1.5 -mt-1.5 hover:bg-ds-brand-100")}
+                        >
+                          <X size={16} aria-hidden />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        aria-label="Fermer ce message"
-                        onClick={() => setSharedNotice(null)}
-                        className="shrink-0 rounded-full px-1 text-ink-500 hover:text-ink-900"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    </Note>
                   ) : null}
-                  <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
-                    💡 Cliquez sur une section de l&apos;aperçu à droite pour l&apos;ouvrir ici,
-                    puis modifiez textes et photos. L&apos;interrupteur masque une section sans
-                    perdre son contenu.
-                  </p>
                   {sections.map((section, i) => {
                     const visible = isSectionVisible(section);
                     const label = SECTION_LABELS[section.type];
+                    const open = active === i;
                     return (
                       <div
                         key={`${section.type}-${i}`}
@@ -1155,28 +1299,52 @@ export function SiteEditor({
                         data-section-type={section.type}
                         data-section-hidden={visible ? undefined : "true"}
                         className={clsx(
-                          "rounded-2xl border transition-colors",
-                          active === i ? "border-primary-400 shadow-sm" : "border-cream-300",
-                          !visible && "bg-cream-50",
+                          "rounded-ds-md",
+                          // Carte ouverte : liseré épais à l'accent de la section, en-tête teinté, chevron vers le bas
+                          open ? "shadow-ds-card ring-2 ring-ds-section-accent" : "ring-1 ring-ds-ink-200",
+                          visible ? "bg-white" : "bg-ds-ink-50",
                         )}
                       >
-                        <div className={clsx("flex items-center gap-2 py-2 pl-3 pr-3", !visible && "opacity-70")}>
-                          <button
-                            type="button"
-                            onClick={() => selectSection(i)}
-                            aria-expanded={active === i}
-                            className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left text-sm font-semibold"
-                          >
-                            <span aria-hidden className="w-3 text-ink-500">
-                              {active === i ? "−" : "+"}
-                            </span>
-                            <span className="truncate">{label}</span>
-                            {!visible ? <Badge tone="neutral">Masquée</Badge> : null}
-                          </button>
+                        <div
+                          className={clsx(
+                            "flex items-center gap-2 py-1 pl-2 pr-3",
+                            open && (visible ? "rounded-t-ds-md bg-ds-section-tint" : "rounded-t-ds-md bg-ds-ink-100"),
+                          )}
+                        >
+                          <h3 className="min-w-0 flex-1">
+                            <button
+                              type="button"
+                              onClick={() => selectSection(i)}
+                              aria-expanded={open}
+                              className={clsx(
+                                "flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-ds-sm py-1 text-left text-ds-body font-semibold ds-focus",
+                                visible ? "text-ds-ink-900" : "text-ds-ink-600",
+                              )}
+                            >
+                              {open ? (
+                                <ChevronDown size={18} aria-hidden className="shrink-0 text-ds-section-accent" />
+                              ) : (
+                                <ChevronRight size={18} aria-hidden className="shrink-0 text-ds-ink-600" />
+                              )}
+                              <IconBadge
+                                icon={SECTION_CARD_ICONS[section.type]}
+                                tone="soft"
+                                size="sm"
+                                className={visible ? undefined : "bg-ds-ink-200! text-ds-ink-600!"}
+                              />
+                              <span className="min-w-0">{label}</span>
+                              {!visible ? (
+                                <Badge tone="neutral" icon={EyeOff} className="bg-ds-ink-200!">
+                                  Masquée
+                                </Badge>
+                              ) : null}
+                            </button>
+                          </h3>
+                          {/* Après un clic sur « Section masquée » dans l'aperçu : l'interrupteur surgit une fois, cerclé */}
                           <span
                             className={clsx(
-                              "flex shrink-0 items-center rounded-full p-0.5 transition-shadow",
-                              highlightVisibility === i && "animate-pulse ring-2 ring-amber-400 ring-offset-1",
+                              "flex shrink-0 items-center rounded-full",
+                              highlightVisibility === i && "ring-2 ring-ds-section-accent ring-offset-2 ds-pop",
                             )}
                           >
                             <ToggleSwitch
@@ -1187,13 +1355,13 @@ export function SiteEditor({
                             />
                           </span>
                         </div>
-                        {active === i ? (
-                          <div className={clsx("border-t border-cream-200 p-4", !visible && "opacity-75")}>
+                        {open ? (
+                          <div className="border-t border-ds-ink-200 p-4">
                             {!visible ? (
-                              <p className="mb-3 rounded-xl bg-cream-100 px-3 py-2 text-xs text-ink-500">
+                              <Note tone="info" icon={EyeOff} className="mb-4">
                                 Cette section est masquée : elle n&apos;apparaît pas sur le site public.
                                 Réactivez l&apos;interrupteur « Visible sur cette page » pour l&apos;afficher.
-                              </p>
+                              </Note>
                             ) : null}
                             <SectionFields
                               section={section}
@@ -1211,39 +1379,31 @@ export function SiteEditor({
                   })}
                 </div>
               ) : (
-                <p className="p-4 text-sm text-ink-500">Aucune section éditable sur cette page.</p>
+                <p className="text-ds-body text-ds-ink-600">Aucune section éditable sur cette page.</p>
               )
             ) : null}
 
             {panel === "style" ? (
               <div className="space-y-5">
-                <div className="flex gap-1 rounded-full bg-cream-100 p-1">
-                  {(
-                    [
-                      ["couleur", "🎨 Couleur"],
-                      ["typo", "T Typo"],
-                      ["forme", "◫ Style"],
-                    ] as [StyleTab, string][]
-                  ).map(([tab, label]) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setStyleTab(tab)}
-                      className={clsx(
-                        "flex-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
-                        styleTab === tab ? "bg-white text-ink-900 shadow-sm" : "text-ink-500",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <PanelIntro icon={Palette} title="Style">
+                  Couleur, polices et formes de votre site. L&apos;aperçu change tout de suite ; rien n&apos;est en
+                  ligne avant « Enregistrer et publier ».
+                </PanelIntro>
+                <Tabs
+                  variant="pill"
+                  label="Réglages de style"
+                  idBase="style"
+                  tabs={STYLE_TABS}
+                  value={styleTab}
+                  onChange={setStyleTab}
+                  className="w-full"
+                />
 
                 {styleTab === "couleur" ? (
-                  <>
+                  <TabPanel idBase="style" tab="couleur" className="space-y-6">
                     <div>
-                      <p className="text-sm font-semibold">Couleur du site</p>
-                      <div className="mt-2 grid grid-cols-6 gap-2">
+                      <h3 className={SUB_TITLE}>Couleur du site</h3>
+                      <div className="mt-2.5 grid grid-cols-4 gap-2.5 min-[360px]:grid-cols-6">
                         {THEME_PRESETS.map((preset) => (
                           <button
                             key={preset}
@@ -1256,18 +1416,23 @@ export function SiteEditor({
                               previewTheme({ preset });
                             }}
                             className={clsx(
-                              "h-10 w-10 rounded-xl border-2 transition-transform",
-                              themePreset === preset ? "scale-110 border-ink-900" : "border-transparent",
+                              "grid aspect-square w-full place-items-center rounded-ds-sm text-white ds-focus ds-press",
+                              // Couleur retenue : cerclée d'encre et cochée
+                              themePreset === preset ? "ring-2 ring-ds-ink-900 ring-offset-2" : "ring-1 ring-ds-ink-900/10",
                             )}
                             style={{ background: THEME_SWATCHES[preset] }}
-                          />
+                          >
+                            {themePreset === preset ? <Check size={20} strokeWidth={3} aria-hidden /> : null}
+                          </button>
                         ))}
                       </div>
-                      <p className="mt-2 text-xs capitalize text-ink-500">{themePreset}</p>
+                      <p className={clsx("mt-3", HINT)}>
+                        Couleur choisie : <span className="font-semibold capitalize text-ds-ink-900">{themePreset}</span>
+                      </p>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">Intensité</p>
-                      <div className="mt-2 grid grid-cols-3 gap-2">
+                      <h3 className={SUB_TITLE}>Intensité</h3>
+                      <div className="mt-2.5 grid grid-cols-3 gap-2.5">
                         {INTENSITY_CHOICES.map((choice) => (
                           <button
                             key={choice.value}
@@ -1278,16 +1443,15 @@ export function SiteEditor({
                               setDirty(true);
                               previewTheme({ intensity: choice.value });
                             }}
-                            className={clsx(
-                              "flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-xs font-medium",
-                              intensity === choice.value
-                                ? "border-ink-900 bg-cream-100"
-                                : "border-cream-300 hover:bg-cream-50",
+                            className={choiceCard(
+                              intensity === choice.value,
+                              "flex flex-col items-center gap-2 px-2 py-3 text-ds-meta font-semibold text-ds-ink-900",
                             )}
                           >
+                            {intensity === choice.value ? <ChoiceMark /> : null}
                             <span
                               aria-hidden
-                              className="h-6 w-6 rounded-lg"
+                              className="size-7 rounded-lg"
                               style={{
                                 background: THEME_SWATCHES[themePreset],
                                 opacity:
@@ -1299,48 +1463,47 @@ export function SiteEditor({
                         ))}
                       </div>
                     </div>
-                  </>
+                  </TabPanel>
                 ) : null}
 
                 {styleTab === "typo" ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {FONT_CHOICES.map((choice) => (
-                      <button
-                        key={choice.value}
-                        type="button"
-                        aria-pressed={fontPreset === choice.value}
-                        onClick={() => {
-                          setFontPreset(choice.value);
-                          setDirty(true);
-                          previewTheme({ fontPreset: choice.value });
-                        }}
-                        className={clsx(
-                          "rounded-2xl border p-4 text-center",
-                          fontPreset === choice.value
-                            ? "border-ink-900 bg-cream-100"
-                            : "border-cream-300 hover:bg-cream-50",
-                        )}
-                      >
-                        <span className="block text-xl leading-tight" style={{ fontFamily: choice.family }}>
-                          Votre cabinet
-                        </span>
-                        <span
-                          className="mt-1 block text-[0.8rem] leading-snug text-ink-700"
-                          style={{ fontFamily: choice.bodyFamily }}
+                  <TabPanel idBase="style" tab="typo">
+                    <h3 className={SUB_TITLE}>Polices du site</h3>
+                    <div className="mt-2.5 grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2">
+                      {FONT_CHOICES.map((choice) => (
+                        <button
+                          key={choice.value}
+                          type="button"
+                          aria-pressed={fontPreset === choice.value}
+                          onClick={() => {
+                            setFontPreset(choice.value);
+                            setDirty(true);
+                            previewTheme({ fontPreset: choice.value });
+                          }}
+                          className={choiceCard(fontPreset === choice.value, "px-3 py-4 text-center text-ds-ink-900")}
                         >
-                          Un espace pour souffler
-                        </span>
-                        <span className="mt-1.5 block text-xs text-ink-500">{choice.label}</span>
-                      </button>
-                    ))}
-                  </div>
+                          {fontPreset === choice.value ? <ChoiceMark /> : null}
+                          <span className="block text-xl leading-tight" style={{ fontFamily: choice.family }}>
+                            Votre cabinet
+                          </span>
+                          <span
+                            className="mt-1 block text-[0.8125rem] leading-snug text-ds-ink-700"
+                            style={{ fontFamily: choice.bodyFamily }}
+                          >
+                            Un espace pour souffler
+                          </span>
+                          <span className="mt-2 block text-ds-meta font-semibold text-ds-ink-900">{choice.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </TabPanel>
                 ) : null}
 
                 {styleTab === "forme" ? (
-                  <>
+                  <TabPanel idBase="style" tab="forme" className="space-y-6">
                     <div>
-                      <p className="text-sm font-semibold">Forme des coins</p>
-                      <div className="mt-2 grid grid-cols-4 gap-2">
+                      <h3 className={SUB_TITLE}>Forme des coins</h3>
+                      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
                         {CORNER_CHOICES.map((choice) => (
                           <button
                             key={choice.value}
@@ -1352,26 +1515,25 @@ export function SiteEditor({
                               setDirty(true);
                               previewTheme({ corners: choice.value });
                             }}
-                            className={clsx(
-                              "flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 text-[10px] font-medium leading-tight",
-                              corners === choice.value
-                                ? "border-ink-900 bg-cream-100"
-                                : "border-cream-300 hover:bg-cream-50",
+                            className={choiceCard(
+                              corners === choice.value,
+                              "flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-left text-ds-meta font-semibold text-ds-ink-900",
                             )}
                           >
+                            {corners === choice.value ? <ChoiceMark /> : null}
                             <span
                               aria-hidden
-                              className="h-6 w-6 border-2 border-ink-500 bg-white"
+                              className="h-6 w-9 shrink-0 border-2 border-ds-ink-600 bg-white"
                               style={{ borderRadius: choice.radius }}
                             />
-                            {choice.label}
+                            <span className="min-w-0 pr-4">{choice.label}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">Ambiance</p>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
+                      <h3 className={SUB_TITLE}>Ambiance</h3>
+                      <div className="mt-2.5 grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2">
                         {AMBIANCE_CHOICES.map((choice) => (
                           <button
                             key={choice.value}
@@ -1382,62 +1544,75 @@ export function SiteEditor({
                               setDirty(true);
                               previewTheme({ ambiance: choice.value });
                             }}
-                            className={clsx(
-                              "rounded-2xl border p-3 text-left",
-                              ambiance === choice.value
-                                ? "border-ink-900 bg-cream-100"
-                                : "border-cream-300 hover:bg-cream-50",
-                            )}
+                            className={choiceCard(ambiance === choice.value, "p-3 text-left")}
                           >
-                            <span className="block text-sm font-semibold">{choice.label}</span>
-                            <span className="mt-0.5 block text-xs text-ink-500">{choice.caption}</span>
+                            {ambiance === choice.value ? <ChoiceMark /> : null}
+                            <span className="block pr-5 text-ds-body font-semibold text-ds-ink-900">{choice.label}</span>
+                            <span className={clsx("mt-0.5 block", HINT)}>{choice.caption}</span>
                           </button>
                         ))}
                       </div>
                     </div>
-                  </>
+                  </TabPanel>
                 ) : null}
               </div>
             ) : null}
           </div>
 
           {panel !== "pages" ? (
-            <div className="border-t border-cream-300 p-4">
+            <div className="border-t border-ds-ink-200 bg-white px-4 py-3 shadow-ds-bar md:py-4">
+              {/* Réussite : la coche surgit ; échec : le message du service, annoncé aussitôt */}
               {feedback ? (
-                <p className={clsx("mb-2 text-xs", feedback.startsWith("Publié") ? "text-success-500" : "text-danger-500")}>
+                <ActionMessage tone={feedback.startsWith("Publié") ? "success" : "error"} className="mb-3">
                   {feedback}
-                </p>
+                </ActionMessage>
               ) : null}
-              <Button onClick={onSave} disabled={saving || (!dirty && panel === "contenu")} className="w-full">
-                {saving ? <Spinner className="text-white" /> : null}
+              <Button
+                onClick={onSave}
+                loading={saving}
+                disabled={!dirty && panel === "contenu"}
+                icon={<CloudUpload size={18} aria-hidden />}
+                className="w-full"
+              >
                 {saving ? "Publication…" : "Enregistrer et publier"}
               </Button>
+              {!dirty && panel === "contenu" && !feedback ? (
+                <p className={clsx("mt-2 text-center", HINT)}>Modifiez un texte ou une photo pour pouvoir publier.</p>
+              ) : null}
             </div>
           ) : (
-            <p className="border-t border-cream-300 px-4 py-3 text-xs text-ink-500">
-              Une page désactivée n&apos;apparaît plus sur votre site (carte, menu, Google) mais reste
-              éditable ici.
+            <p className={clsx("flex items-start gap-2 border-t border-ds-ink-200 px-4 py-3", HINT)}>
+              <Info size={15} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+              <span>
+                Une page désactivée n&apos;apparaît plus sur votre site (carte, menu, Google) mais reste
+                éditable ici.
+              </span>
             </p>
           )}
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col bg-cream-200">
-          <div className="flex items-center justify-between gap-3 px-4 pt-3">
-            <p className="min-w-0 truncate text-xs text-ink-500">
-              Aperçu : <span className="font-medium text-ink-700">{previewLabel}</span>
-            </p>
+        {/* Sous 768 px l'aperçu occupe le haut de l'écran ; si l'écran est aussi très bas (zoom fort), il laisse
+            toute la place au panneau. */}
+        <section
+          aria-label="Aperçu du site"
+          className="flex min-w-0 flex-col bg-ds-section-soft max-md:h-[38dvh] max-md:shrink-0 max-md:[@media(max-height:35rem)]:hidden md:flex-1"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 pt-2.5 sm:px-4 sm:pt-3">
+            <h2 className="min-w-0 truncate text-ds-meta font-normal text-ds-ink-700">
+              Aperçu : <span className="font-semibold text-ds-ink-900">{previewLabel}</span>
+            </h2>
             <Segmented
               aria-label="Largeur de l'aperçu"
               options={PREVIEW_WIDTH_OPTIONS}
               value={previewWidth}
               onChange={setPreviewWidth}
-              className="shrink-0 bg-white/70"
+              className="max-w-full shrink-0 bg-white! inset-ring inset-ring-ds-section-line [&>button]:max-sm:px-3 [&>button]:pointer-coarse:min-h-11 [&>button[aria-pressed=true]]:bg-ds-section-tint-2 [&>button[aria-pressed=true]]:font-semibold [&>button[aria-pressed=true]]:text-ds-section-ink [&>button[aria-pressed=true]]:ring-ds-section-line"
             />
           </div>
           <div
             ref={previewBoxRef}
             className={clsx(
-              "flex min-h-0 flex-1 overflow-hidden p-4",
+              "flex min-h-0 flex-1 overflow-hidden p-3 sm:p-4",
               desktopScale < 1 ? "justify-start" : "justify-center",
             )}
           >
@@ -1464,18 +1639,18 @@ export function SiteEditor({
                   : { width: PREVIEW_WIDTHS[previewWidth] ?? "100%", maxWidth: "100%" }
               }
               className={clsx(
-                "rounded-2xl border border-cream-300 bg-white shadow-card transition-[width] duration-300",
+                "rounded-ds-md bg-white shadow-ds-card ring-1 ring-ds-ink-900/10",
                 desktopScale < 1 ? "" : "h-full",
               )}
             />
           </div>
-        </div>
+        </section>
       </div>
 
       {/* ── Fenêtre Paramètres (modale centrée, quasi pleine page) ─────────── */}
       {settingsOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-4 sm:p-10"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ds-brand-950/50 sm:p-6 lg:p-10"
           onMouseDown={(e) => {
             // Clic sur le fond : ferme seulement s'il n'y a rien à perdre
             if (e.target === e.currentTarget && !settingsDirty) cancelSettings();
@@ -1487,73 +1662,86 @@ export function SiteEditor({
             aria-modal="true"
             aria-label="Paramètres du site"
             tabIndex={-1}
-            className="flex h-full max-h-[860px] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl focus:outline-none"
+            className="flex h-full w-full max-w-5xl flex-col overflow-hidden bg-white shadow-ds-pop focus:outline-none sm:max-h-[860px] sm:rounded-ds-band"
           >
-            <div className="flex items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
-              <p className="flex items-center gap-3 text-lg font-semibold">
-                Paramètres
+            <div className="flex items-center justify-between gap-3 border-b border-ds-section-line bg-ds-section-soft px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                <IconBadge icon={Settings} size="sm" />
+                <h2 className="font-ds-display text-xl/7 font-bold text-ds-ink-900">Paramètres</h2>
                 {trackingErrors.length > 0 || socialErrors.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => setSettingsTab(trackingErrors.length > 0 ? "tracking" : "social")}
-                    className="inline-flex items-center gap-1 rounded-full border border-warning-500/50 bg-warning-100 px-2.5 py-0.5 text-xs font-medium text-warning-500"
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-ds-warning-100 px-3 text-ds-meta font-semibold text-ds-warning-900 ring-1 ring-ds-warning-700/40 ds-focus pointer-coarse:min-h-11"
                   >
-                    ⚠ Format à corriger
+                    <TriangleAlert size={14} aria-hidden className="shrink-0" />
+                    Format à corriger
                   </button>
                 ) : null}
-                <span aria-hidden className="h-5 w-px bg-cream-300" />
-                <span className="text-base font-normal text-ink-500">{activeSettingsLabel}</span>
-              </p>
+                <span aria-hidden className="h-5 w-px bg-ds-ink-300 max-sm:hidden" />
+                <span className="text-ds-body text-ds-ink-700 max-sm:hidden">{activeSettingsLabel}</span>
+              </div>
               <button
                 type="button"
                 onClick={cancelSettings}
                 aria-label="Fermer les paramètres"
-                className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-ink-500 transition-colors hover:bg-cream-100 hover:text-ink-900"
+                className={clsx(ICON_BUTTON, "size-11! hover:bg-white")}
               >
-                ✕
+                <X size={20} aria-hidden />
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1">
-              <nav className="w-72 shrink-0 space-y-5 overflow-y-auto border-r border-cream-200 bg-cream-50 p-4">
+            <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+              {/* À partir de 768 px : colonne de gauche, groupée. En dessous : une rangée qui défile, avec un fondu aux bords. */}
+              <nav
+                ref={settingsNavRef}
+                aria-label="Catégories des paramètres"
+                className="flex shrink-0 gap-1.5 overflow-x-auto border-ds-ink-200 bg-ds-ink-50 px-3 py-2 ds-tabs-scroll max-md:border-b max-md:[mask-image:linear-gradient(to_right,transparent,#000_0.75rem,#000_calc(100%_-_2rem),transparent)] md:w-72 md:flex-col md:gap-5 md:overflow-y-auto md:overflow-x-hidden md:border-r md:p-4"
+              >
                 {SETTINGS_NAV.map((group) => (
-                  <div key={group.group}>
-                    <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-500">
-                      {group.group}
-                    </p>
-                    <div className="space-y-1">
-                      {group.items.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setSettingsTab(item.id)}
-                          className={clsx(
-                            "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors",
-                            settingsTab === item.id
-                              ? "bg-primary-500 text-white"
-                              : "text-ink-700 hover:bg-cream-100",
-                          )}
-                        >
-                          <span aria-hidden>{item.icon}</span>
-                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                          {(item.id === "tracking" && trackingErrors.length > 0) ||
-                          (item.id === "social" && socialErrors.length > 0) ? (
-                            <span
-                              aria-hidden
-                              className={clsx(
-                                "h-2 w-2 shrink-0 rounded-full",
-                                settingsTab === item.id ? "bg-white" : "bg-warning-500",
-                              )}
-                            />
-                          ) : null}
-                        </button>
-                      ))}
+                  <div key={group.group} className="max-md:contents">
+                    <p className="px-3 pb-1.5 text-ds-meta font-semibold text-ds-ink-600 max-md:hidden">{group.group}</p>
+                    <div className="max-md:contents md:space-y-1">
+                      {group.items.map((item) => {
+                        const current = settingsTab === item.id;
+                        const invalid =
+                          (item.id === "tracking" && trackingErrors.length > 0) ||
+                          (item.id === "social" && socialErrors.length > 0);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSettingsTab(item.id)}
+                            aria-current={current ? "true" : undefined}
+                            className={clsx(
+                              "flex min-h-11 shrink-0 items-center gap-2.5 rounded-ds-sm px-3 py-1.5 text-left text-ds-body ds-focus md:w-full",
+                              // Catégorie affichée : aplat en dégradé profond, graisse, chevron — plus `aria-current`
+                              current
+                                ? "bg-ds-section-gradient-deep font-semibold text-ds-section-on-deep shadow-sm"
+                                : "font-medium text-ds-ink-700 hover:bg-ds-section-tint-2 hover:text-ds-section-ink",
+                            )}
+                          >
+                            <item.icon size={18} aria-hidden className="shrink-0" />
+                            <span className="whitespace-nowrap md:min-w-0 md:flex-1 md:truncate">{item.label}</span>
+                            {invalid ? (
+                              <TriangleAlert
+                                size={16}
+                                aria-hidden
+                                className={clsx("shrink-0", current ? "text-white" : "text-ds-warning-700")}
+                              />
+                            ) : null}
+                            {current ? <ChevronRight size={16} aria-hidden className="shrink-0 max-md:hidden" /> : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
+                {/* Marge de fin : le fondu du bord ne couvre pas la dernière catégorie une fois la rangée défilée */}
+                <span aria-hidden className="w-6 shrink-0 md:hidden" />
               </nav>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-6 sm:p-8">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
                 {settingsTab === "identite" ? (
                   <SettingsPane
                     title="Identité"
@@ -1562,21 +1750,23 @@ export function SiteEditor({
                     <FieldBlock label="Nom du site">
                       <input
                         value={siteName}
+                        aria-label="Nom du site"
                         onChange={(e) => {
                           setSiteName(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={INPUT}
                       />
                     </FieldBlock>
                     <FieldBlock label="Ville">
                       <input
                         value={cityValue}
+                        aria-label="Ville"
                         onChange={(e) => {
                           setCityValue(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full max-w-xs rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={clsx(INPUT, "max-w-xs")}
                       />
                     </FieldBlock>
                   </SettingsPane>
@@ -1592,29 +1782,33 @@ export function SiteEditor({
                         <img
                           src={logoUrl}
                           alt="Logo"
-                          className="mb-3 h-16 w-auto max-w-full rounded-lg border border-cream-300 bg-white object-contain p-1"
+                          className="mb-3 h-16 w-auto max-w-full rounded-ds-sm bg-white object-contain p-1.5 ring-1 ring-ds-ink-200"
                         />
                       ) : null}
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
+                        <Button
                           type="button"
-                          disabled={logoUploading}
+                          variant="secondary"
+                          size="sm"
+                          loading={logoUploading}
+                          icon={<ImageUp size={16} aria-hidden />}
                           onClick={() => logoInputRef.current?.click()}
-                          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
                         >
-                          {logoUploading ? "Envoi en cours…" : "🖼 Téléverser un logo"}
-                        </button>
+                          {logoUploading ? "Envoi en cours…" : "Téléverser un logo"}
+                        </Button>
                         {logoUrl ? (
-                          <button
+                          <Button
                             type="button"
+                            variant="quiet"
+                            size="sm"
+                            icon={<X size={16} aria-hidden />}
                             onClick={() => {
                               setLogoUrl("");
                               setSettingsDirty(true);
                             }}
-                            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
                           >
                             Retirer (afficher le nom)
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
                       <input
@@ -1627,7 +1821,7 @@ export function SiteEditor({
                           if (file) void uploadLogo(file);
                         }}
                       />
-                      {logoError ? <p className="mt-1 text-xs text-danger-500">{logoError}</p> : null}
+                      {logoError ? <FieldError>{logoError}</FieldError> : null}
                     </div>
                   </SettingsPane>
                 ) : null}
@@ -1638,11 +1832,11 @@ export function SiteEditor({
                     description="Voici comment votre site apparaît dans les résultats de recherche Google et lors d'un partage du lien (WhatsApp, réseaux sociaux…)."
                   >
                     {/* Aperçu façon résultat Google */}
-                    <div className="rounded-2xl border border-cream-300 bg-white p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="rounded-ds-md bg-white p-4 shadow-ds-card ring-1 ring-ds-ink-200">
+                      <div className="flex items-start justify-between gap-3 sm:gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-cream-300 bg-cream-100 p-1">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ds-ink-100 p-1 ring-1 ring-ds-ink-200">
                               <img
                                 src={
                                   faviconUrl === ""
@@ -1656,16 +1850,16 @@ export function SiteEditor({
                               />
                             </span>
                             <span className="min-w-0 text-xs leading-tight">
-                              <span className="block truncate text-ink-900">
+                              <span className="block truncate text-ds-ink-900">
                                 {siteOrigin.replace(/^https?:\/\//, "")}
                               </span>
-                              <span className="block truncate text-ink-500">{site.url}</span>
+                              <span className="block truncate text-ds-ink-600">{site.url}</span>
                             </span>
                           </div>
                           <p className="mt-1.5 truncate text-xl text-[#1a0dab]">
                             {seoTitle || site.name}
                           </p>
-                          <p className="mt-0.5 line-clamp-2 text-sm text-ink-700">
+                          <p className="mt-0.5 line-clamp-2 text-sm text-ds-ink-700">
                             {seoDescription || "Ajoutez une description pour ce résultat."}
                           </p>
                         </div>
@@ -1673,62 +1867,50 @@ export function SiteEditor({
                           <img
                             src={shareImageUrl || seo.heroImageUrl}
                             alt=""
-                            className="h-24 w-24 shrink-0 rounded-2xl object-cover"
+                            className="size-20 shrink-0 rounded-ds-md object-cover sm:size-24"
                           />
                         ) : null}
                       </div>
                     </div>
 
                     <div>
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <p className="text-sm font-medium">Titre du lien</p>
-                        <span
-                          className={clsx(
-                            "text-xs",
-                            seoTitle.length > 70 ? "text-danger-500" : "text-ink-500",
-                          )}
-                        >
-                          {seoTitle.length}/70
-                        </span>
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <p className={LABEL}>Titre du lien</p>
+                        <LengthMark length={seoTitle.length} limit={70} />
                       </div>
                       <input
                         value={seoTitle}
                         maxLength={120}
+                        aria-label="Titre du lien"
                         onChange={(e) => {
                           setSeoTitle(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={INPUT}
                       />
-                      <p className="mt-1 text-xs text-ink-500">
+                      <p className={clsx("mt-1.5", HINT)}>
                         Le titre bleu du résultat Google. Recommandé : métier + ville, 70 caractères
                         maximum.
                       </p>
                     </div>
 
                     <div>
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <p className="text-sm font-medium">Description</p>
-                        <span
-                          className={clsx(
-                            "text-xs",
-                            seoDescription.length > 170 ? "text-danger-500" : "text-ink-500",
-                          )}
-                        >
-                          {seoDescription.length}/170
-                        </span>
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <p className={LABEL}>Description</p>
+                        <LengthMark length={seoDescription.length} limit={170} />
                       </div>
                       <textarea
                         value={seoDescription}
                         maxLength={300}
                         rows={3}
+                        aria-label="Description"
                         onChange={(e) => {
                           setSeoDescription(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={TEXTAREA}
                       />
-                      <p className="mt-1 text-xs text-ink-500">
+                      <p className={clsx("mt-1.5", HINT)}>
                         Les deux lignes grises sous le titre. Recommandé : 170 caractères maximum,
                         avec une invitation à prendre rendez-vous.
                       </p>
@@ -1739,25 +1921,28 @@ export function SiteEditor({
                       hint="Affichée à côté du résultat Google et en grand lors d'un partage du lien. Idéal : 1200×630 px. Sans image choisie, la photo d'accueil du site est utilisée."
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
+                        <Button
                           type="button"
-                          disabled={shareUploading}
+                          variant="secondary"
+                          size="sm"
+                          loading={shareUploading}
+                          icon={<ImageUp size={16} aria-hidden />}
                           onClick={() => shareInputRef.current?.click()}
-                          className="rounded-full bg-primary-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60"
                         >
-                          {shareUploading ? "Envoi en cours…" : "🖼 Téléverser une image"}
-                        </button>
+                          {shareUploading ? "Envoi en cours…" : "Téléverser une image"}
+                        </Button>
                         {shareImageUrl ? (
-                          <button
+                          <Button
                             type="button"
+                            variant="quiet"
+                            size="sm"
                             onClick={() => {
                               setShareImageUrl("");
                               setSettingsDirty(true);
                             }}
-                            className="rounded-full bg-cream-100 px-4 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200"
                           >
                             Revenir à la photo d&apos;accueil
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
                       <input
@@ -1770,7 +1955,7 @@ export function SiteEditor({
                           if (file) void uploadShareImage(file);
                         }}
                       />
-                      {shareError ? <p className="mt-1 text-xs text-danger-500">{shareError}</p> : null}
+                      {shareError ? <FieldError>{shareError}</FieldError> : null}
                     </FieldBlock>
                   </SettingsPane>
                 ) : null}
@@ -1800,12 +1985,13 @@ export function SiteEditor({
                     <FieldBlock label="Lien de prise de rendez-vous" hint="Doctolib, Calendly, Crenolib, tel:…">
                       <input
                         value={bookingUrl}
+                        aria-label="Lien de prise de rendez-vous"
                         onChange={(e) => {
                           setBookingUrl(e.target.value);
                           setSettingsDirty(true);
                         }}
                         placeholder="https://www.doctolib.fr/…"
-                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={INPUT}
                       />
                     </FieldBlock>
                     <FieldBlock
@@ -1815,18 +2001,19 @@ export function SiteEditor({
                       <input
                         type="tel"
                         value={phoneValue}
+                        aria-label="Numéro de téléphone"
                         onChange={(e) => {
                           setPhoneValue(e.target.value);
                           setSettingsDirty(true);
                         }}
                         placeholder="06 12 34 56 78"
-                        className="w-full max-w-xs rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={clsx(INPUT, "max-w-xs")}
                       />
                     </FieldBlock>
-                    <p className="text-xs text-ink-500">
+                    <Note tone="info">
                       Adresse et horaires se modifient dans la section « Contact » de la page
                       d&apos;accueil (onglet Contenu).
-                    </p>
+                    </Note>
                   </SettingsPane>
                 ) : null}
 
@@ -1837,48 +2024,54 @@ export function SiteEditor({
                   >
                     <div>
                       {gBusiness ? (
-                        <div className="mb-2 rounded-xl bg-cream-100 px-3 py-2 text-sm">
-                          <p className="font-medium">{gBusiness.name}</p>
-                          <p className="text-xs text-ink-500">
-                            {gBusiness.address}
-                            {gBusiness.rating ? (
-                              <>
-                                {" · ★ "}
-                                {gBusiness.rating}
-                                {gBusiness.reviewCount ? ` (${gBusiness.reviewCount} avis)` : null}
-                              </>
-                            ) : null}
-                          </p>
+                        <div className="mb-3 flex items-start gap-3 rounded-ds-sm bg-ds-section-tint px-3 py-2.5 ring-1 ring-ds-section-line/70">
+                          <MapPin size={18} aria-hidden className="mt-0.5 shrink-0 text-ds-section-accent" />
+                          <div className="min-w-0">
+                            <p className="text-ds-body font-semibold text-ds-ink-900">{gBusiness.name}</p>
+                            <p className="text-ds-meta text-ds-ink-700">
+                              {gBusiness.address}
+                              {gBusiness.rating ? (
+                                <>
+                                  {" · "}
+                                  <StarMark />
+                                  {gBusiness.rating}
+                                  {gBusiness.reviewCount ? ` (${gBusiness.reviewCount} avis)` : null}
+                                </>
+                              ) : null}
+                            </p>
+                          </div>
                         </div>
                       ) : null}
                       <input
                         value={gQuery}
+                        aria-label={gBusiness ? "Changer de fiche Google : rechercher" : "Rechercher votre cabinet sur Google"}
                         onChange={(e) => onGoogleQueryChange(e.target.value)}
                         placeholder={
                           gBusiness ? "Changer de fiche : rechercher…" : "Rechercher votre cabinet sur Google…"
                         }
-                        className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={INPUT}
                       />
                       {gSearching ? (
-                        <p className="mt-2 flex items-center gap-2 text-xs text-ink-500">
-                          <Spinner /> Recherche…
+                        <p role="status" className={clsx("mt-2 flex items-center gap-2", HINT)}>
+                          <Spinner className="size-4 text-ds-section-accent" /> Recherche…
                         </p>
                       ) : null}
                       {gResults.length > 0 ? (
-                        <ul className="mt-2 overflow-hidden rounded-xl border border-cream-300">
+                        <ul className="mt-2 divide-y divide-ds-ink-200 overflow-hidden rounded-ds-sm ring-1 ring-ds-ink-300">
                           {gResults.map((place) => (
                             <li key={place.placeId}>
                               <button
                                 type="button"
                                 onClick={() => void onConnectPlace(place)}
-                                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-cream-100"
+                                className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left text-ds-body ds-focus-inset hover:bg-ds-section-tint"
                               >
                                 <span className="min-w-0">
-                                  <span className="block truncate font-medium">{place.name}</span>
-                                  <span className="block truncate text-xs text-ink-500">{place.address}</span>
+                                  <span className="block truncate font-semibold text-ds-ink-900">{place.name}</span>
+                                  <span className="block truncate text-ds-meta text-ds-ink-600">{place.address}</span>
                                 </span>
-                                <span className="shrink-0 text-xs text-primary-600">
-                                  ★ {place.rating} · {place.reviewCount}
+                                <span className="shrink-0 text-ds-meta font-medium text-ds-ink-700 ds-tnum">
+                                  <StarMark />
+                                  {place.rating} · {place.reviewCount}
                                 </span>
                               </button>
                             </li>
@@ -1886,14 +2079,9 @@ export function SiteEditor({
                         </ul>
                       ) : null}
                       {gStatus ? (
-                        <p
-                          className={clsx(
-                            "mt-2 text-xs",
-                            gStatus.startsWith("Fiche reliée") ? "text-success-500" : "text-danger-500",
-                          )}
-                        >
+                        <ActionMessage tone={gStatus.startsWith("Fiche reliée") ? "success" : "error"} className="mt-3">
                           {gStatus}
-                        </p>
+                        </ActionMessage>
                       ) : null}
                     </div>
                   </SettingsPane>
@@ -1919,31 +2107,33 @@ export function SiteEditor({
                     title="Informations légales"
                     description="Ces informations alimentent les pages Mentions légales, Politique de confidentialité et Politique de cookies de votre site."
                   >
-                    <div className="rounded-2xl border border-primary-200 bg-primary-50 px-4 py-3 text-xs text-ink-700">
-                      <p className="font-semibold">Pages générées automatiquement</p>
+                    <Note tone="info" className="py-3">
+                      <p className="font-semibold text-ds-ink-900">Pages générées automatiquement</p>
                       <p className="mt-0.5 leading-relaxed">
                         Elles reprennent le nom du site, vos coordonnées, l&apos;hébergeur, le bandeau cookies
                         et les outils de suivi configurés : aucune rédaction nécessaire, complétez simplement
                         les champs ci-dessous. Les pages sont liées depuis le pied de page du site.
                       </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <div className="mt-2.5 flex flex-wrap gap-2">
                         {LEGAL_PAGES.map((page) => (
                           <a
                             key={page.slug}
                             href={`${site.url}${previewPath({ kind: "legal", slug: page.slug }, site.previewToken)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded-full bg-white px-3 py-1 font-medium text-primary-600 ring-1 ring-primary-200 hover:bg-primary-100"
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white px-3 py-1 font-semibold text-ds-brand-800 ring-1 ring-ds-brand-200 ds-focus hover:bg-ds-brand-100 pointer-coarse:min-h-11"
                           >
-                            ↗ {page.title}
+                            <ExternalLink size={14} aria-hidden className="shrink-0" />
+                            {page.title}
+                            <span className="sr-only"> (nouvel onglet)</span>
                           </a>
                         ))}
                       </div>
-                    </div>
+                    </Note>
                     {LEGAL_FIELDS.map((field) => (
                       <div key={field.key}>
-                        <div className="mb-1 flex items-baseline justify-between gap-2">
-                          <label htmlFor={`legal-${field.key}`} className="text-sm font-medium">
+                        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                          <label htmlFor={`legal-${field.key}`} className={LABEL}>
                             {field.label}
                           </label>
                           <CharCounter length={legal[field.key].length} limit={field.limit} />
@@ -1959,7 +2149,7 @@ export function SiteEditor({
                               setLegal((prev) => ({ ...prev, [field.key]: e.target.value }));
                               setSettingsDirty(true);
                             }}
-                            className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                            className={TEXTAREA}
                           />
                         ) : (
                           <input
@@ -1972,10 +2162,10 @@ export function SiteEditor({
                               setLegal((prev) => ({ ...prev, [field.key]: e.target.value }));
                               setSettingsDirty(true);
                             }}
-                            className="w-full rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                            className={INPUT}
                           />
                         )}
-                        {field.hint ? <p className="mt-1 text-xs text-ink-500">{field.hint}</p> : null}
+                        {field.hint ? <p className={clsx("mt-1.5", HINT)}>{field.hint}</p> : null}
                       </div>
                     ))}
                   </SettingsPane>
@@ -1990,7 +2180,7 @@ export function SiteEditor({
                       const error = socialUrlError(network.key, social[network.key]);
                       return (
                         <div key={network.key}>
-                          <label htmlFor={`social-${network.key}`} className="mb-1 block text-sm font-medium">
+                          <label htmlFor={`social-${network.key}`} className={clsx("mb-1.5 block", LABEL)}>
                             {network.label}
                           </label>
                           <input
@@ -1998,16 +2188,14 @@ export function SiteEditor({
                             type="url"
                             value={social[network.key]}
                             placeholder={`https://www.${network.host}/votre-page`}
+                            aria-invalid={error ? true : undefined}
                             onChange={(e) => {
                               setSocial((prev) => ({ ...prev, [network.key]: e.target.value }));
                               setSettingsDirty(true);
                             }}
-                            className={clsx(
-                              "w-full rounded-xl border px-3 py-2 text-sm",
-                              error ? "border-danger-500" : "border-ink-300",
-                            )}
+                            className={clsx(INPUT, "aria-invalid:border-ds-danger-700")}
                           />
-                          {error ? <p className="mt-1 text-xs text-danger-500">⚠ {error}</p> : null}
+                          {error ? <FieldError>{error}</FieldError> : null}
                         </div>
                       );
                     })}
@@ -2020,8 +2208,8 @@ export function SiteEditor({
                     description="Une phrase d'accompagnement sous le nom du site, et des informations complémentaires (SIRET, diplômes, adhésions…) en bas de chaque page."
                   >
                     <div>
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <label htmlFor="footer-text" className="text-sm font-medium">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <label htmlFor="footer-text" className={LABEL}>
                           Phrase d&apos;accompagnement
                         </label>
                         <CharCounter length={footerText.length} limit={300} />
@@ -2036,12 +2224,12 @@ export function SiteEditor({
                           setFooterText(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={TEXTAREA}
                       />
                     </div>
                     <div>
-                      <div className="mb-1 flex items-baseline justify-between gap-2">
-                        <label htmlFor="footer-details" className="text-sm font-medium">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <label htmlFor="footer-details" className={LABEL}>
                           Informations complémentaires
                         </label>
                         <CharCounter length={footerDetails.length} limit={500} />
@@ -2056,9 +2244,9 @@ export function SiteEditor({
                           setFooterDetails(e.target.value);
                           setSettingsDirty(true);
                         }}
-                        className="w-full resize-y rounded-xl border border-ink-300 px-3 py-2 text-sm"
+                        className={TEXTAREA}
                       />
-                      <p className="mt-1 text-xs text-ink-500">
+                      <p className={clsx("mt-1.5", HINT)}>
                         Affichées en petit sous les liens du pied de page. Un retour à la ligne sépare deux
                         informations.
                       </p>
@@ -2072,14 +2260,12 @@ export function SiteEditor({
                     description="Connectez vos outils de statistiques et de marketing, puis choisissez le bandeau cookies affiché sur le site public."
                   >
                     <div className="space-y-3">
-                      <div className="rounded-2xl border border-cream-300 bg-cream-50 p-4">
+                      <div className="rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70">
                         <div className="flex items-center gap-3">
-                          <span aria-hidden className="text-lg">
-                            🍪
-                          </span>
+                          <IconBadge icon={Cookie} tone="soft" size="sm" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold">Activer le bandeau cookies</p>
-                            <p className="mt-0.5 text-xs text-ink-500">
+                            <h4 className="text-ds-body font-semibold text-ds-ink-900">Activer le bandeau cookies</h4>
+                            <p className={clsx("mt-0.5", "text-ds-meta text-ds-ink-700")}>
                               {cookieBanner
                                 ? "Le bandeau est affiché : les outils ci-dessous ne se chargent qu'après « Accepter »."
                                 : "Aucun bandeau ne sera affiché. Le tracking sera actif par défaut."}
@@ -2103,19 +2289,15 @@ export function SiteEditor({
                           <div
                             key={card.key}
                             className={clsx(
-                              "rounded-2xl border p-4",
-                              invalid
-                                ? "border-danger-500/50 bg-danger-100/40"
-                                : "border-cream-300 bg-cream-50",
+                              "rounded-ds-md p-4 ring-1",
+                              invalid ? "bg-ds-danger-100 ring-ds-danger-700/40" : "bg-white shadow-ds-card ring-ds-ink-200",
                             )}
                           >
                             <div className="flex items-center gap-3">
-                              <span aria-hidden className="text-lg">
-                                {card.icon}
-                              </span>
+                              <IconBadge icon={card.icon} tone="soft" size="sm" className={invalid ? "bg-white!" : undefined} />
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold">{card.title}</p>
-                                <p className="mt-0.5 text-xs text-ink-500">{card.description}</p>
+                                <h4 className="text-ds-body font-semibold text-ds-ink-900">{card.title}</h4>
+                                <p className={clsx("mt-0.5", invalid ? "text-ds-meta text-ds-ink-700" : HINT)}>{card.description}</p>
                               </div>
                               <ToggleSwitch
                                 checked={enabled}
@@ -2132,18 +2314,14 @@ export function SiteEditor({
                                   value={trackingIds[card.key]}
                                   placeholder={card.placeholder}
                                   aria-label={`Identifiant ${card.title}`}
+                                  aria-invalid={invalid ? true : undefined}
                                   onChange={(e) => {
                                     setTrackingIds((prev) => ({ ...prev, [card.key]: e.target.value }));
                                     setSettingsDirty(true);
                                   }}
-                                  className={clsx(
-                                    "w-full rounded-xl border bg-white px-3 py-2 text-sm",
-                                    invalid ? "border-danger-500" : "border-ink-300",
-                                  )}
+                                  className={clsx(INPUT, "aria-invalid:border-ds-danger-700")}
                                 />
-                                {invalid ? (
-                                  <p className="mt-1 text-xs text-danger-500">⚠ {card.error}</p>
-                                ) : null}
+                                {invalid ? <FieldError>{card.error}</FieldError> : null}
                               </div>
                             ) : null}
                           </div>
@@ -2155,25 +2333,19 @@ export function SiteEditor({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-4 border-t border-cream-200 px-6 py-4">
-              <p
-                className={clsx(
-                  "min-w-0 text-xs",
-                  settingsFeedback?.startsWith("Publié") ? "text-success-500" : "text-danger-500",
-                )}
-              >
-                {settingsFeedback}
-              </p>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={cancelSettings}
-                  className="rounded-full px-5 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-cream-100 hover:text-ink-900"
-                >
+            <div className="flex flex-col gap-x-4 gap-y-2.5 border-t border-ds-ink-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+              <div className="min-w-0">
+                {settingsFeedback ? (
+                  <ActionMessage tone={settingsFeedback.startsWith("Publié") ? "success" : "error"}>
+                    {settingsFeedback}
+                  </ActionMessage>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <Button type="button" variant="quiet" onClick={cancelSettings}>
                   Annuler
-                </button>
-                <Button onClick={onSaveSettings} disabled={settingsSaving}>
-                  {settingsSaving ? <Spinner className="text-white" /> : null}
+                </Button>
+                <Button onClick={onSaveSettings} loading={settingsSaving} icon={<CloudUpload size={18} aria-hidden />}>
                   {settingsSaving ? "Publication…" : "Enregistrer et publier"}
                 </Button>
               </div>
@@ -2196,37 +2368,105 @@ function SettingsPane({
   children: ReactNode;
 }) {
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="max-w-2xl space-y-5 ds-fade-in">
       <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        <p className="mt-1 text-sm text-ink-500">{description}</p>
+        <h3 className="font-ds-display text-lg/7 font-bold text-ds-ink-900">{title}</h3>
+        <p className="mt-1 text-ds-body text-ds-ink-600">{description}</p>
       </div>
       {children}
     </div>
   );
 }
 
-function PanelTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+/** Tête d'un panneau : pastille de la section, titre (`h2`) et, en une phrase, ce qu'on y fait. */
+function PanelIntro({ icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
+  return (
+    <div className="mb-4 flex items-start gap-3">
+      <IconBadge icon={icon} size="sm" />
+      <div className="min-w-0">
+        <h2 className="font-ds-display text-lg/7 font-bold text-ds-ink-900">{title}</h2>
+        <p className={clsx("mt-0.5", HINT)}>{children}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Onglet de la barre du haut, au dessin des onglets du design system. Trois
+ * indices pour l'onglet actif : le trait en dégradé, la graisse, la couleur.
+ * Un vrai bouton : « Paramètres » ouvre une fenêtre, les trois autres
+ * changent le panneau (`aria-pressed`).
+ */
+function PanelTab({
+  label,
+  icon: Icon,
+  active,
+  onClick,
+  ...aria
+}: {
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+  onClick: () => void;
+  "aria-pressed"?: boolean;
+  "aria-haspopup"?: "dialog";
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={clsx(
-        "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-        active ? "bg-cream-200 text-ink-900" : "text-ink-500 hover:text-ink-900",
+        "relative inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-ds-sm px-2.5 text-ds-body ds-focus-inset sm:px-3 lg:min-h-14",
+        active ? "font-semibold text-ds-section-ink" : "font-medium text-ds-ink-600 hover:text-ds-ink-900",
       )}
+      {...aria}
     >
-      {label}
+      <Icon size={18} aria-hidden className={clsx("max-sm:hidden", active && "text-ds-section-accent")} />
+      {/* `ds-tab-label` réserve la largeur de la graisse active : pas de saut à la sélection */}
+      <span className="ds-tab-label" data-label={label}>
+        {label}
+      </span>
+      {active ? <span aria-hidden className="absolute inset-x-1.5 bottom-0 h-[3px] rounded-t-full bg-ds-section-gradient" /> : null}
     </button>
+  );
+}
+
+/** Coche d'une carte de choix retenue (panneau Style). */
+function ChoiceMark() {
+  return (
+    <span aria-hidden className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-ds-section-accent text-white">
+      <Check size={12} strokeWidth={3} />
+    </span>
+  );
+}
+
+/** Compteur « 45/70 » d'un champ de l'aperçu du lien : au-delà du repère, un pictogramme et la graisse doublent la couleur. */
+function LengthMark({ length, limit }: { length: number; limit: number }) {
+  const over = length > limit;
+  return (
+    <span className={clsx("inline-flex shrink-0 items-center gap-1 text-xs ds-tnum", over ? "font-semibold text-ds-danger-700" : "text-ds-ink-600")}>
+      {over ? <TriangleAlert size={12} strokeWidth={2.5} aria-hidden /> : null}
+      {length}/{limit}
+    </span>
+  );
+}
+
+/** Étoile d'une note Google : décorative, le mot « note » est lu à sa place. */
+function StarMark() {
+  return (
+    <>
+      <Star size={13} aria-hidden className="mr-1 inline-block fill-current align-[-1.5px]" />
+      <span className="sr-only">note </span>
+    </>
   );
 }
 
 function FieldBlock({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-sm font-medium">{label}</p>
+      <p className={clsx("mb-1.5", LABEL)}>{label}</p>
       {children}
-      {hint ? <p className="mt-1 text-xs text-ink-500">{hint}</p> : null}
+      {hint ? <p className={clsx("mt-1.5", HINT)}>{hint}</p> : null}
     </div>
   );
 }
@@ -2287,34 +2527,38 @@ function FaviconPicker({
     }
   }
 
+  // Icône retenue : liseré épais à l'accent de la section, détaché de la pastille (et `aria-pressed`)
   const tile = (selected: boolean) =>
     clsx(
-      "flex h-11 w-11 items-center justify-center rounded-full border-2 bg-white p-1.5 transition",
-      selected ? "border-primary-500 ring-2 ring-primary-100" : "border-cream-300 hover:border-primary-300",
+      "grid size-11 place-items-center rounded-full bg-white p-1.5 ds-focus ds-press",
+      selected
+        ? "ring-[3px] ring-ds-section-accent ring-offset-2"
+        : "ring-1 ring-ds-ink-300 hover:ring-2 hover:ring-ds-section-line",
     );
 
   return (
     <div>
       {/* Aperçu façon onglet de navigateur */}
-      <div className="mb-3 rounded-xl border border-cream-300 bg-cream-100 px-3 pt-2.5">
+      <div className="mb-4 rounded-ds-sm bg-ds-ink-100 px-3 pt-2.5 ring-1 ring-ds-ink-200">
         <div className="flex items-end gap-3">
           <span aria-hidden className="mb-2 flex gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
-            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
-            <span className="h-2.5 w-2.5 rounded-full bg-cream-300" />
+            <span className="size-2.5 rounded-full bg-ds-ink-300" />
+            <span className="size-2.5 rounded-full bg-ds-ink-300" />
+            <span className="size-2.5 rounded-full bg-ds-ink-300" />
           </span>
-          <span className="flex min-w-0 items-center gap-2 rounded-t-lg bg-white px-3.5 py-2 text-xs text-ink-700 shadow-sm">
+          <span className="flex min-w-0 items-center gap-2 rounded-t-lg bg-white px-3.5 py-2 text-ds-meta text-ds-ink-800 shadow-sm">
             <img src={display(value)} alt="" className="h-4 w-4 shrink-0 rounded-sm" />
             <span className="truncate">{siteName}</span>
           </span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           title="Logo Harmony (défaut)"
           aria-label="Logo Harmony (défaut)"
+          aria-pressed={value === ""}
           onClick={() => onChange("")}
           className={tile(value === "")}
         >
@@ -2326,6 +2570,7 @@ function FaviconPicker({
             type="button"
             title={`Pictogramme ${name}`}
             aria-label={`Pictogramme ${name}`}
+            aria-pressed={value === `/favicons/${name}.svg`}
             onClick={() => onChange(`/favicons/${name}.svg`)}
             className={tile(value === `/favicons/${name}.svg`)}
           >
@@ -2337,6 +2582,7 @@ function FaviconPicker({
             type="button"
             title="Icône personnalisée (active)"
             aria-label="Icône personnalisée"
+            aria-pressed
             onClick={() => onChange(value)}
             className={tile(true)}
           >
@@ -2349,9 +2595,9 @@ function FaviconPicker({
           title="Téléverser une icône personnalisée"
           aria-label="Téléverser une icône personnalisée"
           onClick={() => inputRef.current?.click()}
-          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-ink-300 text-lg text-ink-500 transition hover:border-primary-400 hover:text-primary-500 disabled:opacity-60"
+          className="grid size-11 place-items-center rounded-full border-2 border-dashed border-ds-ink-450 text-ds-brand-800 ds-focus ds-press hover:border-ds-brand-600 hover:bg-ds-brand-50 disabled:cursor-progress"
         >
-          {uploading ? "…" : "+"}
+          {uploading ? <Spinner className="size-[1.125rem]" label="Envoi en cours" /> : <Plus size={20} aria-hidden />}
         </button>
       </div>
       <input
@@ -2364,7 +2610,7 @@ function FaviconPicker({
           if (file) void upload(file);
         }}
       />
-      {error ? <p className="mt-1 text-xs text-danger-500">{error}</p> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );
 }
@@ -2383,13 +2629,8 @@ function CabinetInput({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-ink-700">{label}</span>
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-ink-300 bg-white px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100"
-      />
+      <span className={clsx("mb-1.5 block", LABEL)}>{label}</span>
+      <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className={INPUT} />
     </label>
   );
 }
@@ -2428,26 +2669,24 @@ function CabinetPhotoButton({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {value ? (
-        <img src={value} alt="" className="h-12 w-12 shrink-0 rounded-lg border border-cream-300 object-cover" />
+        <img src={value} alt="" className="size-12 shrink-0 rounded-ds-sm object-cover ring-1 ring-ds-ink-200" />
       ) : null}
-      <button
+      <Button
         type="button"
-        disabled={uploading}
+        variant="secondary"
+        size="sm"
+        loading={uploading}
+        icon={<Camera size={16} aria-hidden />}
         onClick={() => inputRef.current?.click()}
-        className="rounded-full bg-cream-100 px-3 py-1.5 text-xs font-medium text-ink-700 hover:bg-cream-200 disabled:opacity-60"
       >
-        {uploading ? "Envoi…" : value ? "Changer la photo" : "📷 Photo (facultatif)"}
-      </button>
+        {uploading ? "Envoi…" : value ? "Changer la photo" : "Photo (facultatif)"}
+      </Button>
       {value ? (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className="text-xs text-ink-500 hover:underline"
-        >
+        <Button type="button" variant="quiet" size="sm" icon={<X size={16} aria-hidden />} onClick={() => onChange("")}>
           Retirer
-        </button>
+        </Button>
       ) : null}
       <input
         ref={inputRef}
@@ -2459,7 +2698,7 @@ function CabinetPhotoButton({
           if (file) void upload(file);
         }}
       />
-      {error ? <p className="text-xs text-danger-500">{error}</p> : null}
+      {error ? <FieldError className="mt-0 w-full">{error}</FieldError> : null}
     </div>
   );
 }
@@ -2481,7 +2720,7 @@ function CabinetsEditor({
   return (
     <div className="space-y-3">
       {cabinets.map((cabinet, i) => (
-        <div key={i} className="space-y-2.5 rounded-xl bg-cream-100 p-3">
+        <div key={i} className="space-y-3 rounded-ds-md bg-ds-ink-50 p-4 ring-1 ring-ds-ink-200">
           <CabinetInput
             label="Nom du cabinet"
             placeholder="Cabinet du Marais"
@@ -2512,12 +2751,9 @@ function CabinetsEditor({
             value={cabinet.photoUrl ?? ""}
             onChange={(photoUrl) => update(i, { photoUrl: photoUrl || undefined })}
           />
-          <div className="text-right">
-            <button
-              type="button"
-              onClick={() => onChange(cabinets.filter((_, j) => j !== i))}
-              className="text-xs text-danger-500 hover:underline"
-            >
+          <div className="flex justify-end">
+            <button type="button" onClick={() => onChange(cabinets.filter((_, j) => j !== i))} className={DANGER_LINK}>
+              <Trash2 size={15} aria-hidden />
               Supprimer ce cabinet
             </button>
           </div>
@@ -2529,9 +2765,10 @@ function CabinetsEditor({
           onClick={() =>
             onChange([...cabinets, { name: "", address: "", postalCode: "", city: "" }])
           }
-          className="w-full rounded-xl border border-dashed border-ink-300 px-3 py-2 text-sm font-medium text-ink-500 hover:border-primary-400 hover:text-primary-500"
+          className={ADD_BUTTON}
         >
-          + Ajouter un cabinet
+          <Plus size={18} aria-hidden />
+          Ajouter un cabinet
         </button>
       ) : null}
     </div>

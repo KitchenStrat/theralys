@@ -152,9 +152,12 @@ export function DiagnosticTab({
    */
   const [refreshing, startRefresh] = useTransition();
   const refreshRef = useRef<() => void>(() => undefined);
+  const refreshStartedAt = useRef(0);
   useEffect(() => {
     refreshRef.current = () => {
-      if (refreshing) return;
+      // Filet : une relecture restée en suspens (réseau figé) ne retient pas les suivantes au-delà de trois tics
+      if (refreshing && Date.now() - refreshStartedAt.current < 3 * RUNNING_REFRESH_MS) return;
+      refreshStartedAt.current = Date.now();
       startRefresh(() => router.refresh());
     };
   }, [refreshing, router]);

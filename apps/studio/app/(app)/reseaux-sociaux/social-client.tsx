@@ -28,7 +28,6 @@ import { RequestBar } from "./request-bar";
 import { BioLinkCard, ExportCard } from "./share-cards";
 import { SocialPostModal } from "./social-post-modal";
 import { SocialSettingsModal } from "./social-settings-modal";
-import { SECTION_PURPOSE } from "./social-ui";
 
 /** Les trois gestes de la règle de bas de page, rappelés en images. */
 const RULE_STEPS: { icon: LucideIcon; label: string }[] = [
@@ -146,7 +145,6 @@ export function SocialClient({
       <Stagger className="space-y-6">
         <PageHeader
           section="reseaux-sociaux"
-          purpose={SECTION_PURPOSE}
           action={
             // Simple raccourci vers la carte de demande, donc secondaire : le bouton principal de la page reste
             // « Créer ce contenu » (ou « Préparer mon mois »). À partir de 1 280 px la carte est à côté de la

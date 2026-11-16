@@ -125,7 +125,7 @@ export function SectionFields({
           {googleConnected ? (
             <SwitchRow
               label="Afficher la note Google"
-              hint="Badge « ★ note/5 · avis Google » sous le titre, d'après votre fiche reliée."
+              hint="Un badge avec votre note sur 5 et votre nombre d'avis Google, sous le titre, d'après votre fiche reliée."
               checked={section.showGoogleRating === true}
               onChange={(showGoogleRating) => onChange({ showGoogleRating })}
             />

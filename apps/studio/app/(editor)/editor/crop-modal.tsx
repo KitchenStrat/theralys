@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@theralys/ui";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, ZoomIn, ZoomOut } from "lucide-react";
+import { useDialogFocus } from "@theralys/ui";
+import { Button } from "@/components/ds";
+import { HINT, Note } from "./editor-ui";
 
 /**
  * Recadrage avant téléversement : cadre au format imposé, photo déplaçable
@@ -28,6 +31,19 @@ export function CropModal({
   const [zoom, setZoom] = useState(1); // multiplicateur au-dessus du « cover »
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragging = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
+
+  // Fenêtre de dialogue : le focus y entre à l'ouverture, Tab y boucle, il revient au bouton
+  // « Téléverser une photo » à la fermeture ; Échap annule, comme le bouton « Annuler ».
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(true, dialogRef);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
   // Création + révocation dans le même effet (sinon le double-montage du mode
   // strict de React révoque une URL encore utilisée).
@@ -108,38 +124,48 @@ export function CropModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/50 p-4">
-      <div className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-xl">
-        <p className="font-semibold">Cadrez votre photo</p>
-        <p className="mt-0.5 text-xs text-ink-500">
-          Faites glisser pour positionner, ajustez le zoom si besoin.
-        </p>
+    // Le cadre fait 320 px de large (mesure du recadrage) : sous 352 px d'écran, la fenêtre va de bord à bord
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ds-brand-950/50 min-[352px]:p-4">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="max-h-full w-full max-w-sm overflow-y-auto bg-white px-4 py-5 shadow-ds-pop focus:outline-none min-[352px]:rounded-ds-card"
+      >
+        <h2 id={titleId} className="font-ds-display text-lg/7 font-bold text-ds-ink-900">
+          Cadrez votre photo
+        </h2>
+        <p className={`mt-0.5 ${HINT}`}>Faites glisser pour positionner, ajustez le zoom si besoin.</p>
         {decodeError ? (
-          <p className="mt-3 rounded-xl bg-danger-100 px-3 py-2 text-xs text-danger-500">
+          <Note tone="danger" role="alert" className="mt-3">
             Ce format d&apos;image n&apos;est pas lisible par votre navigateur (souvent le cas des
             photos iPhone en HEIC). Convertissez la photo en JPEG ou PNG, ou envoyez-la-vous par
             e-mail/WhatsApp qui la convertit automatiquement, puis réessayez.
-          </p>
+          </Note>
         ) : null}
-        <div
-          className="relative mx-auto mt-4 cursor-grab touch-none overflow-hidden rounded-2xl bg-cream-100 active:cursor-grabbing"
-          style={{ width: FRAME_W, height: frameH }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-        >
-          {natural && url ? (
-            <img
-              src={url}
-              alt=""
-              draggable={false}
-              className="pointer-events-none absolute max-w-none select-none"
-              style={{ width: imgW, height: imgH, left: offset.x, top: offset.y }}
-            />
-          ) : null}
+        <div className="-mx-4 mt-4 flex justify-center">
+          <div
+            className="relative shrink-0 cursor-grab touch-none overflow-hidden bg-ds-ink-100 ring-1 ring-ds-ink-200 active:cursor-grabbing min-[352px]:rounded-ds-md"
+            style={{ width: FRAME_W, height: frameH }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+          >
+            {natural && url ? (
+              <img
+                src={url}
+                alt=""
+                draggable={false}
+                className="pointer-events-none absolute max-w-none select-none"
+                style={{ width: imgW, height: imgH, left: offset.x, top: offset.y }}
+              />
+            ) : null}
+          </div>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <span aria-hidden className="text-xs text-ink-500">−</span>
+        <div className="mt-4 flex items-center gap-3 text-ds-ink-600">
+          <ZoomOut size={18} aria-hidden className="shrink-0" />
           <input
             type="range"
             aria-label="Zoom"
@@ -148,15 +174,15 @@ export function CropModal({
             step={0.01}
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="w-full accent-primary-500"
+            className="h-6 w-full cursor-pointer accent-ds-brand-600 pointer-coarse:h-11"
           />
-          <span aria-hidden className="text-sm text-ink-500">+</span>
+          <ZoomIn size={18} aria-hidden className="shrink-0" />
         </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="quiet" onClick={onCancel}>
             Annuler
           </Button>
-          <Button type="button" size="sm" onClick={confirm} disabled={!natural}>
+          <Button type="button" icon={<Check size={18} aria-hidden />} onClick={confirm} disabled={!natural}>
             Valider le cadrage
           </Button>
         </div>

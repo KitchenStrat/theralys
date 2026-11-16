@@ -171,7 +171,8 @@ export function Tabs<T extends string = string>({
           id: `${idBase}-tab-${tab.id}`,
           role: "tab" as const,
           "aria-selected": selected,
-          "aria-controls": `${idBase}-panel-${tab.id}`,
+          // Seul le panneau de l'onglet actif est toujours rendu : un `aria-controls` vers un `id` absent ne mène nulle part
+          "aria-controls": selected ? `${idBase}-panel-${tab.id}` : undefined,
           tabIndex: selected ? 0 : -1,
           className: classes,
         };

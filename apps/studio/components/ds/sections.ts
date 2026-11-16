@@ -82,7 +82,8 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
     shortLabel: "Publications",
     href: "/publications",
     icon: Newspaper,
-    purpose: "Les articles de votre blog : nous les écrivons, vous les relisez avant publication.",
+    // En publication automatique, un article paraît à sa date même sans relecture : la phrase ne promet pas de validation préalable
+    purpose: "Les articles de votre blog : nous les écrivons, vous pouvez les relire et les modifier avant leur parution.",
     group: "visibilite",
     gradient: { name: "Lagon", from: "#01A2B9", to: "#0A88CC", deepFrom: "#017F95", deepTo: "#09669A" },
     tint: { soft: "#EDF9FF", ink: "#003E52", accent: "#027495" },
@@ -93,7 +94,8 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
     shortLabel: "Réseaux",
     href: "/reseaux-sociaux",
     icon: Share2,
-    purpose: "Vos publications du mois, prêtes à poster : nous préparons, vous validez.",
+    // Harmony ne publie rien sur les réseaux à la place du praticien
+    purpose: "Vos contenus du mois, prêts à poster : nous les préparons, vous les publiez.",
     group: "visibilite",
     gradient: { name: "Aurore", from: "#0E97DD", to: "#8F6CE0", deepFrom: "#0079B4", deepTo: "#7D51D2" },
     tint: { soft: "#F4F6FF", ink: "#2C306A", accent: "#5458C8" },
@@ -126,7 +128,7 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
     shortLabel: "Meta Ads",
     href: "/meta-ads",
     icon: Megaphone,
-    purpose: "Vous faire connaître sur Facebook et Instagram auprès des personnes de votre secteur.",
+    purpose: "Vous faire connaître sur Facebook et Instagram auprès des personnes de votre secteur : Harmony prépare, vous diffusez depuis votre compte Meta.",
     group: "publicite",
     gradient: { name: "Iris", from: "#6269DB", to: "#7A4ECF", deepFrom: "#4A4CBA", deepTo: "#5E31A9" },
     tint: { soft: "#F6F6FF", ink: "#392C67", accent: "#6B50C2" },

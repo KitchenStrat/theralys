@@ -79,7 +79,14 @@ export function SiteSummary({
           }
         >
           <p className="text-lg/7">
-            <a href={url} target="_blank" rel="noopener noreferrer" className={`wrap-anywhere ${TEXT_LINK}`} data-testid="site-url">
+            {/* Lien seul sur sa ligne : au doigt, sa zone fait 44 px de haut (les marges négatives gardent l'espacement) */}
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`wrap-anywhere pointer-coarse:-my-2 pointer-coarse:inline-block pointer-coarse:py-2 ${TEXT_LINK}`}
+              data-testid="site-url"
+            >
               {siteAddressLabel(url)}
               <ExternalLink size={16} aria-hidden className="ml-1.5 inline-block align-[-2px]" />
               <span className="sr-only"> (nouvel onglet)</span>

@@ -24,13 +24,6 @@ import type { SocialCalendarItem } from "@/lib/social/data";
  * composé à partir du design system (`@/components/ds`).
  */
 
-/**
- * Phrase d'usage de la section, sous le titre de page. Elle précise celle du
- * registre (« nous préparons, vous validez ») : ici rien n'est publié à la place
- * du praticien — il télécharge, colle la légende et publie lui-même.
- */
-export const SECTION_PURPOSE = "Vos contenus du mois, prêts à poster : nous les préparons, vous les publiez.";
-
 export type SocialFormatKey = SocialCalendarItem["format"];
 
 export const FORMAT_LABEL: Record<SocialFormatKey, string> = {
