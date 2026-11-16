@@ -137,7 +137,8 @@ export function Modal({ open, onClose, title, children, footer, size, wide, plai
                 type="button"
                 onClick={onClose}
                 aria-label="Fermer"
-                className="rounded-full p-1 text-ink-500 hover:bg-cream-200"
+                // Cible de 44 px (au doigt comme à la souris) ; la marge négative garde la hauteur de l'en-tête
+                className="-m-2 rounded-full p-3 text-ink-500 hover:bg-cream-200"
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
                   <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

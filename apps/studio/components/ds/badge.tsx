@@ -43,7 +43,7 @@ export function Badge({ tone = "neutral", icon: Icon, className, children, ...pr
       )}
       {...props}
     >
-      {Icon ? <Icon size={14} strokeWidth={2.25} aria-hidden /> : null}
+      {Icon ? <Icon size={14} strokeWidth={2.25} className="shrink-0" aria-hidden /> : null}
       {children}
     </span>
   );

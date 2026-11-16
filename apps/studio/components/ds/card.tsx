@@ -124,7 +124,8 @@ export function CardHeader({ title, description, icon, as: Heading = "h2", actio
           {description ? <p className="mt-0.5 text-ds-body text-ds-ink-600">{description}</p> : null}
         </div>
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {/* `max-w-full` : une action longue passe sous le titre et y tient, même à 320 px */}
+      {action ? <div className="max-w-full">{action}</div> : null}
     </div>
   );
 }
