@@ -440,11 +440,12 @@ function PageRow({
   onClick: () => void;
   trailing?: ReactNode;
 }) {
-  // Ligne affichée dans l'aperçu : fond teinté, trait en dégradé à gauche, graisse — plus `aria-current`
+  // Ligne affichée dans l'aperçu : fond teinté, trait en dégradé à gauche, graisse — plus `aria-current`.
+  // Si le titre et les actions ne tiennent pas côte à côte (écran étroit), les actions passent dessous.
   return (
     <div
       className={clsx(
-        "relative flex items-center gap-2 rounded-ds-sm py-0.5 pl-3 pr-1.5",
+        "relative flex flex-wrap items-center gap-x-2 rounded-ds-sm py-0.5 pl-3 pr-1.5",
         selected
           ? "bg-ds-section-tint-2 inset-ring inset-ring-ds-section-line"
           : "bg-white inset-ring inset-ring-ds-ink-200 hover:bg-ds-ink-50",
@@ -456,14 +457,14 @@ function PageRow({
         type="button"
         onClick={onClick}
         className={clsx(
-          "flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-ds-sm py-1 text-left text-ds-body ds-focus",
+          "flex min-h-11 min-w-40 flex-1 items-center gap-2.5 rounded-ds-sm py-1 text-left text-ds-body ds-focus",
           selected ? "font-semibold text-ds-section-ink" : muted ? "text-ds-ink-600" : "font-medium text-ds-ink-800",
         )}
       >
         <Icon size={18} aria-hidden className={clsx("shrink-0", selected ? "text-ds-section-accent" : "text-ds-ink-600")} />
         <span className="line-clamp-2 min-w-0">{title}</span>
       </button>
-      {trailing}
+      {trailing ? <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-0.5">{trailing}</div> : null}
     </div>
   );
 }

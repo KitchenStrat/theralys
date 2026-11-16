@@ -432,6 +432,21 @@ const THEME_SWATCHES: Record<ThemePreset, string> = {
   taupe: "#8c7767",
 };
 
+/**
+ * Le site est-il déjà dans le cadre d'aperçu ? Tant que le cadre est sur sa page vide initiale (même origine que
+ * l'éditeur), son adresse se lit et vaut « about:blank » ; dès que le site, servi par une autre origine, y est
+ * chargé, la lecture est refusée par le navigateur.
+ */
+function frameHoldsSite(frame: HTMLIFrameElement | null): boolean {
+  const target = frame?.contentWindow;
+  if (!target) return false;
+  try {
+    return target.location.href !== "about:blank";
+  } catch {
+    return true;
+  }
+}
+
 export function SiteEditor({
   site,
   city,
@@ -1028,12 +1043,17 @@ export function SiteEditor({
     }, 600);
   }
 
-  useEffect(
-    () => () => {
+  // Le cadre peut finir de charger avant l'hydratation : son `onLoad` passe alors sans que React l'entende, et le
+  // pont ne serait jamais annoncé (clic dans l'aperçu et prévisualisation du style inertes jusqu'au rechargement
+  // du cadre). Au montage, si le site est déjà dans le cadre, on l'annonce donc aussi : l'annonce se répète
+  // jusqu'à l'accusé de réception, et un `onLoad` qui arriverait ensuite la relance sans dommage.
+  useEffect(() => {
+    if (frameHoldsSite(iframeRef.current)) announceEditor();
+    return () => {
       if (announceTimer.current) clearInterval(announceTimer.current);
-    },
-    [],
-  );
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- au montage seulement : `announceEditor` ne lit que des références
+  }, []);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -1340,8 +1360,10 @@ export function SiteEditor({
                               ) : null}
                             </button>
                           </h3>
-                          {/* Après un clic sur « Section masquée » dans l'aperçu : l'interrupteur surgit une fois, cerclé */}
+                          {/* Après un clic sur « Section masquée » dans l'aperçu : l'interrupteur surgit une fois, cerclé
+                              (`data-highlight` : repère des parcours automatisés, à la place de l'ancienne classe en boucle) */}
                           <span
+                            data-highlight={highlightVisibility === i ? "true" : undefined}
                             className={clsx(
                               "flex shrink-0 items-center rounded-full",
                               highlightVisibility === i && "ring-2 ring-ds-section-accent ring-offset-2 ds-pop",
@@ -1517,16 +1539,16 @@ export function SiteEditor({
                             }}
                             className={choiceCard(
                               corners === choice.value,
-                              "flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-left text-ds-meta font-semibold text-ds-ink-900",
+                              "flex min-h-14 items-center gap-2.5 px-3 py-2 text-left text-ds-meta font-semibold text-ds-ink-900",
                             )}
                           >
-                            {corners === choice.value ? <ChoiceMark /> : null}
                             <span
                               aria-hidden
-                              className="h-6 w-9 shrink-0 border-2 border-ds-ink-600 bg-white"
+                              className="size-6 shrink-0 border-2 border-ds-ink-600 bg-white"
                               style={{ borderRadius: choice.radius }}
                             />
-                            <span className="min-w-0 pr-4">{choice.label}</span>
+                            <span className="min-w-0">{choice.label}</span>
+                            {corners === choice.value ? <ChoiceMark inline /> : null}
                           </button>
                         ))}
                       </div>
@@ -1595,7 +1617,7 @@ export function SiteEditor({
             toute la place au panneau. */}
         <section
           aria-label="Aperçu du site"
-          className="flex min-w-0 flex-col bg-ds-section-soft max-md:h-[38dvh] max-md:shrink-0 max-md:[@media(max-height:35rem)]:hidden md:flex-1"
+          className="flex min-w-0 flex-col bg-ds-section-soft max-md:h-[34dvh] max-md:shrink-0 max-md:[@media(max-height:35rem)]:hidden md:flex-1"
         >
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 pt-2.5 sm:px-4 sm:pt-3">
             <h2 className="min-w-0 truncate text-ds-meta font-normal text-ds-ink-700">
@@ -2416,7 +2438,7 @@ function PanelTab({
       type="button"
       onClick={onClick}
       className={clsx(
-        "relative inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-ds-sm px-2.5 text-ds-body ds-focus-inset sm:px-3 lg:min-h-14",
+        "relative inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-t-ds-sm px-2 text-ds-body ds-focus-inset sm:px-3 lg:min-h-14",
         active ? "font-semibold text-ds-section-ink" : "font-medium text-ds-ink-600 hover:text-ds-ink-900",
       )}
       {...aria}
@@ -2431,10 +2453,16 @@ function PanelTab({
   );
 }
 
-/** Coche d'une carte de choix retenue (panneau Style). */
-function ChoiceMark() {
+/** Coche d'une carte de choix retenue (panneau Style) : dans son coin, ou en fin de ligne (`inline`). */
+function ChoiceMark({ inline = false }: { inline?: boolean }) {
   return (
-    <span aria-hidden className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-ds-section-accent text-white">
+    <span
+      aria-hidden
+      className={clsx(
+        "grid size-5 shrink-0 place-items-center rounded-full bg-ds-section-accent text-white",
+        inline ? "ml-auto" : "absolute right-1.5 top-1.5",
+      )}
+    >
       <Check size={12} strokeWidth={3} />
     </span>
   );
