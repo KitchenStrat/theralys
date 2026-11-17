@@ -40,7 +40,7 @@ const QUESTIONS = [
   },
   {
     q: "Y a-t-il un engagement ?",
-    a: "**Vous choisissez** : une formule mensuelle **sans engagement**, résiliable à tout moment, ou une formule annuelle **environ 30 % moins chère**. Dans les deux cas, il n'y a aucun frais de création.",
+    a: "**Oui, de 12 mois minimum**, que vous régliez chaque mois, chaque trimestre ou chaque année. La formule sur 3 ans vous engage pour 3 ans, au prix par mois le plus bas. Dans tous les cas, **les frais de création et la formation sont offerts**.",
   },
   {
     q: "Comment savoir ce que cela me rapporte ?",

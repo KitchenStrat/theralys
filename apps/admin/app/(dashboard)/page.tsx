@@ -311,7 +311,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                 );
               })}
             </ul>
-            <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">Actifs + impayés, au tarif de la période souscrite (annuel ou mensuel).</p>
+            <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">Actifs + impayés, au prix par mois de la durée souscrite (mensuel, trimestriel, annuel ou 3 ans). Un abonnement d&apos;avant le 17 novembre 2026 compte à son ancien tarif.</p>
           </Card>
         </div>
         {usage ? <BalancesCard report={usage} className="min-w-0" /> : null}

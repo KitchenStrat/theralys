@@ -13,9 +13,9 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { domains, getDb, PLANS, subscriptions, type PlanId } from "@theralys/db";
+import { describeSubscriptionPricing, domains, getDb, PLANS, subscriptions, type PlanId } from "@theralys/db";
 import { activeExternalSite, formatDateFr } from "@theralys/shared";
-import { Badge, Card, CardHeader, EmptyState, NBSP, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
+import { Badge, Card, CardHeader, EmptyState, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { DomainSection } from "./domain-section";
@@ -131,10 +131,8 @@ export default async function AccountPage() {
                 <ul className="mt-2 space-y-1.5 text-base text-ds-ink-700">
                   <li className="flex items-start gap-2.5">
                     <Wallet size={18} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
-                    {/* Espace insécable : le prix et son unité ne se séparent pas en fin de ligne */}
-                    {subscription.billingPeriod === "annual"
-                      ? `Engagement annuel — ${plan.annualMonthlyPrice}${NBSP}€/mois`
-                      : `Mensuel sans engagement — ${plan.monthlyPrice}${NBSP}€/mois`}
+                    {/* Le prix réellement payé : un abonnement d'avant le changement de tarif garde le sien */}
+                    {describeSubscriptionPricing(subscription)}
                   </li>
                   {subscription.currentPeriodEnd ? (
                     <li className="flex items-start gap-2.5">

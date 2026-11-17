@@ -1,4 +1,4 @@
-import { normalizePlan, PLANS, type OfferedPlanId, type PlanId } from "@theralys/db";
+import { normalizePlan, PLANS, subscriptionPricing, type BillingPeriod, type OfferedPlanId, type PlanId } from "@theralys/db";
 
 /**
  * Métriques de la vue d'ensemble — fonctions pures, testées unitairement.
@@ -10,8 +10,10 @@ import { normalizePlan, PLANS, type OfferedPlanId, type PlanId } from "@theralys
 
 export type SubscriptionLike = {
   plan: PlanId;
-  billingPeriod: "monthly" | "annual";
+  billingPeriod: BillingPeriod;
   status: "active" | "trialing" | "past_due" | "canceled";
+  /** Date de souscription : un abonnement d'avant le changement de tarif garde son prix */
+  createdAt: Date;
 };
 
 export type MrrSummary = {
@@ -23,13 +25,14 @@ export type MrrSummary = {
 };
 
 /**
- * Revenu mensuel d'un abonnement (€/mois) : tarif de la période souscrite pour
- * un abonnement actif ou impayé, zéro pour un essai ou un abonnement annulé.
+ * Revenu mensuel d'un abonnement (€ TTC par mois) : le prix par mois de la
+ * durée souscrite, que la somme soit réglée chaque mois ou d'avance pour un
+ * trimestre, un an ou trois ans. Un abonnement souscrit avant le changement de
+ * tarif compte à son ancien prix. Zéro pour un essai ou un abonnement annulé.
  */
 export function subscriptionMrr(subscription: SubscriptionLike): number {
   if (subscription.status !== "active" && subscription.status !== "past_due") return 0;
-  const def = PLANS[subscription.plan];
-  return subscription.billingPeriod === "annual" ? def.annualMonthlyPrice : def.monthlyPrice;
+  return subscriptionPricing(subscription).monthlyPrice;
 }
 
 export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {

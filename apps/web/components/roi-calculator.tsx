@@ -209,7 +209,7 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
         </div>
 
         <p data-reveal className="mx-auto mt-8 max-w-2xl text-center text-sm leading-relaxed text-ink-500">
-          Simulation calculée à partir de vos propres hypothèses, sur le tarif de la formule {planLabel} avec engagement annuel
+          Simulation calculée à partir de vos propres hypothèses, sur le tarif de la formule {planLabel} en facturation annuelle
           ({euros(monthlyCost)} par mois). Harmony ne promet pas un nombre de patients&nbsp;: vos résultats dépendent de votre ville,
           de votre spécialité et de la concurrence.
         </p>

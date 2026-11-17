@@ -96,7 +96,8 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "canceled",
   "trialing",
 ]);
-export const billingPeriodEnum = pgEnum("billing_period", ["monthly", "annual"]);
+// Ordre de la base : « quarterly » et « triennial » ont été ajoutés après coup (migration 0010)
+export const billingPeriodEnum = pgEnum("billing_period", ["monthly", "annual", "quarterly", "triennial"]);
 export const domainStatusEnum = pgEnum("domain_status", [
   "pending",
   "registered",

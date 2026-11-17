@@ -1374,6 +1374,7 @@ async function fetchUsageSites(db: Database, siteIds: string[]): Promise<UsageSi
       subscriptionPlan: subscriptions.plan,
       billingPeriod: subscriptions.billingPeriod,
       subscriptionStatus: subscriptions.status,
+      subscriptionCreatedAt: subscriptions.createdAt,
     })
     .from(sites)
     .leftJoin(subscriptions, eq(subscriptions.siteId, sites.id))
@@ -1385,8 +1386,13 @@ async function fetchUsageSites(db: Database, siteIds: string[]): Promise<UsageSi
     status: row.status,
     plan: row.plan,
     subscription:
-      row.subscriptionPlan && row.billingPeriod && row.subscriptionStatus
-        ? { plan: row.subscriptionPlan, billingPeriod: row.billingPeriod, status: row.subscriptionStatus }
+      row.subscriptionPlan && row.billingPeriod && row.subscriptionStatus && row.subscriptionCreatedAt
+        ? {
+            plan: row.subscriptionPlan,
+            billingPeriod: row.billingPeriod,
+            status: row.subscriptionStatus,
+            createdAt: row.subscriptionCreatedAt,
+          }
         : null,
   }));
 }

@@ -6,9 +6,13 @@ statistiques).
 
 ## Deux règles
 
-1. **Les formules viennent du produit.** Prix et contenu des formules sont lus
-   dans `@theralys/db` (`PLANS`) : la vitrine et le studio ne peuvent pas se
-   contredire.
+1. **Les formules viennent du produit.** Le contenu des formules, leur prix par
+   mois sur chaque durée de facturation (mensuel, trimestriel, annuel, 3 ans),
+   la somme réglée à chaque échéance, les mois d'économies et l'engagement de
+   12 mois minimum sont lus dans `@theralys/db` (`PLANS`, `planPrice`,
+   `periodTotal`, `savedMonths`) : la vitrine, le studio et la facturation ne
+   peuvent pas se contredire. Changer un tarif = changer `prices` dans
+   `packages/db/src/plans.ts`, rien d'autre.
 2. **Rien n'est inventé.** Chaque phrase décrit un comportement réel du studio,
    les captures sont de vrais écrans (compte de démonstration), et la page ne
    porte aucun chiffre de clientèle.

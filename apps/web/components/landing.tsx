@@ -1,4 +1,16 @@
-import { OFFERED_PLANS, PLANS } from "@theralys/db";
+import {
+  BILLING_PERIODS,
+  BILLING_PERIOD_CADENCE,
+  BILLING_PERIOD_LABELS,
+  MIN_COMMITMENT_MONTHS,
+  OFFERED_PLANS,
+  PLANS,
+  commitmentMonths,
+  periodTotal,
+  planPeriods,
+  planPrice,
+  savedMonths,
+} from "@theralys/db";
 import { Band } from "./band";
 import { Control } from "./control";
 import { DemoForm } from "./demo-form";
@@ -25,8 +37,9 @@ import { Tour } from "./tour";
  * statistiques), et non plus un seul outil de site internet.
  *
  * Deux règles tiennent la page :
- * - les formules et leurs prix viennent de la définition produit
- *   (@theralys/db) : la vitrine et le studio ne peuvent pas se contredire ;
+ * - les formules, leurs prix sur chaque durée de facturation, les économies
+ *   et l'engagement viennent de la définition produit (@theralys/db) : la
+ *   vitrine, le studio et la facturation ne peuvent pas se contredire ;
  * - rien n'y est inventé. Les captures sont de vrais écrans du studio (compte
  *   de démonstration), chaque phrase décrit un comportement réel du produit,
  *   et la page ne porte aucun chiffre de clientèle. La section des
@@ -40,8 +53,14 @@ export function Landing() {
     return {
       id,
       label: plan.label,
-      monthlyPrice: plan.monthlyPrice,
-      annualMonthlyPrice: plan.annualMonthlyPrice,
+      periods: planPeriods(id).map((period) => ({
+        id: period,
+        price: planPrice(id, period) ?? 0,
+        total: periodTotal(id, period) ?? 0,
+        cadence: BILLING_PERIOD_CADENCE[period],
+        savedMonths: savedMonths(id, period),
+        commitmentMonths: commitmentMonths(period),
+      })),
       homeSpecialties: plan.homeSpecialties,
       maxMotifPages: plan.maxMotifPages,
       blogArticlesPerWeek: plan.blogArticlesPerWeek,
@@ -53,8 +72,14 @@ export function Landing() {
       metaAds: plan.metaAds,
     };
   });
-  // Le simulateur raisonne sur la formule complète, au tarif annuel
+  // Les durées proposées par au moins une formule, dans l'ordre du sélecteur
+  const periods = BILLING_PERIODS.filter((period) => OFFERED_PLANS.some((id) => planPrice(id, period) !== null)).map((period) => ({
+    id: period,
+    label: BILLING_PERIOD_LABELS[period],
+  }));
+  // Le simulateur raisonne sur la formule complète, en facturation annuelle
   const complete = PLANS.scale;
+  const completeAnnualPrice = planPrice("scale", "annual") ?? 0;
 
   return (
     <>
@@ -76,8 +101,8 @@ export function Landing() {
         <OwnSite />
         <Testimonials />
         <Band />
-        <Pricing plans={plans} />
-        <RoiCalculator monthlyCost={complete.annualMonthlyPrice} planLabel={complete.label} />
+        <Pricing plans={plans} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
+        <RoiCalculator monthlyCost={completeAnnualPrice} planLabel={complete.label} />
         <Faq />
         <DemoForm />
       </main>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge, Card } from "@theralys/ui";
 import {
   blogArticles,
+  describeSubscriptionPricing,
   domains,
   getDb,
   PLANS,
@@ -119,7 +120,7 @@ export default async function ClientsPage() {
                     <td className="px-4 py-3">
                       {PLANS[site.plan as PlanId].label}
                       <span className="block text-xs text-ink-500">
-                        {subscription?.billingPeriod === "annual" ? "engagement annuel" : "mensuel"}
+                        {subscription ? describeSubscriptionPricing(subscription) : "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3">

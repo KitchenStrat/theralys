@@ -9,7 +9,7 @@ import { PostMock } from "./post-mock";
 import { ScrollTilt } from "./scroll-tilt";
 import { TOOLS } from "./tools";
 
-const PROMISES = ["Démo personnalisée gratuite", "Sans engagement", "Aucune compétence technique"];
+const PROMISES = ["Démo personnalisée gratuite", "Frais de création offerts", "Aucune compétence technique"];
 
 export function Hero() {
   return (

@@ -245,7 +245,8 @@ dégradé par section, un seul accent chaud.
   rattachement au projet + SSL automatique). Le middleware multi-tenant sert le
   site sur son domaine dès le rattachement ; robots.txt passe en `Allow` avec
   sitemap.
-- **Stripe Billing** : abonnements par formule (mensuel / engagement annuel),
+- **Stripe Billing** : abonnements par formule et par durée (mensuel, trimestriel,
+  annuel, 3 ans — réglés d'avance à chaque échéance, engagement 12 mois minimum),
   webhook (`/api/stripe/webhook` sur l&apos;admin) — impayé → `past_due` (bandeau
   studio), annulation → `canceled` + site archivé, réactivation → site republié ;
   portail de facturation client. **Le gating suit l&apos;abonnement** : la formule en

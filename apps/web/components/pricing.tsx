@@ -2,14 +2,31 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
+import { BadgePercent, CalendarCheck, GraduationCap, Info } from "lucide-react";
+import type { BillingPeriod } from "@theralys/db/plans";
 import { fr } from "./typo";
+
+/** Le prix d'une formule sur une durée de facturation. */
+export type PlanPeriod = {
+  id: BillingPeriod;
+  /** € TTC par mois */
+  price: number;
+  /** € TTC réglés à chaque échéance */
+  total: number;
+  /** « tous les trimestres », « tous les ans »… */
+  cadence: string;
+  /** Mois de mensuel économisés sur la durée d'engagement (0 : pas d'économie) */
+  savedMonths: number;
+  /** Durée d'engagement, en mois */
+  commitmentMonths: number;
+};
 
 /** Données de formule sérialisées côté serveur depuis @theralys/db (source unique). */
 export type PlanCard = {
   id: string;
   label: string;
-  monthlyPrice: number;
-  annualMonthlyPrice: number;
+  /** Les durées proposées pour la formule, de la plus courte à la plus longue */
+  periods: PlanPeriod[];
   homeSpecialties: number;
   maxMotifPages: number;
   blogArticlesPerWeek: number;
@@ -186,8 +203,27 @@ function orderedFeatures(plan: PlanCard): Feature[] {
   return [...features.filter((feature) => feature.included), ...features.filter((feature) => !feature.included)];
 }
 
-export function Pricing({ plans }: { plans: PlanCard[] }) {
-  const [period, setPeriod] = useState<"annual" | "monthly">("annual");
+const euros = (value: number) => `${value.toLocaleString("fr-FR")}\u00a0€`;
+
+/** « 12 mois » → « Engagement 12 mois minimum » ; « 36 mois » → « Engagement de 3 ans ». */
+function commitmentLabel(months: number, minimum: number): string {
+  if (months <= minimum) return `Engagement ${minimum} mois minimum`;
+  return months % 12 === 0 ? `Engagement de ${months / 12} ans` : `Engagement de ${months} mois`;
+}
+
+export function Pricing({
+  plans,
+  periods,
+  minCommitmentMonths,
+}: {
+  plans: PlanCard[];
+  /** Les durées du sélecteur, dans l'ordre */
+  periods: { id: BillingPeriod; label: string }[];
+  minCommitmentMonths: number;
+}) {
+  const [period, setPeriod] = useState<BillingPeriod>("annual");
+  const index = Math.max(0, periods.findIndex((option) => option.id === period));
+  const periodLabel = periods[index]?.label ?? "";
 
   return (
     <section id="tarifs" className="mx-auto max-w-6xl px-5 py-24">
@@ -206,32 +242,31 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
         style={{ "--rv-delay": "160ms" } as CSSProperties}
         className="mx-auto mt-4 max-w-xl text-center text-lg text-ink-700"
       >
-        Aucun frais de création. L&apos;hébergement et votre nom de domaine sont inclus dans les deux formules.
+        L&apos;hébergement et votre nom de domaine sont inclus dans les deux formules. Plus la durée est longue, plus le prix par
+        mois baisse.
       </p>
 
-      {/* Bascule mensuel / annuel */}
+      {/* Durée de facturation : le curseur glisse d'une durée à l'autre */}
       <div data-reveal style={{ "--rv-delay": "220ms" } as CSSProperties} className="mt-9 flex justify-center">
-        <div className="relative flex rounded-full border border-cream-300 bg-white p-1 shadow-sm">
+        <div
+          role="group"
+          aria-label="Durée de facturation"
+          className="relative grid w-full max-w-md rounded-full border border-cream-300 bg-white p-1 shadow-sm"
+          style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))` }}
+        >
           <span
             aria-hidden
-            className={clsx(
-              "absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-full bg-primary-600 transition-all duration-300",
-              period === "monthly" ? "left-1" : "left-[calc(50%+0.05rem)]",
-            )}
+            className="absolute inset-y-1 left-1 rounded-full bg-primary-600 transition-transform duration-300"
+            style={{ width: `calc((100% - 0.5rem) / ${periods.length})`, transform: `translateX(${index * 100}%)` }}
           />
-          {(
-            [
-              { id: "monthly", label: "Mensuel" },
-              { id: "annual", label: "Annuel −30 %" },
-            ] as const
-          ).map((option) => (
+          {periods.map((option) => (
             <button
               key={option.id}
               type="button"
               onClick={() => setPeriod(option.id)}
               aria-pressed={period === option.id}
               className={clsx(
-                "focus-ring relative z-10 min-h-11 w-36 rounded-full py-2.5 text-sm font-semibold transition-colors duration-300",
+                "focus-ring relative z-10 min-h-11 rounded-full px-1 py-2.5 text-sm font-semibold transition-colors duration-300",
                 period === option.id ? "text-white" : "text-ink-700 hover:text-primary-700",
               )}
             >
@@ -241,10 +276,26 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
         </div>
       </div>
 
-      <div className="mx-auto mt-12 grid max-w-4xl gap-8 md:grid-cols-2">
+      {/* Ce qui vaut pour toutes les formules et toutes les durées */}
+      <ul data-reveal style={{ "--rv-delay": "260ms" } as CSSProperties} className="mt-5 flex flex-wrap justify-center gap-2.5 text-sm font-semibold">
+        <li className="inline-flex items-center gap-2 rounded-full bg-success-100 px-3.5 py-1.5 text-[#14532d]">
+          <GraduationCap size={16} aria-hidden />
+          Frais de création et formation offerts
+        </li>
+        <li className="inline-flex items-center gap-2 rounded-full bg-primary-100 px-3.5 py-1.5 text-primary-800">
+          <CalendarCheck size={16} aria-hidden />
+          Engagement {minCommitmentMonths} mois minimum
+        </li>
+      </ul>
+
+      <div className="mx-auto mt-10 grid max-w-4xl gap-8 md:grid-cols-2">
         {plans.map((plan, i) => {
           const popular = plan.id === "scale";
-          const price = period === "annual" ? plan.annualMonthlyPrice : plan.monthlyPrice;
+          // Une formule qui n'existe pas sur la durée choisie montre son tarif annuel, et le dit
+          const offered = plan.periods.find((entry) => entry.id === period);
+          const shown = offered ?? plan.periods.find((entry) => entry.id === "annual") ?? plan.periods[0];
+          if (!shown) return null;
+          const shownLabel = periods.find((option) => option.id === shown.id)?.label ?? "";
           return (
             <article
               key={plan.id}
@@ -267,16 +318,38 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
               <h3 className="font-display text-2xl font-bold text-ink-900">{plan.label}</h3>
               <p className="mt-1.5 min-h-12 text-base text-ink-700">{fr(TAGLINES[plan.id] ?? "")}</p>
               <div className="mt-5 flex items-end gap-2">
-                <span key={`${plan.id}-${period}`} className="font-display animate-[price-in_0.35s_ease] text-5xl font-bold text-ink-900">
-                  {price}&nbsp;€
+                <span key={`${plan.id}-${shown.id}`} className="font-display animate-[price-in_0.35s_ease] text-5xl font-bold text-ink-900">
+                  {euros(shown.price)}
                 </span>
-                <span className="pb-1.5 text-sm text-ink-500">/ mois</span>
+                <span className="pb-1.5 text-sm text-ink-500">TTC / mois</span>
               </div>
-              <p className="mt-1 text-sm text-ink-500">
-                {period === "annual"
-                  ? "Engagement 12 mois, le meilleur tarif"
-                  : "Sans engagement, résiliable à tout moment"}
+              {/* La ligne garde sa hauteur en mensuel : la carte ne saute pas d'une durée à l'autre */}
+              <p className="mt-2 min-h-7">
+                {shown.savedMonths > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success-100 px-3 py-1 text-sm font-bold whitespace-nowrap text-[#14532d]">
+                    <BadgePercent size={15} aria-hidden />
+                    {shown.savedMonths} mois d&apos;économies
+                  </span>
+                ) : null}
               </p>
+              <p className="mt-2 text-sm text-ink-700">
+                {shown.total === shown.price ? (
+                  <>Réglés {shown.cadence}.</>
+                ) : (
+                  <>
+                    Soit <strong className="font-semibold text-ink-900">{euros(shown.total)}</strong> {shown.cadence}.
+                  </>
+                )}{" "}
+                {commitmentLabel(shown.commitmentMonths, minCommitmentMonths)}.
+              </p>
+              {offered ? null : (
+                <p className="mt-2.5 flex items-start gap-2 rounded-xl bg-cream-100 px-3 py-2 text-sm text-ink-700">
+                  <Info size={16} className="mt-0.5 shrink-0 text-primary-700" aria-hidden />
+                  <span>
+                    {plan.label} n&apos;existe pas en formule «&nbsp;{periodLabel}&nbsp;»&nbsp;: voici son tarif {shownLabel.toLowerCase()}.
+                  </span>
+                </p>
+              )}
               <ul className="mt-6 mb-8 space-y-3">
                 {orderedFeatures(plan).map((feature) => (
                   <li key={feature.text} className="flex items-center gap-3 text-base">
@@ -332,8 +405,9 @@ export function Pricing({ plans }: { plans: PlanCard[] }) {
         })}
       </div>
       <p data-reveal className="mx-auto mt-8 max-w-2xl text-center text-sm leading-relaxed text-ink-500">
-        Les budgets publicitaires Google et Meta ne sont pas compris dans l&apos;abonnement&nbsp;: si vous choisissez de faire de
-        la publicité, ils sont réglés directement aux plateformes.
+        Prix TTC. La somme de la durée choisie est réglée d&apos;avance à chaque échéance. Les budgets publicitaires Google et Meta
+        ne sont pas compris dans l&apos;abonnement&nbsp;: si vous choisissez de faire de la publicité, ils sont réglés directement
+        aux plateformes.
       </p>
       <style>{`@keyframes price-in { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }`}</style>
     </section>

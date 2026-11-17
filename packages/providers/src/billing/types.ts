@@ -1,6 +1,6 @@
-import type { PlanId } from "@theralys/db";
+import type { BillingPeriod, PlanId } from "@theralys/db";
 
-export type BillingPeriod = "monthly" | "annual";
+export type { BillingPeriod };
 
 export type SubscriptionResult = {
   stripeCustomerId: string;

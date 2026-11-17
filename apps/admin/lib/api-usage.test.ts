@@ -553,10 +553,10 @@ describe("summarizeByFeature", () => {
 
 describe("summarizeBySite", () => {
   const sites: UsageSite[] = [
-    { id: SITE_A, name: "Cabinet A", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "monthly", status: "active" } },
-    { id: SITE_B, name: "Cabinet B", type: "client", status: "ready", plan: "starter", subscription: { plan: "starter", billingPeriod: "annual", status: "trialing" } },
+    { id: SITE_A, name: "Cabinet A", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "monthly", status: "active", createdAt: new Date("2026-06-01T00:00:00Z") } },
+    { id: SITE_B, name: "Cabinet B", type: "client", status: "ready", plan: "starter", subscription: { plan: "starter", billingPeriod: "annual", status: "trialing", createdAt: new Date("2026-06-01T00:00:00Z") } },
     { id: SITE_DEMO, name: "Démo C", type: "demo", status: "ready", plan: "scale", subscription: null },
-    { id: "44444444-4444-4444-8444-444444444444", name: "Cabinet D", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "annual", status: "active" } },
+    { id: "44444444-4444-4444-8444-444444444444", name: "Cabinet D", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "annual", status: "active", createdAt: new Date("2026-06-01T00:00:00Z") } },
     { id: "55555555-5555-4555-8555-555555555555", name: "Cabinet archivé", type: "client", status: "archived", plan: "scale", subscription: null },
   ];
   const rows = billed([
@@ -840,7 +840,7 @@ describe("buildApiUsageReport", () => {
     providerErrors: [{ provider: "anthropic", operation: "messages", error: "529", createdAt: new Date("2026-11-02T10:00:00Z") }],
     recentErrors: [],
     journal: null,
-    sites: [{ id: SITE_A, name: "Cabinet A", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "annual", status: "active" } }],
+    sites: [{ id: SITE_A, name: "Cabinet A", type: "client", status: "ready", plan: "scale", subscription: { plan: "scale", billingPeriod: "annual", status: "active", createdAt: new Date("2026-06-01T00:00:00Z") } }],
     scrapeCreatorsCredits: { credits: "150", at: now },
     metaLastCall: null,
     metaLastSuccessAt: null,

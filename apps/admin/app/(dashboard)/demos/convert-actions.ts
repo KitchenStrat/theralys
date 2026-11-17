@@ -1,9 +1,21 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { getDb, leads, prospects, sites, subscriptions, users } from "@theralys/db";
+import {
+  BILLING_PERIODS,
+  BILLING_PERIOD_LABELS,
+  PLANS,
+  getDb,
+  leads,
+  planPrice,
+  prospects,
+  sites,
+  subscriptions,
+  users,
+  type BillingPeriod,
+} from "@theralys/db";
 import { purgeMockLibrary } from "@theralys/jobs";
 import { createBillingProvider } from "@theralys/providers/billing";
 import { requireAdmin } from "@/lib/auth";
@@ -12,7 +24,7 @@ import { createClientInvitation } from "@/lib/invitations";
 const convertSchema = z.object({
   siteId: z.string().uuid(),
   plan: z.enum(["starter", "scale"]),
-  period: z.enum(["monthly", "annual"]),
+  period: z.enum(BILLING_PERIODS),
   clientEmail: z.string().trim().email("Email invalide"),
 });
 
@@ -30,6 +42,20 @@ export type ConversionResult =
     };
 
 /**
+ * Les durées « trimestriel » et « 3 ans » demandent la migration 0010 (deux
+ * valeurs de plus dans le type `billing_period`). On le vérifie avant de
+ * créer quoi que ce soit : un refus de la base en cours de conversion
+ * laisserait un compte sans abonnement.
+ */
+async function periodStorable(period: BillingPeriod): Promise<boolean> {
+  if (period === "monthly" || period === "annual") return true;
+  const result = await getDb().execute(
+    sql`select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'billing_period' and e.enumlabel = ${period} limit 1`,
+  );
+  return result.rows.length > 0;
+}
+
+/**
  * Conversion démo → site client (activation manuelle par l'admin) :
  * compte client + formule + abonnement Stripe + site publié.
  * Le lien de démo devient l'URL de production en attendant le domaine custom.
@@ -39,6 +65,14 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
   const parsed = convertSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Formulaire invalide" };
   const { siteId, plan, period, clientEmail } = parsed.data;
+  if (planPrice(plan, period) === null) {
+    return { error: `La formule ${PLANS[plan].label} n'est pas proposée sur la durée « ${BILLING_PERIOD_LABELS[period]} ».` };
+  }
+  if (!(await periodStorable(period))) {
+    return {
+      error: `La durée « ${BILLING_PERIOD_LABELS[period]} » demande la migration 0010 (packages/db/drizzle/0010_billing_periods.sql) : appliquez-la à la base, puis recommencez.`,
+    };
+  }
 
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });

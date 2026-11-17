@@ -2,13 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  BILLING_PERIOD_CADENCE,
+  BILLING_PERIOD_LABELS,
+  MIN_COMMITMENT_MONTHS,
+  OFFERED_PLANS,
+  PLANS,
+  periodTotal,
+  planPeriods,
+  planPrice,
+  type BillingPeriod,
+  type OfferedPlanId,
+} from "@theralys/db/plans";
 import { Badge, Button, FieldHint, Input, Label, Modal, Select } from "@theralys/ui";
 import { convertDemoToClient, type ConversionResult } from "../../convert-actions";
 
-const PLAN_LABELS = {
-  starter: "Starter — 48 €/mois (annuel) · 69 €/mois",
-  scale: "Scale — 55 €/mois (annuel) · 79 €/mois",
-} as const;
+const euros = (value: number) => `${value.toLocaleString("fr-FR")} €`;
+
+/** « Annuel — 86 € TTC/mois, soit 1 032 € tous les ans » */
+function periodLabel(plan: OfferedPlanId, period: BillingPeriod): string {
+  const price = planPrice(plan, period) ?? 0;
+  const label = `${BILLING_PERIOD_LABELS[period]} — ${euros(price)} TTC/mois`;
+  return period === "monthly" ? label : `${label}, soit ${euros(periodTotal(plan, period) ?? 0)} ${BILLING_PERIOD_CADENCE[period]}`;
+}
 
 export function ConvertModal({
   siteId,
@@ -25,6 +41,15 @@ export function ConvertModal({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [plan, setPlan] = useState<OfferedPlanId>("scale");
+  const [period, setPeriod] = useState<BillingPeriod>("annual");
+  const periods = planPeriods(plan);
+
+  // Une durée que la formule choisie ne propose pas retombe sur l'annuel
+  function choosePlan(next: OfferedPlanId) {
+    setPlan(next);
+    if (!planPeriods(next).includes(period)) setPeriod("annual");
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,10 +141,10 @@ export function ConvertModal({
           </p>
           <div>
             <Label htmlFor="plan">Formule</Label>
-            <Select id="plan" name="plan" defaultValue="scale">
-              {Object.entries(PLAN_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+            <Select id="plan" name="plan" value={plan} onChange={(event) => choosePlan(event.target.value as OfferedPlanId)}>
+              {OFFERED_PLANS.map((id) => (
+                <option key={id} value={id}>
+                  {PLANS[id].label} — à partir de {euros(Math.min(...planPeriods(id).map((p) => planPrice(id, p) ?? Infinity)))} TTC/mois
                 </option>
               ))}
             </Select>
@@ -131,10 +156,17 @@ export function ConvertModal({
           </div>
           <div>
             <Label htmlFor="period">Facturation</Label>
-            <Select id="period" name="period" defaultValue="annual">
-              <option value="annual">Engagement annuel (tarif réduit)</option>
-              <option value="monthly">Mensuel sans engagement</option>
+            <Select id="period" name="period" value={period} onChange={(event) => setPeriod(event.target.value as BillingPeriod)}>
+              {periods.map((id) => (
+                <option key={id} value={id}>
+                  {periodLabel(plan, id)}
+                </option>
+              ))}
             </Select>
+            <FieldHint>
+              La somme est réglée d&apos;avance à chaque échéance. Engagement de {MIN_COMMITMENT_MONTHS} mois minimum, frais de création et
+              formation offerts.
+            </FieldHint>
           </div>
           <div>
             <Label htmlFor="clientEmail">Email du client *</Label>

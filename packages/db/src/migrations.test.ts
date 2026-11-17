@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0008_api_usage puis 0009_external_sites, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0009_external_sites puis 0010_billing_periods, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -63,6 +63,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0007_meta_library",
       "0008_api_usage",
       "0009_external_sites",
+      "0010_billing_periods",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -268,5 +269,16 @@ describe("0009_external_sites : site internet du client et origine des visites",
     expect(statements.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "external_sites_site_id_unique" ON "external_sites"'))).toBe(true);
     expect(statements.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "external_sites_measure_key_unique" ON "external_sites"'))).toBe(true);
     expect(statements.some((s) => s === 'ALTER TABLE "analytics_events" ADD COLUMN IF NOT EXISTS "origin" text;')).toBe(true);
+  });
+});
+
+describe("0010_billing_periods : durées de facturation trimestrielle et sur 3 ans", () => {
+  const statements = statementsOf("0010_billing_periods");
+
+  it("deux valeurs ajoutées au type billing_period, chacune gardée — rien d'autre", () => {
+    expect(statements).toEqual([
+      `ALTER TYPE "public"."billing_period" ADD VALUE IF NOT EXISTS 'quarterly';`,
+      `ALTER TYPE "public"."billing_period" ADD VALUE IF NOT EXISTS 'triennial';`,
+    ]);
   });
 });
