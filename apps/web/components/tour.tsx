@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, ty
 import clsx from "clsx";
 import { Check, Info } from "lucide-react";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
+import { Kinetic } from "./kinetic";
 import { TOOLS, type Tool } from "./tools";
 import { rich } from "./rich";
 import { fr } from "./typo";
@@ -109,11 +110,11 @@ export function Tour() {
             La visite guidée
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            Sept outils. Un seul espace.
+            <Kinetic>Sept outils. Un seul espace.</Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
             Chaque outil fait une chose précise pour votre cabinet. Voici ce que vous trouverez dans votre espace, captures
@@ -219,8 +220,12 @@ export function Tour() {
                     {fr(tool.promise)}
                   </h3>
                   <ul className="mt-5 grid gap-3 md:grid-cols-3 md:gap-5">
-                    {tool.points.map((point) => (
-                      <li key={point} className="flex gap-2.5 text-base leading-relaxed text-ink-700 md:flex-col md:gap-2">
+                    {tool.points.map((point, order) => (
+                      <li
+                        key={point}
+                        style={{ "--p": order } as CSSProperties}
+                        className="tour-point flex gap-2.5 text-base leading-relaxed text-ink-700 md:flex-col md:gap-2"
+                      >
                         <span className="tool-chip mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full md:mt-0">
                           <Check size={14} strokeWidth={3} aria-hidden />
                         </span>
@@ -234,12 +239,12 @@ export function Tour() {
                   </p>
 
                   {/* La capture : l'écran d'ordinateur dès la tablette, l'écran de téléphone en dessous */}
-                  <div className="mt-7 hidden md:block">
+                  <div className="tour-shot mt-7 hidden md:block">
                     <BrowserFrame>
                       <Capture src={tool.desktop} alt={tool.alt} sizes="(min-width: 1200px) 760px, (min-width: 1024px) 62vw, (min-width: 768px) 88vw, 1px" />
                     </BrowserFrame>
                   </div>
-                  <div className="mx-auto mt-7 w-60 md:hidden">
+                  <div className="tour-shot mx-auto mt-7 w-60 md:hidden">
                     <PhoneFrame>
                       <Capture src={tool.mobile} alt={tool.alt} sizes="(min-width: 768px) 1px, 240px" />
                     </PhoneFrame>

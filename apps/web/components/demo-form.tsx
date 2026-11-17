@@ -3,6 +3,7 @@
 import { useState, useTransition, type CSSProperties, type FormEvent } from "react";
 import { requestDemo } from "@/app/actions";
 import { rich } from "./rich";
+import { Kinetic } from "./kinetic";
 
 const STEPS = [
   {
@@ -52,11 +53,11 @@ export function DemoForm() {
             Démo gratuite
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            Voyez ce que cela donne pour votre cabinet
+            <Kinetic>Voyez ce que cela donne pour votre cabinet</Kinetic>
           </h2>
           <div className="mt-10 space-y-7">
             {STEPS.map((step, i) => (

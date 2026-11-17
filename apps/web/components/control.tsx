@@ -6,6 +6,8 @@ import visuelA from "@/assets/captures/visuel-reseaux.webp";
 import visuelB from "@/assets/captures/visuel-reseaux-2.webp";
 import visuelC from "@/assets/captures/visuel-reseaux-3.webp";
 import { Brand } from "./brand";
+import { Kinetic } from "./kinetic";
+import { ScrollWords } from "./scroll-words";
 import { Capture } from "./frames";
 
 /**
@@ -15,7 +17,7 @@ import { Capture } from "./frames";
  */
 export function Control() {
   return (
-    <section id="confiance" className="relative overflow-hidden bg-night-900 py-24 text-white md:py-28">
+    <section id="confiance" className="relative overflow-clip bg-night-900 py-24 text-white md:py-28">
       <div aria-hidden data-parallax="0.06" className="absolute inset-0">
         <div className="blob top-[-10rem] left-[-8rem] h-[26rem] w-[26rem] bg-primary-700/35" />
         <div className="blob right-[-6rem] bottom-[-10rem] h-[28rem] w-[28rem] bg-[#6a5bd6]/25" style={{ animationDelay: "-9s" }} />
@@ -27,14 +29,17 @@ export function Control() {
             Vous gardez la main
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance md:text-5xl"
           >
-            <Brand onDark /> prépare. Vous décidez.
+            <Kinetic>
+              <Brand onDark /> prépare. Vous décidez.
+            </Kinetic>
           </h2>
-          <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-white/80">
-            Un outil qui travaille pour vous ne doit jamais parler à votre place sans votre accord. Voici nos règles.
+          <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-xl leading-relaxed font-medium text-pretty text-white">
+            {/* La section rogne ses halos avec `overflow-clip`, pas `hidden` : un conteneur de défilement figerait l'animation de la phrase */}
+            <ScrollWords>Un outil qui travaille pour vous ne doit jamais parler à votre place sans votre accord. Voici nos règles.</ScrollWords>
           </p>
         </div>
 

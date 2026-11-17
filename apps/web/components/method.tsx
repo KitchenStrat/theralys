@@ -3,6 +3,7 @@ import { Mail, MapPin, Newspaper, Share2, type LucideIcon } from "lucide-react";
 import { Brand } from "./brand";
 import { Timeline } from "./timeline";
 import { rich } from "./rich";
+import { Kinetic } from "./kinetic";
 
 const STEPS = [
   {
@@ -50,11 +51,11 @@ export function Method() {
             La méthode
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            De la démo à votre première semaine
+            <Kinetic>De la démo à votre première semaine</Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
             Quatre étapes, aucune compétence technique. Vous savez à tout moment où vous en êtes.

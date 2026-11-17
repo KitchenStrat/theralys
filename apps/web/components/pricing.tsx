@@ -4,6 +4,8 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import clsx from "clsx";
 import { BadgePercent, CalendarCheck, GraduationCap, Info } from "lucide-react";
 import type { BillingPeriod } from "@theralys/db/plans";
+import { CountTo } from "./count-to";
+import { Kinetic } from "./kinetic";
 import { fr } from "./typo";
 
 /** Le prix d'une formule sur une durée de facturation. */
@@ -231,11 +233,11 @@ export function Pricing({
         Tarifs
       </p>
       <h2
-        data-reveal
+        data-reveal="kinetic"
         style={{ "--rv-delay": "80ms" } as CSSProperties}
         className="font-display mx-auto mt-3 max-w-2xl text-center text-3xl font-bold text-ink-900 md:text-5xl"
       >
-        Deux formules, tout compris
+        <Kinetic>Deux formules, tout compris</Kinetic>
       </h2>
       <p
         data-reveal
@@ -318,8 +320,9 @@ export function Pricing({
               <h3 className="font-display text-2xl font-bold text-ink-900">{plan.label}</h3>
               <p className="mt-1.5 min-h-12 text-base text-ink-700">{fr(TAGLINES[plan.id] ?? "")}</p>
               <div className="mt-5 flex items-end gap-2">
-                <span key={`${plan.id}-${shown.id}`} className="font-display animate-[price-in_0.35s_ease] text-5xl font-bold text-ink-900">
-                  {euros(shown.price)}
+                {/* Le prix file vers sa nouvelle valeur au changement de durée */}
+                <span className="font-display text-5xl font-bold text-ink-900 tabular-nums">
+                  <CountTo value={shown.price} format={euros} />
                 </span>
                 <span className="pb-1.5 text-sm text-ink-500">TTC / mois</span>
               </div>
@@ -337,7 +340,11 @@ export function Pricing({
                   <>Réglés {shown.cadence}.</>
                 ) : (
                   <>
-                    Soit <strong className="font-semibold text-ink-900">{euros(shown.total)}</strong> {shown.cadence}.
+                    Soit{" "}
+                    <strong className="font-semibold text-ink-900 tabular-nums">
+                      <CountTo value={shown.total} format={euros} />
+                    </strong>{" "}
+                    {shown.cadence}.
                   </>
                 )}{" "}
                 {commitmentLabel(shown.commitmentMonths, minCommitmentMonths)}.
@@ -351,11 +358,12 @@ export function Pricing({
                 </p>
               )}
               <ul className="mt-6 mb-8 space-y-3">
-                {orderedFeatures(plan).map((feature) => (
+                {orderedFeatures(plan).map((feature, order) => (
                   <li key={feature.text} className="flex items-center gap-3 text-base">
                     <span
+                      style={{ "--draw-delay": `${order * 60}ms` } as CSSProperties}
                       className={clsx(
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                        "draw flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                         !feature.included
                           ? "bg-cream-100 text-ink-500"
                           : feature.highlight
@@ -391,8 +399,10 @@ export function Pricing({
               </ul>
               <a
                 href="#demo"
+                data-magnetic={popular || undefined}
                 className={clsx(
                   "focus-ring mt-auto block rounded-full py-3.5 text-center text-base font-semibold transition hover:-translate-y-0.5",
+                  popular && "cta",
                   popular
                     ? "bg-primary-600 text-white shadow-[0_14px_30px_-10px_rgb(3_123_189/0.8)] hover:bg-primary-700"
                     : "border border-ink-300 text-ink-700 hover:border-primary-300 hover:text-primary-700",
@@ -409,7 +419,6 @@ export function Pricing({
         ne sont pas compris dans l&apos;abonnement&nbsp;: si vous choisissez de faire de la publicité, ils sont réglés directement
         aux plateformes.
       </p>
-      <style>{`@keyframes price-in { from { opacity: 0; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }`}</style>
     </section>
   );
 }

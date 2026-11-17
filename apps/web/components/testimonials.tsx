@@ -10,6 +10,7 @@ import therapist10 from "@/assets/temoignages/therapist-10.jpg";
 import therapist12 from "@/assets/temoignages/therapist-12.jpg";
 import therapist4 from "@/assets/temoignages/therapist-4.jpg";
 import { QuoteCarousel, type CarouselQuote } from "./quote-carousel";
+import { Kinetic } from "./kinetic";
 import { fr } from "./typo";
 
 /*
@@ -160,11 +161,11 @@ export function Testimonials() {
             Ils nous font confiance
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            Nos praticiens témoignent
+            <Kinetic>Nos praticiens témoignent</Kinetic>
           </h2>
           {PROVISIONAL ? (
             <p data-reveal style={{ "--rv-delay": "130ms" } as CSSProperties} className="mt-5 flex justify-center">

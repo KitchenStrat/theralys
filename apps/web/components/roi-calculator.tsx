@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { Brand } from "./brand";
+import { Kinetic } from "./kinetic";
 
 /*
  * Simulateur de rentabilité. Il ne promet rien : le praticien pose ses propres
@@ -98,11 +99,13 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
             Simulateur
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
           >
-            À partir de combien de patients <Brand /> est-il rentable&nbsp;?
+            <Kinetic>
+              À partir de combien de patients <Brand /> est-il rentable&nbsp;?
+            </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
             Posez vos propres hypothèses&nbsp;: le calcul se met à jour sous vos yeux.

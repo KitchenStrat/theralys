@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import mobileSite from "@/assets/captures/m-site.webp";
 import siteExistant from "@/assets/captures/site-existant.webp";
 import { Brand } from "./brand";
+import { Kinetic } from "./kinetic";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { rich } from "./rich";
 
@@ -23,11 +24,16 @@ export function OwnSite() {
             Déjà un site&nbsp;?
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-[#034239] md:text-5xl"
           >
-            <span className="block">Gardez votre site.</span> <Brand /> s&apos;y branche.
+            <span className="block">
+              <Kinetic>Gardez votre site.</Kinetic>
+            </span>{" "}
+            <Kinetic from={3}>
+              <Brand /> s&apos;y branche.
+            </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
             Vous tenez à votre site actuel&nbsp;? Rien ne vous oblige à en changer. <Brand /> lit ses pages publiques pour comprendre

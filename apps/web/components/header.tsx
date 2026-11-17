@@ -84,7 +84,7 @@ export function Header() {
             </a>
             <a
               href="#demo"
-              className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_10px_24px_-10px_rgb(3_123_189/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-700 lg:px-5"
+              className="cta focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_10px_24px_-10px_rgb(3_123_189/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-700 lg:px-5"
             >
               {/* Sur un petit téléphone, la barre garde la place du menu */}
               <span className="sm:hidden">Ma démo</span>

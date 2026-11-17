@@ -77,6 +77,31 @@ Après une évolution visible du studio, reprendre les captures concernées aux
 mêmes dimensions, puis les convertir en WebP (qualité 88) sous le même nom :
 la page n'a pas à changer.
 
+## Motion design
+
+Tout est écrit à la main, en CSS et en quelques lignes de React, sans
+bibliothèque d'animation :
+
+- **titres cinétiques** (`components/kinetic.tsx`, titre en
+  `data-reveal="kinetic"`) : chaque mot monte de derrière un masque, l'un
+  après l'autre ;
+- **prix qui filent** (`components/count-to.tsx`) : au changement de durée, le
+  prix et la somme par échéance rejoignent leur nouvelle valeur ;
+- **icônes qui se dessinent** (classe `draw`, et `.bento-icon`) à l'apparition
+  de leur bloc ;
+- **boutons d'appel** (classe `cta`, attribut `data-magnetic`) : un reflet les
+  traverse, la flèche avance, le curseur les attire de quelques pixels
+  (`MagneticObserver`) ;
+- **phrase qui s'illumine au défilement** (`components/scroll-words.tsx`) :
+  animation liée au défilement, donc sans JavaScript ; un navigateur qui ne la
+  connaît pas affiche la phrase entière. Sa section ne doit pas devenir un
+  conteneur de défilement (`overflow-clip`, pas `overflow-hidden`) ;
+- **visite guidée** : à chaque outil, les points arrivent en cascade et la
+  capture se dévoile de haut en bas.
+
+Chaque effet a son repli dans le bloc `prefers-reduced-motion` de
+`app/globals.css` : tout est en place d'emblée, rien ne bouge.
+
 ## Accessibilité
 
 Contraste AA, cibles tactiles de 44 px, un seul `h1`, lien d'évitement,

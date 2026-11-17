@@ -89,3 +89,40 @@ export function ParallaxObserver() {
   }, []);
   return null;
 }
+
+/**
+ * Boutons magnétiques : un bouton marqué [data-magnetic] se laisse attirer de
+ * quelques pixels par le curseur qui le survole, et revient à sa place quand
+ * il s'éloigne (variables --mag-x/--mag-y consommées par .cta). Souris
+ * uniquement, jamais en mouvement réduit.
+ */
+export function MagneticObserver() {
+  useEffect(() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-magnetic]"));
+    if (nodes.length === 0) return;
+    const STRENGTH = 0.22;
+    const LIMIT = 7;
+    const clamp = (value: number) => Math.max(-LIMIT, Math.min(LIMIT, value));
+    const cleanups = nodes.map((node) => {
+      const onMove = (event: PointerEvent) => {
+        const rect = node.getBoundingClientRect();
+        node.style.setProperty("--mag-x", `${clamp((event.clientX - (rect.left + rect.width / 2)) * STRENGTH).toFixed(1)}px`);
+        node.style.setProperty("--mag-y", `${clamp((event.clientY - (rect.top + rect.height / 2)) * STRENGTH).toFixed(1)}px`);
+      };
+      const onLeave = () => {
+        node.style.setProperty("--mag-x", "0px");
+        node.style.setProperty("--mag-y", "0px");
+      };
+      node.addEventListener("pointermove", onMove, { passive: true });
+      node.addEventListener("pointerleave", onLeave);
+      return () => {
+        node.removeEventListener("pointermove", onMove);
+        node.removeEventListener("pointerleave", onLeave);
+      };
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, []);
+  return null;
+}

@@ -5,6 +5,7 @@ import mobileAccueil from "@/assets/captures/m-accueil.webp";
 import visuel from "@/assets/captures/visuel-reseaux.webp";
 import { Brand } from "./brand";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
+import { Kinetic } from "./kinetic";
 import { PostMock } from "./post-mock";
 import { ScrollTilt } from "./scroll-tilt";
 import { TOOLS } from "./tools";
@@ -31,11 +32,13 @@ export function Hero() {
           La solution digitale tout-en-un des thérapeutes
         </p>
         <h1
-          data-reveal
+          data-reveal="kinetic"
           style={{ "--rv-delay": "80ms" } as CSSProperties}
           className="font-display mt-6 text-[2.5rem] leading-[1.06] font-extrabold text-balance text-ink-900 sm:text-5xl md:text-[4.1rem]"
         >
-          Tout le digital de votre cabinet, <span className="shimmer-text shimmer-blue">enfin réuni.</span>
+          <Kinetic>
+            Tout le digital de votre cabinet, <span className="shimmer-text shimmer-blue">enfin réuni.</span>
+          </Kinetic>
         </h1>
         <p
           data-reveal
@@ -74,7 +77,8 @@ export function Hero() {
         <div data-reveal style={{ "--rv-delay": "320ms" } as CSSProperties} className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#demo"
-            className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700"
+            data-magnetic
+            className="cta focus-ring inline-flex items-center gap-2 rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700"
           >
             Demander ma démo gratuite
             <ArrowRight size={18} aria-hidden />

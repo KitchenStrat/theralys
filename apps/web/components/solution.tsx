@@ -1,6 +1,7 @@
 import { type CSSProperties } from "react";
 import { ChartNoAxesCombined, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
 import { Brand } from "./brand";
+import { Kinetic } from "./kinetic";
 import { TOOLS } from "./tools";
 import { rich } from "./rich";
 
@@ -47,11 +48,11 @@ export function Solution() {
             Le constat
           </p>
           <h2
-            data-reveal
+            data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
             className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-[2.75rem]"
           >
-            Vous êtes thérapeute. Pas webmaster, rédacteur, community manager et publicitaire.
+            <Kinetic>Vous êtes thérapeute. Pas webmaster, rédacteur, community manager et publicitaire.</Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-5 text-xl leading-relaxed font-semibold text-pretty text-ink-900">
             Avec <Brand />, tout est au même endroit, et le gros du travail est fait pour vous.
@@ -65,7 +66,7 @@ export function Solution() {
                 style={{ "--rv-delay": `${240 + index * 100}ms` } as CSSProperties}
                 className="flex gap-4"
               >
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-100 text-primary-700 ring-1 ring-primary-200">
+                <span className="draw grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-100 text-primary-700 ring-1 ring-primary-200">
                   <benefit.icon size={22} aria-hidden />
                 </span>
                 <div>

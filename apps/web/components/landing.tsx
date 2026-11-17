@@ -14,7 +14,7 @@ import {
 import { Band } from "./band";
 import { Control } from "./control";
 import { DemoForm } from "./demo-form";
-import { ParallaxObserver, SpotlightObserver } from "./effects";
+import { MagneticObserver, ParallaxObserver, SpotlightObserver } from "./effects";
 import { Faq } from "./faq";
 import { Footer } from "./footer";
 import { Header } from "./header";
@@ -86,6 +86,7 @@ export function Landing() {
       <RevealObserver />
       <SpotlightObserver />
       <ParallaxObserver />
+      <MagneticObserver />
       <ScrollProgress />
       <a href="#contenu" className="skip-link">
         Aller au contenu

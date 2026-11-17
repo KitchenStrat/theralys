@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { rich } from "./rich";
+import { Kinetic } from "./kinetic";
 import { fr } from "./typo";
 
 const QUESTIONS = [
@@ -57,11 +58,11 @@ export function Faq() {
         Questions fréquentes
       </p>
       <h2
-        data-reveal
+        data-reveal="kinetic"
         style={{ "--rv-delay": "80ms" } as CSSProperties}
         className="font-display mt-3 text-center text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
       >
-        Tout ce que vous devez savoir
+        <Kinetic>Tout ce que vous devez savoir</Kinetic>
       </h2>
 
       <div className="mt-12 space-y-3">
