@@ -39,7 +39,7 @@ export function Control() {
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-xl leading-relaxed font-medium text-pretty text-white">
             {/* La section rogne ses halos avec `overflow-clip`, pas `hidden` : un conteneur de défilement figerait l'animation de la phrase */}
-            <ScrollWords>Un outil qui travaille pour vous ne doit jamais parler à votre place sans votre accord. Voici nos règles.</ScrollWords>
+            <ScrollWords>Rien ne se publie à votre place sans votre accord.</ScrollWords>
           </p>
         </div>
 
@@ -56,8 +56,7 @@ export function Control() {
               </span>
               <h3 className="font-display mt-4 text-2xl font-bold">Rien n&apos;est publié sur vos réseaux sans vous</h3>
               <p className="mt-2 leading-relaxed text-white/75">
-                <Brand onDark /> prépare les visuels et leurs légendes. <strong className="font-semibold text-white">C&apos;est vous qui postez</strong>, depuis vos comptes,
-                quand vous le voulez.
+                <Brand onDark /> prépare visuels et légendes. <strong className="font-semibold text-white">Vous postez.</strong>
               </p>
             </div>
             <div aria-hidden className="visual-fan relative mx-auto mt-7 h-44 w-64 md:mt-0 md:h-52 md:w-72">
@@ -79,7 +78,7 @@ export function Control() {
             </span>
             <h3 className="font-display mt-4 text-2xl font-bold">L&apos;IA est toujours signalée</h3>
             <p className="mt-2 leading-relaxed text-white/75">
-              Un contenu rédigé par l&apos;IA porte sa marque dans votre espace&nbsp;: <strong className="font-semibold text-white">vous savez toujours ce que vous relisez</strong>.
+              <strong className="font-semibold text-white">Vous savez toujours</strong> ce que vous relisez.
             </p>
             <p aria-hidden className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary-100 px-3 py-1.5 text-sm font-semibold text-primary-900">
               <Sparkles size={15} strokeWidth={2.25} />
@@ -99,7 +98,7 @@ export function Control() {
               </span>
               <h3 className="font-display mt-4 text-2xl font-bold">Chaque article se relit avant de paraître</h3>
               <p className="mt-2 leading-relaxed text-white/75">
-                Il est écrit sept jours avant sa date. Vous pouvez <strong className="font-semibold text-white">le modifier, le reporter ou le retirer</strong>.
+                Sept jours pour <strong className="font-semibold text-white">le modifier, le reporter ou le retirer</strong>.
               </p>
             </div>
             <div aria-hidden className="relative mx-auto mt-6 h-44 w-52 overflow-hidden rounded-2xl ring-1 ring-white/15 md:mt-0 md:-mb-12 md:h-60">
@@ -121,7 +120,7 @@ export function Control() {
               </span>
               <h3 className="font-display mt-4 text-2xl font-bold">Des chiffres mesurés, pas des promesses</h3>
               <p className="mt-2 leading-relaxed text-white/75">
-                <strong className="font-semibold text-white">Votre place réelle</strong> dans Google Maps, vos vrais visiteurs, vos vrais clics de rendez-vous.
+                <strong className="font-semibold text-white">Votre place réelle</strong> sur Google Maps, vos vrais visiteurs.
               </p>
             </div>
             <div aria-hidden className="relative mx-auto mt-6 h-44 w-52 overflow-hidden rounded-2xl ring-1 ring-white/15 md:mt-0 md:h-48">
@@ -135,8 +134,7 @@ export function Control() {
             </span>
             <h3 className="font-display mt-4 text-2xl font-bold">Vos comptes restent les vôtres</h3>
             <p className="mt-2 leading-relaxed text-white/75">
-              Fiche Google, compte Google Ads, compte Meta&nbsp;: <strong className="font-semibold text-white">vous en restez propriétaire</strong>. Les budgets publicitaires sont réglés
-              directement aux plateformes, jamais à <Brand onDark />.
+              Google, Meta&nbsp;: <strong className="font-semibold text-white">vous restez propriétaire</strong>. Vos budgets vont aux plateformes.
             </p>
           </article>
 
@@ -146,8 +144,7 @@ export function Control() {
             </span>
             <h3 className="font-display mt-4 text-2xl font-bold">Un lecteur de site qui se présente</h3>
             <p className="mt-2 leading-relaxed text-white/75">
-              Quand <Brand onDark /> lit votre site existant, il le fait <strong className="font-semibold text-white">sous son nom</strong>, ne lit que vos pages publiques et
-              respecte vos consignes.{" "}
+              Il lit vos pages publiques <strong className="font-semibold text-white">sous son nom</strong>.{" "}
               <a href="/robot" className="focus-ring-dark rounded font-semibold text-primary-300 underline underline-offset-4 hover:text-white">
                 Ce que fait notre lecteur
               </a>

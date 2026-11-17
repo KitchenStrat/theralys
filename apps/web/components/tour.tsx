@@ -173,7 +173,6 @@ export function Tour() {
                       <span className={clsx("font-display block text-base font-bold whitespace-nowrap", selected ? "text-[var(--t-ink)]" : "text-ink-900")}>
                         {tool.name}
                       </span>
-                      <span className="hidden text-sm text-ink-500 lg:block">Formule {tool.plan}</span>
                     </span>
                     {/* La barre se remplit pendant l'affichage de l'outil ; à son terme, la visite passe au suivant */}
                     <span aria-hidden className="tour-track absolute inset-x-3 bottom-1 h-[3px] overflow-hidden rounded-full lg:inset-x-4 lg:bottom-1.5">
@@ -212,9 +211,6 @@ export function Tour() {
                     <span className="tool-deep inline-flex items-center rounded-full px-3 py-1 text-xs font-bold tracking-wide text-white uppercase">
                       {tool.name}
                     </span>
-                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--t-ink)] ring-1 ring-[color-mix(in_oklab,var(--t-from)_30%,white)]">
-                      Formule {tool.plan}
-                    </span>
                   </div>
                   <h3 className="font-display mt-4 max-w-2xl text-2xl leading-snug font-extrabold text-balance text-[var(--t-ink)] md:text-3xl">
                     {fr(tool.promise)}
@@ -246,7 +242,7 @@ export function Tour() {
                   </div>
                   <div className="tour-shot mx-auto mt-7 w-60 md:hidden">
                     <PhoneFrame>
-                      <Capture src={tool.mobile} alt={tool.alt} sizes="(min-width: 768px) 1px, 240px" />
+                      <Capture src={tool.mobile} alt={tool.mobileAlt ?? tool.alt} sizes="(min-width: 768px) 1px, 240px" />
                     </PhoneFrame>
                   </div>
                 </div>

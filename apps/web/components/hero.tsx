@@ -49,21 +49,19 @@ export function Hero() {
           <strong className="font-semibold text-ink-900">s&apos;occupe de toute votre présence en ligne</strong> et vous montre ce
           qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
         </p>
+      </div>
 
-        {/* Les outils, d'un coup d'œil : chaque pastille ouvre l'outil dans la visite guidée */}
-        <ul
-          data-reveal
-          style={{ "--rv-delay": "240ms" } as CSSProperties}
-          aria-label="Les outils de Harmony"
-          className="mx-auto mt-8 flex max-w-3xl flex-wrap justify-center gap-2"
-        >
+      {/* Les outils, d'un coup d'œil, sur une seule ligne : chaque pastille ouvre l'outil dans la visite guidée.
+          La ligne est centrée quand elle tient dans l'écran, et se fait défiler du doigt quand elle n'y tient pas. */}
+      <div data-reveal style={{ "--rv-delay": "240ms" } as CSSProperties} className="chips-row mt-6 overflow-x-auto px-5 py-2">
+        <ul aria-label="Les outils de Harmony" className="mx-auto flex w-max gap-2">
           {TOOLS.map((tool, index) => (
             <li key={tool.id}>
               <a
                 href="#outils"
                 data-tool={tool.id}
                 style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to, "--chip-delay": `${index * 70}ms` } as CSSProperties}
-                className="chip-pop focus-ring group inline-flex min-h-11 items-center gap-2 rounded-full border border-cream-200 bg-white/90 py-1.5 pr-3.5 pl-1.5 text-sm font-semibold text-ink-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md"
+                className="chip-pop focus-ring group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full border border-cream-200 bg-white/90 py-1.5 pr-3.5 pl-1.5 text-sm font-semibold text-ink-900 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:shadow-md"
               >
                 <span className="tool-chip grid h-7 w-7 place-items-center rounded-full">
                   <tool.icon size={15} strokeWidth={2.25} aria-hidden />
@@ -73,8 +71,10 @@ export function Hero() {
             </li>
           ))}
         </ul>
+      </div>
 
-        <div data-reveal style={{ "--rv-delay": "320ms" } as CSSProperties} className="mt-9 flex flex-wrap items-center justify-center gap-3">
+      <div className="mx-auto max-w-4xl px-5 text-center">
+        <div data-reveal style={{ "--rv-delay": "320ms" } as CSSProperties} className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#demo"
             data-magnetic

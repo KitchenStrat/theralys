@@ -12,6 +12,7 @@ import {
   savedMonths,
 } from "@theralys/db";
 import { Band } from "./band";
+import { BillingPeriodProvider } from "./billing-period";
 import { Control } from "./control";
 import { DemoForm } from "./demo-form";
 import { MagneticObserver, ParallaxObserver, SpotlightObserver } from "./effects";
@@ -77,9 +78,9 @@ export function Landing() {
     id: period,
     label: BILLING_PERIOD_LABELS[period],
   }));
-  // Le simulateur raisonne sur la formule complète, en facturation annuelle
+  // Le simulateur raisonne sur la formule complète, au prix de la durée choisie dans les tarifs
   const complete = PLANS.scale;
-  const completeAnnualPrice = planPrice("scale", "annual") ?? 0;
+  const completePrices = planPeriods("scale").map((period) => ({ id: period, price: planPrice("scale", period) ?? 0 }));
 
   return (
     <>
@@ -102,8 +103,10 @@ export function Landing() {
         <OwnSite />
         <Testimonials />
         <Band />
-        <Pricing plans={plans} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
-        <RoiCalculator monthlyCost={completeAnnualPrice} planLabel={complete.label} />
+        <BillingPeriodProvider>
+          <Pricing plans={plans} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
+          <RoiCalculator prices={completePrices} planLabel={complete.label} />
+        </BillingPeriodProvider>
         <Faq />
         <DemoForm />
       </main>

@@ -19,7 +19,7 @@ import mobileFicheGoogle from "@/assets/captures/m-fiche-google.webp";
 import mobileGoogleAds from "@/assets/captures/m-google-ads.webp";
 import mobileMetaAds from "@/assets/captures/m-meta-ads.webp";
 import mobileReseaux from "@/assets/captures/m-reseaux.webp";
-import mobileSite from "@/assets/captures/m-site.webp";
+import mobileSite from "@/assets/captures/m-site-public.webp";
 import metaAds from "@/assets/captures/meta-ads.webp";
 import reseaux from "@/assets/captures/reseaux.webp";
 import site from "@/assets/captures/site.webp";
@@ -49,13 +49,13 @@ export type Tool = {
   points: string[];
   /** Ce que l'outil ne fait pas à la place du praticien, dit clairement */
   note: string;
-  /** Formule(s) qui comprennent l'outil */
-  plan: "Starter et Scale" | "Scale";
   colors: { from: string; to: string; deepFrom: string; deepTo: string; soft: string; ink: string; accent: string };
   desktop: StaticImageData;
   mobile: StaticImageData;
   /** Ce que montre la capture (texte de remplacement) */
   alt: string;
+  /** Texte de remplacement de la capture téléphone, quand elle ne montre pas le même écran */
+  mobileAlt?: string;
 };
 
 export const TOOLS: Tool[] = [
@@ -71,11 +71,11 @@ export const TOOLS: Tool[] = [
       "**Vos spécialités ont leur page**, vos avis Google s'affichent d'eux-mêmes.",
     ],
     note: "Vous avez déjà un site ? Gardez-le : Harmony s'y branche.",
-    plan: "Starter et Scale",
     colors: { from: "#23A381", to: "#009298", deepFrom: "#1B8367", deepTo: "#006B72", soft: "#E9FCF7", ink: "#034239", accent: "#127A6B" },
     desktop: site,
     mobile: mobileSite,
-    alt: "L'éditeur de site de Harmony : les réglages du contenu à gauche, l'aperçu du site d'une sophrologue à droite.",
+    alt: "L'éditeur de site de Harmony : les réglages du contenu à gauche, l'aperçu du site d'une sophrologue à droite, avec sa photo d'accueil et ses couleurs chaudes.",
+    mobileAlt: "Le site d'une sophrologue créé avec Harmony, sur un téléphone : sa photo d'accueil, son titre et ses couleurs chaudes.",
   },
   {
     id: "blog",
@@ -89,7 +89,6 @@ export const TOOLS: Tool[] = [
       "**Un calendrier lisible d'un coup d'œil** : publié, planifié, à relire.",
     ],
     note: "Les articles sont rédigés par une IA spécialisée, et signalés comme tels dans votre espace.",
-    plan: "Scale",
     colors: { from: "#01A2B9", to: "#0A88CC", deepFrom: "#017F95", deepTo: "#09669A", soft: "#EDF9FF", ink: "#003E52", accent: "#027495" },
     desktop: blog,
     mobile: mobileBlog,
@@ -107,7 +106,6 @@ export const TOOLS: Tool[] = [
       "**Des réponses à vos avis et des posts Google** préparés, prêts à copier.",
     ],
     note: "Harmony prépare ; vous publiez sur votre fiche Google, qui reste la vôtre.",
-    plan: "Scale",
     colors: { from: "#00A497", to: "#008EB3", deepFrom: "#008479", deepTo: "#006A8B", soft: "#E8FBFD", ink: "#004046", accent: "#007781" },
     desktop: ficheGoogle,
     mobile: mobileFicheGoogle,
@@ -125,7 +123,6 @@ export const TOOLS: Tool[] = [
       "**Trois gestes pour publier** : télécharger le visuel, coller la légende, poster.",
     ],
     note: "Harmony ne publie rien à votre place : vous gardez la main sur vos comptes.",
-    plan: "Scale",
     colors: { from: "#0E97DD", to: "#8F6CE0", deepFrom: "#0079B4", deepTo: "#7D51D2", soft: "#F4F6FF", ink: "#2C306A", accent: "#5458C8" },
     desktop: reseaux,
     mobile: mobileReseaux,
@@ -143,7 +140,6 @@ export const TOOLS: Tool[] = [
       "**Le suivi des rendez-vous** venus de vos annonces, dans vos statistiques.",
     ],
     note: "Vous paramétrez votre propre compte Google Ads avec notre guide ; le budget publicitaire est réglé à Google.",
-    plan: "Scale",
     colors: { from: "#2D74D9", to: "#4B53C2", deepFrom: "#1C55B2", deepTo: "#363896", soft: "#F2F7FF", ink: "#19356B", accent: "#2E62C9" },
     desktop: googleAds,
     mobile: mobileGoogleAds,
@@ -161,7 +157,6 @@ export const TOOLS: Tool[] = [
       "**Un plan de campagne et de ciblage**, avec le budget à prévoir.",
     ],
     note: "Vous diffusez depuis votre compte Meta ; le budget publicitaire est réglé à Meta.",
-    plan: "Scale",
     colors: { from: "#6269DB", to: "#7A4ECF", deepFrom: "#4A4CBA", deepTo: "#5E31A9", soft: "#F6F6FF", ink: "#392C67", accent: "#6B50C2" },
     desktop: metaAds,
     mobile: mobileMetaAds,
@@ -179,7 +174,6 @@ export const TOOLS: Tool[] = [
       "À chaque visite, **la prochaine chose utile à faire**, et rien d'autre.",
     ],
     note: "Des chiffres mesurés sur votre site, pas des estimations.",
-    plan: "Starter et Scale",
     colors: { from: "#0E97DD", to: "#2F6DD3", deepFrom: "#0079B4", deepTo: "#2454B3", soft: "#F1F8FF", ink: "#003967", accent: "#006BB9" },
     desktop: accueil,
     mobile: mobileAccueil,

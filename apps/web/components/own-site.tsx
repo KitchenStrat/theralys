@@ -8,10 +8,10 @@ import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { rich } from "./rich";
 
 const STEPS = [
-  { title: "Connecter", text: "Vous indiquez **l'adresse de votre site**. Ses pages publiques sont lues en une minute environ." },
-  { title: "Relire", text: "**Vous vérifiez** ce qui a été compris de votre activité, et vous corrigez si besoin." },
-  { title: "Activer", text: "D'un clic, **vos outils s'appuient sur votre site** : contenus, liens et statistiques." },
-  { title: "Mesurer", text: "**Un petit code à coller** sur votre site, et ses visites apparaissent dans votre espace." },
+  { title: "Connecter", text: "Indiquez **l'adresse de votre site**." },
+  { title: "Relire", text: "**Vérifiez** ce qui en a été compris." },
+  { title: "Activer", text: "**Un clic**, et vos outils s'y appuient." },
+  { title: "Mesurer", text: "**Un code à coller** pour suivre ses visites." },
 ];
 
 /** Le praticien a déjà un site : il le garde, les outils s'y branchent. */
@@ -36,8 +36,7 @@ export function OwnSite() {
             </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
-            Vous tenez à votre site actuel&nbsp;? Rien ne vous oblige à en changer. <Brand /> lit ses pages publiques pour comprendre
-            votre activité, puis vos contenus, vos liens et vos statistiques s&apos;appuient sur lui.
+            Rien ne vous oblige à en changer&nbsp;: <strong className="font-semibold text-ink-900">vos outils s&apos;appuient sur votre site actuel</strong>.
           </p>
 
           <ol className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -65,7 +64,7 @@ export function OwnSite() {
               href="/robot"
               className="focus-ring inline-flex items-center gap-1 rounded font-semibold text-[#0b5f54] underline underline-offset-4 hover:text-[#034239]"
             >
-              Comment notre lecteur de site se comporte
+              Ce que fait notre lecteur
               <ArrowRight size={16} aria-hidden />
             </a>
           </p>

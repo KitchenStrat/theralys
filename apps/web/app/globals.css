@@ -510,6 +510,16 @@ body {
   animation-delay: calc(0.35s + var(--chip-delay, 0ms));
 }
 
+/* ── Pastilles d'outils du haut de page : une seule ligne. Centrée quand elle
+   tient dans l'écran ; sinon elle se fait défiler, et ses bords s'estompent
+   pour dire qu'il y a une suite ────────────────────────────────────────── */
+.chips-row {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  mask-image: linear-gradient(to right, transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+}
+.chips-row::-webkit-scrollbar { display: none; }
+
 /* ── Capture du haut de page : arrive inclinée, se redresse au défilement
    (--tilt et --lift sont tenues à jour par ScrollTilt) ──────────────────── */
 .scroll-tilt { perspective: 2200px; }

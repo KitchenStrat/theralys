@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import type { BillingPeriod } from "@theralys/db/plans";
+import { useBillingPeriod } from "./billing-period";
 import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 
@@ -9,10 +11,22 @@ import { Kinetic } from "./kinetic";
  * hypothèses (tarif, nouveaux patients venus d'internet, séances par patient)
  * et lit ce que cela représente face au prix de l'abonnement. Aucun taux de
  * conversion « constaté » n'entre dans le calcul.
+ *
+ * Le prix de l'abonnement est celui de la durée de facturation choisie dans la
+ * grille tarifaire, juste au-dessus : passer en mensuel ou sur 3 ans là-haut
+ * change le montant et le seuil de rentabilité ici.
  */
 const PRICE = { min: 30, max: 150, step: 5, default: 60 };
 const PATIENTS = { min: 1, max: 15, step: 1, default: 3 };
 const SESSIONS = { min: 1, max: 10, step: 1, default: 3 };
+
+/** La durée telle qu'elle se lit après « votre abonnement » ou « au tarif Scale ». */
+const PERIOD_PHRASES: Record<BillingPeriod, string> = {
+  monthly: "en mensuel",
+  quarterly: "en trimestriel",
+  annual: "en annuel",
+  triennial: "sur 3 ans",
+};
 
 const euros = (n: number) => `${Math.round(n).toLocaleString("fr-FR")}\u00a0€`;
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
@@ -72,7 +86,20 @@ function Slider({
   );
 }
 
-export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number; planLabel: string }) {
+export function RoiCalculator({
+  prices,
+  planLabel,
+}: {
+  /** Le prix par mois de la formule sur chacune de ses durées de facturation */
+  prices: { id: BillingPeriod; price: number }[];
+  planLabel: string;
+}) {
+  const { period } = useBillingPeriod();
+  const current = prices.find((entry) => entry.id === period) ?? prices.find((entry) => entry.id === "annual") ?? prices[0];
+  const monthlyCost = current?.price ?? 0;
+  const periodPhrase = current ? PERIOD_PHRASES[current.id] : "";
+  // La synthèse n'est annoncée que pendant qu'on manipule le simulateur, pas quand la durée change depuis les tarifs
+  const [engaged, setEngaged] = useState(false);
   const [price, setPrice] = useState(PRICE.default);
   const [patients, setPatients] = useState(PATIENTS.default);
   const [sessions, setSessions] = useState(SESSIONS.default);
@@ -118,7 +145,11 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
           className="mx-auto mt-12 grid max-w-5xl gap-6 lg:grid-cols-[1fr_1.05fr] lg:gap-8"
         >
           {/* Les hypothèses du praticien */}
-          <div className="grid content-between gap-8 rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-card)] md:p-8">
+          <div
+            onFocus={() => setEngaged(true)}
+            onBlur={() => setEngaged(false)}
+            className="grid content-between gap-8 rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-card)] md:p-8"
+          >
             <Slider
               id="sim-price"
               label="Tarif de votre séance"
@@ -182,7 +213,7 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
               <div>
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-base font-medium text-ink-700">
-                    Votre abonnement <Brand />
+                    Votre abonnement <Brand /> <span className="whitespace-nowrap text-ink-500">{periodPhrase}</span>
                   </dt>
                   <dd className="font-display text-2xl font-extrabold whitespace-nowrap text-ink-900">{euros(monthlyCost)}</dd>
                 </div>
@@ -192,7 +223,7 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
               </div>
             </dl>
 
-            <p aria-live="polite" className="mt-6 rounded-2xl bg-primary-50 p-4 text-base leading-relaxed text-ink-900">
+            <p aria-live={engaged ? "polite" : "off"} className="mt-6 rounded-2xl bg-primary-50 p-4 text-base leading-relaxed text-ink-900">
               Avec ces hypothèses, {plural(patients, "nouveau patient", "nouveaux patients")} par mois{" "}
               {patients > 1 ? "représentent" : "représente"}{" "}
               <strong className="font-bold">
@@ -212,9 +243,8 @@ export function RoiCalculator({ monthlyCost, planLabel }: { monthlyCost: number;
         </div>
 
         <p data-reveal className="mx-auto mt-8 max-w-2xl text-center text-sm leading-relaxed text-ink-500">
-          Simulation calculée à partir de vos propres hypothèses, sur le tarif de la formule {planLabel} en facturation annuelle
-          ({euros(monthlyCost)} par mois). Harmony ne promet pas un nombre de patients&nbsp;: vos résultats dépendent de votre ville,
-          de votre spécialité et de la concurrence.
+          Simulation sur vos propres hypothèses, au tarif {planLabel} {periodPhrase} ({euros(monthlyCost)} par mois). Harmony ne
+          promet pas un nombre de patients&nbsp;: vos résultats dépendent de votre ville, de votre spécialité et de la concurrence.
         </p>
       </div>
     </section>

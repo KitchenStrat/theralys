@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import clsx from "clsx";
 import { Check } from "lucide-react";
 import type { BillingPeriod } from "@theralys/db/plans";
+import { useBillingPeriod } from "./billing-period";
 import { CountTo } from "./count-to";
 import { Kinetic } from "./kinetic";
 import { fr } from "./typo";
@@ -82,7 +83,8 @@ export function Pricing({
   periods: { id: BillingPeriod; label: string }[];
   minCommitmentMonths: number;
 }) {
-  const [period, setPeriod] = useState<BillingPeriod>("annual");
+  // Partagée avec le simulateur, qui calcule sur le prix de la durée choisie ici
+  const { period, setPeriod } = useBillingPeriod();
   const index = Math.max(0, periods.findIndex((option) => option.id === period));
   const periodLabel = periods[index]?.label ?? "";
   // La formule de base : les autres se décrivent par ce qu'elles lui ajoutent
