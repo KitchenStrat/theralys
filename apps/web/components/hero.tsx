@@ -42,8 +42,9 @@ export function Hero() {
           style={{ "--rv-delay": "160ms" } as CSSProperties}
           className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-ink-700 md:text-xl"
         >
-          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand /> s&apos;occupe de toute votre présence en
-          ligne et vous montre ce qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
+          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand />{" "}
+          <strong className="font-semibold text-ink-900">s&apos;occupe de toute votre présence en ligne</strong> et vous montre ce
+          qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
         </p>
 
         {/* Les outils, d'un coup d'œil : chaque pastille ouvre l'outil dans la visite guidée */}

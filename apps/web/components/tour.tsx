@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { Check, Info, Pause, Play } from "lucide-react";
+import { Check, Info } from "lucide-react";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { TOOLS, type Tool } from "./tools";
+import { rich } from "./rich";
 import { fr } from "./typo";
 
 /** Durée d'affichage d'un outil quand la visite défile seule. */
@@ -29,8 +30,8 @@ function toolVars(tool: Tool): CSSProperties {
  *
  * La visite avance seule tant qu'elle est à l'écran et qu'on ne la touche pas :
  * c'est la fin de l'animation de la barre de l'onglet actif qui passe au
- * suivant (pas de minuterie à synchroniser). Elle s'arrête au survol, au
- * focus, sur le bouton pause, dès qu'on choisit un outil, et ne démarre jamais
+ * suivant (pas de minuterie à synchroniser). Elle attend au survol et au
+ * focus, s'arrête pour de bon dès qu'on choisit un outil, et ne démarre jamais
  * en mouvement réduit.
  */
 export function Tour() {
@@ -187,14 +188,6 @@ export function Tour() {
                 );
               })}
             </div>
-            <button
-              type="button"
-              onClick={() => setAuto((value) => !value)}
-              className="focus-ring mt-3 inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-medium text-ink-700 transition hover:bg-cream-100 hover:text-primary-700"
-            >
-              {auto ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
-              {auto ? "Mettre la visite en pause" : "Faire défiler la visite"}
-            </button>
           </div>
 
           {/* Tous les panneaux partagent la même case : la hauteur ne bouge pas d'un outil à l'autre */}
@@ -231,7 +224,7 @@ export function Tour() {
                         <span className="tool-chip mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full md:mt-0">
                           <Check size={14} strokeWidth={3} aria-hidden />
                         </span>
-                        <span>{fr(point)}</span>
+                        <span>{rich(point)}</span>
                       </li>
                     ))}
                   </ul>

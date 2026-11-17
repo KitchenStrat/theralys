@@ -19,6 +19,7 @@ export function Band() {
           <span className="sr-only"> toute votre présence en ligne.</span>
           <WordRotator
             words={TASKS}
+            interval={1700}
             className="mt-2 w-full max-w-full items-center justify-items-center text-3xl text-white md:text-5xl [&>span]:max-w-full"
           />
         </h2>

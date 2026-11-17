@@ -45,7 +45,7 @@ export type Tool = {
   icon: LucideIcon;
   /** La promesse, en une phrase */
   promise: string;
-  /** Ce que fait l'outil : trois faits vérifiables dans le produit */
+  /** Ce que fait l'outil : trois faits vérifiables dans le produit ; `**…**` marque ce qu'il faut retenir (cf. `rich`) */
   points: string[];
   /** Ce que l'outil ne fait pas à la place du praticien, dit clairement */
   note: string;
@@ -66,9 +66,9 @@ export const TOOLS: Tool[] = [
     icon: Globe,
     promise: "Un site professionnel à votre image, ou le vôtre si vous en avez déjà un.",
     points: [
-      "Créé pour votre pratique et votre ville, livré clé en main : hébergement, nom de domaine et certificat de sécurité compris.",
-      "Textes, photos, horaires, tarifs : vous modifiez tout en quelques clics, avec l'aperçu en direct.",
-      "Vos spécialités ont leur page, vos avis Google s'affichent d'eux-mêmes.",
+      "**Créé pour votre pratique et votre ville**, livré clé en main : hébergement, nom de domaine et certificat de sécurité compris.",
+      "Textes, photos, horaires, tarifs : **vous modifiez tout en quelques clics**, avec l'aperçu en direct.",
+      "**Vos spécialités ont leur page**, vos avis Google s'affichent d'eux-mêmes.",
     ],
     note: "Vous avez déjà un site ? Gardez-le : Harmony s'y branche.",
     plan: "Starter et Scale",
@@ -84,9 +84,9 @@ export const TOOLS: Tool[] = [
     icon: Newspaper,
     promise: "Jusqu'à quatre articles par semaine, écrits pour vous.",
     points: [
-      "Des sujets tirés de vos spécialités et de votre ville : ce que vos futurs patients tapent dans Google.",
-      "Chaque article est rédigé sept jours avant sa date : vous pouvez le relire et le modifier avant qu'il paraisse.",
-      "Un calendrier lisible d'un coup d'œil : publié, planifié, à relire.",
+      "Des sujets tirés de **vos spécialités et de votre ville** : ce que vos futurs patients tapent dans Google.",
+      "Chaque article est rédigé **sept jours avant sa date** : vous pouvez le relire et le modifier avant qu'il paraisse.",
+      "**Un calendrier lisible d'un coup d'œil** : publié, planifié, à relire.",
     ],
     note: "Les articles sont rédigés par une IA spécialisée, et signalés comme tels dans votre espace.",
     plan: "Scale",
@@ -102,9 +102,9 @@ export const TOOLS: Tool[] = [
     icon: MapPin,
     promise: "Votre fiche Google Maps auditée, suivie, et comparée aux cabinets voisins.",
     points: [
-      "Un score sur 100 et un plan d'action classé par impact, avec la marche à suivre pour chaque point.",
-      "Une carte qui montre votre place dans Google Maps, emplacement par emplacement autour de votre cabinet.",
-      "Des réponses à vos avis et des posts Google préparés, prêts à copier.",
+      "**Un score sur 100 et un plan d'action** classé par impact, avec la marche à suivre pour chaque point.",
+      "**Une carte qui montre votre place dans Google Maps**, emplacement par emplacement autour de votre cabinet.",
+      "**Des réponses à vos avis et des posts Google** préparés, prêts à copier.",
     ],
     note: "Harmony prépare ; vous publiez sur votre fiche Google, qui reste la vôtre.",
     plan: "Scale",
@@ -120,9 +120,9 @@ export const TOOLS: Tool[] = [
     icon: Share2,
     promise: "Vos publications du mois, prêtes à poster.",
     points: [
-      "Visuels, carrousels et stories aux couleurs de votre cabinet, chacun avec sa légende.",
-      "Un sujet vous tient à cœur ? Demandez un contenu sur mesure : il est préparé à partir de votre site.",
-      "Trois gestes pour publier : télécharger le visuel, coller la légende, poster.",
+      "**Visuels, carrousels et stories** aux couleurs de votre cabinet, chacun avec sa légende.",
+      "Un sujet vous tient à cœur ? Demandez **un contenu sur mesure** : il est préparé à partir de votre site.",
+      "**Trois gestes pour publier** : télécharger le visuel, coller la légende, poster.",
     ],
     note: "Harmony ne publie rien à votre place : vous gardez la main sur vos comptes.",
     plan: "Scale",
@@ -138,9 +138,9 @@ export const TOOLS: Tool[] = [
     icon: MousePointerClick,
     promise: "La publicité sur Google, sans avancer à l'aveugle.",
     points: [
-      "Un diagnostic chiffré : est-ce pertinent pour votre cabinet, et avec quel budget ?",
-      "Les mots-clés à viser et un plan d'action à suivre pas à pas.",
-      "Le suivi des rendez-vous venus de vos annonces, dans vos statistiques.",
+      "**Un diagnostic chiffré** : est-ce pertinent pour votre cabinet, et avec quel budget ?",
+      "**Les mots-clés à viser** et un plan d'action à suivre pas à pas.",
+      "**Le suivi des rendez-vous** venus de vos annonces, dans vos statistiques.",
     ],
     note: "Vous paramétrez votre propre compte Google Ads avec notre guide ; le budget publicitaire est réglé à Google.",
     plan: "Scale",
@@ -156,9 +156,9 @@ export const TOOLS: Tool[] = [
     icon: Megaphone,
     promise: "Facebook et Instagram : des annonces prêtes à diffuser.",
     points: [
-      "Une veille des annonces diffusées par les praticiens autour de vous.",
-      "Vos annonces rédigées et mises en image dans les trois formats de Meta, plus un plan vidéo à tourner.",
-      "Un plan de campagne et de ciblage, avec le budget à prévoir.",
+      "**Une veille des annonces** diffusées par les praticiens autour de vous.",
+      "**Vos annonces rédigées et mises en image** dans les trois formats de Meta, plus un plan vidéo à tourner.",
+      "**Un plan de campagne et de ciblage**, avec le budget à prévoir.",
     ],
     note: "Vous diffusez depuis votre compte Meta ; le budget publicitaire est réglé à Meta.",
     plan: "Scale",
@@ -174,9 +174,9 @@ export const TOOLS: Tool[] = [
     icon: ChartNoAxesCombined,
     promise: "Vous voyez ce que votre présence en ligne vous rapporte.",
     points: [
-      "Visiteurs, clics sur la prise de rendez-vous, appels : vos chiffres clés sur 7 jours, 30 jours ou 6 mois.",
-      "D'où viennent vos visiteurs : Google, Instagram, Facebook, vos publicités.",
-      "À chaque visite, la prochaine chose utile à faire, et rien d'autre.",
+      "**Visiteurs, clics sur la prise de rendez-vous, appels** : vos chiffres clés sur 7 jours, 30 jours ou 6 mois.",
+      "**D'où viennent vos visiteurs** : Google, Instagram, Facebook, vos publicités.",
+      "À chaque visite, **la prochaine chose utile à faire**, et rien d'autre.",
     ],
     note: "Des chiffres mesurés sur votre site, pas des estimations.",
     plan: "Starter et Scale",

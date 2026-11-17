@@ -2,20 +2,20 @@
 
 import { useState, useTransition, type CSSProperties, type FormEvent } from "react";
 import { requestDemo } from "@/app/actions";
-import { fr } from "./typo";
+import { rich } from "./rich";
 
 const STEPS = [
   {
     title: "Nous préparons votre démo",
-    text: "Un site complet pour votre pratique et votre ville, et un aperçu de vos outils : pas une maquette générique.",
+    text: "Un site complet pour votre pratique et votre ville, et **un aperçu de vos outils** : pas une maquette générique.",
   },
   {
     title: "Nous vous la présentons",
-    text: "Vous découvrez votre futur espace, et nous ajustons ensemble ce qui doit l'être.",
+    text: "Vous découvrez **votre futur espace**, et nous ajustons ensemble ce qui doit l'être.",
   },
   {
     title: "Vous décidez, sereinement",
-    text: "La démo est gratuite et sans engagement. Si elle vous plaît, tout peut partir en ligne.",
+    text: "La démo est **gratuite et sans engagement**. Si elle vous plaît, tout peut partir en ligne.",
   },
 ];
 
@@ -71,7 +71,7 @@ export function DemoForm() {
                 </span>
                 <div>
                   <h3 className="font-display text-lg font-bold text-ink-900">{step.title}</h3>
-                  <p className="mt-1 leading-relaxed text-ink-700">{fr(step.text)}</p>
+                  <p className="mt-1 leading-relaxed text-ink-700">{rich(step.text)}</p>
                 </div>
               </div>
             ))}

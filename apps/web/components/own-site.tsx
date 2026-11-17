@@ -4,13 +4,13 @@ import mobileSite from "@/assets/captures/m-site.webp";
 import siteExistant from "@/assets/captures/site-existant.webp";
 import { Brand } from "./brand";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
-import { fr } from "./typo";
+import { rich } from "./rich";
 
 const STEPS = [
-  { title: "Connecter", text: "Vous indiquez l'adresse de votre site. Ses pages publiques sont lues en une minute environ." },
-  { title: "Relire", text: "Vous vérifiez ce qui a été compris de votre activité, et vous corrigez si besoin." },
-  { title: "Activer", text: "D'un clic, vos outils s'appuient sur votre site : contenus, liens et statistiques." },
-  { title: "Mesurer", text: "Un petit code à coller sur votre site, et ses visites apparaissent dans votre espace." },
+  { title: "Connecter", text: "Vous indiquez **l'adresse de votre site**. Ses pages publiques sont lues en une minute environ." },
+  { title: "Relire", text: "**Vous vérifiez** ce qui a été compris de votre activité, et vous corrigez si besoin." },
+  { title: "Activer", text: "D'un clic, **vos outils s'appuient sur votre site** : contenus, liens et statistiques." },
+  { title: "Mesurer", text: "**Un petit code à coller** sur votre site, et ses visites apparaissent dans votre espace." },
 ];
 
 /** Le praticien a déjà un site : il le garde, les outils s'y branchent. */
@@ -48,7 +48,7 @@ export function OwnSite() {
                   </span>
                   <span className="font-display text-lg font-bold text-[#034239]">{step.title}</span>
                 </p>
-                <p className="mt-2 text-base leading-relaxed text-ink-700">{fr(step.text)}</p>
+                <p className="mt-2 text-base leading-relaxed text-ink-700">{rich(step.text)}</p>
               </li>
             ))}
           </ol>

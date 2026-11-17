@@ -2,24 +2,24 @@ import { type CSSProperties } from "react";
 import { Mail, MapPin, Newspaper, Share2, type LucideIcon } from "lucide-react";
 import { Brand } from "./brand";
 import { Timeline } from "./timeline";
-import { fr } from "./typo";
+import { rich } from "./rich";
 
 const STEPS = [
   {
     title: "Vous demandez votre démo",
-    text: "Dites-nous votre pratique et votre ville. Nous préparons un site complet pour votre cabinet, gratuitement et sans engagement.",
+    text: "Dites-nous votre pratique et votre ville. Nous préparons **un site complet pour votre cabinet**, gratuitement et sans engagement.",
   },
   {
     title: "Nous l'ajustons ensemble",
-    text: "Couleurs, textes, photos : le site est retouché jusqu'à ce qu'il vous ressemble. Vous avez déjà un site ? Nous y branchons vos outils.",
+    text: "Couleurs, textes, photos : le site est retouché **jusqu'à ce qu'il vous ressemble**. Vous avez déjà un site ? Nous y branchons vos outils.",
   },
   {
     title: "Mise en ligne, sans technique",
-    text: "Nom de domaine, hébergement, certificat de sécurité : tout est géré pour vous. Vous validez, c'est en ligne.",
+    text: "Nom de domaine, hébergement, certificat de sécurité : **tout est géré pour vous**. Vous validez, c'est en ligne.",
   },
   {
     title: "Chaque semaine, votre espace se remplit",
-    text: "Articles, contenus pour vos réseaux, suivi de votre fiche Google : le travail arrive prêt, vous gardez un œil dessus.",
+    text: "Articles, contenus pour vos réseaux, suivi de votre fiche Google : **le travail arrive prêt**, vous gardez un œil dessus.",
   },
 ];
 
@@ -70,7 +70,7 @@ export function Method() {
                 </span>
                 <div className="pt-1">
                   <h3 className="font-display text-xl font-bold text-ink-900 md:text-2xl">{step.title}</h3>
-                  <p className="mt-1.5 leading-relaxed text-ink-700">{fr(step.text)}</p>
+                  <p className="mt-1.5 leading-relaxed text-ink-700">{rich(step.text)}</p>
                 </div>
               </li>
             ))}

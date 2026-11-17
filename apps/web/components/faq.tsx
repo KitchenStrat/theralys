@@ -2,49 +2,49 @@
 
 import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
-import { brandify } from "./brand";
+import { rich } from "./rich";
 import { fr } from "./typo";
 
 const QUESTIONS = [
   {
     q: "Harmony, c'est un site internet ou plus que cela ?",
-    a: "Les deux. Harmony crée et héberge votre site, puis s'occupe de ce qui le fait vivre : articles de blog, fiche Google, contenus pour vos réseaux sociaux, accompagnement publicitaire et statistiques. Tout se retrouve dans un seul espace, avec un seul abonnement.",
+    a: "**Les deux.** Harmony crée et héberge votre site, puis s'occupe de ce qui le fait vivre : articles de blog, fiche Google, contenus pour vos réseaux sociaux, accompagnement publicitaire et statistiques. Tout se retrouve dans un seul espace, avec un seul abonnement.",
   },
   {
     q: "J'ai déjà un site : puis-je utiliser Harmony ?",
-    a: "Oui, et vous le gardez. Vous indiquez son adresse dans votre espace : Harmony lit ses pages publiques pour comprendre votre activité, et vos contenus pour les réseaux sociaux, votre fiche Google et vos publicités s'appuient ensuite sur lui. Un petit code à coller permet de suivre ses visites. Les articles de blog restent rédigés dans votre espace : vous les copiez sur votre site en un clic.",
+    a: "**Oui, et vous le gardez.** Vous indiquez son adresse dans votre espace : Harmony lit ses pages publiques pour comprendre votre activité, et vos contenus pour les réseaux sociaux, votre fiche Google et vos publicités s'appuient ensuite sur lui. Un petit code à coller permet de suivre ses visites. Les articles de blog restent rédigés dans votre espace : vous les copiez sur votre site en un clic.",
   },
   {
     q: "Dois-je m'occuper de la technique ?",
-    a: "Non, de rien du tout. Nom de domaine, hébergement, certificat de sécurité, mises à jour : Harmony gère l'intégralité de la technique. Vous validez votre site, nous le mettons en ligne, et il reste maintenu en permanence.",
+    a: "**Non, de rien du tout.** Nom de domaine, hébergement, certificat de sécurité, mises à jour : Harmony gère l'intégralité de la technique. Vous validez votre site, nous le mettons en ligne, et il reste maintenu en permanence.",
   },
   {
     q: "Qui publie sur mes réseaux sociaux ?",
-    a: "Vous. Harmony prépare chaque mois vos visuels, carrousels et stories avec leur légende ; vous téléchargez, vous collez, vous postez depuis vos propres comptes. Rien n'est publié à votre place, et vous pouvez modifier chaque légende avant de la poster.",
+    a: "**Vous.** Harmony prépare chaque mois vos visuels, carrousels et stories avec leur légende ; vous téléchargez, vous collez, vous postez depuis vos propres comptes. Rien n'est publié à votre place, et vous pouvez modifier chaque légende avant de la poster.",
   },
   {
     q: "Les articles du blog sont-ils écrits par une IA ?",
-    a: "Oui, par une IA spécialisée, à partir de vos spécialités, de votre ville et des thématiques que vous choisissez. Chaque article est rédigé sept jours avant sa date : vous pouvez le relire, le modifier, le reporter ou le retirer. Dans votre espace, un contenu rédigé par l'IA est toujours signalé.",
+    a: "**Oui, par une IA spécialisée**, à partir de vos spécialités, de votre ville et des thématiques que vous choisissez. Chaque article est rédigé sept jours avant sa date : vous pouvez le relire, le modifier, le reporter ou le retirer. Dans votre espace, un contenu rédigé par l'IA est toujours signalé.",
   },
   {
     q: "La publicité est-elle comprise dans l'abonnement ?",
-    a: "L'accompagnement, oui, avec la formule Scale : diagnostic, mots-clés à viser, annonces prêtes à diffuser et plan d'action, pour Google comme pour Facebook et Instagram. Le budget publicitaire, lui, est réglé directement à Google ou à Meta depuis vos propres comptes. Et rien ne vous oblige à en faire.",
+    a: "**L'accompagnement, oui**, avec la formule Scale : diagnostic, mots-clés à viser, annonces prêtes à diffuser et plan d'action, pour Google comme pour Facebook et Instagram. **Le budget publicitaire, lui, est réglé directement à Google ou à Meta**, depuis vos propres comptes. Et rien ne vous oblige à en faire.",
   },
   {
     q: "Combien de temps faut-il pour être en ligne ?",
-    a: "Quelques jours suffisent le plus souvent. Nous préparons d'abord une démo personnalisée de votre futur site. Une fois validée avec vous (textes, couleurs, photos), la mise en ligne est immédiate.",
+    a: "**Quelques jours suffisent le plus souvent.** Nous préparons d'abord une démo personnalisée de votre futur site. Une fois validée avec vous (textes, couleurs, photos), la mise en ligne est immédiate.",
   },
   {
     q: "Puis-je utiliser mon nom de domaine actuel ?",
-    a: "Oui. Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet. Sinon, nous achetons pour vous le domaine de votre choix : il est inclus dans l'abonnement.",
+    a: "**Oui.** Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet. Sinon, nous achetons pour vous le domaine de votre choix : il est inclus dans l'abonnement.",
   },
   {
     q: "Y a-t-il un engagement ?",
-    a: "Vous choisissez : une formule mensuelle sans engagement, résiliable à tout moment, ou une formule annuelle environ 30 % moins chère. Dans les deux cas, il n'y a aucun frais de création.",
+    a: "**Vous choisissez** : une formule mensuelle **sans engagement**, résiliable à tout moment, ou une formule annuelle **environ 30 % moins chère**. Dans les deux cas, il n'y a aucun frais de création.",
   },
   {
     q: "Comment savoir ce que cela me rapporte ?",
-    a: "Votre espace montre vos visiteurs, les clics sur votre prise de rendez-vous, les appels et la provenance de chaque visite : Google, Instagram, Facebook, publicité. Avec la formule Scale, une carte vous montre aussi votre place dans Google Maps face aux cabinets voisins, mot-clé par mot-clé.",
+    a: "Votre espace montre **vos visiteurs, les clics sur votre prise de rendez-vous, les appels** et la provenance de chaque visite : Google, Instagram, Facebook, publicité. Avec la formule Scale, une carte vous montre aussi votre place dans Google Maps face aux cabinets voisins, mot-clé par mot-clé.",
   },
 ];
 
@@ -101,7 +101,7 @@ export function Faq() {
                 </button>
                 <div id={`faq-reponse-${i}`} inert={!isOpen} className={clsx("faq-panel", isOpen && "open")}>
                   <div>
-                    <p className="px-6 pb-5 text-base leading-relaxed text-ink-700">{brandify(fr(item.a))}</p>
+                    <p className="px-6 pb-5 text-base leading-relaxed text-ink-700">{rich(item.a)}</p>
                   </div>
                 </div>
               </div>

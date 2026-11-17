@@ -57,8 +57,8 @@ la page n'a pas à changer.
 
 Contraste AA, cibles tactiles de 44 px, un seul `h1`, lien d'évitement,
 onglets de la visite pilotables au clavier (flèches, Début, Fin), visite
-guidée qui se met en pause (survol, focus, bouton) et ne défile pas en
-mouvement réduit.
+guidée qui attend au survol et au focus, s'arrête dès qu'on choisit un outil
+et ne défile pas en mouvement réduit.
 
 ## Développement local
 

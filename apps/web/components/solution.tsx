@@ -2,23 +2,23 @@ import { type CSSProperties } from "react";
 import { ChartNoAxesCombined, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
 import { Brand } from "./brand";
 import { TOOLS } from "./tools";
-import { fr } from "./typo";
+import { rich } from "./rich";
 
 const BENEFITS: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: LayoutGrid,
     title: "Un seul espace",
-    text: "Site, blog, fiche Google, réseaux sociaux, publicité, statistiques : un seul accès, un seul abonnement.",
+    text: "Site, blog, fiche Google, réseaux sociaux, publicité, statistiques : **un seul accès, un seul abonnement**.",
   },
   {
     icon: Sparkles,
     title: "Le travail est préparé pour vous",
-    text: "Articles rédigés, visuels créés, plans d'action écrits : il vous reste à relire, ajuster et valider.",
+    text: "Articles rédigés, visuels créés, plans d'action écrits : **il vous reste à relire, ajuster et valider**.",
   },
   {
     icon: ChartNoAxesCombined,
     title: "Vous savez ce que ça donne",
-    text: "Visites, appels, clics de rendez-vous, provenance : vos chiffres, expliqués sans jargon.",
+    text: "Visites, appels, clics de rendez-vous, provenance : **vos chiffres, expliqués sans jargon**.",
   },
 ];
 
@@ -53,12 +53,7 @@ export function Solution() {
           >
             Vous êtes thérapeute. Pas webmaster, rédacteur, community manager et publicitaire.
           </h2>
-          <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-5 text-lg leading-relaxed text-pretty text-ink-700">
-            Être trouvé en ligne demande aujourd&apos;hui un site à jour, des articles réguliers, une fiche Google soignée,
-            des publications sur les réseaux et parfois de la publicité. Séparément, ce sont cinq métiers, cinq outils et
-            autant de soirées.
-          </p>
-          <p data-reveal style={{ "--rv-delay": "220ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed font-semibold text-ink-900">
+          <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-5 text-xl leading-relaxed font-semibold text-pretty text-ink-900">
             Avec <Brand />, tout est au même endroit, et le gros du travail est fait pour vous.
           </p>
 
@@ -67,7 +62,7 @@ export function Solution() {
               <li
                 key={benefit.title}
                 data-reveal
-                style={{ "--rv-delay": `${280 + index * 100}ms` } as CSSProperties}
+                style={{ "--rv-delay": `${240 + index * 100}ms` } as CSSProperties}
                 className="flex gap-4"
               >
                 <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary-100 text-primary-700 ring-1 ring-primary-200">
@@ -75,7 +70,7 @@ export function Solution() {
                 </span>
                 <div>
                   <h3 className="font-display text-xl font-bold text-ink-900">{benefit.title}</h3>
-                  <p className="mt-1 leading-relaxed text-ink-700">{fr(benefit.text)}</p>
+                  <p className="mt-1 leading-relaxed text-ink-700">{rich(benefit.text)}</p>
                 </div>
               </li>
             ))}
