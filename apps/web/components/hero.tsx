@@ -5,6 +5,7 @@ import mobileAccueil from "@/assets/captures/m-accueil.webp";
 import visuel from "@/assets/captures/visuel-reseaux.webp";
 import { Brand } from "./brand";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
+import { PostMock } from "./post-mock";
 import { ScrollTilt } from "./scroll-tilt";
 import { TOOLS } from "./tools";
 
@@ -98,7 +99,7 @@ export function Hero() {
         </ul>
       </div>
 
-      {/* L'espace client, en vrai : l'accueil du studio, un visuel prêt à poster, la version téléphone */}
+      {/* L'espace client, en vrai : l'accueil du studio, une publication prête à poster, la version téléphone */}
       <div data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="relative mx-auto mt-14 max-w-6xl px-5 md:mt-16">
         {/* Ordinateur et tablette */}
         <div className="relative hidden md:block">
@@ -112,11 +113,20 @@ export function Hero() {
               />
             </BrowserFrame>
           </ScrollTilt>
-          <div data-parallax="0.06" className="absolute -bottom-10 -left-2 hidden w-44 lg:block xl:-left-10 xl:w-52">
-            <figure className="float-slow -rotate-6 overflow-hidden rounded-2xl border-4 border-white bg-white shadow-[0_30px_60px_-25px_rgb(7_21_34/0.55)]">
-              <Capture src={visuel} sizes="208px" alt="Un visuel de carrousel Instagram préparé par Harmony aux couleurs du cabinet." />
-              <figcaption className="px-3 py-2 text-xs font-semibold text-ink-700">Prêt à poster</figcaption>
-            </figure>
+          {/* Une publication telle qu'elle paraîtra : le visuel préparé par Harmony, dans le fil du cabinet.
+              Ancrée sous la liste des outils de la capture, elle déborde sous le cadre. */}
+          <div data-parallax="0.06" className="absolute top-[71%] left-2 hidden w-56 lg:block xl:-left-12 xl:w-64">
+            <PostMock
+              className="float-slow -rotate-3"
+              image={visuel}
+              account="claire.sophrologue"
+              place="Albi"
+              initials="CD"
+              pages={7}
+              caption="Trois minutes, les yeux fermés : un exercice simple à glisser dans votre journée."
+              hashtags={["sophrologie", "albi", "gestiondustress"]}
+              label="Exemple de publication prête à poster : le carrousel « Cinq étapes pour relâcher la pression » préparé par Harmony, dans le fil Instagram d'une sophrologue, avec sa légende et ses mots-dièse."
+            />
           </div>
           <div data-parallax="-0.05" className="absolute -right-2 -bottom-16 hidden w-48 lg:block xl:-right-8 xl:w-56">
             <PhoneFrame className="float-slower">
@@ -135,7 +145,8 @@ export function Hero() {
             />
           </PhoneFrame>
         </div>
-        <p className="mt-8 pb-4 text-center text-sm text-ink-500 md:mt-10 lg:mt-24">
+        {/* À partir de lg, la publication et le téléphone débordent sous le cadre : la légende reste entre les deux */}
+        <p className="mt-8 pb-4 text-center text-sm text-ink-500 md:mt-10 lg:mx-auto lg:mt-12 lg:max-w-md lg:pb-52 xl:pb-60">
           Captures réelles de l&apos;espace client <Brand />, sur un compte de démonstration.
         </p>
       </div>
