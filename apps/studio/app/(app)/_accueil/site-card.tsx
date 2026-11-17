@@ -25,7 +25,7 @@ export function SiteCard({ reference, address, viewHref, emphasis }: Props) {
   const main = emphasis ? "primary" : "secondary";
   const external = reference === "external";
   return (
-    <Card variant="tinted" section="mon-site" data-testid="site-card" data-reference={reference}>
+    <Card variant="tinted" section="mon-site" data-testid="site-card" data-reference={reference} className="flex flex-col">
       <div className="flex items-start gap-3.5">
         <IconBadge icon={Globe} size="md" />
         {/* `min-w-0` : une adresse longue passe à la ligne, elle n'élargit jamais la carte */}
@@ -60,7 +60,8 @@ export function SiteCard({ reference, address, viewHref, emphasis }: Props) {
         </>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-2.5">
+      {/* `mt-auto` : étirée à la hauteur de sa voisine, la carte garde ses boutons tout en bas */}
+      <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-2.5 pt-4">
         {external ? (
           <LinkButton href="/mon-site" variant={main} data-testid="site-card-manage" icon={<Settings2 size={18} aria-hidden />}>
             Gérer mon site

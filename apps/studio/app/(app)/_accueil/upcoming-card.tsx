@@ -1,3 +1,4 @@
+import { clsx } from "clsx";
 import { ArrowRight, CalendarDays, Newspaper } from "lucide-react";
 import { Card, CardHeader, EmptyState, LinkButton, StatusPill } from "@/components/ds";
 import type { CalendarItem } from "@/lib/data";
@@ -20,7 +21,14 @@ function UpcomingStatus({ status }: { status: CalendarItem["status"] }) {
  * éditorial, et le chemin vers l'agenda complet. Vide, la carte dit pourquoi
  * et où le calendrier se remplit.
  */
-export function UpcomingCard({ items }: { items: readonly CalendarItem[] }) {
+export function UpcomingCard({
+  items,
+  wide = false,
+}: {
+  items: readonly CalendarItem[];
+  /** La carte occupe toute la largeur de l'accueil : à partir de `xl`, les contenus se rangent côte à côte */
+  wide?: boolean;
+}) {
   if (items.length === 0) {
     return (
       <Card section="publications">
@@ -41,11 +49,14 @@ export function UpcomingCard({ items }: { items: readonly CalendarItem[] }) {
   }
 
   return (
-    <Card section="publications">
+    <Card section="publications" className="flex flex-col">
       <CardHeader icon={CalendarDays} title="Prochaines publications" description="Les prochains contenus de votre calendrier." />
-      <ul className="mt-5 divide-y divide-ds-ink-200">
+      <ul className={clsx("mt-5 mb-4 divide-y divide-ds-ink-200", wide && "xl:grid xl:grid-cols-3 xl:gap-x-8 xl:divide-y-0")}>
         {items.map((item) => (
-          <li key={`${item.date}-${item.title}`} className="flex items-center gap-4 py-3.5 first:pt-0 last:pb-0">
+          <li
+            key={`${item.date}-${item.title}`}
+            className={clsx("flex items-center gap-4 py-3.5 first:pt-0 last:pb-0", wide && "xl:items-start xl:py-0")}
+          >
             <time
               dateTime={item.date}
               className="grid size-14 shrink-0 place-items-center rounded-ds-md bg-ds-section-tint-2 text-center leading-none text-ds-section-ink"
@@ -68,8 +79,9 @@ export function UpcomingCard({ items }: { items: readonly CalendarItem[] }) {
           </li>
         ))}
       </ul>
-      {/* En pied de carte : dans la colonne étroite de l'accueil, une action d'en-tête passerait à la ligne sous le titre */}
-      <p className="mt-4 border-t border-ds-ink-200 pt-3">
+      {/* En pied de carte : dans la colonne étroite de l'accueil, une action d'en-tête passerait à la ligne sous le titre.
+          `mt-auto` : étirée à la hauteur de sa voisine, la carte garde ce lien tout en bas. */}
+      <p className="mt-auto border-t border-ds-ink-200 pt-3">
         <LinkButton href="/publications" variant="quiet" size="sm" className="-ml-2" iconRight={<ArrowRight size={16} aria-hidden />}>
           Tout l&apos;agenda
         </LinkButton>

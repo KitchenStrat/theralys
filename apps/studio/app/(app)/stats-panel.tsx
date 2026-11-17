@@ -1,5 +1,6 @@
 "use client";
 
+import { clsx } from "clsx";
 import { CalendarCheck, ChartLine, Users, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { Card, CardHeader, NBSP, Tabs, formatNumber, type SectionKey } from "@/components/ds";
@@ -33,6 +34,8 @@ type Props = {
    * vide dit pourquoi et mène à l'installation. `address` : son adresse.
    */
   awaitingMeasure?: { address: string } | null;
+  /** Grille de la page : la provenance n'a pas de carte en face, elle prend les deux colonnes */
+  sourcesWide?: boolean;
 };
 
 /** Les deux chiffres de l'accueil : chacun sa couleur, celle que prend aussi la courbe quand il est choisi. */
@@ -73,12 +76,14 @@ const tickOf = (day: string, period: Period) => (period === "7j" ? WEEKDAY.forma
  * jour par jour et la provenance des visites.
  *
  * À poser dans la grille à deux colonnes de la page : le titre et les tuiles
- * prennent toute la largeur, la courbe et la provenance la colonne de gauche ;
- * ce qui suit dans la grille (mise en route, site, publications) vient à
- * droite. Le panneau de la période est en `display: contents` pour que ses
- * blocs soient eux-mêmes des cellules de cette grille.
+ * prennent toute la largeur, puis la courbe et la provenance ouvrent chacune
+ * une rangée, à gauche ; les cartes de la page (mise en route, site,
+ * publications) viennent en face, à droite. Le panneau de la période et la
+ * pile courbe + provenance sont en `display: contents` pour que leurs blocs
+ * soient eux-mêmes des cellules de cette grille : deux cartes d'une même
+ * rangée ont la même hauteur, la page ne laisse aucun vide entre ses colonnes.
  */
-export function StatsPanel({ period, stats, sources, socialAccess, awaitingMeasure = null }: Props) {
+export function StatsPanel({ period, stats, sources, socialAccess, awaitingMeasure = null, sourcesWide = false }: Props) {
   const [metric, setMetric] = useState<Metric>("visitors");
 
   if (awaitingMeasure) return <AwaitingMeasure address={awaitingMeasure.address} />;
@@ -135,8 +140,9 @@ export function StatsPanel({ period, stats, sources, socialAccess, awaitingMeasu
           </div>
         </div>
 
-        <div className="min-w-0 space-y-6">
-          <Card id={CHART_ID} section={chosen.section}>
+        {/* Une colonne jusqu'à `xl` ; au-delà, la courbe ouvre la rangée 3 et la provenance la rangée 4 */}
+        <div className="flex min-w-0 flex-col gap-6 xl:contents">
+          <Card id={CHART_ID} section={chosen.section} className="min-w-0 xl:col-start-1 xl:row-start-3">
             <CardHeader as="h3" icon={ChartLine} title={chosen.chartTitle} description={total > 0 ? `${count(total)} ${labels.caption}` : chosen.none} />
             <VisitsChart
               // La courbe se révèle à nouveau quand la série ou la période change
@@ -149,7 +155,14 @@ export function StatsPanel({ period, stats, sources, socialAccess, awaitingMeasu
             />
           </Card>
 
-          <SourcesCard sources={sources} caption={labels.caption} socialAccess={socialAccess} />
+          <SourcesCard
+            sources={sources}
+            caption={labels.caption}
+            socialAccess={socialAccess}
+            // Personne en face (une seule carte à droite, déjà placée devant la courbe) : la provenance prend la largeur
+            wide={sourcesWide}
+            className={clsx("min-w-0 xl:col-start-1 xl:row-start-4", sourcesWide && "xl:col-span-2")}
+          />
         </div>
       </div>
       {/* Panneaux des autres périodes : vides et masqués. Leurs onglets sont des liens (la page est relue), mais chacun désigne ainsi un panneau qui existe. */}
