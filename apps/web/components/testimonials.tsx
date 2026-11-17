@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import Image, { type StaticImageData } from "next/image";
-import { Star } from "lucide-react";
+import { Info, Star } from "lucide-react";
 import cabinet1 from "@/assets/temoignages/cabinet-1.jpg";
 import cabinet3 from "@/assets/temoignages/cabinet-3.jpg";
 import cabinet5 from "@/assets/temoignages/cabinet-5.jpg";
@@ -14,14 +14,18 @@ import { fr } from "./typo";
 
 /*
  * TÉMOIGNAGES PROVISOIRES. Les textes, les prénoms et les portraits ci-dessous
- * sont des contenus d'illustration (portraits de banque d'images), là pour
- * juger du rendu de la section. Ils ne sont affichés que sur la page d'aperçu
- * (`/apercu`, non indexée), jamais sur la page publique.
+ * sont des contenus d'illustration (portraits de banque d'images), en place
+ * pour travailler la page en attendant de vrais retours.
  *
- * Pour publier la section : remplacer ces contenus par de vrais retours
- * (prénom, métier, ville, texte, accord de la personne), puis passer
- * `testimonials` à `<Landing />` dans `app/page.tsx`.
+ * Tant que `PROVISIONAL` est vrai, la section le dit sous son titre : un
+ * visiteur ne doit pas les prendre pour des avis de clients.
+ *
+ * Le jour où les vrais retours sont là (prénom, métier, ville, texte, accord
+ * de la personne) : remplacer `FEATURED` et `REVIEWS`, puis passer
+ * `PROVISIONAL` à `false`. La mention disparaît, rien d'autre ne change.
  */
+const PROVISIONAL = true;
+
 const FEATURED: CarouselQuote[] = [
   {
     text: "J'ai fait appel à Harmony pour la création de mon site. Je voulais un site élégant et surtout bien référencé, pas juste une jolie vitrine. L'accompagnement a été sérieux du premier échange jusqu'à la mise en ligne, et les résultats ont suivi. Je recommande !",
@@ -162,6 +166,14 @@ export function Testimonials() {
           >
             Nos praticiens témoignent
           </h2>
+          {PROVISIONAL ? (
+            <p data-reveal style={{ "--rv-delay": "130ms" } as CSSProperties} className="mt-5 flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-2xl border border-cream-300 bg-white px-4 py-2 text-left text-sm font-medium text-ink-700 shadow-sm sm:rounded-full">
+                <Info size={16} className="shrink-0 text-primary-700" aria-hidden />
+                Témoignages d&apos;illustration, en attendant ceux de nos premiers praticiens.
+              </span>
+            </p>
+          ) : null}
         </div>
 
         <QuoteCarousel quotes={FEATURED} />

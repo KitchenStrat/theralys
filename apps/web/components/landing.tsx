@@ -29,14 +29,12 @@ import { Tour } from "./tour";
  *   (@theralys/db) : la vitrine et le studio ne peuvent pas se contredire ;
  * - rien n'y est inventé. Les captures sont de vrais écrans du studio (compte
  *   de démonstration), chaque phrase décrit un comportement réel du produit,
- *   et la page publique ne porte ni témoignage ni chiffre de clientèle tant
- *   que de vrais retours ne sont pas disponibles.
- *
- * `testimonials` ajoute la section « Nos praticiens témoignent ». Ses contenus
- * sont encore provisoires : elle ne s'affiche que sur la page d'aperçu
- * (`/apercu`), signalée comme telle. Voir `testimonials.tsx` pour la publier.
+ *   et la page ne porte aucun chiffre de clientèle. La section des
+ *   témoignages est en place avec des contenus provisoires, signalés comme
+ *   tels sur la page tant qu'ils n'ont pas été remplacés par de vrais retours
+ *   (cf. `PROVISIONAL` dans `testimonials.tsx`).
  */
-export function Landing({ testimonials = false }: { testimonials?: boolean }) {
+export function Landing() {
   const plans: PlanCard[] = OFFERED_PLANS.map((id) => {
     const plan = PLANS[id];
     return {
@@ -76,7 +74,7 @@ export function Landing({ testimonials = false }: { testimonials?: boolean }) {
         <Control />
         <Method />
         <OwnSite />
-        {testimonials ? <Testimonials /> : null}
+        <Testimonials />
         <Band />
         <Pricing plans={plans} />
         <RoiCalculator monthlyCost={complete.annualMonthlyPrice} planLabel={complete.label} />
@@ -84,11 +82,6 @@ export function Landing({ testimonials = false }: { testimonials?: boolean }) {
         <DemoForm />
       </main>
       <Footer />
-      {testimonials ? (
-        <p className="pointer-events-none fixed bottom-4 left-4 z-50 rounded-full bg-ink-900 px-3.5 py-1.5 text-xs font-semibold text-white shadow-lg">
-          Aperçu · témoignages provisoires, page non publique
-        </p>
-      ) : null}
     </>
   );
 }

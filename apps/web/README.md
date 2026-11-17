@@ -10,30 +10,29 @@ statistiques).
    dans `@theralys/db` (`PLANS`) : la vitrine et le studio ne peuvent pas se
    contredire.
 2. **Rien n'est inventé.** Chaque phrase décrit un comportement réel du studio,
-   les captures sont de vrais écrans (compte de démonstration), et la page
-   publique ne porte ni témoignage ni chiffre de clientèle tant que de vrais
-   retours ne sont pas disponibles.
+   les captures sont de vrais écrans (compte de démonstration), et la page ne
+   porte aucun chiffre de clientèle.
 
-## Témoignages : la page d'aperçu
+## Témoignages
 
 La section « Nos praticiens témoignent » (`components/testimonials.tsx` : une
-citation à la une, deux rangées d'avis qui défilent) existe, avec des contenus
-**provisoires** (textes et portraits d'illustration). Elle ne s'affiche que sur
-`/apercu` : la page complète, non indexée, non liée, signalée « Aperçu ». La
-page publique ne la contient pas.
+citation à la une, deux rangées d'avis qui défilent) est sur la page, entre
+« Déjà un site ? » et le bandeau. Ses contenus sont pour l'instant
+**provisoires** (textes et portraits d'illustration) : tant que `PROVISIONAL`
+est vrai, la section l'indique sous son titre, pour qu'un visiteur ne les
+prenne pas pour des avis de clients.
 
-Pour la publier : remplacer les contenus de `testimonials.tsx` par de vrais
-retours (prénom, métier, ville, texte, accord de la personne), puis passer
-`testimonials` à `<Landing />` dans `app/page.tsx`.
+Le jour où les vrais retours sont là (prénom, métier, ville, texte, accord de
+la personne) : remplacer `FEATURED` et `REVIEWS`, puis passer `PROVISIONAL` à
+`false`. La mention disparaît, rien d'autre ne change.
 
 ## Structure
 
-- `components/landing.tsx` — la page, partagée par `app/page.tsx` (publique)
-  et `app/apercu/page.tsx` (aperçu avec les témoignages), dans l'ordre :
-  `hero`, `logos`, `solution`
+- `components/landing.tsx` — la page (rendue par `app/page.tsx`), dans
+  l'ordre : `hero`, `logos`, `solution`
   (schéma « tout au même endroit »), `tour` (visite guidée des sept outils),
   `control` (« Vous gardez la main »), `method` (frise et semaine type),
-  `own-site` (« Déjà un site ? »), `band`, `pricing`, `roi-calculator`
+  `own-site` (« Déjà un site ? »), `testimonials`, `band`, `pricing`, `roi-calculator`
   (simulateur de rentabilité), `faq`, `demo-form`.
 - `app/robot/page.tsx` — page publique du lecteur de sites (HarmonyBot).
 - `components/tools.ts` — **les outils**, source unique du haut de page, du
@@ -49,7 +48,7 @@ retours (prénom, métier, ville, texte, accord de la personne), puis passer
   `prefers-reduced-motion` de fin de fichier éteint tout ce qui bouge.
 - `assets/captures/` — captures d'écran du studio, en WebP.
 - `assets/temoignages/` — portraits d'illustration de la section des
-  témoignages (aperçu uniquement).
+  témoignages (provisoires).
 - `public/logos/` — logos des plateformes du bandeau.
 
 ## Captures d'écran
