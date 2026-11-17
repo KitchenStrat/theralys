@@ -126,7 +126,7 @@ export function Hero() {
               pages={7}
               caption="Trois minutes, les yeux fermés : un exercice simple à glisser dans votre journée."
               hashtags={["sophrologie", "albi", "gestiondustress"]}
-              label="Exemple de publication prête à poster : le carrousel « Cinq étapes pour relâcher la pression » préparé par Harmony, dans le fil Instagram d'une sophrologue, avec sa légende et ses mots-dièse."
+              label="Exemple de publication prête à poster : le carrousel « Cinq étapes pour relâcher la pression » préparé par Harmony, dans le fil Instagram d'une sophrologue. Sa première page pose le titre sur la photographie d'une personne assise face à la montagne ; suivent la légende et les mots-dièse."
             />
           </div>
           <div data-parallax="-0.05" className="absolute -right-2 -bottom-16 hidden w-48 lg:block xl:-right-8 xl:w-56">

@@ -63,6 +63,12 @@ démonstration, en mode production :
 - morceaux d'écran : `detail-*` (une carte du studio) et `visuel-*` (un visuel
   généré pour les réseaux sociaux).
 
+Le carrousel montré dans le haut de page et dans l'écran « Réseaux sociaux »
+est un rendu du studio (`/api/social/…/render`) dont la couverture porte une
+vraie photographie, comme chez un praticien : elle vient de Pexels (licence
+libre, usage commercial sans attribution),
+<https://www.pexels.com/photo/unrecognizable-female-meditating-on-grass-in-highlands-on-sunny-day-5694121/>.
+
 Après une évolution visible du studio, reprendre les captures concernées aux
 mêmes dimensions, puis les convertir en WebP (qualité 88) sous le même nom :
 la page n'a pas à changer.
