@@ -148,6 +148,14 @@ body {
   mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
 }
 
+/* ── Témoignages : entrée de la citation à la une ─────────────────────────── */
+@keyframes quote-in {
+  from { opacity: 0; translate: 0 14px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+/* `backwards` : l'animation finie ne retient rien, la citation retrouve son rendu ordinaire */
+.quote-in { animation: quote-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
 /* ── Bande CTA : dégradé animé ─────────────────────────────────────────────── */
 @keyframes gradient-pan {
   0%   { background-position: 0% 50%; }
@@ -721,6 +729,9 @@ body {
     padding-inline: 1.25rem;
   }
   .marquee-track > :nth-child(n + 8) { display: none; }
+  /* Les avis ne défilent plus : les quatre premiers de chaque rangée, en grille */
+  .reviews-track > :nth-child(n + 5) { display: none; }
+  .quote-in { animation: none; }
   .hub-pulse { opacity: 0; }
   /* Faisceaux : des traits pleins, aux couleurs des outils */
   .hub-beam {

@@ -10,14 +10,27 @@ statistiques).
    dans `@theralys/db` (`PLANS`) : la vitrine et le studio ne peuvent pas se
    contredire.
 2. **Rien n'est inventé.** Chaque phrase décrit un comportement réel du studio,
-   les captures sont de vrais écrans (compte de démonstration), et la page ne
-   porte ni témoignage ni chiffre de clientèle tant que de vrais retours ne
-   sont pas disponibles. Une section « témoignages » se rajoute le jour où il y
-   en a : prénom, métier, ville, et l'accord de la personne.
+   les captures sont de vrais écrans (compte de démonstration), et la page
+   publique ne porte ni témoignage ni chiffre de clientèle tant que de vrais
+   retours ne sont pas disponibles.
+
+## Témoignages : la page d'aperçu
+
+La section « Nos praticiens témoignent » (`components/testimonials.tsx` : une
+citation à la une, deux rangées d'avis qui défilent) existe, avec des contenus
+**provisoires** (textes et portraits d'illustration). Elle ne s'affiche que sur
+`/apercu` : la page complète, non indexée, non liée, signalée « Aperçu ». La
+page publique ne la contient pas.
+
+Pour la publier : remplacer les contenus de `testimonials.tsx` par de vrais
+retours (prénom, métier, ville, texte, accord de la personne), puis passer
+`testimonials` à `<Landing />` dans `app/page.tsx`.
 
 ## Structure
 
-- `app/page.tsx` — page unique, dans l'ordre : `hero`, `logos`, `solution`
+- `components/landing.tsx` — la page, partagée par `app/page.tsx` (publique)
+  et `app/apercu/page.tsx` (aperçu avec les témoignages), dans l'ordre :
+  `hero`, `logos`, `solution`
   (schéma « tout au même endroit »), `tour` (visite guidée des sept outils),
   `control` (« Vous gardez la main »), `method` (frise et semaine type),
   `own-site` (« Déjà un site ? »), `band`, `pricing`, `roi-calculator`
@@ -35,6 +48,8 @@ statistiques).
   (halos, faisceaux du schéma, barre de la visite, frise, marquee…). Le bloc
   `prefers-reduced-motion` de fin de fichier éteint tout ce qui bouge.
 - `assets/captures/` — captures d'écran du studio, en WebP.
+- `assets/temoignages/` — portraits d'illustration de la section des
+  témoignages (aperçu uniquement).
 - `public/logos/` — logos des plateformes du bandeau.
 
 ## Captures d'écran
