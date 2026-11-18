@@ -5,12 +5,17 @@ import { useRef, useState } from "react";
 import { PROFESSION_CATEGORIES } from "@theralys/shared";
 import { Badge, Button, FieldHint, Input, Label, Modal, Select, Spinner } from "@theralys/ui";
 import { createDemo, searchGooglePlaces } from "./actions";
+import { matchProfession } from "@/lib/crm/professions";
 import type { PlaceResult } from "@/lib/places";
 
-export function NewDemoModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Valeurs reprises d'une fiche du CRM quand la démo est créée depuis elle. */
+export type DemoPrefill = { crmContactId: string; firstName: string; lastName: string; profession: string; city: string };
+
+export function NewDemoModal({ open, onClose, prefill }: { open: boolean; onClose: () => void; prefill?: DemoPrefill | null }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const prefilledProfession = prefill ? matchProfession(prefill.profession) : "";
 
   // Fiche Google (optionnel)
   const [placeQuery, setPlaceQuery] = useState("");
@@ -62,6 +67,7 @@ export function NewDemoModal({ open, onClose }: { open: boolean; onClose: () => 
       bookingUrl: form.get("bookingUrl") ?? "",
       validityDays: form.get("validityDays") || 30,
       googlePlace: selectedPlace,
+      crmContactId: prefill?.crmContactId ?? null,
     });
     setSubmitting(false);
     if (result.error) {
@@ -136,15 +142,15 @@ export function NewDemoModal({ open, onClose }: { open: boolean; onClose: () => 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="firstName">Prénom *</Label>
-            <Input id="firstName" name="firstName" required />
+            <Input id="firstName" name="firstName" required defaultValue={prefill?.firstName ?? ""} />
           </div>
           <div>
             <Label htmlFor="lastName">Nom *</Label>
-            <Input id="lastName" name="lastName" required />
+            <Input id="lastName" name="lastName" required defaultValue={prefill?.lastName ?? ""} />
           </div>
           <div>
             <Label htmlFor="profession">Métier *</Label>
-            <Select id="profession" name="profession" defaultValue="" required>
+            <Select id="profession" name="profession" defaultValue={prefilledProfession} required>
               <option value="" disabled>
                 Choisir un métier…
               </option>
@@ -162,7 +168,7 @@ export function NewDemoModal({ open, onClose }: { open: boolean; onClose: () => 
           </div>
           <div>
             <Label htmlFor="city">Ville *</Label>
-            <Input id="city" name="city" placeholder="ex. Albi" required />
+            <Input id="city" name="city" placeholder="ex. Albi" required defaultValue={prefill?.city ?? ""} />
           </div>
         </div>
 

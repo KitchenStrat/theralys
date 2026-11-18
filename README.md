@@ -227,10 +227,31 @@ dégradé par section, un seul accent chaud.
   premier article planifié) et **impersonation** : « Studio » ouvre le back
   office du client dans sa session via un jeton signé de 2 minutes — bannière
   « Mode support » et session courte (1 h) côté studio.
-- **Onglet Leads** : pipeline commercial (Nouveau → Démo envoyée → Rendez-vous →
-  Gagné / Perdu), statuts et notes éditables en ligne, ajout manuel
-  (landing/parrainage). Un lead est **créé automatiquement à chaque démo** et
-  passe à « Gagné » à la conversion en client.
+- **Onglet CRM** (remplace Leads) : tout le cycle de vente, de la liste de
+  prospects à la signature.
+  - **Import** de listes en CSV/TSV (séparateur et encodage détectés), Excel
+    `.xlsx`, JSON, vCard `.vcf` ou par copier-coller depuis un tableur. Les
+    colonnes sont reconnues puis vérifiables une à une ; e-mails, téléphones
+    et codes postaux sont normalisés ; les doublons (e-mail, téléphone, nom +
+    ville) sont ignorés, complétés ou créés, au choix. L&apos;ancien format `.xls`
+    n&apos;est pas lu (à réenregistrer en `.xlsx` ou CSV).
+  - **Filtres** combinables et partageables par l&apos;URL : étape, provenance,
+    métier, ville, département, étiquette, liste importée, moyen de contact,
+    prochaine tâche, date d&apos;ajout, dernier contact, formule envisagée,
+    opposition au démarchage. Recherche libre, tri, **export CSV** du résultat,
+    actions groupées (étape, étiquette, opposition, suppression).
+  - **Pipeline** en colonnes (À contacter → Contacté → Intéressé → Démo
+    envoyée → Rendez-vous → Proposition → Client / Perdu), par glisser-déposer,
+    avec motif de perte.
+  - **Fiche prospect** : coordonnées, étape, formule et durée envisagées (valeur
+    mensuelle), notes, **historique** (appels, e-mails, rendez-vous, notes,
+    changements d&apos;étape) et **tâches de relance** datées.
+  - Lié au reste : les demandes de la vitrine et les démos arrivent dans le
+    CRM, « Créer sa démo » préremplit la démo depuis la fiche, et la conversion
+    en client passe le prospect à « Client ».
+  - Trois tables (`crm_contacts`, `crm_activities`, `crm_imports`), migration
+    `0011_crm`. Tant qu&apos;elle n&apos;est pas appliquée, l&apos;onglet affiche un bandeau
+    et l&apos;ancienne liste des leads.
 
 ## Ce que couvre la Phase 3
 

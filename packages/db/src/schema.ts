@@ -499,6 +499,97 @@ export const leads = pgTable("leads", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── CRM (prospection et cycle de vente, back-office agence) ─────────────────
+
+/** Une liste de prospects importée (fichier ou copier-coller) : sert à filtrer et à défaire un import. */
+export const crmImports = pgTable("crm_imports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filename: text("filename").notNull(),
+  format: text("format").notNull(), // csv | xlsx | json | vcard | paste
+  // Provenance donnée à la liste (reprise sur chaque contact créé)
+  source: text("source").notNull().default("import"),
+  totalRows: integer("total_rows").notNull().default(0),
+  createdCount: integer("created_count").notNull().default(0),
+  updatedCount: integer("updated_count").notNull().default(0),
+  skippedCount: integer("skipped_count").notNull().default(0),
+  status: text("status").notNull().default("running"), // running | done
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Un prospect du CRM. Les demandes de la vitrine et les démos (table `leads`)
+ * y sont reprises une fois (`leadId`) ; un contact peut ensuite être relié à
+ * la démo créée pour lui (`prospectId`, `siteId`).
+ */
+export const crmContacts = pgTable(
+  "crm_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    company: text("company").notNull().default(""), // cabinet, raison sociale
+    profession: text("profession").notNull().default(""),
+    email: text("email"), // en minuscules
+    phone: text("phone"), // normalisé (+33…)
+    website: text("website"),
+    address: text("address"),
+    postalCode: text("postal_code"),
+    city: text("city").notNull().default(""),
+    source: text("source").notNull().default("manual"),
+    // Étape du cycle de vente (cf. CRM_STAGES côté admin) : texte, pour pouvoir en ajouter sans migration
+    stage: text("stage").notNull().default("new"),
+    stageChangedAt: timestamp("stage_changed_at", { withTimezone: true }).notNull().defaultNow(),
+    // Formule et durée envisagées : donnent la valeur du prospect dans le pipeline
+    plan: text("plan"),
+    billingPeriod: text("billing_period"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    // Colonnes du fichier importé gardées telles quelles (note Google, nombre d'avis…)
+    extra: jsonb("extra").$type<Record<string, string>>().notNull().default({}),
+    notes: text("notes"),
+    doNotContact: boolean("do_not_contact").notNull().default(false),
+    lostReason: text("lost_reason"),
+    // Prochaine tâche ouverte, recopiée ici pour filtrer et trier sans jointure
+    nextActionAt: timestamp("next_action_at", { withTimezone: true }),
+    nextAction: text("next_action"),
+    lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
+    importId: uuid("import_id").references(() => crmImports.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    prospectId: uuid("prospect_id").references(() => prospects.id, { onDelete: "set null" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("crm_contacts_stage_idx").on(t.stage, t.createdAt),
+    index("crm_contacts_email_idx").on(t.email),
+    index("crm_contacts_phone_idx").on(t.phone),
+    index("crm_contacts_next_action_idx").on(t.nextActionAt),
+    index("crm_contacts_import_idx").on(t.importId),
+    uniqueIndex("crm_contacts_lead_id_unique").on(t.leadId),
+  ],
+);
+
+/** Historique d'un prospect : notes, appels, e-mails, rendez-vous, changements d'étape, tâches (avec échéance). */
+export const crmActivities = pgTable(
+  "crm_activities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => crmContacts.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // note | call | email | meeting | task | stage | system
+    body: text("body").notNull().default(""),
+    // Tâches : échéance et date de réalisation
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("crm_activities_contact_idx").on(t.contactId, t.createdAt),
+    index("crm_activities_due_idx").on(t.dueAt),
+  ],
+);
+
 // ─── Réseaux sociaux (contenus prêts à poster, studio) ───────────────────────
 
 export const socialPosts = pgTable(
@@ -910,3 +1001,7 @@ export type MetaAdMediaRow = typeof metaAdMedia.$inferSelect;
 export type MetaAdsLibraryRow = typeof metaAdsLibrary.$inferSelect;
 export type GoogleReviewTask = typeof googleReviewTasks.$inferSelect;
 export type NotificationLogEntry = typeof notificationLog.$inferSelect;
+export type CrmContact = typeof crmContacts.$inferSelect;
+export type NewCrmContact = typeof crmContacts.$inferInsert;
+export type CrmActivity = typeof crmActivities.$inferSelect;
+export type CrmImport = typeof crmImports.$inferSelect;

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Badge, Button, Card, Input, ProgressDots, Spinner } from "@theralys/ui";
 import { relativeTimeFr } from "@theralys/shared";
 import { duplicateDemo } from "./actions";
-import { NewDemoModal } from "./new-demo-modal";
+import { NewDemoModal, type DemoPrefill } from "./new-demo-modal";
 
 export type DemoListRow = {
   id: string;
@@ -37,6 +37,7 @@ export function DemosPageClient({
   pageCount,
   query,
   sitesBaseUrl,
+  prefill,
 }: {
   rows: DemoListRow[];
   total: number;
@@ -44,11 +45,13 @@ export function DemosPageClient({
   pageCount: number;
   query: string;
   sitesBaseUrl: string;
+  /** Fiche du CRM pour laquelle on vient créer une démo : la fenêtre s'ouvre préremplie */
+  prefill?: DemoPrefill | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(Boolean(prefill));
   const [search, setSearch] = useState(query);
   const [, startTransition] = useTransition();
 
@@ -142,7 +145,7 @@ export function DemosPageClient({
         </div>
       ) : null}
 
-      <NewDemoModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <NewDemoModal open={modalOpen} onClose={() => setModalOpen(false)} prefill={prefill} />
     </div>
   );
 }

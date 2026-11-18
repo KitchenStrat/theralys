@@ -1,3 +1,7 @@
+import { eq } from "drizzle-orm";
+import { crmContacts, getDb } from "@theralys/db";
+import { isMissingTableError } from "@/lib/api-usage";
+import { isUuid } from "@/lib/crm/filters";
 import { listDemos } from "@/lib/demos";
 import { DemosPageClient } from "./demos-page-client";
 
@@ -7,11 +11,27 @@ export const dynamic = "force-dynamic";
 // sur Vercel, la fonction doit vivre assez longtemps (plan Pro + Fluid compute requis, cf. DEPLOY.md)
 export const maxDuration = 800;
 
-type Props = { searchParams: Promise<{ q?: string; page?: string }> };
+type Props = { searchParams: Promise<{ q?: string; page?: string; prospect?: string }> };
+
+/** Fiche du CRM depuis laquelle on vient créer une démo (« Créer sa démo »), pour préremplir la fenêtre. */
+async function demoPrefill(contactId: string | undefined) {
+  if (!isUuid(contactId)) return null;
+  try {
+    const [contact] = await getDb()
+      .select({ id: crmContacts.id, firstName: crmContacts.firstName, lastName: crmContacts.lastName, profession: crmContacts.profession, city: crmContacts.city })
+      .from(crmContacts)
+      .where(eq(crmContacts.id, contactId))
+      .limit(1);
+    return contact ? { crmContactId: contact.id, firstName: contact.firstName, lastName: contact.lastName, profession: contact.profession, city: contact.city } : null;
+  } catch (error) {
+    if (isMissingTableError(error)) return null;
+    throw error;
+  }
+}
 
 export default async function DemosPage({ searchParams }: Props) {
-  const { q, page } = await searchParams;
-  const result = await listDemos({ query: q, page: page ? Number(page) : 1 });
+  const { q, page, prospect } = await searchParams;
+  const [result, prefill] = await Promise.all([listDemos({ query: q, page: page ? Number(page) : 1 }), demoPrefill(prospect)]);
 
   const rows = result.rows.map(({ site, prospect }) => ({
     id: site.id,
@@ -35,6 +55,7 @@ export default async function DemosPage({ searchParams }: Props) {
       pageCount={result.pageCount}
       query={q ?? ""}
       sitesBaseUrl={(process.env.SITES_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "")}
+      prefill={prefill}
     />
   );
 }

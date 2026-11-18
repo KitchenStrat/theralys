@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0009_external_sites puis 0010_billing_periods, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -64,6 +64,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0008_api_usage",
       "0009_external_sites",
       "0010_billing_periods",
+      "0011_crm",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -280,5 +281,34 @@ describe("0010_billing_periods : durées de facturation trimestrielle et sur 3 a
       `ALTER TYPE "public"."billing_period" ADD VALUE IF NOT EXISTS 'quarterly';`,
       `ALTER TYPE "public"."billing_period" ADD VALUE IF NOT EXISTS 'triennial';`,
     ]);
+  });
+});
+
+describe("0011_crm : prospects, historique et listes importées", () => {
+  const statements = statementsOf("0011_crm");
+
+  it("trois tables neuves, chacune gardée ; aucune table existante n'est modifiée", () => {
+    const tables = statements.filter((s) => s.startsWith("CREATE TABLE"));
+    expect(tables.map((s) => /CREATE TABLE IF NOT EXISTS "([^"]+)"/.exec(s)?.[1])).toEqual(["crm_imports", "crm_contacts", "crm_activities"]);
+    // Les demandes de démo continuent d'arriver dans « leads » même si cette migration n'est pas appliquée
+    expect(statements.some((s) => /ALTER TABLE "(leads|prospects|sites|users)"/.test(s))).toBe(false);
+    expect(statements.some((s) => /ADD COLUMN/.test(s))).toBe(false);
+  });
+
+  it("clés étrangères gardées : l'historique suit son prospect, les liens se vident sans rien supprimer", () => {
+    const constraints = statements.filter((s) => s.includes("ADD CONSTRAINT"));
+    expect(constraints).toHaveLength(5);
+    for (const constraint of constraints) expect(constraint).toMatch(/^DO \$\$ BEGIN ALTER TABLE .+EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;$/s);
+    expect(constraints.some((s) => /"crm_activities_contact_id_crm_contacts_id_fk".+ON DELETE cascade/s.test(s))).toBe(true);
+    for (const name of ["crm_contacts_import_id_crm_imports_id_fk", "crm_contacts_lead_id_leads_id_fk", "crm_contacts_prospect_id_prospects_id_fk", "crm_contacts_site_id_sites_id_fk"]) {
+      expect(constraints.some((s) => s.includes(`"${name}"`) && /ON DELETE set null/.test(s)), name).toBe(true);
+    }
+  });
+
+  it("index gardés : étape, e-mail, téléphone, prochaine action, liste ; une demande de la vitrine n'est reprise qu'une fois", () => {
+    const indexes = statements.filter((s) => /^CREATE (UNIQUE )?INDEX/.test(s));
+    expect(indexes).toHaveLength(8);
+    for (const index of indexes) expect(index).toMatch(/^CREATE (UNIQUE )?INDEX IF NOT EXISTS /);
+    expect(indexes.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "crm_contacts_lead_id_unique" ON "crm_contacts"'))).toBe(true);
   });
 });

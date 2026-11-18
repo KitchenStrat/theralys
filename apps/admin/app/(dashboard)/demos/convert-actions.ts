@@ -19,6 +19,7 @@ import {
 import { purgeMockLibrary } from "@theralys/jobs";
 import { createBillingProvider } from "@theralys/providers/billing";
 import { requireAdmin } from "@/lib/auth";
+import { markProspectWon } from "@/lib/crm/write";
 import { createClientInvitation } from "@/lib/invitations";
 
 const convertSchema = z.object({
@@ -151,6 +152,7 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
   // Pipeline commercial : le lead de ce prospect est gagné
   if (site.prospectId) {
     await db.update(leads).set({ status: "won" }).where(eq(leads.prospectId, site.prospectId));
+    await markProspectWon(db, site.prospectId, siteId);
   }
 
   const invitation = await createClientInvitation({

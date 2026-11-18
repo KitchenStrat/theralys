@@ -9,7 +9,7 @@ const TABS = [
   { href: "/couts", label: "API & coûts" },
   { href: "/demos", label: "Démos" },
   { href: "/clients", label: "Clients" },
-  { href: "/leads", label: "Leads" },
+  { href: "/crm", label: "CRM" },
 ];
 
 export function NavTabs() {

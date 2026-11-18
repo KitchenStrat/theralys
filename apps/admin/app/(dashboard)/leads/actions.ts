@@ -29,7 +29,7 @@ export async function createLead(input: unknown): Promise<{ error?: string }> {
     status: "new",
     notes: parsed.data.notes || null,
   });
-  revalidatePath("/leads");
+  revalidatePath("/crm");
   return {};
 }
 
@@ -41,7 +41,7 @@ export async function updateLeadStatus(leadId: string, status: string): Promise<
     .update(leads)
     .set({ status: status as (typeof LEAD_STATUSES)[number] })
     .where(eq(leads.id, leadId));
-  revalidatePath("/leads");
+  revalidatePath("/crm");
 }
 
 export async function updateLeadNotes(leadId: string, notes: string): Promise<void> {
@@ -51,5 +51,5 @@ export async function updateLeadNotes(leadId: string, notes: string): Promise<vo
     .update(leads)
     .set({ notes: notes.trim().slice(0, 2000) || null })
     .where(eq(leads.id, leadId));
-  revalidatePath("/leads");
+  revalidatePath("/crm");
 }

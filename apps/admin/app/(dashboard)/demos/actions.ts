@@ -18,6 +18,8 @@ import {
 import { SignJWT } from "jose";
 import { DEFAULT_THEME, THEME_PRESETS, slugify, uniqueSlug } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
+import { isUuid } from "@/lib/crm/filters";
+import { linkContactToDemo } from "@/lib/crm/write";
 import { runGenerationJob } from "@/lib/generation";
 import { getPlacesProvider, type PlaceResult } from "@/lib/places";
 
@@ -45,6 +47,8 @@ const demoFormSchema = z.object({
     })
     .nullable()
     .default(null),
+  // Fiche du CRM pour laquelle la démo est créée (bouton « Créer sa démo »)
+  crmContactId: z.string().refine(isUuid).nullable().optional(),
 });
 
 export type DemoFormState = { error?: string };
@@ -139,7 +143,12 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
     })
     .returning();
 
-  // Chaque démo alimente le pipeline commercial (onglet Leads)
+  // Démo créée depuis une fiche du CRM : la fiche est reliée à sa démo et avance dans le pipeline
+  if (data.crmContactId) {
+    await linkContactToDemo(db, data.crmContactId, { prospectId: prospect!.id, siteId: site!.id, siteName: site!.name });
+  }
+
+  // Chaque démo alimente le pipeline commercial (reprise dans le CRM à sa prochaine ouverture)
   await db.insert(leads).values({
     name: `${data.firstName} ${data.lastName}`,
     source: "demo",
@@ -152,6 +161,7 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
   after(() => runGenerationJob(site!.id));
 
   revalidatePath("/demos");
+  revalidatePath("/crm");
   return {};
 }
 
