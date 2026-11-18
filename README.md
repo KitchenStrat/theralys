@@ -240,9 +240,14 @@ dégradé par section, un seul accent chaud.
     prochaine tâche, date d&apos;ajout, dernier contact, formule envisagée,
     opposition au démarchage. Recherche libre, tri, **export CSV** du résultat,
     actions groupées (étape, étiquette, opposition, suppression).
-  - **Pipeline** en colonnes (À contacter → Contacté → Intéressé → Démo
-    envoyée → Rendez-vous → Proposition → Client / Perdu), par glisser-déposer,
-    avec motif de perte.
+  - **Pipeline**, vue d&apos;ouverture du CRM, sur le modèle de Pipedrive : une
+    colonne par étape en cours (À contacter → Contacté → Intéressé → Démo
+    envoyée → Rendez-vous → Proposition) avec sa valeur et son nombre
+    d&apos;affaires. Une carte se glisse d&apos;une colonne à l&apos;autre ; pendant le
+    geste, deux zones « Perdu » (avec motif) et « Gagné » apparaissent en bas
+    de l&apos;écran. Chaque carte signale sa prochaine tâche (en retard, du jour,
+    prévue, aucune), ouvre la fiche au clic, et « + » ajoute une affaire
+    directement dans une colonne. La vue Liste reste à un clic.
   - **Fiche prospect** : coordonnées, étape, formule et durée envisagées (valeur
     mensuelle), notes, **historique** (appels, e-mails, rendez-vous, notes,
     changements d&apos;étape) et **tâches de relance** datées.

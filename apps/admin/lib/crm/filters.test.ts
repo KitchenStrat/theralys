@@ -7,7 +7,7 @@ import { matchProfession } from "./professions";
 describe("filtres de la liste, portés par l'adresse", () => {
   it("lit les critères connus et ignore le reste", () => {
     const filters = parseFilters({
-      vue: "pipeline",
+      vue: "liste",
       q: "  dupont   albi ",
       etape: "new,meeting,inconnue,new",
       source: "landing",
@@ -27,7 +27,7 @@ describe("filtres de la liste, portés par l'adresse", () => {
       autre: "x",
     });
     expect(filters).toEqual({
-      view: "pipeline",
+      view: "liste",
       q: "dupont albi",
       stages: ["new", "meeting"],
       source: "landing",
@@ -59,7 +59,8 @@ describe("filtres de la liste, portés par l'adresse", () => {
     const href = filtersHref({ ...filters, stages: [...filters.stages] });
     expect(href).toBe("/crm?q=dupont&etape=new%2Cwon&action=today&tri=action&page=2");
     expect(parseFilters(new URL(href, "https://x.test").searchParams)).toEqual({ ...filters, stages: ["new", "won"] });
-    expect(filtersToParams({ ...EMPTY_FILTERS, view: "pipeline" }).toString()).toBe("vue=pipeline");
+    expect(filtersToParams({ ...EMPTY_FILTERS, view: "liste" }).toString()).toBe("vue=liste");
+    expect(parseFilters({}).view).toBe("pipeline");
   });
 
   it("critères actifs, leurs libellés, et le retrait d'un seul", () => {

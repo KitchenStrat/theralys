@@ -85,7 +85,7 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
           <div className="mt-2 flex flex-wrap gap-1.5">
             {contact.doNotContact ? <Badge tone="danger">Ne pas contacter</Badge> : null}
             {contact.tags.map((tag) => (
-              <Link key={tag} href={filtersHref({ ...EMPTY_FILTERS, tag })}>
+              <Link key={tag} href={filtersHref({ ...EMPTY_FILTERS, view: "liste", tag })}>
                 <Badge>{tag}</Badge>
               </Link>
             ))}

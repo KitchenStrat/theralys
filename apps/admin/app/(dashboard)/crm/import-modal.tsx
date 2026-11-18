@@ -400,7 +400,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
                 type="button"
                 onClick={() => {
                   close();
-                  router.push(filtersHref({ ...EMPTY_FILTERS, importId }));
+                  router.push(filtersHref({ ...EMPTY_FILTERS, view: "liste", importId }));
                 }}
               >
                 Voir cette liste

@@ -42,7 +42,7 @@ export type CrmFilters = {
 };
 
 export const EMPTY_FILTERS: CrmFilters = {
-  view: "liste",
+  view: "pipeline",
   q: "",
   stages: [],
   source: "",
@@ -87,7 +87,7 @@ export function parseFilters(params: Params): CrmFilters {
   const page = Number.parseInt(read(params, "page"), 10);
   const importId = read(params, "liste");
   return {
-    view: read(params, "vue") === "pipeline" ? "pipeline" : "liste",
+    view: read(params, "vue") === "liste" ? "liste" : "pipeline",
     q: read(params, "q").slice(0, 120),
     stages,
     source: read(params, "source").slice(0, 60),
@@ -113,7 +113,7 @@ export function filtersToParams(filters: CrmFilters): URLSearchParams {
   const set = (key: string, value: string) => {
     if (value) params.set(key, value);
   };
-  if (filters.view === "pipeline") params.set("vue", "pipeline");
+  if (filters.view === "liste") params.set("vue", "liste");
   set("q", filters.q);
   set("etape", filters.stages.join(","));
   set("source", filters.source);

@@ -34,7 +34,7 @@ export type ContactFormValues = {
 const EMPTY: ContactFormValues = { firstName: "", lastName: "", company: "", profession: "", email: "", phone: "", website: "", address: "", postalCode: "", city: "", notes: "", tags: "", source: "manual", stage: "new", plan: "", billingPeriod: "", doNotContact: false };
 
 /** Création ou modification d'une fiche. À la création, un doublon probable est signalé avant d'enregistrer. */
-export function ContactModal({ open, onClose, initial }: { open: boolean; onClose: () => void; initial?: ContactFormValues }) {
+export function ContactModal({ open, onClose, initial, defaultStage }: { open: boolean; onClose: () => void; initial?: ContactFormValues; defaultStage?: CrmStage }) {
   const router = useRouter();
   const editing = Boolean(initial?.id);
   const [values, setValues] = useState<ContactFormValues>(initial ?? EMPTY);
@@ -43,7 +43,7 @@ export function ContactModal({ open, onClose, initial }: { open: boolean; onClos
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open) {
-      setValues(initial ? { ...initial, phone: formatPhone(initial.phone) } : EMPTY);
+      setValues(initial ? { ...initial, phone: formatPhone(initial.phone) } : { ...EMPTY, stage: defaultStage ?? "new" });
       setError(null);
       setDuplicate(null);
     }

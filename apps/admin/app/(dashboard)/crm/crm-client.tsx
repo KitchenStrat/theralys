@@ -49,6 +49,7 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
   const [navigating, startNavigation] = useTransition();
   const now = useMemo(() => new Date(nowIso), [nowIso]);
   const [modal, setModal] = useState<"import" | "contact" | "lists" | null>(null);
+  const [newStage, setNewStage] = useState<CrmStage>("new");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState(filters.q);
   useEffect(() => setSearch(filters.q), [filters.q]);
@@ -72,22 +73,22 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
           <Button variant="secondary" onClick={() => setModal("import")}>
             Importer une liste
           </Button>
-          <Button onClick={() => setModal("contact")}>+ Nouveau prospect</Button>
+          <Button onClick={() => { setNewStage("new"); setModal("contact"); }}>+ Nouveau prospect</Button>
         </div>
       </div>
 
       {/* Indicateurs : chacun ouvre la liste correspondante */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi label="Prospects" value={kpis.total.toLocaleString("fr-FR")} hint={kpis.addedThisWeek > 0 ? `+${kpis.addedThisWeek.toLocaleString("fr-FR")} en 7 jours` : "dans le CRM"} href={filtersHref({ ...EMPTY_FILTERS })} />
-        <Kpi label="En cours" value={kpis.open.toLocaleString("fr-FR")} hint="ni gagnés ni perdus" href={filtersHref({ ...EMPTY_FILTERS, stages: ["new", "contacted", "qualified", "demo", "meeting", "proposal"] })} />
+        <Kpi label="Prospects" value={kpis.total.toLocaleString("fr-FR")} hint={kpis.addedThisWeek > 0 ? `+${kpis.addedThisWeek.toLocaleString("fr-FR")} en 7 jours` : "dans le CRM"} href={filtersHref({ ...EMPTY_FILTERS, view: "liste" })} />
+        <Kpi label="En cours" value={kpis.open.toLocaleString("fr-FR")} hint="ni gagnés ni perdus" href={filtersHref({ ...EMPTY_FILTERS })} />
         <Kpi
           label="À faire"
           value={(kpis.overdue + kpis.dueToday).toLocaleString("fr-FR")}
           hint={kpis.overdue > 0 ? `dont ${kpis.overdue.toLocaleString("fr-FR")} en retard` : "tâches du jour"}
           tone={kpis.overdue > 0 ? "danger" : kpis.dueToday > 0 ? "warning" : undefined}
-          href={filtersHref({ ...EMPTY_FILTERS, action: kpis.overdue > 0 ? "overdue" : "today", sort: "action" })}
+          href={filtersHref({ ...EMPTY_FILTERS, view: "liste", action: kpis.overdue > 0 ? "overdue" : "today", sort: "action" })}
         />
-        <Kpi label="Gagnés ce mois" value={kpis.wonThisMonth.toLocaleString("fr-FR")} hint={kpis.winRate === null ? "aucune affaire close" : `${Math.round(kpis.winRate * 100)} % des affaires closes`} href={filtersHref({ ...EMPTY_FILTERS, stages: ["won"] })} />
+        <Kpi label="Gagnés ce mois" value={kpis.wonThisMonth.toLocaleString("fr-FR")} hint={kpis.winRate === null ? "aucune affaire close" : `${Math.round(kpis.winRate * 100)} % des affaires closes`} href={filtersHref({ ...EMPTY_FILTERS, view: "liste", stages: ["won"] })} />
         <Kpi label="Valeur en cours" value={`${euros(kpis.openMonthlyValue)}`} hint="par mois, formules envisagées" className="col-span-2 lg:col-span-1" />
       </div>
 
@@ -99,7 +100,7 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <Button onClick={() => setModal("import")}>Importer une liste</Button>
-            <Button variant="secondary" onClick={() => setModal("contact")}>
+            <Button variant="secondary" onClick={() => { setNewStage("new"); setModal("contact"); }}>
               Ajouter un prospect
             </Button>
           </div>
@@ -127,10 +128,10 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
             <Segmented<CrmView>
               aria-label="Affichage"
               value={filters.view}
-              onChange={(view) => go({ ...filters, view, page: 1 })}
+              onChange={(view) => go({ ...filters, view, stages: view === "pipeline" ? [] : filters.stages, page: 1 })}
               options={[
-                { value: "liste", label: "Liste" },
                 { value: "pipeline", label: "Pipeline" },
+                { value: "liste", label: "Liste" },
               ]}
             />
             <Button variant="secondary" aria-expanded={filtersOpen} aria-controls="crm-filters" onClick={() => setFiltersOpen((open) => !open)}>
@@ -167,8 +168,8 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
             </Card>
           ) : null}
 
-          {/* Étapes du cycle de vente : un clic filtre, plusieurs se cumulent */}
-          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Filtrer par étape">
+          {/* Étapes du cycle de vente : un clic filtre, plusieurs se cumulent. Dans le pipeline, les colonnes en tiennent lieu */}
+          <div className={clsx("mt-4 flex flex-wrap gap-2", filters.view === "pipeline" && "hidden")} role="group" aria-label="Filtrer par étape">
             {summary.map((entry) => {
               const active = filters.stages.includes(entry.stage);
               return (
@@ -211,14 +212,14 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
             {list ? (
               <ContactTable list={list} filters={filters} now={now} total={list.total} exportHref={exportHref} onNavigate={go} tags={facets.tags.map((facet) => facet.value)} />
             ) : columns ? (
-              <PipelineBoard columns={columns} now={now} filters={filters} />
+              <PipelineBoard columns={columns} summary={summary} now={now} filters={filters} onAdd={(stage) => { setNewStage(stage); setModal("contact"); }} />
             ) : null}
           </div>
         </>
       )}
 
       <ImportModal open={modal === "import"} onClose={() => setModal(null)} />
-      <ContactModal open={modal === "contact"} onClose={() => setModal(null)} />
+      <ContactModal open={modal === "contact"} onClose={() => setModal(null)} defaultStage={newStage} />
       <ListsModal open={modal === "lists"} onClose={() => setModal(null)} imports={facets.imports} now={now} />
     </div>
   );

@@ -217,9 +217,9 @@ export type PipelineColumn = StageSummary & { cards: ContactListRow[] };
 export async function pipelineColumns(db: Database, filters: CrmFilters, now: Date): Promise<PipelineColumn[]> {
   const summary = await stageSummary(db, filters, now);
   const base = buildWhere(filters, now, { ignoreStages: true });
-  const shown = filters.stages.length > 0 ? filters.stages : [...CRM_STAGES];
+  // Le tableau montre les étapes en cours : gagner ou perdre une affaire la sort des colonnes
   const columns = await Promise.all(
-    shown.map(async (stage) => {
+    OPEN_STAGES.map(async (stage) => {
       const cards = await db
         .select(LIST_COLUMNS)
         .from(crmContacts)

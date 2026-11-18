@@ -48,7 +48,7 @@ export function ListsModal({ open, onClose, imports, now }: { open: boolean; onC
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link href={filtersHref({ ...EMPTY_FILTERS, importId: entry.id })} onClick={onClose} className="rounded-full border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-cream-100">
+                  <Link href={filtersHref({ ...EMPTY_FILTERS, view: "liste", importId: entry.id })} onClick={onClose} className="rounded-full border border-ink-300 bg-white px-3 py-1.5 text-sm font-medium text-ink-900 hover:bg-cream-100">
                     Voir
                   </Link>
                   <Button size="sm" variant="ghost" disabled={working} onClick={() => remove(entry, false)}>
