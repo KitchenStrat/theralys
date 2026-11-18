@@ -59,7 +59,7 @@ function extras(plan: PlanCard): string[] {
   const ads = [plan.googleAds && "Google Ads", plan.metaAds && "Meta Ads"].filter(Boolean).join(" et ");
   return [
     plan.blogArticlesPerWeek > 0 && `Blog SEO : ${plan.blogArticlesPerYear} articles par an`,
-    plan.googleProfile && "Fiche Google : audit, visibilité, avis",
+    plan.googleProfile && "Fiche Google : audit, visibilité, avis et posts",
     plan.socialMedia && "Réseaux sociaux : contenus prêts à poster",
     ads && `${ads} : diagnostic, plan d'action et contenus`,
     plan.maxMotifPages > 0 && `Site Internet avec ${plan.maxMotifPages} pages de spécialités`,
