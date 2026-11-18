@@ -17,7 +17,7 @@ import { Kinetic } from "./kinetic";
  * change le montant et le seuil de rentabilité ici.
  */
 const PRICE = { min: 30, max: 150, step: 5, default: 60 };
-const PATIENTS = { min: 1, max: 15, step: 1, default: 3 };
+const PATIENTS = { min: 1, max: 40, step: 1, default: 10 };
 const SESSIONS = { min: 1, max: 10, step: 1, default: 3 };
 
 /** La durée telle qu'elle se lit après « votre abonnement » ou « au tarif Scale ». */
