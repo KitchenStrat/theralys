@@ -16,6 +16,7 @@ import {
   BILLING_PERIOD_LABELS,
   BILLING_PERIOD_MONTHS,
   MIN_COMMITMENT_MONTHS,
+  STARTER_TARIFF_CHANGED_AT,
   TARIFF_CHANGED_AT,
   commitmentMonths,
   describeSubscriptionPricing,
@@ -53,15 +54,29 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(savedMonths("scale", "triennial")).toBe(18);
   });
 
-  it("Starter : mensuel et annuel seulement, au tarif inchangé", () => {
-    expect(planPeriods("starter")).toEqual(["monthly", "annual"]);
+  it("Starter : quatre durées à partir de 69 € en mensuel", () => {
+    expect(planPeriods("starter")).toEqual(["monthly", "quarterly", "annual", "triennial"]);
     expect(planPrice("starter", "monthly")).toBe(69);
-    expect(planPrice("starter", "annual")).toBe(48);
-    expect(planPrice("starter", "quarterly")).toBeNull();
-    expect(periodTotal("starter", "triennial")).toBeNull();
-    // 252 € d'écart sur l'année = 3,65 mois de mensuel : jamais arrondi vers le haut
-    expect(savedMonths("starter", "annual")).toBe(3);
-    expect(savedMonths("starter", "quarterly")).toBe(0);
+    expect(planPrice("starter", "quarterly")).toBe(57);
+    expect(planPrice("starter", "annual")).toBe(46);
+    expect(planPrice("starter", "triennial")).toBe(34);
+    expect(periodTotal("starter", "monthly")).toBe(69);
+    expect(periodTotal("starter", "quarterly")).toBe(171);
+    expect(periodTotal("starter", "annual")).toBe(552);
+    expect(periodTotal("starter", "triennial")).toBe(1224);
+    expect(savedMonths("starter", "monthly")).toBe(0);
+    expect(savedMonths("starter", "quarterly")).toBe(2);
+    expect(savedMonths("starter", "annual")).toBe(4);
+    expect(savedMonths("starter", "triennial")).toBe(18);
+  });
+
+  it("les deux formules suivent la même règle : 10 mois réglés sur 12, 8 sur 12, 18 sur 36, à l'euro inférieur", () => {
+    for (const plan of ["starter", "scale"] as const) {
+      const monthly = planPrice(plan, "monthly")!;
+      expect(planPrice(plan, "quarterly")).toBe(Math.floor((monthly * 10) / 12));
+      expect(planPrice(plan, "annual")).toBe(Math.floor((monthly * 8) / 12));
+      expect(planPrice(plan, "triennial")).toBe(Math.floor((monthly * 18) / 36));
+    }
   });
 
   it("engagement : 12 mois au moins, 36 pour le « 3 ans »", () => {
@@ -94,7 +109,22 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
     expect(subscriptionPricing({ plan: "scale", billingPeriod: "quarterly", createdAt: after })).toEqual({ monthlyPrice: 107, billedMonths: 3, legacy: false });
     expect(subscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: after })).toEqual({ monthlyPrice: 86, billedMonths: 12, legacy: false });
     expect(subscriptionPricing({ plan: "scale", billingPeriod: "triennial", createdAt: after })).toEqual({ monthlyPrice: 64, billedMonths: 36, legacy: false });
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: after })).toEqual({ monthlyPrice: 48, billedMonths: 12, legacy: false });
+  });
+
+  it("Starter : l'annuel souscrit entre les deux changements garde 48 € par mois, réglé à l'année ; ensuite 46 €", () => {
+    const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
+    const between = new Date((TARIFF_CHANGED_AT.getTime() + STARTER_TARIFF_CHANGED_AT.getTime()) / 2);
+    const after = new Date(STARTER_TARIFF_CHANGED_AT.getTime() + 86_400_000);
+    expect(TARIFF_CHANGED_AT.getTime()).toBeLessThan(STARTER_TARIFF_CHANGED_AT.getTime());
+    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: between })).toEqual({ monthlyPrice: 48, billedMonths: 12, legacy: false });
+    expect(plain(describeSubscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: between }))).toBe("Annuel — 48 € TTC par mois, soit 576 € tous les ans");
+    // Le mensuel n'a pas bougé, et Scale n'est pas concerné
+    expect(subscriptionPricing({ plan: "starter", billingPeriod: "monthly", createdAt: between })).toEqual({ monthlyPrice: 69, billedMonths: 1, legacy: false });
+    expect(subscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: between })).toEqual({ monthlyPrice: 86, billedMonths: 12, legacy: false });
+    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: after })).toEqual({ monthlyPrice: 46, billedMonths: 12, legacy: false });
+    expect(subscriptionPricing({ plan: "starter", billingPeriod: "quarterly", createdAt: after })).toEqual({ monthlyPrice: 57, billedMonths: 3, legacy: false });
+    expect(subscriptionPricing({ plan: "starter", billingPeriod: "triennial", createdAt: after })).toEqual({ monthlyPrice: 34, billedMonths: 36, legacy: false });
+    expect(plain(describeSubscriptionPricing({ plan: "starter", billingPeriod: "triennial", createdAt: after }))).toBe("3 ans — 34 € TTC par mois, soit 1 224 € tous les 3 ans");
   });
 
   it("décrit ce que paie un abonnement, ancien et nouveau tarif", () => {

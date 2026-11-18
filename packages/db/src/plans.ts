@@ -86,8 +86,10 @@ export type PlanDefinition = {
 const STARTER: PlanDefinition = {
   id: "starter",
   label: "Starter",
-  // Tarif inchangé pour l'instant : mensuel et annuel seulement (nouveaux prix sur les quatre durées à venir)
-  prices: { monthly: 69, annual: 48 },
+  // Tarif du 18 novembre 2026, sur la même règle que Scale à partir du mensuel (10 mois réglés sur 12 en
+  // trimestriel, 8 sur 12 en annuel, 18 sur 36 sur 3 ans, à l'euro inférieur) :
+  // 171 € par trimestre, 552 € par an, 1 224 € pour 3 ans
+  prices: { monthly: 69, quarterly: 57, annual: 46, triennial: 34 },
   homeSpecialties: 6,
   maxMotifPages: 0,
   blogArticlesPerWeek: 0,
@@ -155,8 +157,8 @@ export function commitmentMonths(period: BillingPeriod): number {
 
 /**
  * Économie d'une durée par rapport au mensuel, en mois de mensuel offerts sur
- * la durée d'engagement (arrondi vers le bas : jamais surestimée). Scale :
- * 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
+ * la durée d'engagement (arrondi vers le bas : jamais surestimée). Pour les
+ * deux formules : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
  */
 export function savedMonths(plan: PlanId, period: BillingPeriod): number {
   const monthly = planPrice(plan, "monthly");
@@ -179,6 +181,15 @@ const LEGACY_PRICES: Record<OfferedPlanId, Partial<Record<BillingPeriod, number>
   scale: { monthly: 79, annual: 55 },
 };
 
+/**
+ * Starter a pris ses prix sur quatre durées le 18 novembre 2026. Entre les
+ * deux changements, son annuel valait 48 € par mois, réglé à l'année (576 €) :
+ * un abonnement souscrit alors garde ce prix.
+ */
+export const STARTER_TARIFF_CHANGED_AT = new Date("2026-11-18T11:14:00Z");
+
+const STARTER_INTERIM_ANNUAL_PRICE = 48;
+
 export type SubscriptionPricing = {
   /** € TTC par mois */
   monthlyPrice: number;
@@ -194,9 +205,13 @@ export function subscriptionPricing(subscription: {
   billingPeriod: BillingPeriod;
   createdAt: Date;
 }): SubscriptionPricing {
-  const legacyPrice = LEGACY_PRICES[normalizePlan(subscription.plan)][subscription.billingPeriod];
+  const offered = normalizePlan(subscription.plan);
+  const legacyPrice = LEGACY_PRICES[offered][subscription.billingPeriod];
   if (subscription.createdAt < TARIFF_CHANGED_AT && legacyPrice !== undefined) {
     return { monthlyPrice: legacyPrice, billedMonths: 1, legacy: true };
+  }
+  if (offered === "starter" && subscription.billingPeriod === "annual" && subscription.createdAt < STARTER_TARIFF_CHANGED_AT) {
+    return { monthlyPrice: STARTER_INTERIM_ANNUAL_PRICE, billedMonths: BILLING_PERIOD_MONTHS.annual, legacy: false };
   }
   const price =
     planPrice(subscription.plan, subscription.billingPeriod) ??
