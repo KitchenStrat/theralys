@@ -61,8 +61,8 @@ function extras(plan: PlanCard): string[] {
     plan.blogArticlesPerWeek > 0 && `Blog SEO : ${plan.blogArticlesPerYear} articles par an`,
     plan.googleProfile && "Fiche Google : audit, visibilité, avis",
     plan.socialMedia && "Réseaux sociaux : contenus prêts à poster",
-    ads && `${ads} : diagnostic et plan d'action`,
-    plan.maxMotifPages > 0 && `${plan.maxMotifPages} pages de spécialités dédiées`,
+    ads && `${ads} : diagnostic, plan d'action et contenus`,
+    plan.maxMotifPages > 0 && `Site Internet avec ${plan.maxMotifPages} pages de spécialités`,
   ].filter((line): line is string => Boolean(line));
 }
 
