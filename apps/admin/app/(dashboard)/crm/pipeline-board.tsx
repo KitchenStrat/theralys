@@ -9,7 +9,10 @@ import type { ContactListRow, PipelineColumn, StageSummary } from "@/lib/crm/dat
 import { PIPELINE_COLUMN_LIMIT, filtersHref, type CrmFilters } from "@/lib/crm/filters";
 import { dueLabel, euros } from "@/lib/crm/format";
 import { CRM_STAGES, STAGE_META, contactMonthlyValue, displayName, type CrmStage } from "@/lib/crm/model";
-import { setStage } from "./actions";
+import { deleteContact, restoreFromTrash, setStage } from "./actions";
+
+/** Où une carte peut être lâchée : une étape, ou la corbeille. */
+type Target = CrmStage | "trash";
 
 /** En-têtes en chevrons : la suite des étapes se lit comme un seul parcours, de gauche à droite. */
 const CHEVRON_FIRST = "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)";
@@ -19,7 +22,7 @@ const CHEVRON = "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 1
  * Colonnes telles qu'elles seront une fois les déplacements en cours enregistrés :
  * une carte change de colonne dès qu'on la lâche, sans attendre la réponse du serveur.
  */
-export function projectMoves(columns: PipelineColumn[], moves: Record<string, CrmStage>): PipelineColumn[] {
+export function projectMoves(columns: PipelineColumn[], moves: Record<string, Target>): PipelineColumn[] {
   let board = columns;
   for (const [id, stage] of Object.entries(moves)) {
     const card = board.flatMap((column) => column.cards).find((entry) => entry.id === id);
@@ -27,7 +30,7 @@ export function projectMoves(columns: PipelineColumn[], moves: Record<string, Cr
     const value = contactMonthlyValue(card);
     board = board.map((column) => {
       if (column.stage === card.stage) return { ...column, count: column.count - 1, monthlyValue: column.monthlyValue - value, cards: column.cards.filter((entry) => entry.id !== id) };
-      if (column.stage === stage) return { ...column, count: column.count + 1, monthlyValue: column.monthlyValue + value, cards: [{ ...card, stage }, ...column.cards] };
+      if (column.stage === stage) return { ...column, count: column.count + 1, monthlyValue: column.monthlyValue + value, cards: [{ ...card, stage: column.stage }, ...column.cards] };
       return column;
     });
   }
@@ -37,15 +40,17 @@ export function projectMoves(columns: PipelineColumn[], moves: Record<string, Cr
 /**
  * Pipeline : une colonne par étape en cours du cycle de vente. Une affaire
  * avance en glissant sa carte d'une colonne à l'autre ; pendant le geste, deux
- * zones apparaissent en bas de l'écran pour la marquer gagnée ou perdue. Le
- * menu de la carte fait la même chose au clavier et sur écran tactile.
+ * zones apparaissent en bas de l'écran pour la supprimer, la marquer perdue ou
+ * gagnée. Le menu de la carte fait la même chose au clavier et sur écran
+ * tactile. Une carte supprimée part à la corbeille, d'où elle se restaure.
  */
 export function PipelineBoard({ columns, summary, now, filters, onAdd }: { columns: PipelineColumn[]; summary: StageSummary[]; now: Date; filters: CrmFilters; onAdd: (stage: CrmStage) => void }) {
   const router = useRouter();
   const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<CrmStage | null>(null);
+  const [over, setOver] = useState<Target | null>(null);
   const [, startMove] = useTransition();
-  const [moves, setMoves] = useState<Record<string, CrmStage>>({});
+  const [moves, setMoves] = useState<Record<string, Target>>({});
+  const [undo, setUndo] = useState<{ id: string; name: string } | null>(null);
   const [lost, setLost] = useState<{ id: string; name: string } | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -72,21 +77,48 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
       const result = await setStage({ id, stage, lostReason });
       if (!result.ok) {
         setError(result.error);
-        setMoves((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
+        forget(id);
       } else setError(null);
       router.refresh();
     });
   };
-  const request = (card: ContactListRow, stage: CrmStage) => {
+  const forget = (id: string) => setMoves((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)));
+  const remove = (card: ContactListRow) => {
+    setMoves((current) => ({ ...current, [card.id]: "trash" }));
+    startMove(async () => {
+      const result = await deleteContact(card.id);
+      if (result.ok) {
+        setError(null);
+        setUndo({ id: card.id, name: displayName(card) });
+      } else {
+        setError(result.error);
+        forget(card.id);
+      }
+      router.refresh();
+    });
+  };
+  const restore = () => {
+    if (!undo) return;
+    const { id } = undo;
+    setUndo(null);
+    forget(id);
+    startMove(async () => {
+      const result = await restoreFromTrash({ ids: [id] });
+      setError(result.ok ? null : result.error);
+      router.refresh();
+    });
+  };
+  const request = (card: ContactListRow, stage: Target) => {
     if (card.stage === stage) return;
-    if (stage === "lost") {
+    if (stage === "trash") remove(card);
+    else if (stage === "lost") {
       setReason("");
       setLost({ id: card.id, name: displayName(card) });
     } else move(card.id, stage);
   };
 
-  /** Gestes communs aux colonnes et aux zones « Gagné » / « Perdu ». */
-  const target = (stage: CrmStage) => ({
+  /** Gestes communs aux colonnes et aux zones « Supprimer », « Perdu » et « Gagné ». */
+  const target = (stage: Target) => ({
     onDragOver: (event: DragEvent<HTMLElement>) => {
       // Seules nos cartes se déposent ici (elles portent leur identifiant en texte)
       if (!dragging && !event.dataTransfer.types.includes("text/plain")) return;
@@ -110,6 +142,21 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
       {error ? (
         <p role="alert" className="mb-3 text-sm text-danger-500">
           {error}
+        </p>
+      ) : null}
+
+      {undo ? (
+        <p role="status" className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-cream-200 bg-white px-4 py-2.5 text-sm text-ink-900 shadow-sm">
+          <span>{undo.name} est à la corbeille.</span>
+          <button type="button" onClick={restore} className="rounded font-semibold text-primary-700 underline underline-offset-4 hover:text-primary-900">
+            Annuler
+          </button>
+          <Link href="/crm/corbeille" className="text-ink-700 underline underline-offset-4 hover:text-primary-700">
+            Voir la corbeille
+          </Link>
+          <button type="button" onClick={() => setUndo(null)} aria-label="Fermer ce message" className="ml-auto grid h-6 w-6 place-items-center rounded-full text-ink-500 hover:bg-cream-100">
+            ×
+          </button>
         </p>
       ) : null}
 
@@ -188,9 +235,12 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
         </div>
       </div>
 
-      {/* Pendant qu'une carte est tenue : la lâcher ici clôt l'affaire */}
+      {/* Pendant qu'une carte est tenue : la lâcher ici la supprime ou clôt l'affaire */}
       {dragging ? (
         <div className="fixed inset-x-0 bottom-0 z-40 flex gap-3 border-t border-cream-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.1)]">
+          <div {...target("trash")} data-drop="trash" className={clsx("flex-1 rounded-xl border-2 border-dashed py-4 text-center text-sm font-semibold transition-colors", over === "trash" ? "border-ink-900 bg-ink-900 text-white" : "border-ink-300 bg-cream-100 text-ink-700")}>
+            Supprimer
+          </div>
           <div {...target("lost")} data-drop="lost" className={clsx("flex-1 rounded-xl border-2 border-dashed py-4 text-center text-sm font-semibold transition-colors", over === "lost" ? "border-danger-500 bg-danger-500 text-white" : "border-danger-500/60 bg-danger-100 text-danger-500")}>
             Perdu
           </div>
@@ -231,7 +281,7 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
   );
 }
 
-function PipelineCard({ card, now, dragging, onDragStart, onDragEnd, onMove }: { card: ContactListRow; now: Date; dragging: boolean; onDragStart: () => void; onDragEnd: () => void; onMove: (stage: CrmStage) => void }) {
+function PipelineCard({ card, now, dragging, onDragStart, onDragEnd, onMove }: { card: ContactListRow; now: Date; dragging: boolean; onDragStart: () => void; onDragEnd: () => void; onMove: (target: Target) => void }) {
   const name = displayName(card);
   const due = card.nextActionAt ? dueLabel(new Date(card.nextActionAt), now) : null;
   const value = contactMonthlyValue(card);
@@ -275,7 +325,7 @@ function PipelineCard({ card, now, dragging, onDragStart, onDragEnd, onMove }: {
         <select
           value=""
           onChange={(event) => {
-            if (event.target.value) onMove(event.target.value as CrmStage);
+            if (event.target.value) onMove(event.target.value as Target);
           }}
           className="absolute inset-0 cursor-pointer opacity-0"
         >
@@ -285,6 +335,7 @@ function PipelineCard({ card, now, dragging, onDragStart, onDragEnd, onMove }: {
               {stage === "won" ? "Gagné" : STAGE_META[stage].label}
             </option>
           ))}
+          <option value="trash">Supprimer</option>
         </select>
       </label>
     </li>

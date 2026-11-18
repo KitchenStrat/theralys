@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { csvCell, exportCsv, EXPORT_HEADERS, type ExportRow } from "./export";
 import { EMPTY_FILTERS, activeCriteria, criterionLabel, filtersHref, filtersToParams, parisDayBounds, parseFilters, withoutCriterion } from "./filters";
 import { dateInputValue, dueDateFromInput, dueLabel } from "./format";
+import { TRASH_PREFIX, isTrashed, stageOf } from "./model";
 import { matchProfession } from "./professions";
 
 describe("filtres de la liste, portés par l'adresse", () => {
@@ -173,5 +174,20 @@ describe("métier d'une fiche repris dans la fenêtre « Créer une démo »", (
     expect(matchProfession("Kinésithérapeute")).toBe("");
     expect(matchProfession("Coach")).toBe("");
     expect(matchProfession("")).toBe("");
+  });
+});
+
+describe("corbeille : l'étape d'origine reste lisible", () => {
+  it("reconnaît une fiche supprimée et l'étape qu'elle retrouvera", () => {
+    expect(isTrashed("meeting")).toBe(false);
+    expect(isTrashed(`${TRASH_PREFIX}meeting`)).toBe(true);
+    expect(stageOf("meeting")).toBe("meeting");
+    expect(stageOf(`${TRASH_PREFIX}meeting`)).toBe("meeting");
+    expect(stageOf(`${TRASH_PREFIX}won`)).toBe("won");
+  });
+
+  it("étape inconnue : retour au début du pipeline", () => {
+    expect(stageOf("")).toBe("new");
+    expect(stageOf(`${TRASH_PREFIX}ancienne`)).toBe("new");
   });
 });

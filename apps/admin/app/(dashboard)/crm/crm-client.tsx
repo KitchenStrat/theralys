@@ -69,7 +69,10 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
           <h1 className="text-2xl font-bold">CRM</h1>
           <p className="mt-1 text-sm text-ink-500">Vos prospects, de la première liste à la signature.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/crm/corbeille" className="rounded-full px-3 py-2 text-sm font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline">
+            Corbeille{kpis.trashed > 0 ? ` · ${kpis.trashed.toLocaleString("fr-FR")}` : ""}
+          </Link>
           <Button variant="secondary" onClick={() => setModal("import")}>
             Importer une liste
           </Button>
@@ -291,7 +294,7 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
     startWork(async () => {
       const target = everything ? { query: filtersToParams({ ...filters, page: 1 }).toString() } : { ids: [...selected] };
       const result = await bulkUpdate({ ...target, action, value });
-      setMessage(result.ok ? `${result.count.toLocaleString("fr-FR")} prospect${result.count > 1 ? "s" : ""} mis à jour.` : result.error);
+      setMessage(result.ok ? `${result.count.toLocaleString("fr-FR")} prospect${result.count > 1 ? "s" : ""} ${action === "delete" ? `mis à la corbeille` : "mis à jour"}.` : result.error);
       if (result.ok) {
         setSelected(new Set());
         setEverything(false);
@@ -382,7 +385,7 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
               <Button variant="secondary" size="sm" disabled={working} onClick={() => run("dnc")}>
                 Ne pas contacter
               </Button>
-              <Button variant="danger" size="sm" disabled={working} onClick={() => run("delete", "", `Supprimer définitivement ${count.toLocaleString("fr-FR")} prospect${count > 1 ? "s" : ""} et leur historique ?`)}>
+              <Button variant="danger" size="sm" disabled={working} onClick={() => run("delete", "", `Mettre ${count.toLocaleString("fr-FR")} prospect${count > 1 ? "s" : ""} à la corbeille ? Vous pourrez les restaurer.`)}>
                 Supprimer
               </Button>
             </div>

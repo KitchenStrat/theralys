@@ -19,12 +19,12 @@ export function ListsModal({ open, onClose, imports, now }: { open: boolean; onC
 
   const remove = (entry: ImportSummary, withContacts: boolean) => {
     const question = withContacts
-      ? `Supprimer la liste « ${entry.filename} » et ses ${entry.contacts.toLocaleString("fr-FR")} prospects, avec leur historique ?`
+      ? `Supprimer la liste « ${entry.filename} » et mettre ses ${entry.contacts.toLocaleString("fr-FR")} prospects à la corbeille ?`
       : `Retirer la liste « ${entry.filename} » ? Ses prospects restent dans le CRM.`;
     if (!window.confirm(question)) return;
     startWork(async () => {
       const result = await deleteImport({ importId: entry.id, withContacts });
-      setMessage(result.ok ? (withContacts ? `Liste supprimée, ${result.removed.toLocaleString("fr-FR")} prospects retirés.` : "Liste retirée, ses prospects sont conservés.") : result.error);
+      setMessage(result.ok ? (withContacts ? `Liste supprimée, ${result.removed.toLocaleString("fr-FR")} prospects mis à la corbeille.` : "Liste retirée, ses prospects sont conservés.") : result.error);
       router.refresh();
     });
   };

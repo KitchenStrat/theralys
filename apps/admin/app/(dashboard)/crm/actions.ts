@@ -7,8 +7,9 @@ import { crmActivities, crmContacts, crmImports, getDb } from "@theralys/db";
 import { requireAdmin } from "@/lib/auth";
 import { matchingIds, refreshNextAction } from "@/lib/crm/data";
 import { isUuid, parseFilters } from "@/lib/crm/filters";
-import { CRM_STAGES, FIELD_MAX, LOGGABLE_KINDS, displayName, isCrmStage, isPeriodInterest, isPlanInterest, type ContactDraft } from "@/lib/crm/model";
+import { CRM_STAGES, FIELD_MAX, LOGGABLE_KINDS, displayName, isCrmStage, isPeriodInterest, isPlanInterest, isTrashed, type ContactDraft } from "@/lib/crm/model";
 import { cleanMultiline, cleanText, dedupeKeys, isUsableDraft, normalizeDraft, normalizeTags } from "@/lib/crm/normalize";
+import { purgeContacts, restoreContacts, trashContacts } from "@/lib/crm/trash";
 import { addImportCounts, changeStage, findExisting, mergeIntoExisting, recordActivity } from "@/lib/crm/write";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -81,8 +82,9 @@ export async function saveContact(input: unknown): Promise<SaveContactResult> {
   };
 
   if (data.id) {
-    const [existing] = await db.select({ id: crmContacts.id }).from(crmContacts).where(eq(crmContacts.id, data.id)).limit(1);
+    const [existing] = await db.select({ id: crmContacts.id, stage: crmContacts.stage }).from(crmContacts).where(eq(crmContacts.id, data.id)).limit(1);
     if (!existing) return fail("Cette fiche n'existe plus.");
+    if (isTrashed(existing.stage)) return fail("Cette fiche est à la corbeille : restaurez-la pour la modifier.");
     await db
       .update(crmContacts)
       .set({ ...fields, ...(cleanText(data.source, 60) ? { source: cleanText(data.source, 60) } : {}) })
@@ -106,12 +108,39 @@ export async function saveContact(input: unknown): Promise<SaveContactResult> {
   return { ok: true, id: created!.id };
 }
 
+/** Supprimer une fiche la met à la corbeille : elle s'y restaure, ou s'y efface pour de bon. */
 export async function deleteContact(id: unknown): Promise<Result> {
   await requireAdmin();
   if (!isUuid(id)) return fail("Identifiant invalide.");
-  await getDb().delete(crmContacts).where(eq(crmContacts.id, id));
+  await trashContacts(getDb(), [id]);
   refresh(id);
   return { ok: true };
+}
+
+// ─── Corbeille ───────────────────────────────────────────────────────────────
+
+const trashSchema = z.object({ ids: z.array(uuid).min(1).max(500) });
+
+export async function restoreFromTrash(input: unknown): Promise<Result<{ count: number }>> {
+  await requireAdmin();
+  const parsed = trashSchema.safeParse(input);
+  if (!parsed.success) return fail("Sélection invalide.");
+  const count = await restoreContacts(getDb(), parsed.data.ids);
+  refresh();
+  for (const id of parsed.data.ids.slice(0, 20)) revalidatePath(`/crm/${id}`);
+  revalidatePath("/crm/corbeille");
+  return { ok: true, count };
+}
+
+/** Efface pour de bon des fiches de la corbeille ; sans `ids`, vide la corbeille. */
+export async function purgeFromTrash(input: unknown): Promise<Result<{ count: number }>> {
+  await requireAdmin();
+  const parsed = z.object({ ids: z.array(uuid).min(1).max(500).optional() }).safeParse(input);
+  if (!parsed.success) return fail("Sélection invalide.");
+  const count = await purgeContacts(getDb(), parsed.data.ids);
+  refresh();
+  revalidatePath("/crm/corbeille");
+  return { ok: true, count };
 }
 
 // ─── Étape ───────────────────────────────────────────────────────────────────
@@ -156,7 +185,8 @@ export async function bulkUpdate(input: unknown): Promise<Result<{ count: number
       if (start === 0) count = 0;
       count += await changeStage(db, chunk, value, { now });
     } else if (action === "delete") {
-      await db.delete(crmContacts).where(inArray(crmContacts.id, chunk));
+      if (start === 0) count = 0;
+      count += await trashContacts(db, chunk, now);
     } else if (action === "dnc" || action === "allow") {
       await db.update(crmContacts).set({ doNotContact: action === "dnc", updatedAt: now }).where(inArray(crmContacts.id, chunk));
     } else {
@@ -376,7 +406,7 @@ export async function finishImport(importId: unknown): Promise<Result> {
   return { ok: true };
 }
 
-/** Défait un import : la liste disparaît, avec les prospects qu'elle avait créés si on le demande. */
+/** Défait un import : la liste disparaît ; ses prospects partent à la corbeille si on le demande. */
 export async function deleteImport(input: unknown): Promise<Result<{ removed: number }>> {
   await requireAdmin();
   const parsed = z.object({ importId: uuid, withContacts: z.boolean() }).safeParse(input);
@@ -384,8 +414,10 @@ export async function deleteImport(input: unknown): Promise<Result<{ removed: nu
   const db = getDb();
   let removed = 0;
   if (parsed.data.withContacts) {
-    const rows = await db.delete(crmContacts).where(eq(crmContacts.importId, parsed.data.importId)).returning({ id: crmContacts.id });
-    removed = rows.length;
+    // Les prospects de la liste partent à la corbeille, d'où ils se restaurent
+    const rows = await db.select({ id: crmContacts.id }).from(crmContacts).where(eq(crmContacts.importId, parsed.data.importId));
+    const ids = rows.map((row) => row.id);
+    for (let start = 0; start < ids.length; start += 500) removed += await trashContacts(db, ids.slice(start, start + 500));
   }
   await db.delete(crmImports).where(eq(crmImports.id, parsed.data.importId));
   refresh();

@@ -9,9 +9,9 @@ import { Badge, Button, Card, Input, Label, Modal, Segmented } from "@theralys/u
 import type { ContactDetail } from "@/lib/crm/data";
 import { EMPTY_FILTERS, filtersHref } from "@/lib/crm/filters";
 import { dateInputValue, dateTime, dueDateFromInput, dueLabel, euros, shortDate } from "@/lib/crm/format";
-import { ACTIVITY_LABELS, CRM_STAGES, LOGGABLE_KINDS, STAGE_META, contactMonthlyValue, displayName, isCrmStage, isPeriodInterest, isPlanInterest, sourceLabel, type ActivityKind, type CrmStage, type LoggableKind } from "@/lib/crm/model";
+import { ACTIVITY_LABELS, CRM_STAGES, LOGGABLE_KINDS, STAGE_META, contactMonthlyValue, displayName, isPeriodInterest, isPlanInterest, isTrashed, sourceLabel, stageOf, type ActivityKind, type CrmStage, type LoggableKind } from "@/lib/crm/model";
 import { departmentOf, formatPhone } from "@/lib/crm/normalize";
-import { addTask, completeTask, deleteActivity, deleteContact, logActivity, setStage } from "../actions";
+import { addTask, completeTask, deleteActivity, deleteContact, logActivity, purgeFromTrash, restoreFromTrash, setStage } from "../actions";
 import { ContactModal } from "../contact-modal";
 
 const DAY = 86_400_000;
@@ -43,7 +43,9 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
   const [lostOpen, setLostOpen] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const name = displayName(contact);
-  const stage: CrmStage = isCrmStage(contact.stage) ? contact.stage : "new";
+  // À la corbeille, la fiche se consulte mais ne se modifie plus : elle garde l'étape qu'elle retrouvera
+  const trashed = isTrashed(contact.stage);
+  const stage: CrmStage = stageOf(contact.stage);
   const value = contactMonthlyValue(contact);
 
   const act = (work: () => Promise<{ ok: true } | { ok: false; error: string }>, after?: () => void) =>
@@ -73,8 +75,8 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
 
   return (
     <div>
-      <Link href="/crm" className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline">
-        ← Tous les prospects
+      <Link href={trashed ? "/crm/corbeille" : "/crm"} className="text-sm font-medium text-primary-700 underline-offset-4 hover:underline">
+        {trashed ? "← Corbeille" : "← Tous les prospects"}
       </Link>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
@@ -91,7 +93,7 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={clsx("flex flex-wrap gap-2", trashed && "hidden")}>
           {site ? (
             <Link href={site.type === "client" ? "/clients" : `/demos/${site.id}/edit`} className="rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 hover:bg-cream-100">
               {site.type === "client" ? "Voir le client" : "Ouvrir sa démo"}
@@ -108,10 +110,10 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
             variant="ghost"
             disabled={working}
             onClick={() => {
-              if (!window.confirm(`Supprimer définitivement la fiche de ${name} et tout son historique ?`)) return;
+              // Sans confirmation : la fiche part à la corbeille, d'où elle se restaure
               startWork(async () => {
                 const result = await deleteContact(contact.id);
-                if (result.ok) router.push("/crm");
+                if (result.ok) router.push("/crm/corbeille");
                 else setError(result.error);
               });
             }}
@@ -121,6 +123,34 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
         </div>
       </div>
 
+      {trashed ? (
+        <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning-500/40 bg-warning-100 px-5 py-4 text-sm text-ink-900">
+          <p>
+            <span className="font-semibold">Cette fiche est à la corbeille</span> depuis le {dateTime(new Date(contact.updatedAt))}. Restaurez-la pour la retrouver dans le pipeline, à l&apos;étape « {STAGE_META[stage].label} ».
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={working} onClick={() => act(() => restoreFromTrash({ ids: [contact.id] }))}>
+              Restaurer
+            </Button>
+            <Button
+              variant="danger"
+              disabled={working}
+              onClick={() => {
+                if (!window.confirm(`Effacer définitivement la fiche de ${name} et tout son historique ? Cette action ne s'annule pas.`)) return;
+                startWork(async () => {
+                  const result = await purgeFromTrash({ ids: [contact.id] });
+                  if (result.ok) router.push("/crm/corbeille");
+                  else setError(result.error);
+                });
+              }}
+            >
+              Effacer définitivement
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div inert={trashed} className={clsx(trashed && "opacity-60")}>
       {/* Étape du cycle de vente : un clic la change, l'historique le note */}
       <div className="mt-5 overflow-x-auto pb-1">
         <ol className="flex min-w-max gap-1.5" aria-label="Étape du cycle de vente">
@@ -263,6 +293,8 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
             </Card>
           ) : null}
         </aside>
+      </div>
+
       </div>
 
       <ContactModal

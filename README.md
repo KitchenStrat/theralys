@@ -248,6 +248,13 @@ dégradé par section, un seul accent chaud.
     de l&apos;écran. Chaque carte signale sa prochaine tâche (en retard, du jour,
     prévue, aucune), ouvre la fiche au clic, et « + » ajoute une affaire
     directement dans une colonne. La vue Liste reste à un clic.
+  - **Corbeille** : supprimer une carte (zone « Supprimer » pendant le
+    glisser, menu de la carte, fiche, actions groupées, suppression d&apos;une
+    liste importée) ne l&apos;efface pas. La fiche quitte le pipeline, la liste,
+    les compteurs et les exports, et se retrouve dans **CRM → Corbeille** avec
+    son historique : elle s&apos;y restaure à son étape d&apos;origine ou s&apos;y efface
+    pour de bon (une fiche, une sélection, ou toute la corbeille). Aucune
+    colonne en plus : l&apos;étape d&apos;une fiche supprimée est préfixée par `trash:`.
   - **Fiche prospect** : coordonnées, étape, formule et durée envisagées (valeur
     mensuelle), notes, **historique** (appels, e-mails, rendez-vous, notes,
     changements d&apos;étape) et **tâches de relance** datées.

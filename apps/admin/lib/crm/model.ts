@@ -31,6 +31,19 @@ export function isCrmStage(value: unknown): value is CrmStage {
   return typeof value === "string" && (CRM_STAGES as readonly string[]).includes(value);
 }
 
+/** Corbeille : une fiche supprimée garde son étape d'origine derrière ce préfixe (voir `trash.ts`). */
+export const TRASH_PREFIX = "trash:";
+
+export function isTrashed(stage: string): boolean {
+  return stage.startsWith(TRASH_PREFIX);
+}
+
+/** Étape d'une fiche, qu'elle soit ou non à la corbeille. */
+export function stageOf(stage: string): CrmStage {
+  const own = isTrashed(stage) ? stage.slice(TRASH_PREFIX.length) : stage;
+  return isCrmStage(own) ? own : "new";
+}
+
 /** Étape du CRM pour un statut de l'ancienne table `leads`. */
 export function stageFromLeadStatus(status: string): CrmStage {
   if (status === "demo_sent") return "demo";

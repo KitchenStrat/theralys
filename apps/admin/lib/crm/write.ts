@@ -6,8 +6,9 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { crmActivities, crmContacts, crmImports, type CrmContact, type Database } from "@theralys/db";
 import { isMissingTableError } from "@/lib/api-usage";
-import { STAGE_META, isContactKind, isCrmStage, type ContactDraft, type CrmStage } from "./model";
+import { STAGE_META, isContactKind, isCrmStage, isTrashed, type ContactDraft, type CrmStage } from "./model";
 import { cleanText, dedupeKeys, fold, normalizeTags } from "./normalize";
+import { NOT_TRASHED } from "./trash";
 
 type Executor = Pick<Database, "select" | "insert" | "update" | "delete" | "execute">;
 
@@ -20,7 +21,8 @@ export async function changeStage(db: Executor, ids: string[], stage: CrmStage, 
   if (ids.length === 0) return 0;
   const now = options.now ?? new Date();
   const current = await db.select({ id: crmContacts.id, stage: crmContacts.stage }).from(crmContacts).where(inArray(crmContacts.id, ids));
-  const moving = current.filter((row) => row.stage !== stage);
+  // Une fiche à la corbeille ne change pas d'étape : elle garde celle qu'elle retrouvera à sa restauration
+  const moving = current.filter((row) => row.stage !== stage && !isTrashed(row.stage));
   if (moving.length === 0) return 0;
   const reason = stage === "lost" ? cleanText(options.lostReason, 200) : "";
   await db
@@ -82,7 +84,7 @@ const MATCH_COLUMNS = {
 /**
  * Prospects déjà présents qui correspondent à des brouillons : même e-mail,
  * même téléphone, ou même nom dans la même ville. Renvoie, par clé de
- * doublon, la fiche existante.
+ * doublon, la fiche existante. Les fiches à la corbeille ne comptent pas.
  */
 export async function findExisting(db: Executor, drafts: Pick<ContactDraft, "firstName" | "lastName" | "company" | "city" | "email" | "phone">[]): Promise<Map<string, ExistingMatch>> {
   const emails = [...new Set(drafts.map((draft) => draft.email).filter(Boolean))];
@@ -99,7 +101,7 @@ export async function findExisting(db: Executor, drafts: Pick<ContactDraft, "fir
   const rows = await db
     .select(MATCH_COLUMNS)
     .from(crmContacts)
-    .where(or(...conditions))
+    .where(and(NOT_TRASHED, or(...conditions)))
     .limit(5000);
   for (const row of rows) {
     for (const key of dedupeKeys(row)) if (!found.has(key)) found.set(key, row);

@@ -10,6 +10,7 @@ import { isMissingTableError } from "@/lib/api-usage";
 import { PAGE_SIZE, PIPELINE_COLUMN_LIMIT, parisDayBounds, type CrmFilters } from "./filters";
 import { CRM_STAGES, OPEN_STAGES, contactMonthlyValue, stageFromLeadStatus, type CrmStage } from "./model";
 import { cleanMultiline, cleanText, departmentOf, normalizeEmail, normalizePhone, splitFullName } from "./normalize";
+import { NOT_TRASHED, trashCount } from "./trash";
 
 const DAY = 86_400_000;
 
@@ -97,7 +98,8 @@ function departmentCondition(department: string): SQL | undefined {
 
 /** Condition SQL d'un jeu de filtres. `ignoreStages` sert aux compteurs par étape. */
 export function buildWhere(filters: CrmFilters, now: Date, options: { ignoreStages?: boolean } = {}): SQL | undefined {
-  const conditions: (SQL | undefined)[] = [];
+  // Les fiches à la corbeille ne paraissent nulle part ailleurs que dans la corbeille
+  const conditions: (SQL | undefined)[] = [NOT_TRASHED];
   for (const token of filters.q.split(/\s+/).filter(Boolean).slice(0, 5)) {
     const digits = token.replace(/\D/g, "");
     const phoneDigits = digits.length >= 4 ? (digits.startsWith("0") ? digits.slice(1) : digits) : "";
@@ -242,27 +244,27 @@ export type CrmFacets = { sources: Facet[]; professions: Facet[]; cities: Facet[
 export async function loadFacets(db: Database): Promise<CrmFacets> {
   const count = sql<number>`count(*)::int`;
   const [sources, professions, cities, postalCodes, tags, imports] = await Promise.all([
-    db.select({ value: crmContacts.source, count }).from(crmContacts).groupBy(crmContacts.source).orderBy(desc(count)).limit(60),
+    db.select({ value: crmContacts.source, count }).from(crmContacts).where(NOT_TRASHED).groupBy(crmContacts.source).orderBy(desc(count)).limit(60),
     db
       .select({ value: sql<string>`min(${crmContacts.profession})`, count })
       .from(crmContacts)
-      .where(sql`${crmContacts.profession} <> ''`)
+      .where(and(NOT_TRASHED, sql`${crmContacts.profession} <> ''`))
       .groupBy(sql`lower(${crmContacts.profession})`)
       .orderBy(desc(count))
       .limit(150),
     db
       .select({ value: sql<string>`min(${crmContacts.city})`, count })
       .from(crmContacts)
-      .where(sql`${crmContacts.city} <> ''`)
+      .where(and(NOT_TRASHED, sql`${crmContacts.city} <> ''`))
       .groupBy(sql`lower(${crmContacts.city})`)
       .orderBy(desc(count))
       .limit(300),
     db
       .select({ value: sql<string>`left(${crmContacts.postalCode}, 3)`, count })
       .from(crmContacts)
-      .where(sql`${crmContacts.postalCode} ~ '^[0-9]{5}$'`)
+      .where(and(NOT_TRASHED, sql`${crmContacts.postalCode} ~ '^[0-9]{5}$'`))
       .groupBy(sql`left(${crmContacts.postalCode}, 3)`),
-    db.execute<{ value: string; count: number }>(sql`select t.tag as value, count(*)::int as count from crm_contacts c, jsonb_array_elements_text(c.tags) as t(tag) group by t.tag order by count(*) desc, t.tag limit 120`),
+    db.execute<{ value: string; count: number }>(sql`select t.tag as value, count(*)::int as count from crm_contacts c, jsonb_array_elements_text(c.tags) as t(tag) where c.stage not like 'trash:%' group by t.tag order by count(*) desc, t.tag limit 120`),
     db
       .select({
         id: crmImports.id,
@@ -275,7 +277,7 @@ export async function loadFacets(db: Database): Promise<CrmFacets> {
         updatedCount: crmImports.updatedCount,
         skippedCount: crmImports.skippedCount,
         // Table nommée en toutes lettres : dans la sous-requête, « id » seul désignerait la colonne de crm_contacts
-        contacts: sql<number>`(select count(*)::int from crm_contacts c where c.import_id = "crm_imports"."id")`,
+        contacts: sql<number>`(select count(*)::int from crm_contacts c where c.import_id = "crm_imports"."id" and c.stage not like 'trash:%')`,
       })
       .from(crmImports)
       .orderBy(desc(crmImports.createdAt))
@@ -299,7 +301,7 @@ export async function loadFacets(db: Database): Promise<CrmFacets> {
 
 // ─── Indicateurs ─────────────────────────────────────────────────────────────
 
-export type CrmKpis = { total: number; open: number; overdue: number; dueToday: number; wonThisMonth: number; addedThisWeek: number; openMonthlyValue: number; winRate: number | null };
+export type CrmKpis = { trashed: number; total: number; open: number; overdue: number; dueToday: number; wonThisMonth: number; addedThisWeek: number; openMonthlyValue: number; winRate: number | null };
 
 export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
   const { start, end } = parisDayBounds(now);
@@ -317,7 +319,9 @@ export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
       won: sql<number>`count(*) filter (where ${crmContacts.stage} = 'won')::int`,
       lost: sql<number>`count(*) filter (where ${crmContacts.stage} = 'lost')::int`,
     })
-    .from(crmContacts);
+    .from(crmContacts)
+    .where(NOT_TRASHED);
+  const trashed = await trashCount(db);
   const valued = await db
     .select({ plan: crmContacts.plan, billingPeriod: crmContacts.billingPeriod, count: sql<number>`count(*)::int` })
     .from(crmContacts)
@@ -325,6 +329,7 @@ export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
     .groupBy(crmContacts.plan, crmContacts.billingPeriod);
   const closed = (row?.won ?? 0) + (row?.lost ?? 0);
   return {
+    trashed,
     total: row?.total ?? 0,
     open: row?.open ?? 0,
     overdue: row?.overdue ?? 0,
