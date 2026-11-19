@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { clsx } from "clsx";
+import { Activity, ListTodo, Plus, SlidersHorizontal, Trash2, Trophy, Upload, Users, Wallet, type LucideIcon } from "lucide-react";
 import { Badge, Button, Card, Input, Segmented, Select } from "@theralys/ui";
 import type { ContactListRow, CrmFacets, CrmKpis, PipelineColumn, StageSummary } from "@/lib/crm/data";
 import {
@@ -31,6 +32,8 @@ import { ContactModal } from "./contact-modal";
 import { ImportModal } from "./import-modal";
 import { ListsModal } from "./lists-modal";
 import { PipelineBoard } from "./pipeline-board";
+import { Avatar, Odometer, StageIcon } from "./ui";
+import { STAGE_COLOR } from "@/lib/crm/stage-style";
 
 type ListResult = { rows: ContactListRow[]; total: number; page: number; pageCount: number };
 
@@ -70,29 +73,36 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
           <p className="mt-1 text-sm text-ink-500">Vos prospects, de la première liste à la signature.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/crm/corbeille" className="rounded-full px-3 py-2 text-sm font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline">
+          <Link href="/crm/corbeille" className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-white hover:text-primary-700">
+            <Trash2 size={15} aria-hidden />
             Corbeille{kpis.trashed > 0 ? ` · ${kpis.trashed.toLocaleString("fr-FR")}` : ""}
           </Link>
           <Button variant="secondary" onClick={() => setModal("import")}>
+            <Upload size={15} aria-hidden className="mr-1.5 inline-block align-[-2px]" />
             Importer une liste
           </Button>
-          <Button onClick={() => { setNewStage("new"); setModal("contact"); }}>+ Nouveau prospect</Button>
+          <Button onClick={() => { setNewStage("new"); setModal("contact"); }}>
+            <Plus size={16} strokeWidth={2.6} aria-hidden className="mr-1 inline-block align-[-3px]" />
+            Nouveau prospect
+          </Button>
         </div>
       </div>
 
       {/* Indicateurs : chacun ouvre la liste correspondante */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi label="Prospects" value={kpis.total.toLocaleString("fr-FR")} hint={kpis.addedThisWeek > 0 ? `+${kpis.addedThisWeek.toLocaleString("fr-FR")} en 7 jours` : "dans le CRM"} href={filtersHref({ ...EMPTY_FILTERS, view: "liste" })} />
-        <Kpi label="En cours" value={kpis.open.toLocaleString("fr-FR")} hint="ni gagnés ni perdus" href={filtersHref({ ...EMPTY_FILTERS })} />
+        <Kpi icon={Users} color={STAGE_COLOR.new} label="Prospects" value={kpis.total.toLocaleString("fr-FR")} hint={kpis.addedThisWeek > 0 ? `+${kpis.addedThisWeek.toLocaleString("fr-FR")} en 7 jours` : "dans le CRM"} href={filtersHref({ ...EMPTY_FILTERS, view: "liste" })} />
+        <Kpi icon={Activity} color={STAGE_COLOR.demo} label="En cours" value={kpis.open.toLocaleString("fr-FR")} hint="ni gagnés ni perdus" href={filtersHref({ ...EMPTY_FILTERS })} />
         <Kpi
+          icon={ListTodo}
+          color={kpis.overdue > 0 ? STAGE_COLOR.lost : STAGE_COLOR.meeting}
           label="À faire"
           value={(kpis.overdue + kpis.dueToday).toLocaleString("fr-FR")}
           hint={kpis.overdue > 0 ? `dont ${kpis.overdue.toLocaleString("fr-FR")} en retard` : "tâches du jour"}
           tone={kpis.overdue > 0 ? "danger" : kpis.dueToday > 0 ? "warning" : undefined}
           href={filtersHref({ ...EMPTY_FILTERS, view: "liste", action: kpis.overdue > 0 ? "overdue" : "today", sort: "action" })}
         />
-        <Kpi label="Gagnés ce mois" value={kpis.wonThisMonth.toLocaleString("fr-FR")} hint={kpis.winRate === null ? "aucune affaire close" : `${Math.round(kpis.winRate * 100)} % des affaires closes`} href={filtersHref({ ...EMPTY_FILTERS, view: "liste", stages: ["won"] })} />
-        <Kpi label="Valeur en cours" value={`${euros(kpis.openMonthlyValue)}`} hint="par mois, formules envisagées" className="col-span-2 lg:col-span-1" />
+        <Kpi icon={Trophy} color={STAGE_COLOR.won} label="Gagnés ce mois" value={kpis.wonThisMonth.toLocaleString("fr-FR")} hint={kpis.winRate === null ? "aucune affaire close" : `${Math.round(kpis.winRate * 100)} % des affaires closes`} href={filtersHref({ ...EMPTY_FILTERS, view: "liste", stages: ["won"] })} />
+        <Kpi icon={Wallet} color={STAGE_COLOR.qualified} label="Valeur en cours" value={`${euros(kpis.openMonthlyValue)}`} hint="par mois, formules envisagées" className="col-span-2 lg:col-span-1" />
       </div>
 
       {empty ? (
@@ -138,6 +148,7 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
               ]}
             />
             <Button variant="secondary" aria-expanded={filtersOpen} aria-controls="crm-filters" onClick={() => setFiltersOpen((open) => !open)}>
+              <SlidersHorizontal size={15} aria-hidden className="mr-1.5 inline-block align-[-2px]" />
               Filtres{criteria.filter((criterion) => criterion !== "q" && criterion !== "stages").length > 0 ? ` (${criteria.filter((criterion) => criterion !== "q" && criterion !== "stages").length})` : ""}
             </Button>
           </div>
@@ -232,21 +243,32 @@ function entries<T extends string>(options: Record<T, string>): { value: string;
   return (Object.entries(options) as [T, string][]).map(([value, label]) => ({ value, label }));
 }
 
-function Kpi({ label, value, hint, href, tone, className }: { label: string; value: string; hint: string; href?: string; tone?: "danger" | "warning"; className?: string }) {
+/** Tuile d'indicateur : pastille à la teinte du sujet, chiffre qui roule à l'arrivée et quand il change. */
+function Kpi({ icon: Icon, color, label, value, hint, href, tone, className }: { icon: LucideIcon; color: string; label: string; value: string; hint: string; href?: string; tone?: "danger" | "warning"; className?: string }) {
   const body = (
     <>
-      <p className="text-xs font-medium tracking-wide text-ink-500 uppercase">{label}</p>
-      <p className={clsx("mt-1 text-2xl font-bold tabular-nums", tone === "danger" ? "text-danger-500" : "text-ink-900")}>{value}</p>
-      <p className="mt-0.5 text-xs text-ink-500">{hint}</p>
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className="crm-stage-badge inline-grid h-9 w-9 shrink-0 place-items-center rounded-xl">
+          <Icon size={18} strokeWidth={2.2} />
+        </span>
+        <p className="text-xs font-medium tracking-wide text-ink-500 uppercase">{label}</p>
+      </div>
+      <p className={clsx("mt-2.5 text-[1.75rem] leading-none font-bold tabular-nums", tone === "danger" ? "text-danger-500" : "text-ink-900")}>
+        <Odometer text={value} />
+      </p>
+      <p className="mt-1.5 text-xs text-ink-500">{hint}</p>
     </>
   );
-  const classes = clsx("rounded-card border border-cream-200 bg-white p-4 shadow-card", className);
+  const classes = clsx("crm-kpi rounded-card border border-cream-200 p-4 shadow-card", className);
+  const style = { "--stage": color } as CSSProperties;
   return href ? (
-    <Link href={href} className={clsx(classes, "block transition hover:border-primary-300 hover:shadow-md")}>
+    <Link href={href} style={style} className={clsx(classes, "block")}>
       {body}
     </Link>
   ) : (
-    <div className={classes}>{body}</div>
+    <div style={style} className={classes}>
+      {body}
+    </div>
   );
 }
 
@@ -430,7 +452,7 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
                 </td>
               </tr>
             ) : (
-              list.rows.map((row) => <ContactRow key={row.id} row={row} now={now} checked={everything || selected.has(row.id)} onCheck={(checked) => {
+              list.rows.map((row, index) => <ContactRow key={row.id} index={index} row={row} now={now} checked={everything || selected.has(row.id)} onCheck={(checked) => {
                 setEverything(false);
                 setSelected((current) => {
                   const next = new Set(current);
@@ -470,23 +492,28 @@ function PageLink({ href, disabled, children }: { href: string; disabled: boolea
   );
 }
 
-function ContactRow({ row, now, checked, onCheck }: { row: ContactListRow; now: Date; checked: boolean; onCheck: (checked: boolean) => void }) {
+function ContactRow({ row, index, now, checked, onCheck }: { row: ContactListRow; index: number; now: Date; checked: boolean; onCheck: (checked: boolean) => void }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const name = displayName(row);
   const due = row.nextActionAt ? dueLabel(new Date(row.nextActionAt), now) : null;
   const place = [row.profession, [row.postalCode, row.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
   return (
-    <tr className={clsx("border-b border-cream-200 align-top last:border-0", checked ? "bg-primary-50/60" : "hover:bg-cream-50")}>
+    <tr style={{ "--row": Math.min(index, 14) } as CSSProperties} className={clsx("crm-row border-b border-cream-200 align-top transition-colors last:border-0", checked ? "bg-primary-50/60" : "hover:bg-cream-50")}>
       <td className="px-3 py-3">
         <input type="checkbox" aria-label={`Sélectionner ${name}`} checked={checked} onChange={(event) => onCheck(event.target.checked)} className="h-4 w-4 accent-primary-600" />
       </td>
-      <td className="max-w-[18rem] px-3 py-3">
-        <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline">
-          {name}
-        </Link>
-        {row.company && row.company !== name ? <p className="truncate text-xs text-ink-700">{row.company}</p> : null}
-        {place ? <p className="truncate text-xs text-ink-500">{place}</p> : null}
+      <td className="max-w-[20rem] px-3 py-3">
+        <div className="flex items-start gap-2.5">
+          <Avatar contact={row} />
+          <div className="min-w-0">
+            <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline">
+              {name}
+            </Link>
+            {row.company && row.company !== name ? <p className="truncate text-xs text-ink-700">{row.company}</p> : null}
+            {place ? <p className="truncate text-xs text-ink-500">{place}</p> : null}
+          </div>
+        </div>
         {row.tags.length > 0 || row.doNotContact ? (
           <p className="mt-1 flex flex-wrap gap-1">
             {row.doNotContact ? <Badge tone="danger">Ne pas contacter</Badge> : null}
@@ -510,6 +537,8 @@ function ContactRow({ row, now, checked, onCheck }: { row: ContactListRow; now: 
         {!row.email && !row.phone ? <span className="text-ink-500">—</span> : null}
       </td>
       <td className="px-3 py-3">
+        <span style={{ "--stage": STAGE_COLOR[isCrmStage(row.stage) ? row.stage : "new"] } as CSSProperties} className="crm-stage-pill inline-flex items-center gap-1 rounded-full py-0.5 pr-1 pl-0.5">
+        <StageIcon stage={isCrmStage(row.stage) ? row.stage : "new"} size="xs" />
         <select
           value={isCrmStage(row.stage) ? row.stage : "new"}
           aria-label={`Étape de ${name}`}
@@ -519,7 +548,7 @@ function ContactRow({ row, now, checked, onCheck }: { row: ContactListRow; now: 
               router.refresh();
             })
           }
-          className="rounded-full border border-ink-300 bg-white px-2.5 py-1 text-xs font-medium focus:border-primary-400 focus:outline-none"
+          className="cursor-pointer rounded-full bg-transparent py-0.5 pr-1 text-xs font-medium text-ink-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
         >
           {CRM_STAGES.map((stage) => (
             <option key={stage} value={stage}>
@@ -527,6 +556,7 @@ function ContactRow({ row, now, checked, onCheck }: { row: ContactListRow; now: 
             </option>
           ))}
         </select>
+        </span>
       </td>
       <td className="max-w-[14rem] px-3 py-3">
         {due ? (

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { clsx } from "clsx";
+import { ArrowRightLeft, CalendarCheck, CircleCheck, CircleX, Cog, Mail, Phone, StickyNote, type LucideIcon } from "lucide-react";
 import { BILLING_PERIOD_LABELS, PLANS, type BillingPeriod, type PlanId } from "@theralys/db/plans";
 import { Badge, Button, Card, Input, Label, Modal, Segmented } from "@theralys/ui";
 import type { ContactDetail } from "@/lib/crm/data";
@@ -13,6 +14,8 @@ import { ACTIVITY_LABELS, CRM_STAGES, LOGGABLE_KINDS, STAGE_META, contactMonthly
 import { departmentOf, formatPhone } from "@/lib/crm/normalize";
 import { addTask, completeTask, deleteActivity, deleteContact, logActivity, purgeFromTrash, restoreFromTrash, setStage } from "../actions";
 import { ContactModal } from "../contact-modal";
+import { Avatar } from "../ui";
+import { STAGE_COLOR, STAGE_ICON } from "@/lib/crm/stage-style";
 
 const DAY = 86_400_000;
 
@@ -23,15 +26,19 @@ const KIND_PLACEHOLDER: Record<LoggableKind, string> = {
   meeting: "Ce qui est ressorti du rendez-vous…",
 };
 
-const KIND_DOT: Record<string, string> = {
-  note: "bg-ink-300",
-  call: "bg-primary-500",
-  email: "bg-info-500",
-  meeting: "bg-warning-500",
-  task: "bg-success-500",
-  stage: "bg-primary-700",
-  system: "bg-ink-500",
+/** Historique : une tuile d'icône par nature d'événement (le libellé à côté dit la même chose en toutes lettres). */
+const KIND_ICON: Record<string, { icon: LucideIcon; tile: string }> = {
+  note: { icon: StickyNote, tile: "bg-cream-200 text-ink-700" },
+  call: { icon: Phone, tile: "bg-primary-100 text-primary-800" },
+  email: { icon: Mail, tile: "bg-info-100 text-info-500" },
+  meeting: { icon: CalendarCheck, tile: "bg-warning-100 text-ink-900" },
+  task: { icon: CircleCheck, tile: "bg-success-100 text-success-500" },
+  stage: { icon: ArrowRightLeft, tile: "bg-primary-50 text-primary-700" },
+  system: { icon: Cog, tile: "bg-cream-100 text-ink-500" },
 };
+
+/** Le parcours d'une affaire jusqu'à la signature ; « Perdu » en sort, à part. */
+const PATH: CrmStage[] = CRM_STAGES.filter((entry) => entry !== "lost");
 
 export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: ContactDetail; nowIso: string; sitesBaseUrl: string }) {
   const { contact, activities, site, importName } = detail;
@@ -80,7 +87,9 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
       </Link>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-4">
+          <Avatar contact={contact} size="lg" className="mt-0.5 shadow-sm" />
+          <div className="min-w-0">
           <h1 className="text-2xl font-bold break-words">{name}</h1>
           {contact.company && contact.company !== name ? <p className="mt-0.5 text-base text-ink-700">{contact.company}</p> : null}
           {place ? <p className="mt-0.5 text-sm text-ink-500">{place}</p> : null}
@@ -91,6 +100,7 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
                 <Badge>{tag}</Badge>
               </Link>
             ))}
+          </div>
           </div>
         </div>
         <div className={clsx("flex flex-wrap gap-2", trashed && "hidden")}>
@@ -152,38 +162,56 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
 
       <div inert={trashed} className={clsx(trashed && "opacity-60")}>
       {/* Étape du cycle de vente : un clic la change, l'historique le note */}
-      <div className="mt-5 overflow-x-auto pb-1">
-        <ol className="flex min-w-max gap-1.5" aria-label="Étape du cycle de vente">
-          {CRM_STAGES.map((entry, index) => {
+      <div className="mt-6 flex items-start gap-4 overflow-x-auto rounded-card border border-cream-200 bg-white px-3 pt-4 pb-3 shadow-card">
+        <ol className="relative flex min-w-[38rem] flex-1" aria-label="Étape du cycle de vente" style={{ "--stage": STAGE_COLOR[stage] } as CSSProperties}>
+          {/* Le trait relie les étapes et se remplit jusqu'à celle en cours */}
+          <li aria-hidden className="absolute top-[1.0625rem] h-1 rounded-full bg-cream-200" style={{ left: `${50 / PATH.length}%`, right: `${50 / PATH.length}%` }}>
+            <span className="crm-track-fill block h-full rounded-full" style={{ width: `${(Math.max(PATH.indexOf(stage), 0) / (PATH.length - 1)) * 100}%` }} />
+          </li>
+          {PATH.map((entry, index) => {
             const current = entry === stage;
-            const passed = stage !== "lost" && entry !== "lost" && index < CRM_STAGES.indexOf(stage);
+            const passed = stage !== "lost" && index < PATH.indexOf(stage);
+            const Icon = STAGE_ICON[entry];
             return (
-              <li key={entry}>
+              <li key={entry} className="relative flex-1 text-center">
                 <button
                   type="button"
                   aria-current={current ? "step" : undefined}
                   disabled={working}
                   title={STAGE_META[entry].hint}
                   onClick={() => changeStage(entry)}
-                  className={clsx(
-                    "rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
-                    current
-                      ? entry === "lost"
-                        ? "border-danger-500 bg-danger-500 text-white"
-                        : entry === "won"
-                          ? "border-success-500 bg-success-500 text-white"
-                          : "border-primary-500 bg-primary-500 text-white"
-                      : passed
-                        ? "border-primary-200 bg-primary-50 text-primary-900 hover:border-primary-400"
-                        : "border-cream-300 bg-white text-ink-700 hover:border-primary-300",
-                  )}
+                  className="group inline-flex flex-col items-center gap-1.5 rounded-lg px-1.5 pb-1 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
                 >
-                  {STAGE_META[entry].label}
+                  <span
+                    aria-hidden
+                    style={{ "--stage": STAGE_COLOR[entry] } as CSSProperties}
+                    className={clsx(
+                      "grid h-9 w-9 place-items-center rounded-full border-2 border-white transition duration-200",
+                      current ? "crm-stage-badge crm-step-current" : passed ? "crm-stage-badge" : "!border-cream-300 bg-white text-ink-500 group-hover:!border-primary-300 group-hover:text-primary-700",
+                    )}
+                  >
+                    <Icon size={16} strokeWidth={2.3} />
+                  </span>
+                  <span className={clsx("text-xs whitespace-nowrap", current ? "font-semibold text-ink-900" : "text-ink-700")}>{STAGE_META[entry].label}</span>
                 </button>
               </li>
             );
           })}
         </ol>
+        <button
+          type="button"
+          aria-current={stage === "lost" ? "step" : undefined}
+          disabled={working}
+          title={STAGE_META.lost.hint}
+          onClick={() => changeStage("lost")}
+          className={clsx(
+            "mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+            stage === "lost" ? "border-danger-500 bg-danger-500 text-white" : "border-cream-300 bg-white text-ink-700 hover:border-danger-500 hover:text-danger-500",
+          )}
+        >
+          <CircleX size={15} aria-hidden />
+          {STAGE_META.lost.label}
+        </button>
       </div>
       {stage === "lost" && contact.lostReason ? <p className="mt-2 text-sm text-ink-700">Motif : {contact.lostReason}</p> : null}
       {error ? (
@@ -201,11 +229,15 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
             {timeline.length === 0 ? (
               <p className="mt-5 text-sm text-ink-500">Rien pour l&apos;instant. Notez ici chaque appel, e-mail ou rendez-vous : c&apos;est la mémoire de la relation.</p>
             ) : (
-              <ol className="mt-5 space-y-4">
-                {timeline.map((activity) => (
-                  <li key={activity.id} className="group flex gap-3">
-                    <span aria-hidden className={clsx("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", KIND_DOT[activity.kind] ?? "bg-ink-300")} />
-                    <div className="min-w-0 flex-1">
+              <ol className="relative mt-5 space-y-4 before:absolute before:top-2 before:bottom-2 before:left-[0.9375rem] before:w-px before:bg-cream-200">
+                {timeline.map((activity, index) => {
+                  const kind = KIND_ICON[activity.kind] ?? KIND_ICON.system!;
+                  return (
+                  <li key={activity.id} style={{ "--row": Math.min(index, 12) } as CSSProperties} className="crm-row group relative flex gap-3">
+                    <span aria-hidden className={clsx("relative grid h-8 w-8 shrink-0 place-items-center rounded-full ring-4 ring-white", kind.tile)}>
+                      <kind.icon size={15} strokeWidth={2.2} />
+                    </span>
+                    <div className="min-w-0 flex-1 pt-0.5">
                       <p className="text-xs text-ink-500">
                         <span className="font-semibold text-ink-700">{activity.kind === "task" ? "Tâche faite" : (ACTIVITY_LABELS[activity.kind as ActivityKind] ?? activity.kind)}</span> · {dateTime(new Date(activity.doneAt ?? activity.createdAt))}
                       </p>
@@ -225,7 +257,8 @@ export function ContactDetailClient({ detail, nowIso, sitesBaseUrl }: { detail: 
                       </button>
                     ) : null}
                   </li>
-                ))}
+                  );
+                })}
               </ol>
             )}
           </Card>

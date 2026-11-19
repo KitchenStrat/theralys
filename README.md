@@ -248,6 +248,15 @@ dégradé par section, un seul accent chaud.
     de l&apos;écran. Chaque carte signale sa prochaine tâche (en retard, du jour,
     prévue, aucune), ouvre la fiche au clic, et « + » ajoute une affaire
     directement dans une colonne. La vue Liste reste à un clic.
+  - **Identité visuelle** : chaque étape a sa couleur et son icône
+    (`apps/admin/lib/crm/stage-style.ts`), les mêmes dans le pipeline, la
+    liste, la fiche et la corbeille. L&apos;ordre des six teintes alterne froid et
+    chaud pour que deux étapes voisines restent distinctes en vision
+    daltonienne ; « Client » et « Perdu » gardent le vert et le rouge d&apos;état.
+    Les mouvements (cartes en cascade, carte qui se pose, zones qui montent,
+    chiffres qui roulent, confettis d&apos;une affaire gagnée) sont en CSS
+    (`.crm-*` dans `apps/admin/app/globals.css`) et s&apos;effacent quand le
+    système demande un mouvement réduit.
   - **Corbeille** : supprimer une carte (zone « Supprimer » pendant le
     glisser, menu de la carte, fiche, actions groupées, suppression d&apos;une
     liste importée) ne l&apos;efface pas. La fiche quitte le pipeline, la liste,

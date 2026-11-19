@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Badge, Button, Card, Input } from "@theralys/ui";
+import { RotateCcw, Trash2 } from "lucide-react";
+import { Button, Card, Input } from "@theralys/ui";
 import { dateTime } from "@/lib/crm/format";
-import { STAGE_META, displayName, sourceLabel, type CrmStage } from "@/lib/crm/model";
+import { displayName, sourceLabel, type CrmStage } from "@/lib/crm/model";
 import { fold, formatPhone } from "@/lib/crm/normalize";
 import { purgeFromTrash, restoreFromTrash } from "../actions";
+import { Avatar, StagePill } from "../ui";
 
 export type TrashItem = {
   id: string;
@@ -78,7 +80,12 @@ export function TrashClient({ rows, total, limit }: { rows: TrashItem[]; total: 
       </Link>
       <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Corbeille</h1>
+          <h1 className="flex items-center gap-2.5 text-2xl font-bold">
+            <span aria-hidden className="grid h-10 w-10 place-items-center rounded-xl bg-cream-200 text-ink-700">
+              <Trash2 size={20} />
+            </span>
+            Corbeille
+          </h1>
           <p className="mt-1 max-w-2xl text-sm text-ink-500">Tout ce que vous supprimez du CRM arrive ici, avec son historique. Une fiche restaurée retrouve son étape d&apos;origine. Rien n&apos;est effacé tant que vous ne le demandez pas.</p>
         </div>
         {total > 0 ? (
@@ -165,7 +172,7 @@ export function TrashClient({ rows, total, limit }: { rows: TrashItem[]; total: 
                   const name = displayName(row);
                   const context = [row.company && row.company !== name ? row.company : "", row.profession, row.city].filter(Boolean).join(" · ");
                   return (
-                    <tr key={row.id} className="border-b border-cream-200 align-top last:border-b-0">
+                    <tr key={row.id} className="crm-row border-b border-cream-200 align-top transition-colors last:border-b-0 hover:bg-cream-50">
                       <td className="py-3 pl-4">
                         <input
                           type="checkbox"
@@ -183,11 +190,16 @@ export function TrashClient({ rows, total, limit }: { rows: TrashItem[]; total: 
                         />
                       </td>
                       <td className="px-3 py-3">
-                        <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline">
-                          {name}
-                        </Link>
-                        {context ? <p className="text-xs text-ink-500">{context}</p> : null}
-                        <p className="text-xs text-ink-500">{sourceLabel(row.source)}</p>
+                        <div className="flex items-start gap-2.5">
+                          <Avatar contact={row} className="opacity-80" />
+                          <div className="min-w-0">
+                            <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline">
+                              {name}
+                            </Link>
+                            {context ? <p className="text-xs text-ink-500">{context}</p> : null}
+                            <p className="text-xs text-ink-500">{sourceLabel(row.source)}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-ink-700">
                         {row.email ? <p className="break-all">{row.email}</p> : null}
@@ -195,12 +207,13 @@ export function TrashClient({ rows, total, limit }: { rows: TrashItem[]; total: 
                         {!row.email && !row.phone ? <span className="text-ink-500">—</span> : null}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge tone={STAGE_META[row.stage].tone}>{STAGE_META[row.stage].label}</Badge>
+                        <StagePill stage={row.stage} />
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-ink-700">{dateTime(new Date(row.deletedAt))}</td>
                       <td className="px-3 py-3 pr-4">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="secondary" disabled={working} onClick={() => restore([row.id])} aria-label={`Restaurer ${name}`}>
+                            <RotateCcw size={14} aria-hidden className="mr-1 inline-block align-[-2px]" />
                             Restaurer
                           </Button>
                           <Button
