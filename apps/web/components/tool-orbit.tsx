@@ -10,9 +10,9 @@ import { TOOLS } from "./tools";
  * visite guidée ; le mouvement se fige au survol ou au clavier, le temps de
  * viser. Tout est en CSS (styles .saturn dans globals.css) : rien à charger.
  */
-export function ToolOrbit({ className = "", style }: { className?: string; style?: CSSProperties }) {
+export function ToolOrbit({ className = "", style, onDark = false }: { className?: string; style?: CSSProperties; onDark?: boolean }) {
   return (
-    <div data-reveal style={style} className={`saturn ${className}`}>
+    <div data-reveal style={style} className={`saturn ${onDark ? "saturn--dark" : ""} ${className}`}>
       <div className="saturn-tilt">
         <span aria-hidden className="saturn-ring saturn-ring--back" />
         <div aria-hidden className="saturn-planet">

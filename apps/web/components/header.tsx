@@ -47,6 +47,8 @@ export function Header() {
   }, [open]);
 
   const floating = scrolled || open;
+  // En haut de page, la barre est posée sur la vidéo : ses textes passent en blanc
+  const onDark = !floating;
 
   return (
     <header className="header-in fixed inset-x-0 top-0 z-50 px-3">
@@ -62,14 +64,17 @@ export function Header() {
       >
         <div className={clsx("flex items-center justify-between gap-2 px-4 transition-all duration-500 sm:px-5", floating ? "h-14" : "h-16")}>
           <a href="#" className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-lg text-2xl" aria-label="Harmony, retour en haut de page">
-            <Brand />
+            <Brand onDark={onDark} />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Navigation principale">
             {LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
-                className="focus-ring inline-flex min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:bg-primary-100/70 hover:text-primary-700"
+                className={clsx(
+                  "inline-flex min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium transition",
+                  onDark ? "focus-ring-dark text-white/90 hover:bg-white/15 hover:text-white" : "focus-ring text-ink-700 hover:bg-primary-100/70 hover:text-primary-700",
+                )}
               >
                 {link.label}
               </a>
@@ -78,7 +83,10 @@ export function Header() {
           <div className="flex items-center gap-1.5">
             <a
               href={STUDIO_URL}
-              className="focus-ring hidden min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium text-ink-700 transition hover:bg-primary-100/70 hover:text-primary-700 sm:inline-flex"
+              className={clsx(
+                "hidden min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium transition sm:inline-flex",
+                onDark ? "focus-ring-dark text-white/90 hover:bg-white/15 hover:text-white" : "focus-ring text-ink-700 hover:bg-primary-100/70 hover:text-primary-700",
+              )}
             >
               Espace client
             </a>
@@ -95,7 +103,7 @@ export function Header() {
               aria-expanded={open}
               aria-controls={menuId}
               onClick={() => setOpen((value) => !value)}
-              className="focus-ring grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-700 transition hover:bg-primary-100/70 lg:hidden"
+              className={clsx("grid h-11 w-11 shrink-0 place-items-center rounded-full transition lg:hidden", onDark ? "focus-ring-dark text-white hover:bg-white/15" : "focus-ring text-ink-700 hover:bg-primary-100/70")}
             >
               <span className="sr-only">{open ? "Fermer le menu" : "Ouvrir le menu"}</span>
               {open ? <X size={22} aria-hidden /> : <Menu size={22} aria-hidden />}

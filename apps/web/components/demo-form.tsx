@@ -4,6 +4,8 @@ import { useState, useTransition, type CSSProperties, type FormEvent } from "rea
 import { requestDemo } from "@/app/actions";
 import { rich } from "./rich";
 import { Kinetic } from "./kinetic";
+import montagnes from "@/assets/photos/montagnes.jpg";
+import { PhotoBackdrop } from "./photo-backdrop";
 
 const STEPS = [
   {
@@ -42,12 +44,10 @@ export function DemoForm() {
 
   return (
     <section id="demo" className="relative overflow-hidden py-24">
-      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
-        <div className="blob right-[-10rem] top-[-4rem] h-[26rem] w-[26rem] bg-primary-200/60" />
-        <div className="blob bottom-[-10rem] left-[-8rem] h-[24rem] w-[24rem] bg-[#c9f1e6]/70" style={{ animationDelay: "-11s" }} />
-      </div>
+      {/* Brume du matin sur les montagnes, très éclaircie : le formulaire reste au premier plan */}
+      <PhotoBackdrop src={montagnes} position="50% 60%" veil="bg-[linear-gradient(180deg,rgb(251_253_255/0.96)_0%,rgb(251_253_255/0.74)_40%,rgb(251_253_255/0.8)_75%,rgb(251_253_255/0.97)_100%)]" />
 
-      <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
+      <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
         <div>
           <p data-reveal className="text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
             Démo gratuite

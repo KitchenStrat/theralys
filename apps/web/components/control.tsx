@@ -9,6 +9,8 @@ import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 import { ScrollWords } from "./scroll-words";
 import { Capture } from "./frames";
+import cabinet from "@/assets/photos/cabinet.jpg";
+import { PhotoBackdrop } from "./photo-backdrop";
 
 /**
  * « Vous gardez la main » : les règles du produit, dites sans détour. Chaque
@@ -18,10 +20,8 @@ import { Capture } from "./frames";
 export function Control() {
   return (
     <section id="confiance" className="relative overflow-clip bg-night-900 py-24 text-white md:py-28">
-      <div aria-hidden data-parallax="0.06" className="absolute inset-0">
-        <div className="blob top-[-10rem] left-[-8rem] h-[26rem] w-[26rem] bg-primary-700/35" />
-        <div className="blob right-[-6rem] bottom-[-10rem] h-[28rem] w-[28rem] bg-[#6a5bd6]/25" style={{ animationDelay: "-9s" }} />
-      </div>
+      {/* Un cabinet au calme, en fond : la photo reste discrète sous le voile bleu nuit */}
+      <PhotoBackdrop src={cabinet} position="50% 40%" veil="bg-[linear-gradient(115deg,rgb(7_21_34/0.93)_0%,rgb(7_21_34/0.82)_55%,rgb(7_21_34/0.7)_100%)]" />
 
       <div className="relative mx-auto max-w-6xl px-5">
         <div className="max-w-2xl">

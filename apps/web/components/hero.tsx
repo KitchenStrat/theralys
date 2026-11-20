@@ -5,6 +5,7 @@ import mobileAccueil from "@/assets/captures/m-accueil.webp";
 import visuel from "@/assets/captures/visuel-reseaux.webp";
 import { Brand } from "./brand";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
+import { HeroVideo } from "./hero-video";
 import { Kinetic } from "./kinetic";
 import { PostMock } from "./post-mock";
 import { ScrollTilt } from "./scroll-tilt";
@@ -14,48 +15,45 @@ const PROMISES = ["Démo personnalisée gratuite", "Frais de création offerts",
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden pt-28 md:pt-36">
-      {/* Halos animés et trame discrète */}
-      <div aria-hidden data-parallax="0.05" className="absolute inset-0 -z-10">
-        <div className="hero-grid" />
-        <div className="blob top-[-8rem] left-[-10rem] h-[28rem] w-[28rem] bg-primary-200/70" />
-        <div className="blob top-[2rem] right-[-9rem] h-[30rem] w-[30rem] bg-[#cfc9f7]/55" style={{ animationDelay: "-7s" }} />
-        <div className="blob top-[26rem] left-[32%] h-[26rem] w-[26rem] bg-[#c9f1e6]/70" style={{ animationDelay: "-13s" }} />
-      </div>
+    <section className="relative">
+      {/* La scène : des praticiens au travail, filmés en lumière naturelle, derrière le message.
+          --hero-overlap : hauteur dont la capture de l'espace client, juste après, remonte sur la vidéo. */}
+      <div className="hero-stage relative overflow-hidden rounded-b-[2rem] bg-[#1a1512] pt-28 pb-[calc(var(--hero-overlap)+2.5rem)] text-white [--hero-overlap:7rem] md:rounded-b-[3rem] md:pt-36 md:[--hero-overlap:14rem]">
+        <HeroVideo />
 
-      <div className="mx-auto max-w-4xl px-5 text-center">
+      <div className="relative mx-auto max-w-4xl px-5 text-center">
         <p
           data-reveal
-          className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-white/80 px-4 py-1.5 text-sm font-semibold text-primary-700 shadow-sm backdrop-blur"
+          className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-1.5 text-sm font-semibold text-white shadow-sm backdrop-blur"
         >
-          <span aria-hidden className="dot-live h-1.5 w-1.5 rounded-full bg-success-500" />
+          <span aria-hidden className="dot-live h-1.5 w-1.5 rounded-full bg-[#4ade80]" />
           La solution digitale tout-en-un des thérapeutes
         </p>
         <h1
           data-reveal="kinetic"
           style={{ "--rv-delay": "80ms" } as CSSProperties}
-          className="font-display mt-6 text-[2.5rem] leading-[1.06] font-extrabold text-balance text-ink-900 sm:text-5xl md:text-[4.1rem]"
+          className="font-display mt-6 text-[2.5rem] leading-[1.06] font-extrabold text-balance text-white drop-shadow-[0_2px_18px_rgb(7_21_34/0.35)] sm:text-5xl md:text-[4.1rem]"
         >
           <Kinetic>
-            Tout le digital de votre cabinet, <span className="shimmer-text shimmer-blue">enfin réuni.</span>
+            Tout le digital de votre cabinet, <span className="shimmer-text shimmer-light">enfin réuni.</span>
           </Kinetic>
         </h1>
         <p
           data-reveal
           style={{ "--rv-delay": "160ms" } as CSSProperties}
-          className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-ink-700 md:text-xl"
+          className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-white/90 md:text-xl"
         >
-          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand />{" "}
-          <strong className="font-semibold text-ink-900">s&apos;occupe de toute votre présence en ligne</strong> et vous montre ce
+          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand onDark />{" "}
+          <strong className="font-semibold text-white">s&apos;occupe de toute votre présence en ligne</strong> et vous montre ce
           qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
         </p>
       </div>
 
       {/* Les outils, d'un coup d'œil : ils tournent autour de Harmony comme les anneaux d'une planète,
           et chaque pastille ouvre l'outil dans la visite guidée */}
-      <ToolOrbit className="mt-5" style={{ "--rv-delay": "240ms" } as CSSProperties} />
+      <ToolOrbit onDark className="relative mt-5" style={{ "--rv-delay": "240ms" } as CSSProperties} />
 
-      <div className="mx-auto max-w-4xl px-5 text-center">
+      <div className="relative mx-auto max-w-4xl px-5 text-center">
         <div data-reveal style={{ "--rv-delay": "320ms" } as CSSProperties} className="mt-5 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#demo"
@@ -67,7 +65,7 @@ export function Hero() {
           </a>
           <a
             href="#outils"
-            className="focus-ring rounded-full border border-ink-300 bg-white/70 px-7 py-3.5 text-base font-semibold text-ink-900 backdrop-blur transition hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-700"
+            className="focus-ring-dark rounded-full border border-white/45 bg-white/10 px-7 py-3.5 text-base font-semibold text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/20"
           >
             Découvrir les outils
           </a>
@@ -75,19 +73,22 @@ export function Hero() {
         <ul
           data-reveal
           style={{ "--rv-delay": "400ms" } as CSSProperties}
-          className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-ink-700"
+          className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-white/90"
         >
           {PROMISES.map((promise) => (
             <li key={promise} className="inline-flex items-center gap-1.5">
-              <Check size={16} strokeWidth={2.5} className="text-success-600" aria-hidden />
+              <Check size={16} strokeWidth={2.5} className="text-[#86efac]" aria-hidden />
               {promise}
             </li>
           ))}
         </ul>
       </div>
 
-      {/* L'espace client, en vrai : l'accueil du studio, une publication prête à poster, la version téléphone */}
-      <div data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="relative mx-auto mt-14 max-w-6xl px-5 md:mt-16">
+      </div>
+
+      {/* L'espace client, en vrai : l'accueil du studio, une publication prête à poster, la version téléphone.
+          La capture remonte sur la vidéo : elle en sort à moitié, sur le fond clair de la page. */}
+      <div data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="relative z-10 mx-auto -mt-28 max-w-6xl px-5 md:-mt-56">
         {/* Ordinateur et tablette */}
         <div className="relative hidden md:block">
           <ScrollTilt>

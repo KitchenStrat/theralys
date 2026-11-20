@@ -150,10 +150,10 @@ function ReviewRow({ reviews, speed, reverse = false }: { reviews: Review[]; spe
  */
 export function Testimonials() {
   return (
-    <section id="temoignages" className="relative overflow-hidden bg-gradient-to-b from-white via-primary-50 to-white py-24 md:py-28">
-      <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cream-300 to-transparent" />
-      <div aria-hidden className="blob top-10 left-[12%] h-72 w-72 bg-primary-200/50" />
-      <div aria-hidden className="blob right-[10%] bottom-24 h-72 w-72 bg-[#c9d6ff]/45" />
+    <section id="temoignages" className="relative overflow-hidden bg-[#f6f1ea] py-24 md:py-28">
+      {/* Fond sable, deux halos chauds : la section reprend les tons des photos qui l'entourent */}
+      <div aria-hidden className="blob top-10 left-[12%] h-72 w-72 bg-[#f3d9bf]/60" />
+      <div aria-hidden className="blob right-[10%] bottom-24 h-72 w-72 bg-[#e9dccb]/70" />
 
       <div className="relative">
         <div className="mx-auto max-w-3xl px-5 text-center">

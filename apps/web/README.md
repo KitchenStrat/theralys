@@ -91,6 +91,35 @@ Après une évolution visible du studio, reprendre les captures concernées aux
 mêmes dimensions, puis les convertir en WebP (qualité 88) sous le même nom :
 la page n'a pas à changer.
 
+## Photos et vidéo de fond
+
+La page s'appuie sur des images de **banque d'images** (Pexels, licence
+gratuite, usage commercial sans attribution obligatoire) pour un rendu
+naturel : des praticiens au travail, un cabinet, la nature.
+
+| Emplacement | Fichier | Source Pexels |
+| --- | --- | --- |
+| Haut de page (vidéo) | `public/media/hero-1080.mp4`, `hero-720.mp4` | vidéos 5793440 (praticienne et patiente, cabinet lumineux) et 6629950 (soin en lumière chaude) |
+| Haut de page (image d'attente) | `assets/photos/hero-poster.jpg` | première image de la vidéo |
+| « Vous gardez la main » | `assets/photos/cabinet.jpg` | photo 16269026 |
+| Bandeau avant les tarifs | `assets/photos/foret.jpg` | photo 165812 |
+| Demande de démo | `assets/photos/montagnes.jpg` | photo 14871684 |
+
+- **Vidéo** (`components/hero-video.tsx`) : deux plans enchaînés en fondu,
+  15,6 s, en boucle sans coupure (la fin se fond dans le début), sans son.
+  L'image d'attente s'affiche d'emblée, la vidéo se charge ensuite et la
+  remplace en fondu : la page n'attend jamais la vidéo. 720p sur téléphone,
+  1080p au-delà. Aucune vidéo en mouvement réduit ni en économie de données.
+  Elle s'arrête hors de l'écran, et un bouton la met en pause.
+  Le montage se refait avec `scripts/monter-video-hero.sh <sources> <sortie>`
+  (ffmpeg ; `a.mp4` et `b.mp4` sont les deux vidéos Pexels en 1080p).
+- **Photos de fond** (`components/photo-backdrop.tsx`) : plein cadre sous un
+  voile, avec une parallaxe très douce. Le voile est réglé pour que le texte
+  garde un contraste d'au moins 4,5:1 sur toute la photo (mesuré sur
+  capture, bureau et téléphone).
+- Pour changer un média : remplacer le fichier, garder son nom, et revérifier
+  la lisibilité du texte posé dessus.
+
 ## Motion design
 
 Tout est écrit à la main, en CSS et en quelques lignes de React, sans
