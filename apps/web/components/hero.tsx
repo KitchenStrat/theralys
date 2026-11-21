@@ -15,7 +15,7 @@ const PROMISES = ["Démo personnalisée gratuite", "Frais de création offerts",
 export function Hero() {
   return (
     <section data-hero className="relative">
-      {/* La scène : la nature au calme (forêt dans la brume, blés au soleil), derrière le message.
+      {/* La scène : des praticiens au travail (cabinet, yoga, massage, bureau), derrière le message.
           --hero-overlap : hauteur dont la capture de l'espace client, juste après, remonte sur la vidéo. */}
       <div className="hero-stage relative overflow-hidden rounded-b-[2rem] bg-[#1a1512] pt-28 pb-[calc(var(--hero-overlap)+2.5rem)] text-white [--hero-overlap:7rem] md:rounded-b-[3rem] md:pt-36 md:[--hero-overlap:14rem]">
         <HeroVideo />

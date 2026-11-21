@@ -6,9 +6,10 @@ import { Pause, Play } from "lucide-react";
 import poster from "@/assets/photos/hero-poster.jpg";
 
 /*
- * Fond vidéo du haut de page : une marche en forêt dans la brume du matin,
- * puis une main qui effleure les blés (deux plans de banque d'images montés
- * en boucle, sans coupure).
+ * Fond vidéo du haut de page : des praticiens au travail, cinq scènes à la
+ * suite — une séance en cabinet, une professeure de yoga au jardin, un
+ * massage, la praticienne à son bureau, le yoga seul au soleil (huit plans de
+ * banques d'images montés en boucle, sans coupure).
  *
  * - La première image s'affiche d'emblée (optimisée, prioritaire) ; la vidéo
  *   se charge ensuite et la remplace en fondu. La page n'attend jamais la vidéo.

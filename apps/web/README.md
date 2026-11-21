@@ -97,29 +97,34 @@ la page n'a pas à changer.
 
 ## Photos et vidéo de fond
 
-La page s'appuie sur des images de **banque d'images** (Pexels, licence
-gratuite, usage commercial sans attribution obligatoire) pour un rendu
-naturel : la nature au calme, un cabinet.
+La page s'appuie sur des images de **banques d'images** (Pexels, Mixkit et
+Coverr : licences gratuites, usage commercial sans attribution obligatoire)
+pour un rendu naturel : des praticiens au travail, la nature au calme.
 
-| Emplacement | Fichier | Source Pexels |
+| Emplacement | Fichier | Source |
 | --- | --- | --- |
-| Haut de page (vidéo) | `public/media/hero-1080.mp4`, `hero-720.mp4` | vidéos 5841958 (marche dans une forêt de pins, brume et rayons du matin) et 5098636 (une main effleure les blés) |
+| Haut de page (vidéo) | `public/media/hero-1080.mp4`, `hero-720.mp4` | huit plans, cinq scènes : séance en cabinet (Pexels, vidéos 4098445 et 4098435), professeure de yoga au jardin (Coverr, « communication with a yoga teacher » et « brunette woman smiling »), massage du dos (Mixkit 4744), praticienne à son bureau (Mixkit 4957 et 4937), yoga seul au soleil (Mixkit 887) |
 | Haut de page (image d'attente) | `assets/photos/hero-poster.jpg` | première image de la vidéo |
-| « Vous gardez la main » | `assets/photos/cabinet.jpg` | photo 16269026 |
-| Bandeau avant les tarifs | `assets/photos/foret.jpg` | photo 165812 |
-| Demande de démo | `assets/photos/montagnes.jpg` | photo 14871684 |
+| « Vous gardez la main » | `assets/photos/cabinet.jpg` | Pexels, photo 16269026 |
+| Bandeau avant les tarifs | `assets/photos/foret.jpg` | Pexels, photo 165812 |
+| Demande de démo | `assets/photos/montagnes.jpg` | Pexels, photo 14871684 |
 
-- **Vidéo** (`components/hero-video.tsx`) : deux plans enchaînés en fondu,
-  15,6 s, en boucle sans coupure (la fin se fond dans le début), sans son.
+- **Vidéo** (`components/hero-video.tsx`) : huit plans enchaînés en fondu,
+  23,8 s, en boucle sans coupure (la fin se fond dans le début), sans son.
   L'image d'attente s'affiche d'emblée, la vidéo se charge ensuite et la
   remplace en fondu : la page n'attend jamais la vidéo. 720p sur téléphone,
   1080p au-delà. Aucune vidéo en mouvement réduit ni en économie de données.
   Elle s'arrête hors de l'écran, et un bouton la met en pause.
   Le montage se refait avec `scripts/monter-video-hero.sh <sources> <sortie>`
-  (ffmpeg ; `a.mp4` et `b.mp4` sont les deux vidéos Pexels en 1080p). Le plan
-  de la forêt, tourné à 30 images par seconde, est lu à 25 : un léger
-  ralenti, sans saccade. Version précédente (praticienne et patiente, puis un
-  soin) : vidéos Pexels 5793440 et 6629950.
+  (ffmpeg ; la liste des plans — fichier, début, durée, cadence — est en tête
+  du script, les sources en 1080p). Chaque plan est relu à 25 images par
+  seconde, image pour image : aucune saccade. Les hautes lumières sont
+  plafonnées (les murs clairs du cabinet) pour que le titre blanc reste
+  lisible. Sur Mixkit, seules les vidéos sous « Free License » sont
+  utilisables ici : celles marquées « Restricted License » sont réservées à
+  l'usage personnel. Versions précédentes : forêt dans la brume et main dans
+  les blés (Pexels 5841958 et 5098636) ; praticienne et patiente, puis un
+  soin (Pexels 5793440 et 6629950).
 - **Photos de fond** (`components/photo-backdrop.tsx`) : plein cadre sous un
   voile, immobiles. Le voile est réglé pour que le texte
   garde un contraste d'au moins 4,5:1 sur toute la photo (mesuré sur
