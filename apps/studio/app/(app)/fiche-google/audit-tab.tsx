@@ -143,7 +143,7 @@ export function AuditTab({
                 Score de votre fiche
               </h2>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2 max-md:justify-center">
-                <span className="font-ds-display text-2xl/8 font-bold text-ds-section-ink sm:text-[1.75rem]/9">{grade.label}</span>
+                <span className="font-ds-voice text-2xl/8 font-bold text-ds-section-ink sm:text-[1.75rem]/9">{grade.label}</span>
                 <Badge tone={grade.tone} icon={grade.icon}>
                   Grade {audit.grade}
                 </Badge>

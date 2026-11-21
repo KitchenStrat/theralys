@@ -59,7 +59,7 @@ export function GreetingBand({
               {eyebrow}
             </p>
           ) : null}
-          <h1 className="mt-3 font-ds-display text-[2rem]/10 font-extrabold tracking-tight text-balance sm:text-[2.5rem]/[1.15]">
+          <h1 className="mt-3 font-ds-voice text-[2rem]/10 font-extrabold tracking-tight text-balance sm:text-[2.5rem]/[1.15]">
             {title}
           </h1>
           {children ? <div className="mt-3 max-w-[54ch] text-lg/7 text-pretty">{children}</div> : null}

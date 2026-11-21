@@ -93,7 +93,7 @@ export function PlanTab({
               <h2 className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7">Objectif</h2>
               {plan.generator === "anthropic" ? <AiBadge>Préparé par l&apos;IA, à relire</AiBadge> : null}
             </div>
-            <p className="mt-3 font-ds-display text-xl/7 font-bold text-ds-ink-900 text-pretty sm:text-2xl/8">{plan.objective}</p>
+            <p className="mt-3 font-ds-voice text-xl/7 font-bold text-ds-ink-900 text-pretty sm:text-2xl/8">{plan.objective}</p>
             <p className="mt-2.5 text-base text-ds-ink-700 text-pretty">{plan.summary}</p>
             <FinePrint className="mt-3">
               Plan préparé le {formatDayFr(plan.generatedAt, "day")}

@@ -1,5 +1,4 @@
 import { type CSSProperties } from "react";
-import { Brand } from "./brand";
 import { WordRotator } from "./word-rotator";
 import foret from "@/assets/photos/foret.jpg";
 import { PhotoBackdrop } from "./photo-backdrop";
@@ -15,7 +14,7 @@ export function Band() {
 
       <div className="relative mx-auto max-w-4xl px-5 text-center">
         <h2 data-reveal className="font-display text-3xl leading-tight font-bold md:text-5xl">
-          <Brand onDark /> s&apos;occupe de
+          Harmony s&apos;occupe de
           <span className="sr-only"> toute votre présence en ligne.</span>
           <WordRotator
             words={TASKS}

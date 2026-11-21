@@ -325,7 +325,7 @@ export function ModalHeader({
       <div className={clsx("flex items-start gap-3.5", before ? null : "pr-10 sm:pr-8")}>
         {lead}
         <div className="min-w-0 flex-1">
-          <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">{title}</h2>
+          <h2 className="font-ds-voice text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">{title}</h2>
           {children}
         </div>
       </div>

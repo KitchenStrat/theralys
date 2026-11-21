@@ -408,7 +408,7 @@ function Pitch({ subject }: { subject: string }) {
   ];
   return (
     <Card variant="tinted" padding="lg">
-      <h2 className="font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">Google Ads est-il pertinent pour {subject} ?</h2>
+      <h2 className="font-ds-voice text-xl/7 font-bold text-ds-section-ink text-balance sm:text-2xl/8">Google Ads est-il pertinent pour {subject} ?</h2>
       <p className="mt-2 text-base text-ds-ink-700">Avant de dépenser le moindre euro, l&apos;analyse répond à trois questions :</p>
       <ol className="mt-5 space-y-3">
         {questions.map((question, i) => (
@@ -450,7 +450,7 @@ function VerdictCard({ diagnostic, hasPlan, onSelectTab }: { diagnostic: GoogleA
           <Badge tone={verdict.tone} icon={verdict.icon}>
             {verdict.label}
           </Badge>
-          <p className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
+          <p className="mt-3 font-ds-voice text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">{diagnostic.headline}</p>
         </div>
       </div>
       <p className="mt-5 text-base text-ds-ink-700 text-pretty">{diagnostic.summary}</p>

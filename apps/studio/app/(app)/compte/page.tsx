@@ -126,7 +126,7 @@ export default async function AccountPage() {
                     </Badge>
                   ) : null}
                 </div>
-                <p className="mt-2.5 font-ds-display text-ds-title font-bold text-ds-section-ink sm:text-[2rem]/10">
+                <p className="mt-2.5 font-ds-voice text-ds-title font-bold text-ds-section-ink sm:text-[2rem]/10">
                   {formulaLabel}
                 </p>
                 <ul className="mt-2 space-y-1.5 text-base text-ds-ink-700">

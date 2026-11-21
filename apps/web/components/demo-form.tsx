@@ -49,13 +49,9 @@ export function DemoForm() {
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
         <div>
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            Démo gratuite
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>Voyez ce que cela donne pour votre cabinet</Kinetic>
           </h2>
@@ -67,11 +63,11 @@ export function DemoForm() {
                 style={{ "--rv-delay": `${140 + i * 110}ms` } as CSSProperties}
                 className="flex gap-4"
               >
-                <span className="font-display flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-base font-bold text-white shadow-[0_10px_22px_-8px_rgb(3_123_189/0.7)]">
+                <span className="font-title flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-600 text-base font-bold text-white shadow-[0_10px_22px_-8px_rgb(3_123_189/0.7)]">
                   {i + 1}
                 </span>
                 <div>
-                  <h3 className="font-display text-lg font-bold text-ink-900">{step.title}</h3>
+                  <h3 className="font-title text-lg font-bold text-ink-900">{step.title}</h3>
                   <p className="mt-1 leading-relaxed text-ink-700">{rich(step.text)}</p>
                 </div>
               </div>
@@ -107,7 +103,7 @@ export function DemoForm() {
             </div>
           ) : (
             <form onSubmit={onSubmit} noValidate>
-              <h3 className="font-display text-xl font-bold text-ink-900">
+              <h3 className="font-title text-xl font-bold text-ink-900">
                 Demander ma démo gratuite
               </h3>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">

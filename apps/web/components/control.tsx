@@ -5,7 +5,6 @@ import prochaines from "@/assets/captures/detail-prochaines.webp";
 import visuelA from "@/assets/captures/visuel-reseaux.webp";
 import visuelB from "@/assets/captures/visuel-reseaux-2.webp";
 import visuelC from "@/assets/captures/visuel-reseaux-3.webp";
-import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 import { ScrollWords } from "./scroll-words";
 import { Capture } from "./frames";
@@ -25,16 +24,12 @@ export function Control() {
 
       <div className="relative mx-auto max-w-6xl px-5">
         <div className="max-w-2xl">
-          <p data-reveal className="text-base font-semibold text-primary-300">
-            Vous gardez la main
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance md:text-5xl"
           >
             <Kinetic>
-              <Brand onDark /> prépare. Vous décidez.
+              Harmony prépare. Vous décidez.
             </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-xl leading-relaxed font-medium text-pretty text-white">
@@ -55,7 +50,7 @@ export function Control() {
               </span>
               <h3 className="font-display mt-4 text-2xl font-bold">Rien n&apos;est publié sur vos réseaux sans vous</h3>
               <p className="mt-2 leading-relaxed text-white/75">
-                <Brand onDark /> prépare visuels et légendes. <strong className="font-semibold text-white">Vous postez.</strong>
+                Harmony prépare visuels et légendes. <strong className="font-semibold text-white">Vous postez.</strong>
               </p>
             </div>
             <div aria-hidden className="visual-fan relative mx-auto mt-7 h-44 w-64 md:mt-0 md:h-52 md:w-72">

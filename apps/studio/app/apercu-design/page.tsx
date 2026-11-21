@@ -94,7 +94,7 @@ export default function DesignPreviewPage() {
       <Stagger className="space-y-12">
         <header>
           <p className="text-ds-body font-semibold text-ds-brand-700">Socle du nouveau studio — rien n'est encore branché sur les vraies pages</p>
-          <h1 className="mt-1 font-ds-display text-[2rem]/10 font-extrabold tracking-tight text-ds-ink-900 sm:text-[2.5rem]/[1.15]">
+          <h1 className="mt-1 font-ds-voice text-[2rem]/10 font-extrabold tracking-tight text-ds-ink-900 sm:text-[2.5rem]/[1.15]">
             Un ciel vivant, toujours bleu
           </h1>
           <p className="mt-3 max-w-[70ch] text-lg/7 text-ds-ink-700">
@@ -178,11 +178,11 @@ export default function DesignPreviewPage() {
           </Card>
         </Block>
 
-        <Block id="typographie" title="Typographie" lead="Figtree pour les titres, Inter pour tout le reste. Corps en 16 px, rien d'informatif sous 13 px.">
+        <Block id="typographie" title="Typographie" lead="Fraunces pour la voix (titres de page, verdicts), Figtree pour tout le reste. Corps en 16 px, rien d'informatif sous 13 px.">
           <Card>
             <dl className="divide-y divide-ds-ink-200">
               {[
-                ["Titre de page · Figtree 700 · 28 puis 32 px", <span key="a" className="font-ds-display text-ds-title font-bold text-ds-ink-900 sm:text-[2rem]/10">Réseaux sociaux</span>],
+                ["Titre de page · Fraunces · 28 puis 32 px", <span key="a" className="font-ds-voice text-ds-title font-bold text-ds-ink-900 sm:text-[2rem]/10">Réseaux sociaux</span>],
                 ["Titre de carte · Figtree 700 · 18 puis 20 px", <span key="b" className="font-ds-display text-xl/7 font-bold text-ds-ink-900">Prochaines publications</span>],
                 ["Chiffre clé · Inter 700 · 34 px (text-ds-kpi)", <span key="c" className="text-ds-kpi font-bold text-ds-ink-900">1 284</span>],
                 ["Corps · Inter 400 · 16 px", <span key="d" className="text-base text-ds-ink-900">Nous écrivons vos articles ; vous les relisez avant publication.</span>],

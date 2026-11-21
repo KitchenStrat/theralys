@@ -90,13 +90,9 @@ export function Pricing({
 
   return (
     <section ref={section} id="tarifs" className="mx-auto max-w-6xl px-5 py-24">
-      <p data-reveal className="text-center text-base font-semibold text-primary-700">
-        Tarifs
-      </p>
       <h2
         data-reveal="kinetic"
-        style={{ "--rv-delay": "80ms" } as CSSProperties}
-        className="font-display mx-auto mt-3 max-w-2xl text-center text-3xl font-bold text-ink-900 md:text-5xl"
+        className="font-display mx-auto max-w-2xl text-center text-3xl font-bold text-ink-900 md:text-5xl"
       >
         <Kinetic>Deux formules, à combiner</Kinetic>
       </h2>
@@ -134,7 +130,7 @@ export function Pricing({
         </div>
       </div>
       <p data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="mt-4 text-center text-sm font-medium text-ink-700">
-        Frais de création et formation offerts <span aria-hidden>·</span> Engagement {minCommitmentMonths} mois minimum
+        Frais de création et formation offerts. Engagement de {minCommitmentMonths} mois minimum.
       </p>
 
       <div className="mx-auto mt-10 grid max-w-4xl gap-6 md:grid-cols-2">
@@ -172,7 +168,7 @@ export function Pricing({
 
               <div className="mt-5 flex items-end gap-2">
                 {/* Le prix file vers sa nouvelle valeur au changement de durée */}
-                <span className="font-display text-5xl font-bold text-ink-900 tabular-nums">
+                <span className="font-title text-5xl font-bold text-ink-900 tabular-nums">
                   <CountTo value={shown.price} format={euros} />
                 </span>
                 <span className="pb-1.5 text-sm text-ink-500">TTC / mois</span>
@@ -225,7 +221,7 @@ export function Pricing({
         >
           <div className="min-w-0">
             <p className="text-sm font-semibold text-primary-200">Votre sélection</p>
-            <p data-total-text className="font-display mt-1 text-2xl font-bold" data-testid="pricing-total-label">
+            <p data-total-text className="font-title mt-1 text-2xl font-bold" data-testid="pricing-total-label">
               {chosen.map((formula) => formula.label).join(" + ")}
             </p>
             {/* Les deux formules : le détail de l'addition */}
@@ -235,7 +231,7 @@ export function Pricing({
           </div>
           <div className="min-w-0">
             <p className="flex items-end gap-2">
-              <span className="font-display text-5xl font-bold tabular-nums" data-testid="pricing-total-price">
+              <span className="font-title text-5xl font-bold tabular-nums" data-testid="pricing-total-price">
                 <CountTo value={total.price} format={euros} />
               </span>
               <span className="pb-1.5 text-sm text-white/80">TTC / mois</span>

@@ -13,9 +13,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Inter et Figtree : polices du studio ; les autres servent aux aperçus « Typo » de l'éditeur */}
+        {/* Figtree (interface) et Fraunces (titres) : polices du studio ; les autres servent aux aperçus « Typo » de l'éditeur */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Inter:wght@400;500;600;700&family=Lora:wght@600&family=Playfair+Display:wght@600&family=Figtree:wght@600;700;800&family=Libre+Baskerville:wght@700&family=Open+Sans:wght@400&family=Lato:wght@400&family=Source+Sans+3:wght@400&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&family=Inter:wght@400;500;600;700&family=Lora:wght@600&family=Playfair+Display:wght@600&family=Figtree:wght@400;500;600;700;800&family=Fraunces:opsz,wght,SOFT@9..144,400..700,100&family=Libre+Baskerville:wght@700&family=Open+Sans:wght@400&family=Lato:wght@400&family=Source+Sans+3:wght@400&display=swap"
           rel="stylesheet"
         />
       </head>

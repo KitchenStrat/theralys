@@ -1,8 +1,6 @@
 import { type CSSProperties } from "react";
-import { ArrowRight } from "lucide-react";
 import mobileSite from "@/assets/captures/m-site.webp";
 import siteExistant from "@/assets/captures/site-existant.webp";
-import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { rich } from "./rich";
@@ -20,19 +18,15 @@ export function OwnSite() {
     <section id="deja-un-site" className="relative overflow-hidden bg-[#effbf7] py-24 md:py-28">
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-5 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <div>
-          <p data-reveal className="text-base font-semibold text-[#127a6b]">
-            Déjà un site&nbsp;?
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-[#034239] md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-[#034239] md:text-5xl"
           >
             <span className="block">
               <Kinetic>Gardez votre site.</Kinetic>
             </span>{" "}
             <Kinetic from={3}>
-              <Brand /> s&apos;y branche.
+              Harmony s&apos;y branche.
             </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
@@ -48,10 +42,10 @@ export function OwnSite() {
                 className="rounded-2xl border border-[#c9eee2] bg-white p-4 shadow-sm"
               >
                 <p className="flex items-center gap-2.5">
-                  <span className="font-display grid h-8 w-8 place-items-center rounded-full bg-[#127a6b] text-sm font-bold text-white">
+                  <span className="font-title grid h-8 w-8 place-items-center rounded-full bg-[#127a6b] text-sm font-bold text-white">
                     {index + 1}
                   </span>
-                  <span className="font-display text-lg font-bold text-[#034239]">{step.title}</span>
+                  <span className="font-title text-lg font-bold text-[#034239]">{step.title}</span>
                 </p>
                 <p className="mt-2 text-base leading-relaxed text-ink-700">{rich(step.text)}</p>
               </li>
@@ -62,10 +56,9 @@ export function OwnSite() {
             Votre site n&apos;est jamais modifié.{" "}
             <a
               href="/robot"
-              className="focus-ring inline-flex items-center gap-1 rounded font-semibold text-[#0b5f54] underline underline-offset-4 hover:text-[#034239]"
+              className="focus-ring rounded font-semibold text-[#0b5f54] underline underline-offset-4 hover:text-[#034239]"
             >
               Ce que fait notre lecteur
-              <ArrowRight size={16} aria-hidden />
             </a>
           </p>
         </div>

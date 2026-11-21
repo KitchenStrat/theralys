@@ -31,7 +31,7 @@ export function Logos() {
           {row.map((platform, i) => (
             <span
               key={`${platform.name}-${i}`}
-              className="font-display flex items-center gap-2.5 rounded-full border border-cream-200 bg-white px-5 py-2 text-base font-semibold whitespace-nowrap text-ink-700 shadow-sm"
+              className="font-title flex items-center gap-2.5 rounded-full border border-cream-200 bg-white px-5 py-2 text-base font-semibold whitespace-nowrap text-ink-700 shadow-sm"
             >
               <img src={platform.logo} alt="" loading="lazy" className="h-5 w-auto" />
               {platform.name}

@@ -3,7 +3,6 @@
 import { useState, type CSSProperties } from "react";
 import type { BillingPeriod } from "@theralys/db/plans";
 import { useBillingPeriod, type FormulaChoice } from "./billing-period";
-import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 
 /*
@@ -62,7 +61,7 @@ function Slider({
         <label htmlFor={id} className="text-base font-semibold text-ink-900">
           {label}
         </label>
-        <output htmlFor={id} className="font-display text-2xl font-bold whitespace-nowrap text-primary-700">
+        <output htmlFor={id} className="font-title text-2xl font-bold whitespace-nowrap text-primary-700">
           {display}
         </output>
       </div>
@@ -122,16 +121,12 @@ export function RoiCalculator({
 
       <div className="mx-auto max-w-6xl px-5">
         <div className="mx-auto max-w-3xl text-center">
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            Simulateur
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>
-              À partir de combien de patients <Brand /> est-il rentable&nbsp;?
+              À partir de combien de patients Harmony est-il rentable&nbsp;?
             </Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">
@@ -201,7 +196,7 @@ export function RoiCalculator({
               <div>
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-base font-medium text-ink-700">Ce que ces patients représentent</dt>
-                  <dd className="font-display text-2xl font-bold whitespace-nowrap text-primary-700">{euros(revenue)}</dd>
+                  <dd className="font-title text-2xl font-bold whitespace-nowrap text-primary-700">{euros(revenue)}</dd>
                 </div>
                 <div aria-hidden className="mt-2 h-3 overflow-hidden rounded-full bg-cream-200">
                   <div
@@ -213,9 +208,9 @@ export function RoiCalculator({
               <div>
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-base font-medium text-ink-700">
-                    Votre abonnement <Brand /> <span className="whitespace-nowrap text-ink-500">{periodPhrase}</span>
+                    Votre abonnement Harmony <span className="whitespace-nowrap text-ink-500">{periodPhrase}</span>
                   </dt>
-                  <dd className="font-display text-2xl font-bold whitespace-nowrap text-ink-900">{euros(monthlyCost)}</dd>
+                  <dd className="font-title text-2xl font-bold whitespace-nowrap text-ink-900">{euros(monthlyCost)}</dd>
                 </div>
                 <div aria-hidden className="mt-2 h-3 overflow-hidden rounded-full bg-cream-200">
                   <div className="h-full rounded-full bg-ink-500 transition-[width] duration-500 ease-out" style={{ width: `${costBar}%` }} />

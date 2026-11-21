@@ -1,6 +1,5 @@
 import { type CSSProperties } from "react";
 import { Mail, MapPin, Newspaper, Share2, type LucideIcon } from "lucide-react";
-import { Brand } from "./brand";
 import { Timeline } from "./timeline";
 import { rich } from "./rich";
 import { Kinetic } from "./kinetic";
@@ -43,13 +42,9 @@ export function Method() {
 
       <div className="mx-auto max-w-6xl px-5">
         <div className="max-w-2xl">
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            La méthode
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>De la démo à votre première semaine</Kinetic>
           </h2>
@@ -62,11 +57,11 @@ export function Method() {
           <Timeline className="space-y-10">
             {STEPS.map((step, index) => (
               <li key={step.title} data-reveal style={{ "--rv-delay": `${index * 90}ms` } as CSSProperties} className="relative flex gap-5">
-                <span className="timeline-dot font-display relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-bold">
+                <span className="timeline-dot font-title relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-bold">
                   {index + 1}
                 </span>
                 <div className="pt-1">
-                  <h3 className="font-display text-xl font-bold text-ink-900 md:text-2xl">{step.title}</h3>
+                  <h3 className="font-title text-xl font-bold text-ink-900 md:text-2xl">{step.title}</h3>
                   <p className="mt-1.5 leading-relaxed text-ink-700">{rich(step.text)}</p>
                 </div>
               </li>
@@ -77,8 +72,8 @@ export function Method() {
           <div data-reveal data-week className="week lg:sticky lg:top-28 lg:self-start">
             <div className="rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-pop)] md:p-7">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="font-display text-xl font-bold text-ink-900">
-                  Une semaine avec <Brand />
+                <h3 className="font-title text-xl font-bold text-ink-900">
+                  Une semaine avec Harmony
                 </h3>
                 <p className="rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">Exemple, formules Site + Scale</p>
               </div>

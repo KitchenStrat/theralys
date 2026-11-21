@@ -58,15 +58,11 @@ export function Faq() {
 
   return (
     <section id="faq" className="mx-auto max-w-3xl px-5 py-24">
-      <p data-reveal className="text-center text-base font-semibold text-primary-700">
-        Questions fréquentes
-      </p>
       <h2
         data-reveal="kinetic"
-        style={{ "--rv-delay": "80ms" } as CSSProperties}
-        className="font-display mt-3 text-center text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+        className="font-display text-center text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
       >
-        <Kinetic>Tout ce que vous devez savoir</Kinetic>
+        <Kinetic>Questions fréquentes</Kinetic>
       </h2>
 
       <div className="mt-12 space-y-3">

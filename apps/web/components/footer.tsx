@@ -69,7 +69,7 @@ export function Footer() {
       </div>
       <div className="mx-auto mt-12 max-w-6xl border-t border-white/10 px-5 pt-6">
         <p className="text-sm text-white/70">
-          © {new Date().getFullYear()} <Brand onDark /> · Tous droits réservés.
+          © {new Date().getFullYear()} Harmony · Tous droits réservés.
         </p>
       </div>
     </footer>

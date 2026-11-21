@@ -63,9 +63,7 @@ export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
                 «&nbsp;{rich(quote.text)}&nbsp;»
               </blockquote>
               <figcaption className="mt-5 text-base text-ink-700">
-                <span className="font-semibold text-ink-900">{quote.author}</span>
-                <span aria-hidden> · </span>
-                {quote.role}
+                <span className="font-semibold text-ink-900">{quote.author}</span>, {quote.role}
               </figcaption>
             </figure>
           ))}

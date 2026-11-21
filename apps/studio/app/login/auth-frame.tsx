@@ -33,7 +33,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
           <span className="mt-1 block text-base font-medium lg:hidden">Votre espace praticien</span>
         </p>
         <div className="hidden lg:block">
-          <p className="font-ds-display text-[2.5rem]/[1.15] font-extrabold tracking-tight text-balance">
+          <p className="font-ds-voice text-[2.5rem]/[1.15] font-extrabold tracking-tight text-balance">
             Bienvenue dans votre espace praticien
           </p>
           <p className="mt-4 max-w-[36ch] text-lg/7 text-pretty">

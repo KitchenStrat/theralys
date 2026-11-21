@@ -31,22 +31,22 @@ const FEATURED: CarouselQuote[] = [
   {
     text: "J'ai fait appel à Harmony pour la création de mon site. Je voulais un site élégant et surtout bien référencé, pas juste une jolie vitrine. L'accompagnement a été sérieux du premier échange jusqu'à la mise en ligne, et les résultats ont suivi. Je recommande !",
     author: "Gabriel M.",
-    role: "Étiopathe · Paris",
+    role: "étiopathe à Paris",
   },
   {
     text: "Le cabinet affiche complet 3 semaines à l'avance depuis la refonte... le site fait le travail d'accueil à ma place, moi je me concentre sur mes séances.",
     author: "Inès R.",
-    role: "Kinésiologue · Strasbourg",
+    role: "kinésiologue à Strasbourg",
   },
   {
     text: "On m'a expliqué chaque choix (structure, textes, mots clés) sans jargon. 6 mois plus tard je suis en tête des recherches sur ma ville, honnêtement je m'y attendais pas.",
     author: "Thomas D.",
-    role: "Ostéopathe · Bordeaux",
+    role: "ostéopathe à Bordeaux",
   },
   {
     text: "J'ai remplacé mon vieux site qui datait de 2015 par une vitrine dont je suis fière, sans y passer un seul week end. Rien que ça, ça valait le coup",
     author: "Claire V.",
-    role: "Sophrologue · Angers",
+    role: "sophrologue à Angers",
   },
 ];
 
@@ -55,49 +55,49 @@ type Review = { name: string; role: string; text: string; photo: StaticImageData
 const REVIEWS: Review[] = [
   {
     name: "Mathilde B.",
-    role: "Sophrologue · Albi",
+    role: "sophrologue à Albi",
     text: "Mon site est magnifique et surtout il m'amène des patients. Je reçois des appels de gens qui m'ont trouvée sur google, ça m'était jamais arrivé avant",
     photo: therapist10,
   },
   {
     name: "Rose L.",
-    role: "Naturopathe · Montpellier",
+    role: "naturopathe à Montpellier",
     text: "Le blog se remplit tout seul avec des articles sérieux, mes patients m'en parlent en consultation. Et visiblement google aime bien aussi :)",
     photo: cabinet3,
   },
   {
     name: "Nadine F.",
-    role: "Hypnothérapeute · Toulouse",
+    role: "hypnothérapeute à Toulouse",
     text: "Franchement top. Je m'occupe de rien, le domaine l'hébergement les mises à jour tout est géré. Je change mes horaires en 2 clics et c'est en ligne.",
     photo: cabinet5,
   },
   {
     name: "Grégoire T.",
-    role: "Ostéopathe · Lyon",
+    role: "ostéopathe à Lyon",
     text: "En 3 mois je suis passé de la page 3 à la 1ère page sur ostéopathe dans ma ville... je pensais pas que ça irait aussi vite. Le suivi sur Google Maps rend tout ça très concret.",
     photo: therapist4,
   },
   {
     name: "Célia A.",
-    role: "Psychopraticienne · Nantes",
+    role: "psychopraticienne à Nantes",
     text: "L'équipe a préparé une démo avant même que je m'engage. J'ai vu mon futur site, ajusté 2-3 couleurs et signé le lendemain. Rien à redire",
     photo: logoCabinet3,
   },
   {
     name: "Karim S.",
-    role: "Réflexologue · Bordeaux",
+    role: "réflexologue à Bordeaux",
     text: "Mes avis google apparaissent directement sur le site ça rassure les nouveaux patients. Tres pro et tres simple d'utilisation !!",
     photo: cabinet1,
   },
   {
     name: "Élodie P.",
-    role: "Sage-femme · Rennes",
+    role: "sage-femme à Rennes",
     text: "Je voulais un site sobre et rassurant, pas un truc criard. C'est exactement ça. Merci encore",
     photo: cabinet6,
   },
   {
     name: "Vincent M.",
-    role: "Chiropracteur · Grenoble",
+    role: "chiropracteur à Grenoble",
     text: "Le tableau de bord montre les appels et les clics de rendez-vous générés par le site, au moins je sais ce que ça me rapporte concrètement.",
     photo: therapist12,
   },
@@ -119,7 +119,7 @@ function ReviewCard({ review }: { review: Review }) {
         <Image src={review.photo} alt="" width={40} height={40} className="h-10 w-10 rounded-full object-cover ring-2 ring-primary-100" />
         <span className="min-w-0">
           <span className="block text-sm font-semibold text-ink-900">{review.name}</span>
-          <span className="block text-sm text-ink-500">{review.role}</span>
+          <span className="block text-sm text-ink-500">{review.role.charAt(0).toUpperCase() + review.role.slice(1)}</span>
         </span>
       </figcaption>
     </figure>
@@ -155,13 +155,9 @@ export function Testimonials() {
 
       <div className="relative">
         <div className="mx-auto max-w-3xl px-5 text-center">
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            Ils nous font confiance
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>Nos praticiens témoignent</Kinetic>
           </h2>

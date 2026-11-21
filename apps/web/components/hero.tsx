@@ -1,8 +1,7 @@
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import accueil from "@/assets/captures/accueil.webp";
 import mobileAccueil from "@/assets/captures/m-accueil.webp";
 import visuel from "@/assets/captures/visuel-reseaux.webp";
-import { Brand } from "./brand";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { HeroVideo } from "./hero-video";
 import { Kinetic } from "./kinetic";
@@ -21,15 +20,12 @@ export function Hero() {
         <HeroVideo />
 
       <div data-hero-copy className="relative mx-auto max-w-4xl px-5 text-center">
-        <p data-reveal data-intro="lead" className="text-sm font-semibold text-white/85">
-          La solution digitale tout-en-un des thérapeutes
-        </p>
         <h1
           data-reveal="kinetic"
-          className="font-display mt-4 text-[2.5rem] leading-[1.06] font-bold text-balance text-white sm:text-5xl md:text-[4.1rem]"
+          className="font-display text-[2.5rem] leading-[1.06] font-bold text-balance text-white sm:text-5xl md:text-[4.1rem]"
         >
           <Kinetic>
-            Tout le digital de votre cabinet, <span className="text-[#bfe5fb]">enfin réuni</span>
+            Tout le digital de votre cabinet, enfin réuni
           </Kinetic>
         </h1>
         <p
@@ -37,7 +33,7 @@ export function Hero() {
           data-intro="lead"
           className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-pretty text-white/90 md:text-xl"
         >
-          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: <Brand onDark />{" "}
+          Site internet, blog, fiche Google, réseaux sociaux, publicité&nbsp;: Harmony{" "}
           <strong className="font-semibold text-white">s&apos;occupe de toute votre présence en ligne</strong> et vous montre ce
           qu&apos;elle vous rapporte. Vous restez concentré sur vos patients.
         </p>
@@ -51,10 +47,9 @@ export function Hero() {
         <div data-reveal data-intro="actions" className="mt-5 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#demo"
-            className="cta focus-ring inline-flex items-center gap-2 rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-black/20 transition-[background-color,scale] hover:bg-primary-700 active:scale-[0.98]"
+            className="cta focus-ring inline-flex items-center rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-black/20 transition-[background-color,scale] hover:bg-primary-700 active:scale-[0.98]"
           >
             Demander ma démo gratuite
-            <ArrowRight size={18} aria-hidden />
           </a>
           <a
             href="#outils"
@@ -128,7 +123,7 @@ export function Hero() {
         </div>
         {/* À partir de lg, la publication et le téléphone débordent sous le cadre : la légende reste entre les deux */}
         <p className="mt-8 pb-4 text-center text-sm text-ink-500 md:mt-10 lg:mx-auto lg:mt-12 lg:max-w-md lg:pb-52 xl:pb-60">
-          Captures réelles de l&apos;espace client <Brand />, sur un compte de démonstration.
+          Captures réelles de l&apos;espace client Harmony, sur un compte de démonstration.
         </p>
       </div>
     </section>

@@ -106,13 +106,9 @@ export function Tour() {
       <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cream-300 to-transparent" />
       <div className="mx-auto max-w-6xl px-5">
         <div className="mx-auto max-w-3xl text-center">
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            La visite guidée
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>Sept outils. Un seul espace.</Kinetic>
           </h2>
@@ -170,7 +166,7 @@ export function Tour() {
                       <tool.icon size={20} strokeWidth={2.1} aria-hidden />
                     </span>
                     <span className="min-w-0">
-                      <span className={clsx("font-display block text-base font-bold whitespace-nowrap", selected ? "text-[var(--t-ink)]" : "text-ink-900")}>
+                      <span className={clsx("font-title block text-base font-bold whitespace-nowrap", selected ? "text-[var(--t-ink)]" : "text-ink-900")}>
                         {tool.name}
                       </span>
                     </span>
@@ -207,12 +203,7 @@ export function Tour() {
                     selected ? "is-active" : "pointer-events-none",
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="tool-deep inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white">
-                      {tool.name}
-                    </span>
-                  </div>
-                  <h3 className="font-display mt-4 max-w-2xl text-2xl leading-snug font-bold text-balance text-[var(--t-ink)] md:text-3xl">
+                  <h3 className="font-display max-w-2xl text-2xl leading-snug font-bold text-balance text-[var(--t-ink)] md:text-3xl">
                     {fr(tool.promise)}
                   </h3>
                   <ul className="mt-5 grid gap-3 md:grid-cols-3 md:gap-5">

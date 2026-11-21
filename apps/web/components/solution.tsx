@@ -44,18 +44,14 @@ export function Solution() {
     <section id="solution" className="relative overflow-hidden py-24 md:py-28">
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
         <div>
-          <p data-reveal className="text-base font-semibold text-primary-700">
-            Le constat
-          </p>
           <h2
             data-reveal="kinetic"
-            style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-[2.75rem]"
+            className="font-display text-3xl leading-tight font-bold text-balance text-ink-900 md:text-[2.75rem]"
           >
             <Kinetic>Vous êtes thérapeute. Pas webmaster, rédacteur, community manager et publicitaire.</Kinetic>
           </h2>
           <p data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="mt-5 text-xl leading-relaxed font-semibold text-pretty text-ink-900">
-            Avec <Brand />, tout est au même endroit, et le gros du travail est fait pour vous.
+            Avec Harmony, tout est au même endroit, et le gros du travail est fait pour vous.
           </p>
 
           <ul className="mt-9 space-y-6">
@@ -70,7 +66,7 @@ export function Solution() {
                   <benefit.icon size={22} aria-hidden />
                 </span>
                 <div>
-                  <h3 className="font-display text-xl font-bold text-ink-900">{benefit.title}</h3>
+                  <h3 className="font-title text-xl font-bold text-ink-900">{benefit.title}</h3>
                   <p className="mt-1 leading-relaxed text-ink-700">{rich(benefit.text)}</p>
                 </div>
               </li>

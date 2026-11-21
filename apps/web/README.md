@@ -31,6 +31,30 @@ Le jour où les vrais retours sont là (prénom, métier, ville, texte, accord d
 la personne) : remplacer `FEATURED` et `REVIEWS`, puis passer `PROVISIONAL` à
 `false`. La mention disparaît, rien d'autre ne change.
 
+## Typographie et ton
+
+Passe de design menée avec le skill `frontend-design` d'Anthropic
+(`anthropics/skills`) : des choix propres au sujet — des praticiens du soin,
+pas des informaticiens — plutôt que les réflexes d'une page générée.
+
+- **Deux familles, deux rôles**, les mêmes que dans l'espace client.
+  **Fraunces**, un serif aux formes rondes (axe `SOFT` au maximum, une seule
+  graisse), porte la voix : titres, citations (`.font-display`). **Figtree**
+  porte tout le reste : texte, petits titres, boutons et chiffres
+  (`.font-title` pour les petits titres ; ses chiffres savent s'aligner,
+  ceux de Fraunces non). **Comfortaa** ne sert qu'au logo.
+- **Le mot-marque est un logo**, pas un mot du texte : en-tête, pied de page
+  et sphères seulement. Dans une phrase ou un titre, « Harmony » s'écrit comme
+  le reste.
+- **Pas de surtitre** au-dessus des titres de section, pas d'expression mise
+  en couleur dans un titre, pas de flèche décorative au bout d'un bouton :
+  le titre dit de quoi il s'agit, le bouton dit ce qu'il fait.
+- **Des phrases plutôt que des points médians** : « Thomas D., ostéopathe à
+  Bordeaux », « Frais de création et formation offerts. Engagement de 12 mois
+  minimum. »
+- **Une seule pièce spectaculaire**, le haut de page (vidéo et anneau des
+  outils) ; le reste de la page reste calme.
+
 ## Structure
 
 - `components/landing.tsx` — la page (rendue par `app/page.tsx`), dans

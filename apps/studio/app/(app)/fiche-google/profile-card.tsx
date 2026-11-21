@@ -58,7 +58,7 @@ export function ProfileCard({
           <IconBadge icon={Store} tone="soft" size="lg" className="max-sm:hidden" />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <h2 className="font-ds-display text-xl/7 font-bold text-ds-ink-900 text-balance sm:text-2xl/8">
+              <h2 className="font-ds-voice text-xl/7 font-bold text-ds-ink-900 text-balance sm:text-2xl/8">
                 {latestAudit?.snapshot.title ?? linked.name}
               </h2>
               <Badge tone="success" icon={Link2}>

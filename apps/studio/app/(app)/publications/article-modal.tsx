@@ -83,7 +83,7 @@ export function ArticleModal({
             <ArticleStatusPill status={item.status}>{STATUS_LABEL[item.status](dateLabel)}</ArticleStatusPill>
             {item.aiGenerated ? <AiBadge>{isArticle ? "Rédigé par l'IA" : "Sera rédigé par l'IA"}</AiBadge> : null}
           </div>
-          <h2 className="mt-3 font-ds-display text-2xl/8 font-bold text-ds-ink-900 text-balance">{frenchSpacing(item.title)}</h2>
+          <h2 className="mt-3 font-ds-voice text-2xl/8 font-bold text-ds-ink-900 text-balance">{frenchSpacing(item.title)}</h2>
           {isArticle || item.motifTitle ? (
             <p className="mt-2.5 flex flex-wrap items-center gap-2">
               {item.motifTitle ? (

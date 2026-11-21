@@ -137,7 +137,7 @@ export function ActivationCard({
                   id="activation-title"
                   ref={titleRef}
                   tabIndex={-1}
-                  className="mt-0.5 rounded-md font-ds-display text-2xl/8 font-bold text-balance ds-focus-inverse sm:text-[1.75rem]/9"
+                  className="mt-0.5 rounded-md font-ds-voice text-2xl/8 font-bold text-balance ds-focus-inverse sm:text-[1.75rem]/9"
                   data-testid="activation-confirmation"
                 >
                   Vos outils s&apos;appuient sur ce site

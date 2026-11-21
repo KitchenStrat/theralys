@@ -81,7 +81,7 @@ export function PageHeader({
           <div className="min-w-0">
             <Heading
               className={clsx(
-                "font-ds-display text-ds-title font-bold text-balance sm:text-[2rem]/10",
+                "font-ds-voice text-ds-title font-bold text-balance sm:text-[2rem]/10",
                 vivid ? "" : "text-ds-section-ink",
               )}
             >

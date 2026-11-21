@@ -114,7 +114,7 @@ export function BlogSettingsModal({
           {/* Le changement d'étape est annoncé (le focus reste sur « Continuer ») ; `key` : le titre arrive en fondu */}
           <div aria-live="polite">
             <div key={step} className="ds-fade-in">
-              <h2 className="mt-4 font-ds-display text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">
+              <h2 className="mt-4 font-ds-voice text-2xl/8 font-bold text-ds-section-ink text-balance sm:text-[1.75rem]/9">
                 {current.title}
               </h2>
               <p className="mt-1.5 text-base text-ds-ink-700 text-pretty">{current.intro}</p>

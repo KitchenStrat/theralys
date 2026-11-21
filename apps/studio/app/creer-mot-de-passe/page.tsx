@@ -23,7 +23,7 @@ export default async function SetPasswordPage({ searchParams }: Props) {
         <Card padding="lg">
           {state.kind === "ok" ? (
             <>
-              <h1 className="font-ds-display text-ds-title font-bold text-ds-ink-900 text-balance">Bienvenue {state.firstName}</h1>
+              <h1 className="font-ds-voice text-ds-title font-bold text-ds-ink-900 text-balance">Bienvenue {state.firstName}</h1>
               <p className="mt-1.5 text-base text-ds-ink-600">
                 Choisissez le mot de passe de votre espace (<span className="[overflow-wrap:anywhere]">{state.email}</span>).
               </p>
@@ -77,7 +77,7 @@ function Notice({
       >
         <Icon size={28} />
       </span>
-      <h1 className="mt-5 font-ds-display text-ds-title font-bold text-ds-ink-900 text-balance">{title}</h1>
+      <h1 className="mt-5 font-ds-voice text-ds-title font-bold text-ds-ink-900 text-balance">{title}</h1>
       {children}
     </>
   );
