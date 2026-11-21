@@ -126,28 +126,44 @@ naturel : des praticiens au travail, un cabinet, la nature.
 
 ## Motion design
 
-Tout est écrit à la main, en CSS et en quelques lignes de React, sans
-bibliothèque d'animation :
+Les séquences sont jouées par **GSAP** (`gsap`, `@gsap/react`), en suivant les
+skills officiels de GSAP (`greensock/gsap-skills`) : `useGSAP` avec nettoyage
+automatique, ScrollTrigger pour tout ce qui est lié au défilement,
+`gsap.matchMedia()` pour le mouvement réduit, uniquement `transform` et
+`opacity`.
 
-- **titres cinétiques** (`components/kinetic.tsx`, titre en
-  `data-reveal="kinetic"`) : chaque mot monte de derrière un masque, l'un
-  après l'autre ;
-- **prix qui filent** (`components/count-to.tsx`) : au changement de durée, le
-  prix et la somme par échéance rejoignent leur nouvelle valeur ;
-- **icônes qui se dessinent** (classe `draw`, et `.bento-icon`) à l'apparition
-  de leur bloc ;
-- **boutons d'appel** (classe `cta`, attribut `data-magnetic`) : un reflet les
-  traverse, la flèche avance, le curseur les attire de quelques pixels
-  (`MagneticObserver`) ;
-- **phrase qui s'illumine au défilement** (`components/scroll-words.tsx`) :
-  animation liée au défilement, donc sans JavaScript ; un navigateur qui ne la
-  connaît pas affiche la phrase entière. Sa section ne doit pas devenir un
-  conteneur de défilement (`overflow-clip`, pas `overflow-hidden`) ;
-- **visite guidée** : à chaque outil, les points arrivent en cascade et la
-  capture se dévoile de haut en bas.
+- `components/motion/gsap.ts` — le socle : modules enregistrés une seule fois
+  (ScrollTrigger, ScrollToPlugin, DrawSVG, CustomEase), **une seule courbe**
+  (« harmony », la même que les transitions CSS), trois durées.
+- `components/motion/director.tsx` — le chef d'orchestre. Le balisage reste
+  déclaratif, il met en mouvement ce que les composants marquent :
+  - `[data-hero]` : **une seule séquence d'entrée** au chargement (titre mot à
+    mot, texte, anneau des outils, boutons, capture de l'espace client), puis
+    le message s'estompe à mesure qu'on défile vers la capture ;
+  - `[data-reveal]` : fondu et courte montée à l'entrée dans l'écran, en
+    cascade pour les blocs qui entrent ensemble (`ScrollTrigger.batch`) ;
+  - `[data-reveal="kinetic"]` : titres dont les mots montent de derrière un
+    masque (`components/kinetic.tsx`) ;
+  - `[data-hub]` : les liaisons du schéma se tracent depuis Harmony, puis
+    chaque outil se pose au bout de la sienne ;
+  - `[data-week]` : la semaine type se remplit jour après jour ;
+  - `a[href^="#"]` : défilement en douceur vers la section (ScrollToPlugin).
+    Pas de `scroll-behavior: smooth` en CSS : il gêne ScrollTrigger.
+- Liés au défilement (`scrub`) : la capture qui se redresse
+  (`scroll-tilt.tsx`), le trait de la frise (`timeline.tsx`), la barre de
+  lecture (`scroll-progress.tsx`).
+- `count-to.tsx` : les prix filent vers leur nouvelle valeur ; `pricing.tsx` :
+  la coche et le bandeau « Votre sélection » accusent réception d'un choix.
 
-Chaque effet a son repli dans le bloc `prefers-reduced-motion` de
-`app/globals.css` : tout est en place d'emblée, rien ne bouge.
+Règles tenues (passe « unslop », d'après le skill de Damir Sokolovsky,
+`heydamir/unslop`, CC BY 4.0) : le mouvement explique quelque chose ou n'existe
+pas. Une seule entrée au chargement, aucun rebond, aucun survol qui soulève,
+pas de halo, de reflet ni d'aimant. Restent en boucle, voulus : l'anneau des
+outils, les bandeaux qui défilent et la barre de la visite guidée. Les blocs
+pas encore entrés sont masqués par leur seule opacité : ils restent lus par
+les lecteurs d'écran et trouvés par la recherche dans la page.
+
+En `prefers-reduced-motion`, GSAP ne joue rien : tout est en place d'emblée.
 
 ## Accessibilité
 

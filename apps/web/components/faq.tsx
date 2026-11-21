@@ -58,13 +58,13 @@ export function Faq() {
 
   return (
     <section id="faq" className="mx-auto max-w-3xl px-5 py-24">
-      <p data-reveal className="text-center text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
+      <p data-reveal className="text-center text-base font-semibold text-primary-700">
         Questions fréquentes
       </p>
       <h2
         data-reveal="kinetic"
         style={{ "--rv-delay": "80ms" } as CSSProperties}
-        className="font-display mt-3 text-center text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
+        className="font-display mt-3 text-center text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
       >
         <Kinetic>Tout ce que vous devez savoir</Kinetic>
       </h2>
@@ -95,7 +95,7 @@ export function Faq() {
                   <span className="text-lg font-semibold text-ink-900">{fr(item.q)}</span>
                   <span
                     className={clsx(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-300",
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-[background-color,color,rotate] duration-200",
                       isOpen ? "rotate-45 bg-primary-600 text-white" : "bg-primary-100 text-primary-700",
                     )}
                   >
@@ -134,7 +134,7 @@ export function Faq() {
         </div>
         <a
           href="#demo"
-          className="focus-ring group flex items-center gap-2 whitespace-nowrap rounded-full bg-ink-900 px-6 py-3 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-primary-700"
+          className="focus-ring group flex items-center gap-2 whitespace-nowrap rounded-full bg-ink-900 px-6 py-3 text-base font-semibold text-white transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700"
         >
           Demander ma démo
           <svg

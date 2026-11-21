@@ -92,7 +92,7 @@ export function QuoteCarousel({ quotes }: { quotes: CarouselQuote[] }) {
               >
                 <span
                   className={clsx(
-                    "block h-2 rounded-full transition-all duration-300",
+                    "block h-2 rounded-full transition-colors duration-200",
                     i === index ? "w-7 bg-primary-600" : "w-2 bg-ink-300 group-hover:bg-primary-400",
                   )}
                 />

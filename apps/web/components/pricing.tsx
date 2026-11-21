@@ -1,12 +1,13 @@
 "use client";
 
-import { type CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import clsx from "clsx";
 import { Check, Plus } from "lucide-react";
 import type { BillingPeriod, FormulaId } from "@theralys/db/plans";
 import { useBillingPeriod, type FormulaChoice } from "./billing-period";
 import { CountTo } from "./count-to";
 import { Kinetic } from "./kinetic";
+import { MEDIA, gsap, useGSAP } from "./motion/gsap";
 import { fr } from "./typo";
 
 /** Le prix d'un choix (une formule, ou les deux) sur une durée de facturation. */
@@ -66,9 +67,30 @@ export function Pricing({
   const total = at(totals[choice]);
   const chosen = formulas.filter((formula) => selection[formula.id]);
 
+  // Le bandeau accuse réception d'un changement de sélection : son libellé et son détail remontent de quelques pixels
+  const section = useRef<HTMLElement>(null);
+  const settled = useRef(false);
+  const { contextSafe } = useGSAP(
+    () => {
+      if (!settled.current) {
+        settled.current = true;
+        return;
+      }
+      if (window.matchMedia(MEDIA.calm).matches) return;
+      gsap.fromTo("[data-total-text]", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.05, overwrite: true, clearProps: "transform,opacity" });
+    },
+    { dependencies: [choice], scope: section },
+  );
+  // La coche de la carte marque le clic, qu'on coche ou qu'on décoche
+  const toggle = contextSafe((formula: FormulaId) => {
+    toggleFormula(formula);
+    if (window.matchMedia(MEDIA.calm).matches) return;
+    gsap.fromTo(`[data-formula="${formula}"] [data-check]`, { scale: 0.72 }, { scale: 1, duration: 0.3, overwrite: true, clearProps: "transform" });
+  });
+
   return (
-    <section id="tarifs" className="mx-auto max-w-6xl px-5 py-24">
-      <p data-reveal className="text-center text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
+    <section ref={section} id="tarifs" className="mx-auto max-w-6xl px-5 py-24">
+      <p data-reveal className="text-center text-base font-semibold text-primary-700">
         Tarifs
       </p>
       <h2
@@ -125,12 +147,11 @@ export function Pricing({
             // carte changent quand on la coche, et React réécrirait alors la classe posée par l'observateur.
             <div key={formula.id} data-reveal style={{ "--rv-delay": `${i * 120}ms` } as CSSProperties} className="flex">
             <article
-              data-spotlight
               data-formula={formula.id}
               data-selected={selected}
               className={clsx(
-                "lift spotlight relative flex w-full flex-col rounded-3xl p-7 sm:p-8",
-                selected ? "card-gradient-border card-lumen" : "border border-cream-300 bg-white shadow-[var(--shadow-card)]",
+                "relative flex w-full flex-col rounded-3xl border-2 bg-white p-7 shadow-[var(--shadow-card)] transition-colors duration-200 sm:p-8",
+                selected ? "border-primary-600" : "border-cream-300",
               )}
             >
               <div className="flex items-start justify-between gap-3">
@@ -138,8 +159,9 @@ export function Pricing({
                 {/* La coche dit l'état ; le bouton du bas le change */}
                 <span
                   aria-hidden
+                  data-check
                   className={clsx(
-                    "grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 transition-colors duration-300",
+                    "grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 transition-colors duration-200",
                     selected ? "border-primary-600 bg-primary-600 text-white" : "border-ink-300 bg-white text-transparent",
                   )}
                 >
@@ -174,11 +196,11 @@ export function Pricing({
               </ul>
               <button
                 type="button"
-                onClick={() => toggleFormula(formula.id)}
+                onClick={() => toggle(formula.id)}
                 aria-pressed={selected}
                 data-testid={`formule-${formula.id}`}
                 className={clsx(
-                  "focus-ring mt-auto flex min-h-12 items-center justify-center gap-2 rounded-full px-5 py-3 text-center text-base font-semibold transition hover:-translate-y-0.5",
+                  "focus-ring mt-auto flex min-h-12 items-center justify-center gap-2 rounded-full px-5 py-3 text-center text-base font-semibold transition-[background-color,border-color,color,scale] active:scale-[0.98]",
                   selected
                     ? "border border-primary-300 bg-primary-50 text-primary-800 hover:border-primary-400"
                     : "border border-ink-300 text-ink-700 hover:border-primary-300 hover:text-primary-700",
@@ -202,12 +224,12 @@ export function Pricing({
           className="mx-auto mt-6 flex max-w-4xl flex-wrap items-center justify-between gap-x-8 gap-y-5 rounded-3xl bg-ink-900 p-7 text-white sm:p-8"
         >
           <div className="min-w-0">
-            <p className="text-sm font-semibold tracking-wide text-primary-200 uppercase">Votre sélection</p>
-            <p className="font-display mt-1 text-2xl font-bold" data-testid="pricing-total-label">
+            <p className="text-sm font-semibold text-primary-200">Votre sélection</p>
+            <p data-total-text className="font-display mt-1 text-2xl font-bold" data-testid="pricing-total-label">
               {chosen.map((formula) => formula.label).join(" + ")}
             </p>
             {/* Les deux formules : le détail de l'addition */}
-            <p className="mt-1 min-h-5 text-sm text-white/80">
+            <p data-total-text className="mt-1 min-h-5 text-sm text-white/80">
               {chosen.length > 1 ? chosen.map((formula) => `${formula.label} ${euros(at(formula.periods)?.price ?? 0)}`).join(" + ") : null}
             </p>
           </div>
@@ -243,8 +265,7 @@ export function Pricing({
           </div>
           <a
             href="#demo"
-            data-magnetic
-            className="focus-ring-dark cta block w-full rounded-full bg-primary-600 px-8 py-3.5 text-center text-base font-semibold text-white shadow-[0_14px_30px_-10px_rgb(3_123_189/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-500 sm:w-auto"
+            className="focus-ring-dark cta block w-full rounded-full bg-primary-600 px-8 py-3.5 text-center text-base font-semibold text-white transition-[background-color,scale] hover:bg-primary-500 active:scale-[0.98] sm:w-auto"
           >
             Demander une démo
           </a>

@@ -1,48 +1,37 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import clsx from "clsx";
+import { MEDIA, gsap, useGSAP } from "./motion/gsap";
 
 /**
- * Frise verticale dont le trait se remplit au défilement : la variable
- * `--fill` (0 à 1) suit la traversée de l'écran par la liste, lue par
- * `.timeline-fill` (globals.css). En mouvement réduit, le trait est plein.
+ * Frise verticale dont le trait se remplit au défilement : il suit une ligne
+ * située aux deux tiers de l'écran, de la première étape à la dernière
+ * (ScrollTrigger, `scrub`). En mouvement réduit, le trait est plein.
  */
 export function Timeline({ children, className }: { children: ReactNode; className?: string }) {
-  const ref = useRef<HTMLOListElement>(null);
+  const root = useRef<HTMLOListElement>(null);
+  const fill = useRef<HTMLSpanElement>(null);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      node.style.setProperty("--fill", "1");
-      return;
-    }
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const rect = node.getBoundingClientRect();
-      // Le trait suit une ligne située aux deux tiers de l'écran
-      const progress = (window.innerHeight * 0.66 - rect.top) / rect.height;
-      node.style.setProperty("--fill", Math.min(1, Math.max(0, progress)).toFixed(3));
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add(MEDIA.motion, () => {
+        gsap.fromTo(
+          fill.current,
+          { scaleY: 0 },
+          { scaleY: 1, ease: "none", scrollTrigger: { trigger: root.current, start: "top 66%", end: "bottom 66%", scrub: 0.4 } },
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: root },
+  );
 
   return (
-    <ol ref={ref} className={clsx("timeline relative", className)}>
+    <ol ref={root} className={clsx("timeline relative", className)}>
       <span aria-hidden className="timeline-track" />
-      <span aria-hidden className="timeline-fill" />
+      <span ref={fill} aria-hidden className="timeline-fill" />
       {children}
     </ol>
   );

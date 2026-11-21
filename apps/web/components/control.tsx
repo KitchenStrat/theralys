@@ -25,13 +25,13 @@ export function Control() {
 
       <div className="relative mx-auto max-w-6xl px-5">
         <div className="max-w-2xl">
-          <p data-reveal className="text-sm font-bold tracking-[0.18em] text-primary-300 uppercase">
+          <p data-reveal className="text-base font-semibold text-primary-300">
             Vous gardez la main
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance md:text-5xl"
           >
             <Kinetic>
               <Brand onDark /> prépare. Vous décidez.
@@ -47,8 +47,7 @@ export function Control() {
           {/* Réseaux sociaux : rien ne part sans le praticien */}
           <article
             data-reveal
-            data-spotlight
-            className="bento spotlight md:col-span-4 md:grid md:grid-cols-[1fr_auto] md:items-center md:gap-6"
+            className="bento md:col-span-4 md:grid md:grid-cols-[1fr_auto] md:items-center md:gap-6"
           >
             <div>
               <span className="bento-icon">
@@ -72,7 +71,7 @@ export function Control() {
             </div>
           </article>
 
-          <article data-reveal style={{ "--rv-delay": "90ms" } as CSSProperties} data-spotlight className="bento spotlight md:col-span-2">
+          <article data-reveal style={{ "--rv-delay": "90ms" } as CSSProperties} className="bento md:col-span-2">
             <span className="bento-icon">
               <Sparkles size={20} aria-hidden />
             </span>
@@ -89,8 +88,7 @@ export function Control() {
           {/* Blog : chaque article se relit */}
           <article
             data-reveal
-            data-spotlight
-            className="bento spotlight overflow-hidden md:col-span-3 md:grid md:grid-cols-[1fr_auto] md:gap-6"
+            className="bento overflow-hidden md:col-span-3 md:grid md:grid-cols-[1fr_auto] md:gap-6"
           >
             <div>
               <span className="bento-icon">
@@ -111,8 +109,7 @@ export function Control() {
           <article
             data-reveal
             style={{ "--rv-delay": "90ms" } as CSSProperties}
-            data-spotlight
-            className="bento spotlight overflow-hidden md:col-span-3 md:grid md:grid-cols-[1fr_auto] md:gap-6"
+            className="bento overflow-hidden md:col-span-3 md:grid md:grid-cols-[1fr_auto] md:gap-6"
           >
             <div>
               <span className="bento-icon">
@@ -128,7 +125,7 @@ export function Control() {
             </div>
           </article>
 
-          <article data-reveal data-spotlight className="bento spotlight md:col-span-3">
+          <article data-revealclassName="bento md:col-span-3">
             <span className="bento-icon">
               <KeyRound size={20} aria-hidden />
             </span>
@@ -138,7 +135,7 @@ export function Control() {
             </p>
           </article>
 
-          <article data-reveal style={{ "--rv-delay": "90ms" } as CSSProperties} data-spotlight className="bento spotlight md:col-span-3">
+          <article data-reveal style={{ "--rv-delay": "90ms" } as CSSProperties} className="bento md:col-span-3">
             <span className="bento-icon">
               <BadgeCheck size={20} aria-hidden />
             </span>

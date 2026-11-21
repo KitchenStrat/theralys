@@ -49,13 +49,13 @@ export function DemoForm() {
 
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
         <div>
-          <p data-reveal className="text-sm font-bold uppercase tracking-[0.18em] text-primary-700">
+          <p data-reveal className="text-base font-semibold text-primary-700">
             Démo gratuite
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>Voyez ce que cela donne pour votre cabinet</Kinetic>
           </h2>
@@ -178,7 +178,7 @@ export function DemoForm() {
               <button
                 type="submit"
                 disabled={busy}
-                className="focus-ring mt-6 w-full rounded-full bg-primary-600 py-4 text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700 disabled:opacity-60"
+                className="focus-ring mt-6 w-full rounded-full bg-primary-600 py-4 text-base font-semibold text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700 disabled:opacity-60"
               >
                 {busy ? "Envoi en cours…" : "Recevoir ma démo gratuite"}
               </button>

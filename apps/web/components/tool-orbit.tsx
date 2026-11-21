@@ -12,7 +12,7 @@ import { TOOLS } from "./tools";
  */
 export function ToolOrbit({ className = "", style, onDark = false }: { className?: string; style?: CSSProperties; onDark?: boolean }) {
   return (
-    <div data-reveal style={style} className={`saturn ${onDark ? "saturn--dark" : ""} ${className}`}>
+    <div data-reveal data-intro="orbit" style={style} className={`saturn ${onDark ? "saturn--dark" : ""} ${className}`}>
       <div className="saturn-tilt">
         <span aria-hidden className="saturn-ring saturn-ring--back" />
         <div aria-hidden className="saturn-planet">

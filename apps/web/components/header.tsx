@@ -55,14 +55,14 @@ export function Header() {
       {/* Au défilement, la barre se resserre en pilule flottante translucide */}
       <div
         className={clsx(
-          "mx-auto border transition-all duration-500 ease-out",
+          "mx-auto border transition-[background-color,border-color,box-shadow] duration-300",
           floating
             ? "mt-3 max-w-5xl border-cream-200/80 bg-white/85 shadow-[0_18px_40px_-18px_rgb(12_74_110/0.35)] backdrop-blur-xl"
             : "mt-0 max-w-6xl border-transparent bg-transparent",
           open ? "rounded-3xl" : floating ? "rounded-[1.75rem]" : "rounded-3xl",
         )}
       >
-        <div className={clsx("flex items-center justify-between gap-2 px-4 transition-all duration-500 sm:px-5", floating ? "h-14" : "h-16")}>
+        <div className={clsx("flex items-center justify-between gap-2 px-4 sm:px-5", floating ? "h-14" : "h-16")}>
           <a href="#" className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-lg text-2xl" aria-label="Harmony, retour en haut de page">
             <Brand onDark={onDark} />
           </a>
@@ -92,7 +92,7 @@ export function Header() {
             </a>
             <a
               href="#demo"
-              className="cta focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_10px_24px_-10px_rgb(3_123_189/0.8)] transition hover:-translate-y-0.5 hover:bg-primary-700 lg:px-5"
+              className="cta focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700 lg:px-5"
             >
               {/* Sur un petit téléphone, la barre garde la place du menu */}
               <span className="sm:hidden">Ma démo</span>

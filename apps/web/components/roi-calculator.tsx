@@ -62,7 +62,7 @@ function Slider({
         <label htmlFor={id} className="text-base font-semibold text-ink-900">
           {label}
         </label>
-        <output htmlFor={id} className="font-display text-2xl font-extrabold whitespace-nowrap text-primary-700">
+        <output htmlFor={id} className="font-display text-2xl font-bold whitespace-nowrap text-primary-700">
           {display}
         </output>
       </div>
@@ -119,20 +119,16 @@ export function RoiCalculator({
 
   return (
     <section id="simulateur" className="relative overflow-hidden py-24 md:py-28">
-      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
-        <div className="blob top-[6rem] left-[-10rem] h-[24rem] w-[24rem] bg-primary-200/50" />
-        <div className="blob right-[-8rem] bottom-[-8rem] h-[26rem] w-[26rem] bg-[#c9f1e6]/60" style={{ animationDelay: "-9s" }} />
-      </div>
 
       <div className="mx-auto max-w-6xl px-5">
         <div className="mx-auto max-w-3xl text-center">
-          <p data-reveal className="text-sm font-bold tracking-[0.18em] text-primary-700 uppercase">
+          <p data-reveal className="text-base font-semibold text-primary-700">
             Simulateur
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>
               À partir de combien de patients <Brand /> est-il rentable&nbsp;?
@@ -193,11 +189,11 @@ export function RoiCalculator({
           </div>
 
           {/* Le résultat ; sa phrase de synthèse est annoncée aux lecteurs d'écran à chaque changement */}
-          <div className="card-gradient-border relative rounded-3xl p-6 shadow-[var(--shadow-pop)] md:p-8">
+          <div className="relative rounded-3xl border border-cream-300 bg-white p-6 shadow-[var(--shadow-card)] md:p-8">
             <p className="text-base font-semibold text-ink-700">
               L&apos;abonnement {planLabel} est couvert dès
             </p>
-            <p className="font-display mt-1 text-4xl leading-tight font-extrabold text-ink-900 md:text-5xl">
+            <p className="font-display mt-1 text-4xl leading-tight font-bold text-ink-900 md:text-5xl">
               {plural(breakEven, "séance", "séances")} <span className="text-2xl font-bold text-ink-700 md:text-3xl">par mois</span>
             </p>
 
@@ -205,7 +201,7 @@ export function RoiCalculator({
               <div>
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-base font-medium text-ink-700">Ce que ces patients représentent</dt>
-                  <dd className="font-display text-2xl font-extrabold whitespace-nowrap text-primary-700">{euros(revenue)}</dd>
+                  <dd className="font-display text-2xl font-bold whitespace-nowrap text-primary-700">{euros(revenue)}</dd>
                 </div>
                 <div aria-hidden className="mt-2 h-3 overflow-hidden rounded-full bg-cream-200">
                   <div
@@ -219,7 +215,7 @@ export function RoiCalculator({
                   <dt className="text-base font-medium text-ink-700">
                     Votre abonnement <Brand /> <span className="whitespace-nowrap text-ink-500">{periodPhrase}</span>
                   </dt>
-                  <dd className="font-display text-2xl font-extrabold whitespace-nowrap text-ink-900">{euros(monthlyCost)}</dd>
+                  <dd className="font-display text-2xl font-bold whitespace-nowrap text-ink-900">{euros(monthlyCost)}</dd>
                 </div>
                 <div aria-hidden className="mt-2 h-3 overflow-hidden rounded-full bg-cream-200">
                   <div className="h-full rounded-full bg-ink-500 transition-[width] duration-500 ease-out" style={{ width: `${costBar}%` }} />
@@ -239,7 +235,7 @@ export function RoiCalculator({
 
             <a
               href="#demo"
-              className="focus-ring mt-6 block rounded-full bg-primary-600 py-3.5 text-center text-base font-semibold text-white shadow-[0_16px_36px_-12px_rgb(3_123_189/0.85)] transition hover:-translate-y-0.5 hover:bg-primary-700"
+              className="focus-ring mt-6 block rounded-full bg-primary-600 py-3.5 text-center text-base font-semibold text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700"
             >
               Demander ma démo gratuite
             </a>

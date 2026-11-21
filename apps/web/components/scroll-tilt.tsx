@@ -1,46 +1,39 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import clsx from "clsx";
+import { MEDIA, gsap, useGSAP } from "./motion/gsap";
 
 /**
  * Bascule au défilement : le cadre arrive incliné vers l'arrière et se redresse
- * à mesure qu'il monte dans l'écran (variables `--tilt` et `--lift` lues par
- * `.scroll-tilt-body`, cf. globals.css). Immobile en mouvement réduit.
+ * à mesure qu'il monte dans l'écran. L'inclinaison est liée au défilement par
+ * ScrollTrigger (`scrub`) : elle avance et recule avec lui. Immobile en
+ * mouvement réduit.
  */
 export function ScrollTilt({ children, className }: { children: ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const rect = node.getBoundingClientRect();
-      const viewport = window.innerHeight;
-      // 0 : le haut du cadre entre par le bas de l'écran ; 1 : il a parcouru 70 % de sa hauteur
-      const progress = Math.min(1, Math.max(0, (viewport - rect.top) / (viewport * 0.7)));
-      node.style.setProperty("--tilt", `${((1 - progress) * 16).toFixed(2)}deg`);
-      node.style.setProperty("--lift", ((1 - progress) * 0.05).toFixed(3));
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia();
+      mm.add(MEDIA.motion, () => {
+        gsap.fromTo(
+          body.current,
+          { rotationX: 14, scale: 0.955 },
+          { rotationX: 0, scale: 1, ease: "none", scrollTrigger: { trigger: root.current, start: "top bottom", end: "top 28%", scrub: 0.5 } },
+        );
+      });
+      return () => mm.revert();
+    },
+    { scope: root },
+  );
 
   return (
-    <div ref={ref} className={clsx("scroll-tilt", className)}>
-      <div className="scroll-tilt-body">{children}</div>
+    <div ref={root} className={clsx("scroll-tilt", className)}>
+      <div ref={body} className="scroll-tilt-body">
+        {children}
+      </div>
     </div>
   );
 }

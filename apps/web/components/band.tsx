@@ -14,7 +14,7 @@ export function Band() {
       <PhotoBackdrop src={foret} position="50% 45%" veil="bg-[radial-gradient(ellipse_110%_80%_at_50%_50%,rgb(22_17_13/0.84)_0%,rgb(22_17_13/0.74)_60%,rgb(22_17_13/0.5)_100%)] md:bg-[radial-gradient(ellipse_62%_78%_at_50%_50%,rgb(22_17_13/0.82)_0%,rgb(22_17_13/0.7)_55%,rgb(22_17_13/0.46)_100%)]" />
 
       <div className="relative mx-auto max-w-4xl px-5 text-center">
-        <h2 data-reveal className="font-display text-3xl leading-tight font-extrabold md:text-5xl">
+        <h2 data-reveal className="font-display text-3xl leading-tight font-bold md:text-5xl">
           <Brand onDark /> s&apos;occupe de
           <span className="sr-only"> toute votre présence en ligne.</span>
           <WordRotator
@@ -27,11 +27,9 @@ export function Band() {
           Voyez ce que cela donnerait pour votre cabinet&nbsp;: nous préparons une démo personnalisée, gratuitement.
         </p>
         <span data-reveal style={{ "--rv-delay": "220ms" } as CSSProperties} className="relative mt-8 inline-block">
-          <span aria-hidden className="glow-halo" />
-          <span aria-hidden className="glow-ring" />
           <a
             href="#demo"
-            className="focus-ring-dark relative z-10 inline-block rounded-full bg-white px-8 py-4 text-base font-bold text-primary-800 shadow-[0_18px_45px_-12px_rgb(7_21_34/0.5)] transition hover:-translate-y-1 hover:shadow-[0_24px_55px_-12px_rgb(7_21_34/0.55)]"
+            className="focus-ring-dark relative z-10 inline-block rounded-full bg-white px-8 py-4 text-base font-semibold text-primary-800 shadow-md shadow-black/25 transition-[background-color,scale] hover:bg-primary-50 active:scale-[0.98]"
           >
             Obtenir ma démo personnalisée
           </a>

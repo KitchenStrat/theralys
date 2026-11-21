@@ -105,7 +105,7 @@ function VideoCard({ video, index }: { video: MetaVideoBrief; index: number }) {
       </p>
 
       <div className="mt-5 rounded-ds-md bg-ds-section-tint p-4 inset-ring inset-ring-ds-section-line/70 sm:p-5">
-        <p className="text-ds-meta font-semibold tracking-wide text-ds-section-accent uppercase">Accroche — les 3 premières secondes</p>
+        <p className="text-ds-meta font-semibold text-ds-section-accent">Accroche — les 3 premières secondes</p>
         <p className="mt-1.5 font-ds-display text-xl/7 font-bold text-ds-section-ink text-balance">« {video.hook} »</p>
       </div>
 

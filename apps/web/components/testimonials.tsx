@@ -152,18 +152,16 @@ export function Testimonials() {
   return (
     <section id="temoignages" className="relative overflow-hidden bg-[#f6f1ea] py-24 md:py-28">
       {/* Fond sable, deux halos chauds : la section reprend les tons des photos qui l'entourent */}
-      <div aria-hidden className="blob top-10 left-[12%] h-72 w-72 bg-[#f3d9bf]/60" />
-      <div aria-hidden className="blob right-[10%] bottom-24 h-72 w-72 bg-[#e9dccb]/70" />
 
       <div className="relative">
         <div className="mx-auto max-w-3xl px-5 text-center">
-          <p data-reveal className="text-sm font-bold tracking-[0.18em] text-primary-700 uppercase">
+          <p data-reveal className="text-base font-semibold text-primary-700">
             Ils nous font confiance
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>Nos praticiens témoignent</Kinetic>
           </h2>

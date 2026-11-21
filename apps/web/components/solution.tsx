@@ -44,13 +44,13 @@ export function Solution() {
     <section id="solution" className="relative overflow-hidden py-24 md:py-28">
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
         <div>
-          <p data-reveal className="text-sm font-bold tracking-[0.18em] text-primary-700 uppercase">
+          <p data-reveal className="text-base font-semibold text-primary-700">
             Le constat
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-[2.75rem]"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-[2.75rem]"
           >
             <Kinetic>Vous êtes thérapeute. Pas webmaster, rédacteur, community manager et publicitaire.</Kinetic>
           </h2>
@@ -78,34 +78,25 @@ export function Solution() {
           </ul>
         </div>
 
-        {/* Tout part de Harmony : les sept outils, reliés par des faisceaux animés */}
-        <div data-reveal style={{ "--rv-delay": "200ms" } as CSSProperties} className="relative mx-auto aspect-square w-full max-w-[34rem]">
+        {/* Tout part de Harmony : les sept outils, chacun relié au centre */}
+        <div data-hub className="relative mx-auto aspect-square w-full max-w-[34rem]">
           <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="absolute inset-0 h-full w-full">
             <circle cx={CENTER} cy={CENTER} r={RADIUS} className="hub-orbit" />
             <circle cx={CENTER} cy={CENTER} r={132} className="hub-orbit hub-orbit--inner" />
-            {NODES.map(({ tool, path }, index) => (
-              <g key={tool.id}>
-                <path d={path} className="hub-line" />
-                <path
-                  d={path}
-                  pathLength={100}
-                  className="hub-beam"
-                  style={{ stroke: tool.colors.from, animationDelay: `${index * 0.5}s` }}
-                />
-              </g>
+            {/* Une liaison par outil, à sa couleur : elle se trace depuis Harmony à l'entrée dans l'écran (cf. `MotionDirector`) */}
+            {NODES.map(({ tool, path }) => (
+              <path key={tool.id} d={path} className="hub-line" style={{ stroke: tool.colors.from }} />
             ))}
           </svg>
 
           <div className="absolute top-1/2 left-1/2 grid h-[27%] w-[27%] -translate-x-1/2 -translate-y-1/2 place-items-center">
-            <span aria-hidden className="hub-pulse" />
-            <span aria-hidden className="hub-pulse" style={{ animationDelay: "1.3s" }} />
             <span className="hub-core grid h-full w-full place-items-center rounded-full text-[clamp(0.95rem,3.4vw,1.5rem)]">
               <Brand onDark />
             </span>
           </div>
 
           <ul aria-label="Les outils réunis dans Harmony">
-            {NODES.map(({ tool, x, y }, index) => (
+            {NODES.map(({ tool, x, y }) => (
               <li
                 key={tool.id}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
@@ -113,7 +104,7 @@ export function Solution() {
               >
                 <span
                   className="hub-node flex flex-col items-center gap-1.5 rounded-2xl border border-cream-200 bg-white px-2 py-2 text-center shadow-[var(--shadow-card)] sm:px-3 sm:py-2.5"
-                  style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to, animationDelay: `${index * 0.35}s` } as CSSProperties}
+                  style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to } as CSSProperties}
                 >
                   <span className="tool-chip grid h-9 w-9 place-items-center rounded-xl sm:h-11 sm:w-11">
                     <tool.icon size={20} strokeWidth={2.1} aria-hidden />

@@ -26,7 +26,7 @@ export function PhotoBackdrop({
   return (
     <div aria-hidden className={clsx("absolute inset-0 overflow-hidden", className)}>
       {/* La photo dépasse du cadre en haut et en bas : la parallaxe ne découvre jamais de bord */}
-      <div data-parallax="0.05" className="absolute inset-x-0 -inset-y-[12%]">
+      <div className="absolute inset-0">
         <Image src={src} alt="" fill sizes="100vw" placeholder="blur" className="object-cover" style={{ objectPosition: position }} />
       </div>
       <div className={clsx("absolute inset-0", veil)} />

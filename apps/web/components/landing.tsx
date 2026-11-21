@@ -19,7 +19,6 @@ import { Band } from "./band";
 import { BillingPeriodProvider } from "./billing-period";
 import { Control } from "./control";
 import { DemoForm } from "./demo-form";
-import { MagneticObserver, ParallaxObserver, SpotlightObserver } from "./effects";
 import { Faq } from "./faq";
 import { Footer } from "./footer";
 import { Header } from "./header";
@@ -28,7 +27,7 @@ import { Logos } from "./logos";
 import { Method } from "./method";
 import { OwnSite } from "./own-site";
 import { Pricing, type FormulaCard, type PlanPeriod } from "./pricing";
-import { RevealObserver } from "./reveal";
+import { MotionDirector } from "./motion/director";
 import { RoiCalculator } from "./roi-calculator";
 import { ScrollProgress } from "./scroll-progress";
 import { Solution } from "./solution";
@@ -99,10 +98,7 @@ export function Landing() {
 
   return (
     <>
-      <RevealObserver />
-      <SpotlightObserver />
-      <ParallaxObserver />
-      <MagneticObserver />
+      <MotionDirector />
       <ScrollProgress />
       <a href="#contenu" className="skip-link">
         Aller au contenu

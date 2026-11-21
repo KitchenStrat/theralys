@@ -18,6 +18,7 @@ export * from "./progress";
 export * from "./checklist";
 export * from "./next-step-card";
 export * from "./empty-state";
+export * from "./motion/sequence";
 export * from "./skeleton";
 export * from "./tabs";
 export * from "./step-progress";

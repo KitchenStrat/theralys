@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { describeSubscriptionPricing, domains, FORMULA_DEFINITIONS, formulaPrice, getDb, hasFormula, hasSite, PLAN_SITE, PLANS, subscriptions, type FormulaId, type PlanId } from "@theralys/db";
 import { activeExternalSite, formatDateFr } from "@theralys/shared";
-import { Badge, Card, CardHeader, EmptyState, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
+import { Badge, Card, CardHeader, EmptyState, PageHeader, Sequence, Stagger, type BadgeTone } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { DomainSection } from "./domain-section";
@@ -150,11 +150,13 @@ export default async function AccountPage() {
                 ) : null}
               </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1 min-[90rem]:grid-cols-2" data-testid="compte-formules">
+              {/* Chaque formule monte, son état se pose, puis ses lignes arrivent une à une (cf. `Sequence`) */}
+              <Sequence kind="formulas" className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1 min-[90rem]:grid-cols-2" data-testid="compte-formules">
                 {groups.map((group) => (
                   <section
                     key={group.formula}
                     aria-labelledby={`formule-${group.formula}`}
+                    data-seq="card"
                     data-formula={group.formula}
                     data-included={group.included}
                     className={`rounded-ds-md p-4 ring-1 ${group.included ? "bg-white ring-ds-ink-200" : "bg-ds-ink-50 ring-ds-ink-200"}`}
@@ -163,13 +165,15 @@ export default async function AccountPage() {
                       <h3 id={`formule-${group.formula}`} className="text-base font-semibold text-ds-ink-900">
                         Formule {FORMULA_DEFINITIONS[group.formula].label}
                       </h3>
-                      <Badge tone={group.included ? "success" : "neutral"} icon={group.included ? Check : Minus}>
-                        {group.included ? "Souscrite" : "Non souscrite"}
-                      </Badge>
+                      <span data-seq="state" className="inline-flex">
+                        <Badge tone={group.included ? "success" : "neutral"} icon={group.included ? Check : Minus}>
+                          {group.included ? "Souscrite" : "Non souscrite"}
+                        </Badge>
+                      </span>
                     </div>
                     <ul className="mt-3 space-y-2.5">
                       {group.features.map((feature) => (
-                        <li key={feature} className={`flex items-start gap-2.5 text-ds-body ${group.included ? "text-ds-ink-900" : "text-ds-ink-600"}`}>
+                        <li key={feature} data-seq="line" className={`flex items-start gap-2.5 text-ds-body ${group.included ? "text-ds-ink-900" : "text-ds-ink-600"}`}>
                           {group.included ? (
                             <span aria-hidden className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-ds-success-600 text-white">
                               <Check size={12} strokeWidth={3.5} />
@@ -184,13 +188,13 @@ export default async function AccountPage() {
                       ))}
                     </ul>
                     {group.included ? null : (
-                      <p className="mt-3 text-ds-body text-ds-ink-700">
+                      <p data-seq="note" className="mt-3 text-ds-body text-ds-ink-700">
                         À partir de {group.from}&nbsp;€ TTC par mois. Écrivez à Harmony pour l&apos;ajouter à votre abonnement.
                       </p>
                     )}
                   </section>
                 ))}
-              </div>
+              </Sequence>
               <p className="mt-3 text-ds-body text-ds-ink-700">Toujours inclus&nbsp;: avis Google synchronisés et statistiques.</p>
 
               <div className="mt-6 border-t border-ds-ink-200 pt-5">

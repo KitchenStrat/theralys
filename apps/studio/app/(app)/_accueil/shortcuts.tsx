@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { InteractiveCard, SECTIONS, SectionBadge, type SectionKey } from "@/components/ds";
+import { InteractiveCard, SECTIONS, SectionBadge, Sequence, type SectionKey } from "@/components/ds";
 import { frenchSpacing } from "@/lib/external-site/format";
 
 /**
@@ -15,11 +15,13 @@ export function Shortcuts({ sections }: { sections: readonly SectionKey[] }) {
         Vos espaces
       </h2>
       <p className="mt-0.5 text-ds-body text-ds-ink-600">Tout ce que comprend votre formule, et à quoi sert chaque espace.</p>
-      <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Sous la ligne de flottaison : les cartes montent en cascade quand la grille entre à l'écran */}
+      <Sequence kind="tiles" className="mt-4">
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {sections.map((key) => {
           const section = SECTIONS[key];
           return (
-            <li key={key}>
+            <li key={key} data-seq="tile">
               <InteractiveCard
                 href={section.href}
                 section={key}
@@ -45,6 +47,7 @@ export function Shortcuts({ sections }: { sections: readonly SectionKey[] }) {
           );
         })}
       </ul>
+      </Sequence>
     </section>
   );
 }

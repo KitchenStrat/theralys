@@ -237,7 +237,7 @@ export function PublicationsClient({
                     <span
                       key={weekday}
                       className={clsx(
-                        "text-xs font-semibold tracking-wider uppercase",
+                        "text-xs font-semibold",
                         index >= SATURDAY ? "text-ds-ink-500" : "text-ds-section-accent",
                         // Colonne repliée : le nom du jour se centre sur le numéro
                         narrowColumns[index] ? "text-center" : "px-2.5",

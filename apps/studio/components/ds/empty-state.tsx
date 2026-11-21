@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Sequence } from "./motion/sequence";
 import type { SectionKey } from "./sections";
 
 export type EmptyStateProps = {
@@ -39,7 +40,8 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
+    <Sequence
+      kind="empty"
       data-ds-section={section}
       className={clsx(
         "flex flex-col items-center px-5 py-9 text-center sm:px-8 sm:py-11",
@@ -48,7 +50,7 @@ export function EmptyState({
       )}
     >
       {/* Vignette : anneaux de teinte, pastille en dégradé, deux points d'accent */}
-      <span aria-hidden className="relative grid size-28 place-items-center">
+      <span aria-hidden data-seq="mark" className="relative grid size-28 place-items-center">
         <span className="absolute inset-0 rounded-full bg-ds-section-tint-2/70" />
         <span className="absolute inset-3.5 rounded-full bg-white ring-1 ring-ds-section-line" />
         <span className="absolute top-1.5 right-3 size-3 rounded-full bg-ds-sun-400" />
@@ -57,14 +59,16 @@ export function EmptyState({
           <Icon size={28} strokeWidth={2} />
         </span>
       </span>
-      <Heading className="mt-5 max-w-md font-ds-display text-xl/7 font-bold text-ds-ink-900 text-balance">{title}</Heading>
-      <div className="mt-2 max-w-md text-base text-ds-ink-600 text-pretty">{children}</div>
+      <Heading data-seq="text" className="mt-5 max-w-md font-ds-display text-xl/7 font-bold text-ds-ink-900 text-balance">{title}</Heading>
+      <div data-seq="text" className="mt-2 max-w-md text-base text-ds-ink-600 text-pretty">
+        {children}
+      </div>
       {action || secondary ? (
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-2">
+        <div data-seq="text" className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-2">
           {action}
           {secondary}
         </div>
       ) : null}
-    </div>
+    </Sequence>
   );
 }

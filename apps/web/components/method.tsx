@@ -40,20 +40,16 @@ export function Method() {
   let rank = 0;
   return (
     <section id="methode" className="relative overflow-hidden py-24 md:py-28">
-      <div aria-hidden data-parallax="0.06" className="absolute inset-0 -z-10">
-        <div className="blob top-[4rem] right-[-10rem] h-[26rem] w-[26rem] bg-primary-200/50" />
-        <div className="blob bottom-[-8rem] left-[-8rem] h-[24rem] w-[24rem] bg-[#c9f1e6]/60" style={{ animationDelay: "-9s" }} />
-      </div>
 
       <div className="mx-auto max-w-6xl px-5">
         <div className="max-w-2xl">
-          <p data-reveal className="text-sm font-bold tracking-[0.18em] text-primary-700 uppercase">
+          <p data-reveal className="text-base font-semibold text-primary-700">
             La méthode
           </p>
           <h2
             data-reveal="kinetic"
             style={{ "--rv-delay": "80ms" } as CSSProperties}
-            className="font-display mt-3 text-3xl leading-tight font-extrabold text-balance text-ink-900 md:text-5xl"
+            className="font-display mt-3 text-3xl leading-tight font-bold text-balance text-ink-900 md:text-5xl"
           >
             <Kinetic>De la démo à votre première semaine</Kinetic>
           </h2>
@@ -66,7 +62,7 @@ export function Method() {
           <Timeline className="space-y-10">
             {STEPS.map((step, index) => (
               <li key={step.title} data-reveal style={{ "--rv-delay": `${index * 90}ms` } as CSSProperties} className="relative flex gap-5">
-                <span className="timeline-dot font-display relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-extrabold">
+                <span className="timeline-dot font-display relative z-10 grid h-11 w-11 shrink-0 place-items-center rounded-full text-lg font-bold">
                   {index + 1}
                 </span>
                 <div className="pt-1">
@@ -78,7 +74,7 @@ export function Method() {
           </Timeline>
 
           {/* Une semaine type : les contenus arrivent l'un après l'autre */}
-          <div data-reveal style={{ "--rv-delay": "160ms" } as CSSProperties} className="week lg:sticky lg:top-28 lg:self-start">
+          <div data-reveal data-week className="week lg:sticky lg:top-28 lg:self-start">
             <div className="rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-pop)] md:p-7">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="font-display text-xl font-bold text-ink-900">

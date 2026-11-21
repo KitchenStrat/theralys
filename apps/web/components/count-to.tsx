@@ -1,39 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { EASE, MEDIA, gsap, useGSAP } from "./motion/gsap";
 
 /**
  * Un nombre qui file vers sa nouvelle valeur quand elle change (les prix au
- * changement de durée). Le texte affiché est toujours un vrai nombre : rien
- * n'est caché aux lecteurs d'écran ni au copier-coller. En mouvement réduit,
- * la valeur change d'un coup.
+ * changement de durée ou de formules). Le texte affiché est toujours un vrai
+ * nombre entier : rien n'est caché aux lecteurs d'écran ni au copier-coller.
+ * En mouvement réduit, la valeur change d'un coup.
  */
-export function CountTo({ value, duration = 420, format }: { value: number; duration?: number; format: (value: number) => string }) {
+export function CountTo({ value, duration = 0.45, format }: { value: number; duration?: number; format: (value: number) => string }) {
   const [shown, setShown] = useState(value);
-  const from = useRef(value);
+  const counter = useRef({ value });
 
-  useEffect(() => {
-    const start = from.current;
-    if (start === value) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      from.current = value;
-      setShown(value);
-      return;
-    }
-    let frame = 0;
-    const began = performance.now();
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - began) / duration);
-      // Départ vif, arrivée douce
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const current = Math.round(start + (value - start) * eased);
-      from.current = current;
-      setShown(current);
-      if (progress < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [value, duration]);
+  useGSAP(
+    () => {
+      const state = counter.current;
+      if (state.value === value) return;
+      if (window.matchMedia(MEDIA.calm).matches) {
+        state.value = value;
+        setShown(value);
+        return;
+      }
+      gsap.to(state, { value, duration, ease: EASE, snap: { value: 1 }, overwrite: true, onUpdate: () => setShown(state.value) });
+    },
+    { dependencies: [value, duration] },
+  );
 
   return <>{format(shown)}</>;
 }

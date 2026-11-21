@@ -46,9 +46,15 @@
   --font-display: "Figtree", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Pas de `scroll-behavior: smooth` : ScrollTrigger doit pouvoir poser la position de défilement d'un coup quand il
+   recalcule ses repères. Les liens internes défilent en douceur avec GSAP (cf. components/motion/director.tsx). */
 html {
-  scroll-behavior: smooth;
   scroll-padding-top: 5.5rem;
+}
+/* Une section qui reçoit le focus après un lien interne ne s'entoure pas d'un cadre : c'est la page qui a bougé */
+section[tabindex="-1"]:focus,
+div[tabindex="-1"]:focus {
+  outline: none;
 }
 
 body {
@@ -69,68 +75,23 @@ body {
   font-family: "Comfortaa", var(--font-display);
   font-weight: 700;
   letter-spacing: -0.02em;
-  background-image: linear-gradient(
-    100deg,
-    var(--color-primary-700),
-    var(--color-primary-600) 42%,
-    var(--color-primary-400) 50%,
-    var(--color-primary-600) 58%,
-    var(--color-primary-700)
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer-sweep 5s ease-in-out infinite;
+  color: var(--color-primary-600);
 }
 .brand-word--dark {
-  background-image: linear-gradient(100deg, #ffffff, #ddf0fd 38%, #7bccf7 50%, #ddf0fd 62%, #ffffff);
+  color: #ffffff;
 }
 
 /* ── Apparitions au défilement (cascade) ───────────────────────────────────── */
+/* État de départ et d'arrivée seulement : le trajet est joué par GSAP (cf. components/motion/director.tsx).
+   `data-in` double la classe : une carte dont React réécrit les classes ne redevient jamais invisible. */
 [data-reveal] {
   opacity: 0;
-  translate: 0 26px;
-  transition:
-    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-    translate 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--rv-delay, 0ms);
 }
-[data-reveal].is-in {
+[data-reveal].is-in,
+[data-reveal][data-in] {
   opacity: 1;
-  translate: 0 0;
 }
 
-/* ── Halos flottants du hero ───────────────────────────────────────────────── */
-@keyframes blob-drift {
-  0%   { transform: translate(0, 0) scale(1); }
-  33%  { transform: translate(3rem, -2rem) scale(1.12); }
-  66%  { transform: translate(-2rem, 2.5rem) scale(0.94); }
-  100% { transform: translate(0, 0) scale(1); }
-}
-.blob {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(70px);
-  pointer-events: none;
-  animation: blob-drift 19s ease-in-out infinite;
-}
-
-/* ── Cartes flottantes du hero ─────────────────────────────────────────────── */
-@keyframes float-y {
-  from { transform: translateY(-8px); }
-  to   { transform: translateY(10px); }
-}
-.float-slow { animation: float-y 6s ease-in-out infinite alternate; }
-.float-slower { animation: float-y 7.5s ease-in-out infinite alternate-reverse; }
-
-/* ── Point « en ligne » qui pulse ──────────────────────────────────────────── */
-@keyframes ping-soft {
-  0%   { box-shadow: 0 0 0 0 rgb(22 163 74 / 0.45); }
-  70%  { box-shadow: 0 0 0 9px rgb(22 163 74 / 0); }
-  100% { box-shadow: 0 0 0 0 rgb(22 163 74 / 0); }
-}
-.dot-live { animation: ping-soft 2.2s ease-out infinite; }
 /* ── Marquee (bandeau des plateformes) ───────────────────────────────────── */
 @keyframes marquee-x {
   from { transform: translateX(0); }
@@ -156,82 +117,7 @@ body {
 /* `backwards` : l'animation finie ne retient rien, la citation retrouve son rendu ordinaire */
 .quote-in { animation: quote-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 
-/* ── Bande CTA : dégradé animé ─────────────────────────────────────────────── */
-@keyframes gradient-pan {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.band-animated {
-  /* Plafonné à #037bbd : le texte blanc garde au moins 4,6:1 sur tout le cycle (AA) */
-  background: linear-gradient(115deg, #0b5280, #037bbd, #0b5280, #037bbd, #0b5280);
-  background-size: 240% 240%;
-  animation: gradient-pan 14s ease infinite;
-}
-
-/* ── Carte « Populaire » : liseré dégradé animé (double fond, fiable même
-   dans un stacking context créé par les animations de reveal) ─────────────── */
-.card-gradient-border {
-  border: 2px solid transparent;
-  background:
-    linear-gradient(#ffffff, #ffffff) padding-box,
-    linear-gradient(120deg, #38b3f0, #0e97dd, #7bccf7, #037bbd, #38b3f0) border-box;
-  background-size: auto, 300% 300%;
-  animation: gradient-pan 8s ease infinite;
-}
-
-/* ── Comète lumineuse qui parcourt le liseré de la carte « Populaire » :
-   l'anneau de 2,5px est isolé par un masque (contenu exclu), et un conic
-   surdimensionné tourne dessous — transform composité, fluide partout. ────── */
-.card-lumen {
-  box-shadow:
-    0 0 0 1px rgb(56 179 240 / 0.25),
-    0 0 38px -6px rgb(56 179 240 / 0.55),
-    var(--shadow-pop);
-}
-.card-comet {
-  position: absolute;
-  inset: -2.5px;
-  border-radius: calc(1.5rem + 2.5px);
-  padding: 3px;
-  overflow: hidden;
-  pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-.card-comet::before {
-  content: "";
-  position: absolute;
-  inset: -75%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 240deg,
-    rgb(14 151 221 / 0.5) 290deg,
-    rgb(56 179 240 / 0.9) 325deg,
-    rgb(183 226 251 / 1) 345deg,
-    #ffffff 356deg,
-    transparent 360deg
-  );
-  animation: glow-rotate 3.5s linear infinite;
-}
-
-/* ── Élévation douce des cartes ────────────────────────────────────────────── */
-.lift {
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
-}
-.lift:hover {
-  transform: translateY(-6px);
-  box-shadow: var(--shadow-pop);
-}
-
-/* ── Accordéon FAQ ─────────────────────────────────────────────────────────── */
+/* ── Questions : le panneau s'ouvre en hauteur ────────────────────────────── */
 .faq-panel {
   display: grid;
   grid-template-rows: 0fr;
@@ -240,37 +126,7 @@ body {
 .faq-panel.open { grid-template-rows: 1fr; }
 .faq-panel > div { overflow: hidden; }
 
-/* ── Shimmer : un reflet lumineux traverse les lettres ─────────────────────── */
-@keyframes shimmer-sweep {
-  0%   { background-position: 150% 0; }
-  100% { background-position: -150% 0; }
-}
-.shimmer-text {
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: shimmer-sweep 4.5s ease-in-out infinite;
-}
-/* Sur une photo ou une vidéo sombre : reflet clair */
-.shimmer-light {
-  background-image: linear-gradient(100deg, #ffffff, #d9f0ff 40%, #8fd4f8 50%, #d9f0ff 60%, #ffffff);
-}
-.shimmer-blue {
-  background-image: linear-gradient(
-    100deg,
-    var(--color-primary-600),
-    var(--color-primary-700) 40%,
-    var(--color-primary-400) 50%,
-    var(--color-primary-700) 60%,
-    var(--color-primary-600)
-  );
-}
-.shimmer-white {
-  background-image: linear-gradient(100deg, #fff, #fff 38%, var(--color-primary-200) 50%, #fff 62%, #fff);
-}
-
-/* ── Rotateur de mots (bande CTA) : les mots se relaient verticalement ─────── */
+/* ── Mot qui change dans un titre (cf. `WordRotator`) ──────────────────────── */
 .wr {
   display: inline-grid;
   overflow: hidden;
@@ -289,90 +145,6 @@ body {
 .wr > span[data-state="enter"] { opacity: 1; translate: 0 0; filter: blur(0); }
 .wr > span[data-state="above"] { opacity: 0; translate: 0 -0.6em; filter: blur(5px); }
 .wr > span[data-state="below"] { opacity: 0; translate: 0 0.6em; filter: blur(5px); }
-
-/* ── Grille lumineuse de la bande CTA : une vague de lumière la parcourt ───── */
-.grid-lines,
-.grid-wave-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.1) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.1) 1px, transparent 1px);
-  background-size: 52px 52px;
-}
-.grid-wave-layer {
-  background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.45) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.45) 1px, transparent 1px);
-  -webkit-mask-image: linear-gradient(105deg, transparent 34%, black 48%, black 52%, transparent 66%);
-  mask-image: linear-gradient(105deg, transparent 34%, black 48%, black 52%, transparent 66%);
-  -webkit-mask-size: 260% 100%;
-  mask-size: 260% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  animation: grid-wave 8s linear infinite;
-}
-@keyframes grid-wave {
-  from { -webkit-mask-position: 130% 0; mask-position: 130% 0; }
-  to   { -webkit-mask-position: -30% 0; mask-position: -30% 0; }
-}
-
-/* ── Liseré conique tournant autour du CTA principal. Le dégradé est statique
-   et c'est un enfant surdimensionné qui tourne (transform composité : fluide
-   partout, aucun repaint, pas de dépendance à @property). ─────────────────── */
-.glow-ring,
-.glow-halo {
-  position: absolute;
-  border-radius: 9999px;
-  pointer-events: none;
-}
-.glow-ring {
-  inset: -4px;
-  overflow: hidden;
-}
-.glow-ring::before {
-  content: "";
-  position: absolute;
-  inset: -150%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    rgb(255 255 255 / 0.95) 45deg,
-    transparent 100deg,
-    transparent 180deg,
-    rgb(183 226 251 / 0.9) 225deg,
-    transparent 280deg
-  );
-  animation: glow-rotate 4s linear infinite;
-}
-@keyframes glow-rotate {
-  to { transform: rotate(360deg); }
-}
-.glow-halo {
-  inset: -14px;
-  background: radial-gradient(closest-side, rgb(255 255 255 / 0.55), transparent 78%);
-  filter: blur(10px);
-  opacity: 0.7;
-}
-
-/* ── Spotlight : un halo suit le curseur sur les cartes ────────────────────── */
-.spotlight { position: relative; }
-.spotlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  background: radial-gradient(
-    340px circle at var(--mx, 50%) var(--my, 50%),
-    rgb(14 151 221 / 0.09),
-    transparent 65%
-  );
-  pointer-events: none;
-}
-.spotlight:hover::after { opacity: 1; }
 
 /* ── Barre de progression de lecture ───────────────────────────────────────── */
 .scroll-progress {
@@ -610,13 +382,8 @@ body {
 .scroll-tilt-body {
   transform-origin: 50% 100%;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .scroll-tilt-body {
-    transform: rotateX(var(--tilt, 7deg)) scale(calc(1 - var(--lift, 0.02)));
-    transition: transform 0.12s linear;
-    will-change: transform;
-  }
-}
+/* L'inclinaison suit le défilement : elle est pilotée par GSAP (cf. `ScrollTilt`) */
+.scroll-tilt-body { will-change: transform; }
 
 /* ── Schéma « tout au même endroit » : orbites, faisceaux, cœur qui pulse ──── */
 .hub-orbit {
@@ -624,57 +391,22 @@ body {
   stroke: var(--color-cream-300);
   stroke-width: 1.5;
   stroke-dasharray: 3 9;
-  transform-origin: center;
-  transform-box: fill-box;
-  animation: hub-spin 90s linear infinite;
 }
-.hub-orbit--inner { animation-duration: 60s; animation-direction: reverse; }
-@keyframes hub-spin { to { rotate: 360deg; } }
+/* Une liaison par outil, à sa couleur (posée en ligne) : elle se trace depuis Harmony (cf. `MotionDirector`) */
 .hub-line {
   fill: none;
   stroke: var(--color-cream-300);
-  stroke-width: 1.5;
-}
-/* Un trait de lumière part de Harmony et rejoint chaque outil */
-.hub-beam {
-  fill: none;
-  stroke-width: 3.5;
+  stroke-width: 2;
   stroke-linecap: round;
-  stroke-dasharray: 14 86;
-  stroke-dashoffset: 14;
-  opacity: 0;
-  animation: hub-beam 3.5s cubic-bezier(0.45, 0, 0.3, 1) infinite;
-}
-@keyframes hub-beam {
-  0%   { stroke-dashoffset: 14; opacity: 0; }
-  12%  { opacity: 1; }
-  70%  { opacity: 1; }
-  100% { stroke-dashoffset: -86; opacity: 0; }
+  opacity: 0.55;
 }
 .hub-core {
   position: relative;
   background: linear-gradient(135deg, #0e97dd, #2f6dd3 55%, #5b4fc9);
   box-shadow:
     0 0 0 6px rgb(255 255 255 / 0.9),
-    0 22px 50px -18px rgb(47 109 211 / 0.75);
+    var(--shadow-card);
 }
-.hub-pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  border: 2px solid rgb(14 151 221 / 0.45);
-  animation: hub-pulse 2.6s ease-out infinite;
-}
-@keyframes hub-pulse {
-  from { scale: 1; opacity: 0.9; }
-  to   { scale: 1.9; opacity: 0; }
-}
-@keyframes hub-bob {
-  from { translate: 0 -4px; }
-  to   { translate: 0 4px; }
-}
-.hub-node { animation: hub-bob 4.5s ease-in-out infinite alternate; }
-
 /* ── Visite guidée : onglets, barre de l'onglet actif, fondu des panneaux ──── */
 .tour-strip { scrollbar-width: none; }
 .tour-strip::-webkit-scrollbar { display: none; }
@@ -714,12 +446,12 @@ body {
   background: linear-gradient(160deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.025));
   padding: 1.5rem;
   backdrop-filter: blur(6px);
-  transition: border-color 0.35s ease, translate 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.18s ease;
 }
 @media (min-width: 48rem) {
   .bento { padding: 1.75rem; }
 }
-.bento:hover { border-color: rgb(123 204 247 / 0.45); translate: 0 -4px; }
+.bento:hover { border-color: rgb(123 204 247 / 0.45); }
 .bento-icon {
   display: grid;
   height: 2.75rem;
@@ -759,33 +491,20 @@ body {
 .timeline-track { background: var(--color-cream-300); }
 .timeline-fill {
   transform-origin: top;
-  transform: scaleY(var(--fill, 0));
   background: linear-gradient(180deg, var(--color-primary-400), var(--color-primary-700));
 }
 .timeline-dot {
   background: #fff;
   color: var(--color-primary-700);
   box-shadow: 0 0 0 3px var(--color-cream-300);
-  transition: background-color 0.5s ease, color 0.5s ease, box-shadow 0.5s ease;
-  transition-delay: calc(var(--rv-delay, 0ms) + 0.2s);
+  transition: background-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
 }
 .is-in > .timeline-dot {
   background: var(--color-primary-600);
   color: #fff;
   box-shadow:
     0 0 0 3px #fff,
-    0 0 0 6px var(--color-primary-200),
-    0 12px 22px -10px rgb(3 123 189 / 0.8);
-}
-
-/* ── Semaine type : les contenus arrivent l'un après l'autre ───────────────── */
-@keyframes week-in {
-  from { opacity: 0; translate: -10px 0; scale: 0.94; }
-  to   { opacity: 1; translate: 0 0; scale: 1; }
-}
-.week.is-in .week-item {
-  animation: week-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-  animation-delay: calc(0.45s + var(--week-delay, 0ms));
+    0 0 0 6px var(--color-primary-200);
 }
 
 /* ── Motion design ─────────────────────────────────────────────────────────── */
@@ -794,8 +513,6 @@ body {
    Le titre lui-même ne bouge pas : ce sont ses mots qui arrivent. */
 [data-reveal="kinetic"] {
   opacity: 1;
-  translate: 0 0;
-  transition: none;
 }
 .kw {
   display: inline-block;
@@ -807,17 +524,11 @@ body {
 }
 .kw-in {
   display: inline-block;
-  translate: 0 118%;
-  rotate: 4deg;
   transform-origin: 0 100%;
-  transition:
-    translate 0.9s cubic-bezier(0.19, 1, 0.22, 1),
-    rotate 0.9s cubic-bezier(0.19, 1, 0.22, 1);
-  transition-delay: calc(var(--rv-delay, 0ms) + var(--kw, 0) * 55ms);
 }
-.is-in .kw-in {
-  translate: 0 0;
-  rotate: 0deg;
+/* Tant que le titre n'est pas entré, ses mots sont cachés ; GSAP les fait monter (cf. `MotionDirector`) */
+[data-reveal="kinetic"]:not(.is-in, [data-in]) .kw-in {
+  visibility: hidden;
 }
 
 /* Icônes qui se dessinent, trait par trait, quand leur bloc apparaît */
@@ -830,36 +541,13 @@ body {
   stroke-dashoffset: 200;
 }
 .is-in :is(.draw, .bento-icon) svg :is(path, circle, rect, line, polyline, polygon, ellipse) {
-  animation: icon-draw 1.3s cubic-bezier(0.65, 0, 0.35, 1) forwards;
-  animation-delay: calc(var(--rv-delay, 0ms) + var(--draw-delay, 0ms) + 0.25s);
+  animation: icon-draw 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: calc(var(--draw-delay, 0ms) + 0.25s);
 }
 
-/* Boutons d'appel : un reflet les traverse, la flèche avance, le curseur les attire (cf. `MagneticObserver`) */
-@keyframes cta-sweep {
-  from { translate: -130% 0; }
-  to   { translate: 130% 0; }
-}
-.cta {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  transform: translate(var(--mag-x, 0px), var(--mag-y, 0px));
-}
-.cta::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 36%, rgb(255 255 255 / 0.36) 50%, transparent 64%);
-  translate: -130% 0;
-  transition: translate 0.75s cubic-bezier(0.22, 1, 0.36, 1);
-  pointer-events: none;
-}
-.cta:hover::after,
-.cta:focus-visible::after { translate: 130% 0; }
-/* Un premier reflet quand le bouton apparaît */
-.is-in .cta::after { animation: cta-sweep 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1.3s 1; }
-.cta svg { transition: translate 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
-.cta:hover svg { translate: 4px 0; }
+/* Boutons d'appel : la flèche avance au survol, rien d'autre ne bouge */
+.cta svg { transition: translate 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+.cta:hover svg { translate: 3px 0; }
 
 /* Phrase qui s'illumine mot à mot en traversant l'écran (cf. `ScrollWords`).
    Animation liée au défilement : là où le navigateur ne la connaît pas, la phrase reste simplement entière. */
@@ -900,28 +588,13 @@ body {
 
 /* ── Accessibilité : tout se calme si l'utilisateur le demande ─────────────── */
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  [data-reveal] {
-    opacity: 1;
-    translate: 0 0;
-    transition: none;
-  }
-  .blob,
-  .float-slow,
-  .float-slower,
-  .dot-live,
-  .band-animated,
-  .card-gradient-border,
+  /* Tout est affiché d'emblée : GSAP ne joue aucune séquence (cf. `MotionDirector`) */
+  [data-reveal] { opacity: 1; }
+  [data-reveal="kinetic"] .kw-in { visibility: visible; }
   .marquee-track,
-  .shimmer-text,
-  .brand-word,
   .header-in,
   .pop-in,
-  .hub-orbit,
-  .hub-node,
-  .hub-pulse,
-  .saturn-tilt,
-  .week.is-in .week-item {
+  .saturn-tilt {
     animation: none;
   }
   /* Le bandeau des plateformes ne défile plus : il tient sur plusieurs lignes, centré */
@@ -936,53 +609,24 @@ body {
   /* Les avis ne défilent plus : les quatre premiers de chaque rangée, en grille */
   .reviews-track > :nth-child(n + 5) { display: none; }
   .quote-in { animation: none; }
-  .hub-pulse { opacity: 0; }
-  /* Faisceaux : des traits pleins, aux couleurs des outils */
-  .hub-beam {
-    animation: none;
-    stroke-dasharray: none;
-    stroke-dashoffset: 0;
-    opacity: 0.55;
-    stroke-width: 2;
-  }
-  .grid-wave-layer,
-  .glow-ring,
-  .glow-halo {
-    animation: none;
-    opacity: 0;
-  }
-  .glow-ring::before { animation: none; }
-  .card-comet { display: none; }
   .wr > span { transition: none; }
   .check-draw {
     animation: none;
     stroke-dashoffset: 0;
   }
-  .spotlight::after { display: none; }
   .range::-webkit-slider-thumb { transition: none; }
   .range::-moz-range-thumb { transition: none; }
-  .lift,
   .bento,
   .visual-fan-card,
   .tour-panel,
   .timeline-dot { transition: none; }
-  .lift:hover,
-  .bento:hover { transform: none; translate: 0 0; }
+
   .tour-progress { animation: none; transform: scaleX(1); }
-  .timeline-fill { transform: scaleY(1); }
-  /* Motion design : tout est en place d'emblée */
-  .kw-in {
-    translate: 0 0;
-    rotate: 0deg;
-    transition: none;
-  }
   :is(.draw, .bento-icon) svg :is(path, circle, rect, line, polyline, polygon, ellipse) {
     animation: none;
     stroke-dasharray: none;
     stroke-dashoffset: 0;
   }
-  .cta { transform: none; }
-  .cta::after { display: none; }
   .cta svg { transition: none; }
   .cta:hover svg { translate: 0 0; }
   .sw > span {

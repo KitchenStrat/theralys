@@ -658,6 +658,17 @@
   font-variant-numeric: tabular-nums;
 }
 /* Entrée d'un bloc : montée de 12 px, fondu seul en mouvement réduit. `--ds-i` décale (40 ms par rang, 5 rangs au plus) */
+/* Séquences d'entrée jouées par GSAP (cf. components/ds/motion/sequence.tsx) : tant que la séquence n'a pas pris
+   la main, ses éléments sont masqués — par l'opacité seule, ils restent lus par les lecteurs d'écran. */
+.ds-seq:not([data-seq-done]) [data-seq] {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-seq [data-seq] {
+    opacity: 1;
+  }
+}
+
 @utility ds-rise {
   animation: ds-fade var(--transition-duration-ds-base) ease-out backwards;
   @media (prefers-reduced-motion: no-preference) {

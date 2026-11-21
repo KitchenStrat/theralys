@@ -114,7 +114,7 @@ rejouer ce parcours sur une version compilée.
 6. Aucune animation ne laisse de `transform` derrière elle (`animation-fill-mode: backwards`) — voir § 6.
 7. Un seul moment de réussite par action (`InlineSuccess`, coche d'une étape). Pas de confettis.
 
-Aucune bibliothèque d'animation : tout est en CSS, et le compteur est rendu côté serveur.
+Le mouvement courant est en CSS (jetons ci-dessus). Les **séquences** — plusieurs éléments qui arrivent dans un ordre qui a un sens — sont jouées par GSAP (`motion/gsap.ts`, `motion/sequence.tsx`), avec la courbe `--ease-ds-out` : les formules du compte (chaque carte, son état, puis ses lignes), un état vide ou une section non souscrite (la vignette, puis le texte et l'action), et « Vos espaces » sur l'accueil, qui attend d'entrer à l'écran (ScrollTrigger). Un bloc porte `<Sequence kind="…">`, ses enfants `data-seq="…"`. En mouvement réduit, rien n'est joué.
 
 ## 5. Accessibilité
 
