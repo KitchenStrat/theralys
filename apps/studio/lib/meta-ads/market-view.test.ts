@@ -243,7 +243,7 @@ describe("phrases de l'en-tête et de la barre d'outils", () => {
 
 describe("rattrapage d'office de la veille : phrases de l'en-tête", () => {
   it("attente : dit pourquoi, combien de temps, et qu'aucune analyse n'est décomptée", () => {
-    expect(MARKET_REFRESH_PENDING).toBe("La veille se met à jour avec les nouveaux critères de sélection — moins d'une minute, sans décompter d'analyse.");
+    expect(MARKET_REFRESH_PENDING).toBe("La veille se met à jour avec les nouveaux critères de sélection — une à deux minutes, sans décompter d'analyse.");
   });
 
   it("bilan : nombre d'annonces de la nouvelle veille, accordé", () => {
