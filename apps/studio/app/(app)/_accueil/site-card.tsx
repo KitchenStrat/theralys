@@ -5,9 +5,11 @@ import { Card, IconBadge, LinkButton } from "@/components/ds";
 type Props = {
   /**
    * Le site de référence des outils : `hosted`, le site Harmony (accès à son
-   * éditeur) ; `external`, le site du praticien (accès à « Mon site »).
+   * éditeur) ; `external`, le site du praticien (accès à « Mon site ») ;
+   * `none`, formule Scale seule et site pas encore connecté (invitation à le
+   * connecter).
    */
-  reference: "hosted" | "external";
+  reference: "hosted" | "external" | "none";
   /** Adresse du site de référence, telle qu'on la lit (« www.mon-cabinet.fr ») */
   address: string;
   /** Adresse complète, pour « Voir mon site » */
@@ -24,6 +26,27 @@ type Props = {
 export function SiteCard({ reference, address, viewHref, emphasis }: Props) {
   const main = emphasis ? "primary" : "secondary";
   const external = reference === "external";
+  if (reference === "none") {
+    return (
+      <Card variant="tinted" section="mon-site" data-testid="site-card" data-reference={reference} className="flex flex-col">
+        <div className="flex items-start gap-3.5">
+          <IconBadge icon={Globe} size="md" />
+          <div className="min-w-0">
+            <h2 className="font-ds-display text-lg/7 font-bold text-ds-section-ink sm:text-xl/7">Votre site</h2>
+            <p className="text-ds-body font-medium text-ds-ink-900">Pas encore connecté</p>
+          </div>
+        </div>
+        <p className="mt-3.5 text-base text-ds-ink-700">
+          Vos outils s&apos;appuient sur votre propre site. Connectez-le&nbsp;: vos contenus, vos liens et vos statistiques reposeront sur lui.
+        </p>
+        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-2.5 pt-4">
+          <LinkButton href="/mon-site" variant={main} data-testid="site-card-connect" icon={<Settings2 size={18} aria-hidden />}>
+            Connecter mon site
+          </LinkButton>
+        </div>
+      </Card>
+    );
+  }
   return (
     <Card variant="tinted" section="mon-site" data-testid="site-card" data-reference={reference} className="flex flex-col">
       <div className="flex items-start gap-3.5">

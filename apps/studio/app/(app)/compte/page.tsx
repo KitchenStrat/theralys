@@ -13,7 +13,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { describeSubscriptionPricing, domains, getDb, PLANS, subscriptions, type PlanId } from "@theralys/db";
+import { describeSubscriptionPricing, domains, FORMULA_DEFINITIONS, formulaPrice, getDb, hasFormula, hasSite, PLAN_SITE, PLANS, subscriptions, type FormulaId, type PlanId } from "@theralys/db";
 import { activeExternalSite, formatDateFr } from "@theralys/shared";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Stagger, type BadgeTone } from "@/components/ds";
 import { requireClient } from "@/lib/auth";
@@ -57,40 +57,41 @@ export default async function AccountPage() {
   // Site du client en référence : le bloc « domaine » ne concerne plus que le site Harmony, et le dit
   const ownSite = activeExternalSite(site.theme);
 
-  // Ce que comprend la formule : inclus (coche) ou non (tiret), toujours dit en toutes lettres
-  const features: { included: boolean; label: string }[] = [
-    { included: true, label: `${plan.homeSpecialties} spécialités présentées sur votre page d'accueil` },
-    plan.maxMotifPages > 0
-      ? { included: true, label: `${plan.maxMotifPages} pages de spécialités dédiées (référencement local)` }
-      : { included: false, label: "Pages de spécialités dédiées non incluses" },
-    plan.blogArticlesPerWeek > 0
-      ? {
-          included: true,
-          label: `${plan.blogArticlesPerYear} articles de blog par an (${plan.blogArticlesPerWeek}/semaine), écrits pour le référencement`,
-        }
-      : { included: false, label: "Blog automatisé non inclus" },
-    plan.searchConsoleAccess
-      ? { included: true, label: "Suivi des mots-clés Google" }
-      : { included: false, label: "Suivi des mots-clés non inclus" },
-    plan.academy ? { included: true, label: "Académie" } : { included: false, label: "Académie non incluse" },
-    plan.socialMedia
-      ? { included: true, label: "Contenus réseaux sociaux prêts à poster (visuels et légendes)" }
-      : { included: false, label: "Contenus réseaux sociaux non inclus" },
-    plan.googleProfile
-      ? { included: true, label: "Fiche Google : audit, visibilité locale, avis et posts" }
-      : { included: false, label: "Fiche Google (audit, visibilité locale, avis et posts) non incluse" },
-    plan.googleAds
-      ? { included: true, label: "Google Ads : analyse, mots-clés et plan d'action" }
-      : { included: false, label: "Google Ads (analyse, mots-clés et plan d'action) non inclus" },
-    plan.metaAds
-      ? { included: true, label: "Meta Ads : veille, annonces et plan vidéo" }
-      : { included: false, label: "Meta Ads (veille, annonces et plan vidéo) non inclus" },
-    { included: true, label: "Avis Google synchronisés · statistiques · hébergement" },
+  // Formule Scale seule : pas de site Harmony, donc pas de nom de domaine à lui rattacher
+  const hosted = site.type === "demo" || hasSite(site.plan);
+  const formulaLabel = plan.formulas.length > 1 ? `Formules ${plan.label}` : `Formule ${plan.label}`;
+  // Ce que comprend chaque formule, souscrite (coche) ou non (tiret) : toujours dit en toutes lettres
+  const site6 = PLANS[PLAN_SITE];
+  const groups: { formula: FormulaId; included: boolean; from: number; features: string[] }[] = [
+    {
+      formula: "site",
+      included: hasFormula(site.plan, "site"),
+      from: formulaPrice("site", "triennial"),
+      features: [
+        "Votre site, son éditeur, son hébergement et son nom de domaine",
+        `${site6.maxMotifPages} pages de spécialités dédiées (référencement local)`,
+        `${site6.blogArticlesPerYear} articles de blog par an (${site6.blogArticlesPerWeek}/semaine), écrits pour le référencement`,
+        "Suivi des mots-clés Google",
+      ],
+    },
+    {
+      formula: "scale",
+      included: hasFormula(site.plan, "scale"),
+      from: formulaPrice("scale", "triennial"),
+      features: [
+        "Fiche Google : audit, visibilité locale, avis et posts",
+        "Contenus réseaux sociaux prêts à poster (visuels et légendes)",
+        "Google Ads : analyse, mots-clés et plan d'action",
+        "Meta Ads : veille, annonces et plan vidéo",
+        "Académie",
+      ],
+    },
   ];
 
   return (
     <Stagger className="space-y-6">
-      <PageHeader section="compte">
+      {/* Sans site Harmony (formule Scale seule), pas de nom de domaine à gérer ici */}
+      <PageHeader section="compte" purpose={hosted ? undefined : "Vos formules et votre facturation."}>
         {/* À qui est ce compte : le nom de la session et celui du cabinet */}
         <p className="flex items-center gap-3">
           <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-ds-section-accent shadow-sm">
@@ -105,19 +106,19 @@ export default async function AccountPage() {
         </p>
       </PageHeader>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className={`grid items-start gap-6 ${hosted ? "xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]" : ""}`}>
         <Card as="section" aria-labelledby="compte-abonnement">
           <CardHeader
             icon={CreditCard}
             title={<span id="compte-abonnement">Mon abonnement</span>}
-            description="Votre formule et sa facturation."
+            description="Vos formules et leur facturation."
           />
           {subscription ? (
             <>
               <div className="mt-5 rounded-ds-md bg-ds-section-tint p-4 ring-1 ring-ds-section-line/70 sm:p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="section" icon={BadgeCheck}>
-                    Formule en cours
+                    {plan.formulas.length > 1 ? "Formules en cours" : "Formule en cours"}
                   </Badge>
                   {badge ? (
                     <Badge tone={badge.tone} icon={badge.icon}>
@@ -126,12 +127,12 @@ export default async function AccountPage() {
                   ) : null}
                 </div>
                 <p className="mt-2.5 font-ds-display text-ds-title font-bold text-ds-section-ink sm:text-[2rem]/10">
-                  Formule {plan.label}
+                  {formulaLabel}
                 </p>
                 <ul className="mt-2 space-y-1.5 text-base text-ds-ink-700">
                   <li className="flex items-start gap-2.5">
                     <Wallet size={18} aria-hidden className="mt-[3px] shrink-0 text-ds-section-accent" />
-                    {/* Le prix réellement payé : un abonnement d'avant le changement de tarif garde le sien */}
+                    {/* Le prix des formules souscrites, sur la durée choisie */}
                     {describeSubscriptionPricing(subscription)}
                   </li>
                   {subscription.currentPeriodEnd ? (
@@ -149,26 +150,48 @@ export default async function AccountPage() {
                 ) : null}
               </div>
 
-              <h3 className="mt-6 text-ds-body font-semibold text-ds-ink-800">Ce que comprend votre formule</h3>
-              <ul className="mt-3 grid gap-x-6 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-1 min-[90rem]:grid-cols-2">
-                {features.map((feature) => (
-                  <li
-                    key={feature.label}
-                    className={`flex items-start gap-2.5 text-ds-body ${feature.included ? "text-ds-ink-900" : "text-ds-ink-600"}`}
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-1 min-[90rem]:grid-cols-2" data-testid="compte-formules">
+                {groups.map((group) => (
+                  <section
+                    key={group.formula}
+                    aria-labelledby={`formule-${group.formula}`}
+                    data-formula={group.formula}
+                    data-included={group.included}
+                    className={`rounded-ds-md p-4 ring-1 ${group.included ? "bg-white ring-ds-ink-200" : "bg-ds-ink-50 ring-ds-ink-200"}`}
                   >
-                    {feature.included ? (
-                      <span aria-hidden className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-ds-success-600 text-white">
-                        <Check size={12} strokeWidth={3.5} />
-                      </span>
-                    ) : (
-                      <span aria-hidden className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-ds-ink-200 text-ds-ink-600">
-                        <Minus size={12} strokeWidth={3.5} />
-                      </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 id={`formule-${group.formula}`} className="text-base font-semibold text-ds-ink-900">
+                        Formule {FORMULA_DEFINITIONS[group.formula].label}
+                      </h3>
+                      <Badge tone={group.included ? "success" : "neutral"} icon={group.included ? Check : Minus}>
+                        {group.included ? "Souscrite" : "Non souscrite"}
+                      </Badge>
+                    </div>
+                    <ul className="mt-3 space-y-2.5">
+                      {group.features.map((feature) => (
+                        <li key={feature} className={`flex items-start gap-2.5 text-ds-body ${group.included ? "text-ds-ink-900" : "text-ds-ink-600"}`}>
+                          {group.included ? (
+                            <span aria-hidden className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-ds-success-600 text-white">
+                              <Check size={12} strokeWidth={3.5} />
+                            </span>
+                          ) : (
+                            <span aria-hidden className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-ds-ink-200 text-ds-ink-600">
+                              <Minus size={12} strokeWidth={3.5} />
+                            </span>
+                          )}
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    {group.included ? null : (
+                      <p className="mt-3 text-ds-body text-ds-ink-700">
+                        À partir de {group.from}&nbsp;€ TTC par mois. Écrivez à Harmony pour l&apos;ajouter à votre abonnement.
+                      </p>
                     )}
-                    {feature.label}
-                  </li>
+                  </section>
                 ))}
-              </ul>
+              </div>
+              <p className="mt-3 text-ds-body text-ds-ink-700">Toujours inclus&nbsp;: avis Google synchronisés et statistiques.</p>
 
               <div className="mt-6 border-t border-ds-ink-200 pt-5">
                 <PortalButton />
@@ -181,6 +204,7 @@ export default async function AccountPage() {
           )}
         </Card>
 
+        {hosted ? (
         <DomainSection
           currentDomain={site.domain}
           domainStatus={attachedDomain?.status ?? null}
@@ -190,6 +214,7 @@ export default async function AccountPage() {
           // Un seul bouton principal par écran : la facturation quand il y a un abonnement, l'achat du domaine sinon
           primaryPurchase={!subscription}
         />
+        ) : null}
       </div>
     </Stagger>
   );

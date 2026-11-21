@@ -15,7 +15,8 @@ export const REACH_OPTIONS = { email: "Avec e-mail", phone: "Avec téléphone", 
 export const ACTION_OPTIONS = { overdue: "Tâche en retard", today: "Tâche aujourd'hui", week: "Tâche dans les 7 jours", none: "Sans tâche prévue" } as const;
 export const CREATED_OPTIONS = { "7": "Ajoutés depuis 7 jours", "30": "Ajoutés depuis 30 jours", "90": "Ajoutés depuis 90 jours" } as const;
 export const TOUCHED_OPTIONS = { never: "Jamais contactés", "30": "Pas contactés depuis 30 jours", "90": "Pas contactés depuis 90 jours" } as const;
-export const PLAN_OPTIONS = { starter: "Formule Starter envisagée", scale: "Formule Scale envisagée", none: "Formule non renseignée" } as const;
+// Clés : les valeurs enregistrées de l'offre (`PLAN_SITE`, `PLAN_SCALE`, `PLAN_COMPLETE` de @theralys/db)
+export const PLAN_OPTIONS = { starter: "Formule Site envisagée", boost: "Formule Scale envisagée", scale: "Les deux formules envisagées", none: "Formule non renseignée" } as const;
 export const DNC_OPTIONS = { hide: "Masquer « ne pas contacter »", only: "Seulement « ne pas contacter »" } as const;
 export const SORT_OPTIONS = { recent: "Ajout récent", updated: "Dernière modification", name: "Nom", action: "Prochaine tâche", stage: "Étape" } as const;
 

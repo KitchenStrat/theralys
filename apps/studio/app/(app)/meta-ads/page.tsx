@@ -29,7 +29,7 @@ export default async function MetaAdsPage({ searchParams }: Props) {
         title="La section Meta Ads n'est pas incluse dans votre formule"
         action={<LinkButton href={SECTIONS.compte.href}>Voir ma formule</LinkButton>}
       >
-        Passez à la formule <strong>Scale</strong> pour savoir si Facebook et Instagram sont pertinents pour votre cabinet,
+        Ajoutez la formule <strong>Scale</strong> pour savoir si Facebook et Instagram sont pertinents pour votre cabinet,
         suivre les annonces des praticiens autour de vous, obtenir vos annonces prêtes à publier (visuels, textes, plan vidéo),
         un plan de campagne complet et{" "}
         {/* Site du client en référence : le studio n'y rattache aucune visite à une annonce, il ne promet pas ce suivi */}

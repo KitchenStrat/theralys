@@ -1,81 +1,111 @@
 import { describe, expect, it } from "vitest";
 import {
-  OFFERED_PLANS,
-  PLANS,
-  canAddMotifPage,
-  hasAcademy,
-  hasBlog,
-  hasGoogleAds,
-  hasGoogleProfile,
-  hasSearchConsole,
-  hasSocialMedia,
-  motifPagesAllowance,
-  normalizePlan,
   BILLING_PERIODS,
   BILLING_PERIOD_CADENCE,
   BILLING_PERIOD_LABELS,
   BILLING_PERIOD_MONTHS,
+  FORMULAS,
+  FORMULA_DEFINITIONS,
   MIN_COMMITMENT_MONTHS,
-  STARTER_TARIFF_CHANGED_AT,
-  TARIFF_CHANGED_AT,
+  OFFERED_PLANS,
+  PLANS,
+  PLAN_COMPLETE,
+  PLAN_SCALE,
+  PLAN_SITE,
+  canAddMotifPage,
   commitmentMonths,
   describeSubscriptionPricing,
+  formulaPrice,
+  hasAcademy,
+  hasBlog,
+  hasFormula,
+  hasGoogleAds,
+  hasGoogleProfile,
+  hasMetaAds,
+  hasSearchConsole,
+  hasSite,
+  hasSocialMedia,
+  isPlanId,
+  motifPagesAllowance,
   periodTotal,
+  planFormulas,
+  planFromFormulas,
   planPeriods,
   planPrice,
+  pricesFromMonthly,
   savedMonths,
   subscriptionPricing,
 } from "./plans";
 
-describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
-  it("seules Starter et Scale sont proposées à la vente", () => {
-    expect(OFFERED_PLANS).toEqual(["starter", "scale"]);
+const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
+
+describe("offre en deux formules indépendantes : Site et Scale", () => {
+  it("deux formules, trois choix : Site, Scale, ou les deux", () => {
+    expect(FORMULAS).toEqual(["site", "scale"]);
+    expect(OFFERED_PLANS).toEqual([PLAN_SITE, PLAN_SCALE, PLAN_COMPLETE]);
+    expect(OFFERED_PLANS.map((plan) => PLANS[plan].label)).toEqual(["Site", "Scale", "Site + Scale"]);
   });
 
-  it("Scale : tarif du 17 novembre 2026, sur quatre durées (€ TTC par mois)", () => {
-    expect(planPeriods("scale")).toEqual(["monthly", "quarterly", "annual", "triennial"]);
-    expect(planPrice("scale", "monthly")).toBe(129);
-    expect(planPrice("scale", "quarterly")).toBe(107);
-    expect(planPrice("scale", "annual")).toBe(86);
-    expect(planPrice("scale", "triennial")).toBe(64);
+  it("ce qui est enregistré : les noms hérités de l'enum, et leur sens d'aujourd'hui", () => {
+    expect([PLAN_SITE, PLAN_SCALE, PLAN_COMPLETE]).toEqual(["starter", "boost", "scale"]);
+    expect(planFormulas("starter")).toEqual(["site"]);
+    expect(planFormulas("boost")).toEqual(["scale"]);
+    // Les démos et les comptes d'avant le découpage sont enregistrés « scale » : ils ont tout
+    expect(planFormulas("scale")).toEqual(["site", "scale"]);
   });
 
-  it("Scale : la somme réglée à chaque échéance (321 € par trimestre, 1 032 € par an, 2 304 € pour 3 ans)", () => {
-    expect(periodTotal("scale", "monthly")).toBe(129);
-    expect(periodTotal("scale", "quarterly")).toBe(321);
-    expect(periodTotal("scale", "annual")).toBe(1032);
-    expect(periodTotal("scale", "triennial")).toBe(2304);
+  it("d'un choix de formules à la valeur enregistrée, et retour", () => {
+    expect(planFromFormulas(["site"])).toBe(PLAN_SITE);
+    expect(planFromFormulas(["scale"])).toBe(PLAN_SCALE);
+    expect(planFromFormulas(["scale", "site"])).toBe(PLAN_COMPLETE);
+    expect(planFromFormulas(new Set(["site", "scale"] as const))).toBe(PLAN_COMPLETE);
+    expect(planFromFormulas([])).toBeNull();
+    for (const plan of OFFERED_PLANS) expect(planFromFormulas(planFormulas(plan))).toBe(plan);
+    expect(hasFormula(PLAN_SITE, "site")).toBe(true);
+    expect(hasFormula(PLAN_SITE, "scale")).toBe(false);
+    expect(hasFormula(PLAN_COMPLETE, "scale")).toBe(true);
+    expect(isPlanId("boost")).toBe(true);
+    expect(isPlanId("site")).toBe(false);
+    expect(isPlanId(undefined)).toBe(false);
+  });
+});
+
+describe("prix (€ TTC par mois)", () => {
+  it("la règle : 10 mois réglés sur 12 en trimestriel, 8 sur 12 en annuel, 18 sur 36 sur 3 ans, à l'euro inférieur", () => {
+    expect(pricesFromMonthly(59)).toEqual({ monthly: 59, quarterly: 49, annual: 39, triennial: 29 });
+    expect(pricesFromMonthly(89)).toEqual({ monthly: 89, quarterly: 74, annual: 59, triennial: 44 });
   });
 
-  it("Scale : 2 mois d'économies en trimestriel, 4 en annuel, 18 sur 3 ans", () => {
-    expect(savedMonths("scale", "monthly")).toBe(0);
-    expect(savedMonths("scale", "quarterly")).toBe(2);
-    expect(savedMonths("scale", "annual")).toBe(4);
-    expect(savedMonths("scale", "triennial")).toBe(18);
+  it("Site : 59 € en mensuel, puis 49, 39 et 29 €", () => {
+    expect(FORMULA_DEFINITIONS.site.label).toBe("Site");
+    expect(BILLING_PERIODS.map((period) => formulaPrice("site", period))).toEqual([59, 49, 39, 29]);
+    expect(BILLING_PERIODS.map((period) => planPrice(PLAN_SITE, period))).toEqual([59, 49, 39, 29]);
+    // 147 € par trimestre, 468 € par an, 1 044 € pour 3 ans
+    expect(BILLING_PERIODS.map((period) => periodTotal(PLAN_SITE, period))).toEqual([59, 147, 468, 1044]);
   });
 
-  it("Starter : quatre durées à partir de 69 € en mensuel", () => {
-    expect(planPeriods("starter")).toEqual(["monthly", "quarterly", "annual", "triennial"]);
-    expect(planPrice("starter", "monthly")).toBe(69);
-    expect(planPrice("starter", "quarterly")).toBe(57);
-    expect(planPrice("starter", "annual")).toBe(46);
-    expect(planPrice("starter", "triennial")).toBe(34);
-    expect(periodTotal("starter", "monthly")).toBe(69);
-    expect(periodTotal("starter", "quarterly")).toBe(171);
-    expect(periodTotal("starter", "annual")).toBe(552);
-    expect(periodTotal("starter", "triennial")).toBe(1224);
-    expect(savedMonths("starter", "monthly")).toBe(0);
-    expect(savedMonths("starter", "quarterly")).toBe(2);
-    expect(savedMonths("starter", "annual")).toBe(4);
-    expect(savedMonths("starter", "triennial")).toBe(18);
+  it("Scale : 89 € en mensuel, puis 74, 59 et 44 €", () => {
+    expect(FORMULA_DEFINITIONS.scale.label).toBe("Scale");
+    expect(BILLING_PERIODS.map((period) => formulaPrice("scale", period))).toEqual([89, 74, 59, 44]);
+    expect(BILLING_PERIODS.map((period) => planPrice(PLAN_SCALE, period))).toEqual([89, 74, 59, 44]);
+    // 222 € par trimestre, 708 € par an, 1 584 € pour 3 ans
+    expect(BILLING_PERIODS.map((period) => periodTotal(PLAN_SCALE, period))).toEqual([89, 222, 708, 1584]);
   });
 
-  it("les deux formules suivent la même règle : 10 mois réglés sur 12, 8 sur 12, 18 sur 36, à l'euro inférieur", () => {
-    for (const plan of ["starter", "scale"] as const) {
-      const monthly = planPrice(plan, "monthly")!;
-      expect(planPrice(plan, "quarterly")).toBe(Math.floor((monthly * 10) / 12));
-      expect(planPrice(plan, "annual")).toBe(Math.floor((monthly * 8) / 12));
-      expect(planPrice(plan, "triennial")).toBe(Math.floor((monthly * 18) / 36));
+  it("les deux : la somme des deux prix, sur chaque durée", () => {
+    expect(BILLING_PERIODS.map((period) => planPrice(PLAN_COMPLETE, period))).toEqual([148, 123, 98, 73]);
+    for (const period of BILLING_PERIODS) expect(planPrice(PLAN_COMPLETE, period)).toBe(formulaPrice("site", period) + formulaPrice("scale", period));
+    // 369 € par trimestre, 1 176 € par an, 2 628 € pour 3 ans
+    expect(BILLING_PERIODS.map((period) => periodTotal(PLAN_COMPLETE, period))).toEqual([148, 369, 1176, 2628]);
+  });
+
+  it("chaque choix est proposé sur les quatre durées", () => {
+    for (const plan of OFFERED_PLANS) expect(planPeriods(plan)).toEqual(["monthly", "quarterly", "annual", "triennial"]);
+  });
+
+  it("économies : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans, pour chaque choix", () => {
+    for (const plan of OFFERED_PLANS) {
+      expect(BILLING_PERIODS.map((period) => savedMonths(plan, period))).toEqual([0, 2, 4, 18]);
     }
   });
 
@@ -88,127 +118,80 @@ describe("gating des formules (offre à 2 formules : Starter / Scale)", () => {
   });
 
   it("chaque durée a ses mois, son libellé et son rythme d'échéance", () => {
-    for (const period of BILLING_PERIODS) {
-      expect(BILLING_PERIOD_MONTHS[period]).toBeGreaterThan(0);
-      expect(BILLING_PERIOD_LABELS[period]).not.toBe("");
-      expect(BILLING_PERIOD_CADENCE[period]).toMatch(/^tous les /);
+    expect(BILLING_PERIODS).toEqual(["monthly", "quarterly", "annual", "triennial"]);
+    expect(BILLING_PERIODS.map((period) => BILLING_PERIOD_MONTHS[period])).toEqual([1, 3, 12, 36]);
+    expect(BILLING_PERIODS.map((period) => BILLING_PERIOD_LABELS[period])).toEqual(["Mensuel", "Trimestriel", "Annuel", "3 ans"]);
+    expect(BILLING_PERIOD_CADENCE.quarterly).toBe("tous les trimestres");
+  });
+
+  it("ce que paie un abonnement : le prix de ses formules, réglé d'avance pour sa durée", () => {
+    expect(subscriptionPricing({ plan: PLAN_COMPLETE, billingPeriod: "annual" })).toEqual({ monthlyPrice: 98, billedMonths: 12 });
+    expect(subscriptionPricing({ plan: PLAN_SITE, billingPeriod: "monthly" })).toEqual({ monthlyPrice: 59, billedMonths: 1 });
+    expect(subscriptionPricing({ plan: PLAN_SCALE, billingPeriod: "triennial" })).toEqual({ monthlyPrice: 44, billedMonths: 36 });
+  });
+
+  it("le décrit en une phrase", () => {
+    expect(plain(describeSubscriptionPricing({ plan: PLAN_SITE, billingPeriod: "monthly" }))).toBe("Mensuel — 59 € TTC par mois");
+    expect(plain(describeSubscriptionPricing({ plan: PLAN_SCALE, billingPeriod: "quarterly" }))).toBe("Trimestriel — 74 € TTC par mois, soit 222 € tous les trimestres");
+    expect(plain(describeSubscriptionPricing({ plan: PLAN_COMPLETE, billingPeriod: "annual" }))).toBe("Annuel — 98 € TTC par mois, soit 1 176 € tous les ans");
+  });
+});
+
+describe("ce qu'ouvre chaque formule", () => {
+  it("Site : le site hébergé, ses pages de spécialités, le blog et le suivi des mots-clés", () => {
+    expect(hasSite(PLAN_SITE)).toBe(true);
+    expect(PLANS[PLAN_SITE].hostingAndDomain).toBe(true);
+    expect(PLANS[PLAN_SITE].homeSpecialties).toBe(6);
+    expect(motifPagesAllowance(PLAN_SITE)).toBe(6);
+    expect(hasBlog(PLAN_SITE)).toBe(true);
+    expect(PLANS[PLAN_SITE].blogArticlesPerWeek).toBe(4);
+    expect(PLANS[PLAN_SITE].blogArticlesPerYear).toBe(208);
+    expect(hasSearchConsole(PLAN_SITE)).toBe(true);
+  });
+
+  it("Site seul : aucun des outils de la formule Scale", () => {
+    expect(hasSocialMedia(PLAN_SITE)).toBe(false);
+    expect(hasGoogleProfile(PLAN_SITE)).toBe(false);
+    expect(hasGoogleAds(PLAN_SITE)).toBe(false);
+    expect(hasMetaAds(PLAN_SITE)).toBe(false);
+    expect(hasAcademy(PLAN_SITE)).toBe(false);
+  });
+
+  it("Scale : fiche Google, réseaux sociaux, Google Ads, Meta Ads, Académie", () => {
+    expect(hasGoogleProfile(PLAN_SCALE)).toBe(true);
+    expect(hasSocialMedia(PLAN_SCALE)).toBe(true);
+    expect(hasGoogleAds(PLAN_SCALE)).toBe(true);
+    expect(hasMetaAds(PLAN_SCALE)).toBe(true);
+    expect(hasAcademy(PLAN_SCALE)).toBe(true);
+  });
+
+  it("Scale seul : pas de site hébergé, donc ni pages, ni blog, ni suivi des mots-clés", () => {
+    expect(hasSite(PLAN_SCALE)).toBe(false);
+    expect(PLANS[PLAN_SCALE].hostingAndDomain).toBe(false);
+    expect(PLANS[PLAN_SCALE].homeSpecialties).toBe(0);
+    expect(motifPagesAllowance(PLAN_SCALE)).toBe(0);
+    expect(canAddMotifPage(PLAN_SCALE, 0)).toBe(false);
+    expect(hasBlog(PLAN_SCALE)).toBe(false);
+    expect(hasSearchConsole(PLAN_SCALE)).toBe(false);
+  });
+
+  it("les deux : tout, comme les démos", () => {
+    for (const has of [hasSite, hasBlog, hasSearchConsole, hasSocialMedia, hasGoogleProfile, hasGoogleAds, hasMetaAds, hasAcademy]) {
+      expect(has(PLAN_COMPLETE)).toBe(true);
     }
-  });
-
-  it("un abonnement souscrit avant le changement garde son prix, réglé chaque mois", () => {
-    const before = new Date(TARIFF_CHANGED_AT.getTime() - 86_400_000);
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: before })).toEqual({ monthlyPrice: 55, billedMonths: 1, legacy: true });
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "monthly", createdAt: before })).toEqual({ monthlyPrice: 79, billedMonths: 1, legacy: true });
-    expect(subscriptionPricing({ plan: "boost", billingPeriod: "annual", createdAt: before })).toEqual({ monthlyPrice: 55, billedMonths: 1, legacy: true });
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: before })).toEqual({ monthlyPrice: 48, billedMonths: 1, legacy: true });
-  });
-
-  it("un abonnement souscrit après suit le nouveau tarif, réglé d'avance pour sa durée", () => {
-    const after = new Date(TARIFF_CHANGED_AT.getTime() + 86_400_000);
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "monthly", createdAt: after })).toEqual({ monthlyPrice: 129, billedMonths: 1, legacy: false });
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "quarterly", createdAt: after })).toEqual({ monthlyPrice: 107, billedMonths: 3, legacy: false });
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: after })).toEqual({ monthlyPrice: 86, billedMonths: 12, legacy: false });
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "triennial", createdAt: after })).toEqual({ monthlyPrice: 64, billedMonths: 36, legacy: false });
-  });
-
-  it("Starter : l'annuel souscrit entre les deux changements garde 48 € par mois, réglé à l'année ; ensuite 46 €", () => {
-    const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
-    const between = new Date((TARIFF_CHANGED_AT.getTime() + STARTER_TARIFF_CHANGED_AT.getTime()) / 2);
-    const after = new Date(STARTER_TARIFF_CHANGED_AT.getTime() + 86_400_000);
-    expect(TARIFF_CHANGED_AT.getTime()).toBeLessThan(STARTER_TARIFF_CHANGED_AT.getTime());
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: between })).toEqual({ monthlyPrice: 48, billedMonths: 12, legacy: false });
-    expect(plain(describeSubscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: between }))).toBe("Annuel — 48 € TTC par mois, soit 576 € tous les ans");
-    // Le mensuel n'a pas bougé, et Scale n'est pas concerné
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "monthly", createdAt: between })).toEqual({ monthlyPrice: 69, billedMonths: 1, legacy: false });
-    expect(subscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: between })).toEqual({ monthlyPrice: 86, billedMonths: 12, legacy: false });
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "annual", createdAt: after })).toEqual({ monthlyPrice: 46, billedMonths: 12, legacy: false });
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "quarterly", createdAt: after })).toEqual({ monthlyPrice: 57, billedMonths: 3, legacy: false });
-    expect(subscriptionPricing({ plan: "starter", billingPeriod: "triennial", createdAt: after })).toEqual({ monthlyPrice: 34, billedMonths: 36, legacy: false });
-    expect(plain(describeSubscriptionPricing({ plan: "starter", billingPeriod: "triennial", createdAt: after }))).toBe("3 ans — 34 € TTC par mois, soit 1 224 € tous les 3 ans");
-  });
-
-  it("décrit ce que paie un abonnement, ancien et nouveau tarif", () => {
-    const before = new Date(TARIFF_CHANGED_AT.getTime() - 86_400_000);
-    const after = new Date(TARIFF_CHANGED_AT.getTime() + 86_400_000);
-    const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
-    expect(plain(describeSubscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: before }))).toBe("Engagement annuel — 55 € par mois (ancien tarif)");
-    expect(plain(describeSubscriptionPricing({ plan: "starter", billingPeriod: "monthly", createdAt: before }))).toBe("Mensuel — 69 € par mois (ancien tarif)");
-    expect(plain(describeSubscriptionPricing({ plan: "scale", billingPeriod: "monthly", createdAt: after }))).toBe("Mensuel — 129 € TTC par mois");
-    expect(plain(describeSubscriptionPricing({ plan: "scale", billingPeriod: "quarterly", createdAt: after }))).toBe("Trimestriel — 107 € TTC par mois, soit 321 € tous les trimestres");
-    expect(plain(describeSubscriptionPricing({ plan: "scale", billingPeriod: "annual", createdAt: after }))).toBe("Annuel — 86 € TTC par mois, soit 1 032 € tous les ans");
-    expect(plain(describeSubscriptionPricing({ plan: "scale", billingPeriod: "triennial", createdAt: after }))).toBe("3 ans — 64 € TTC par mois, soit 2 304 € tous les 3 ans");
-  });
-
-  it("6 spécialités présentées sur l'accueil, quelle que soit la formule", () => {
-    expect(PLANS.starter.homeSpecialties).toBe(6);
-    expect(PLANS.scale.homeSpecialties).toBe(6);
-  });
-
-  it("pages secondaires : Starter 0, Scale 6", () => {
-    expect(motifPagesAllowance("starter")).toBe(0);
-    expect(motifPagesAllowance("scale")).toBe(6);
+    expect(motifPagesAllowance(PLAN_COMPLETE)).toBe(6);
   });
 
   it("canAddMotifPage respecte la limite", () => {
-    expect(canAddMotifPage("starter", 0)).toBe(false);
-    expect(canAddMotifPage("scale", 5)).toBe(true);
-    expect(canAddMotifPage("scale", 6)).toBe(false);
+    expect(canAddMotifPage(PLAN_SITE, 5)).toBe(true);
+    expect(canAddMotifPage(PLAN_SITE, 6)).toBe(false);
+    expect(canAddMotifPage(PLAN_COMPLETE, 0)).toBe(true);
   });
 
-  it("blog automatisé : Scale uniquement (208/an, 4/sem)", () => {
-    expect(hasBlog("starter")).toBe(false);
-    expect(hasBlog("scale")).toBe(true);
-    expect(PLANS.scale.blogArticlesPerWeek).toBe(4);
-    expect(PLANS.scale.blogArticlesPerYear).toBe(208);
-  });
-
-  it("suivi des mots-clés réservé à Scale", () => {
-    expect(hasSearchConsole("starter")).toBe(false);
-    expect(hasSearchConsole("scale")).toBe(true);
-  });
-
-  it("Académie réservée à Scale", () => {
-    expect(hasAcademy("starter")).toBe(false);
-    expect(hasAcademy("scale")).toBe(true);
-  });
-
-  it("héritage : l'ancienne formule Boost est servie comme Scale", () => {
-    expect(normalizePlan("boost")).toBe("scale");
-    expect(normalizePlan("starter")).toBe("starter");
-    expect(motifPagesAllowance("boost")).toBe(6);
-    expect(hasBlog("boost")).toBe(true);
-    expect(hasSearchConsole("boost")).toBe(true);
-    expect(hasGoogleAds("boost")).toBe(true);
-    expect(hasAcademy("boost")).toBe(true);
-    expect(PLANS.boost.label).toBe("Scale");
-  });
-
-  it("inclus dans toutes les formules : avis Google, stats, hébergement", () => {
-    for (const plan of Object.values(PLANS)) {
-      expect(plan.googleReviewsSync).toBe(true);
-      expect(plan.advancedAnalytics).toBe(true);
-      expect(plan.hostingAndDomain).toBe(true);
+  it("toujours inclus : avis Google et statistiques", () => {
+    for (const plan of OFFERED_PLANS) {
+      expect(PLANS[plan].googleReviewsSync).toBe(true);
+      expect(PLANS[plan].advancedAnalytics).toBe(true);
     }
-  });
-
-  it("réseaux sociaux : réservés à Scale (et à l'héritage Boost), pas à Starter", () => {
-    expect(hasSocialMedia("starter")).toBe(false);
-    expect(hasSocialMedia("scale")).toBe(true);
-    expect(hasSocialMedia("boost")).toBe(true);
-    expect(PLANS.starter.socialMedia).toBe(false);
-  });
-
-  it("fiche Google : réservée à Scale (et à l'héritage Boost), pas à Starter", () => {
-    expect(hasGoogleProfile("starter")).toBe(false);
-    expect(hasGoogleProfile("scale")).toBe(true);
-    expect(hasGoogleProfile("boost")).toBe(true);
-    expect(PLANS.starter.googleProfile).toBe(false);
-  });
-
-  it("Google Ads : réservé à Scale (et à l'héritage Boost), pas à Starter ; plus de drapeau « recherche de mots-clés »", () => {
-    expect(hasGoogleAds("starter")).toBe(false);
-    expect(hasGoogleAds("scale")).toBe(true);
-    expect(PLANS.starter.googleAds).toBe(false);
-    expect("keywordResearch" in PLANS.scale).toBe(false);
   });
 });

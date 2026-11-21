@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import type { BillingPeriod } from "@theralys/db/plans";
-import { useBillingPeriod } from "./billing-period";
+import { useBillingPeriod, type FormulaChoice } from "./billing-period";
 import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 
@@ -88,14 +88,18 @@ function Slider({
 
 export function RoiCalculator({
   prices,
-  planLabel,
+  labels,
 }: {
-  /** Le prix par mois de la formule sur chacune de ses durées de facturation */
-  prices: { id: BillingPeriod; price: number }[];
-  planLabel: string;
+  /** Le prix par mois de chaque choix (une formule seule, ou les deux) sur chacune des durées de facturation */
+  prices: Record<FormulaChoice, { id: BillingPeriod; price: number }[]>;
+  /** Le nom de chaque choix : « Site », « Scale », « Site + Scale » */
+  labels: Record<FormulaChoice, string>;
 }) {
-  const { period } = useBillingPeriod();
-  const current = prices.find((entry) => entry.id === period) ?? prices.find((entry) => entry.id === "annual") ?? prices[0];
+  // Le calcul suit le choix fait dans les tarifs : les formules cochées, sur la durée choisie
+  const { period, choice } = useBillingPeriod();
+  const planLabel = labels[choice];
+  const offered = prices[choice];
+  const current = offered.find((entry) => entry.id === period) ?? offered.find((entry) => entry.id === "annual") ?? offered[0];
   const monthlyCost = current?.price ?? 0;
   const periodPhrase = current ? PERIOD_PHRASES[current.id] : "";
   // La synthèse n'est annoncée que pendant qu'on manipule le simulateur, pas quand la durée change depuis les tarifs

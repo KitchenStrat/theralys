@@ -8,15 +8,16 @@ const MOTIFS = [
   { slug: "massage-ayurvedique", title: "Massage ayurvédique" },
 ];
 
-describe("cadence par formule", () => {
-  it("Scale : 4/semaine (lun, mar, jeu, ven)", () => {
-    expect(cadenceDays("boost")).toEqual([1, 2, 4, 5]);
+// Valeurs enregistrées : « starter » = formule Site, « boost » = formule Scale seule, « scale » = les deux
+describe("cadence : le blog fait partie de la formule Site", () => {
+  it("Site : 4/semaine (lundi, mardi, jeudi, vendredi)", () => {
+    expect(cadenceDays("starter")).toEqual([1, 2, 4, 5]);
   });
-  it("Scale : 4/semaine (lundi, mardi, jeudi, vendredi)", () => {
+  it("Site + Scale : la même cadence", () => {
     expect(cadenceDays("scale")).toEqual([1, 2, 4, 5]);
   });
-  it("Starter : pas de blog", () => {
-    expect(cadenceDays("starter")).toEqual([]);
+  it("Scale seule : pas de blog", () => {
+    expect(cadenceDays("boost")).toEqual([]);
   });
 });
 
@@ -29,7 +30,7 @@ describe("planEditorialTopics", () => {
     existingDates: new Set<string>(),
   };
 
-  it("Scale : 4 sujets par semaine sur l'horizon", () => {
+  it("Site + Scale : 4 sujets par semaine sur l'horizon", () => {
     const topics = planEditorialTopics({ ...base, plan: "scale" });
     expect(topics.length).toBe(16);
     for (const t of topics) {
@@ -38,13 +39,13 @@ describe("planEditorialTopics", () => {
     }
   });
 
-  it("Scale : 4 sujets par semaine", () => {
-    const topics = planEditorialTopics({ ...base, plan: "boost" });
+  it("Site seule : 4 sujets par semaine", () => {
+    const topics = planEditorialTopics({ ...base, plan: "starter" });
     expect(topics.length).toBe(16);
   });
 
-  it("Starter : aucun sujet", () => {
-    expect(planEditorialTopics({ ...base, plan: "starter" })).toEqual([]);
+  it("Scale seule : aucun sujet", () => {
+    expect(planEditorialTopics({ ...base, plan: "boost" })).toEqual([]);
   });
 
   it("ne replanifie pas les dates déjà occupées", () => {
@@ -94,7 +95,7 @@ describe("planification par thématiques (wizard)", () => {
       motifs: [{ slug: "sommeil", title: "Sommeil et récupération" }],
       themes: [],
       city: "Albi",
-      plan: "boost",
+      plan: "starter",
       from: new Date("2026-08-03T00:00:00Z"),
       horizonWeeks: 2,
       existingDates: new Set(),

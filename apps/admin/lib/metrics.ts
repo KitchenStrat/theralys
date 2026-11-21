@@ -1,4 +1,4 @@
-import { normalizePlan, PLANS, subscriptionPricing, type BillingPeriod, type OfferedPlanId, type PlanId } from "@theralys/db";
+import { PLANS, subscriptionPricing, type BillingPeriod, type PlanId } from "@theralys/db";
 
 /**
  * Métriques de la vue d'ensemble — fonctions pures, testées unitairement.
@@ -12,14 +12,15 @@ export type SubscriptionLike = {
   plan: PlanId;
   billingPeriod: BillingPeriod;
   status: "active" | "trialing" | "past_due" | "canceled";
-  /** Date de souscription : un abonnement d'avant le changement de tarif garde son prix */
+  /** Date de souscription */
   createdAt: Date;
 };
 
 export type MrrSummary = {
   /** €/mois — abonnements actifs et impayés (churn non acté), hors essais/annulés */
   total: number;
-  byPlan: Record<OfferedPlanId, number>;
+  /** Par choix de formules : Site seul, Scale seul, les deux */
+  byPlan: Record<PlanId, number>;
   payingCount: number;
   pastDueCount: number;
 };
@@ -27,8 +28,7 @@ export type MrrSummary = {
 /**
  * Revenu mensuel d'un abonnement (€ TTC par mois) : le prix par mois de la
  * durée souscrite, que la somme soit réglée chaque mois ou d'avance pour un
- * trimestre, un an ou trois ans. Un abonnement souscrit avant le changement de
- * tarif compte à son ancien prix. Zéro pour un essai ou un abonnement annulé.
+ * trimestre, un an ou trois ans. Zéro pour un essai ou un abonnement annulé.
  */
 export function subscriptionMrr(subscription: SubscriptionLike): number {
   if (subscription.status !== "active" && subscription.status !== "past_due") return 0;
@@ -36,8 +36,7 @@ export function subscriptionMrr(subscription: SubscriptionLike): number {
 }
 
 export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
-  // Offre à 2 formules : les anciens abonnements « Boost » comptent avec Scale
-  const byPlan: Record<OfferedPlanId, number> = { starter: 0, scale: 0 };
+  const byPlan: Record<PlanId, number> = { starter: 0, boost: 0, scale: 0 };
   let total = 0;
   let payingCount = 0;
   let pastDueCount = 0;
@@ -46,7 +45,7 @@ export function computeMrr(subscriptions: SubscriptionLike[]): MrrSummary {
     if (subscription.status !== "active" && subscription.status !== "past_due") continue;
     const monthly = subscriptionMrr(subscription);
     total += monthly;
-    byPlan[normalizePlan(subscription.plan)] += monthly;
+    byPlan[subscription.plan] += monthly;
     payingCount++;
     if (subscription.status === "past_due") pastDueCount++;
   }
@@ -62,7 +61,7 @@ export type BlogHealth = {
 
 /**
  * Un blog est « en retard » si le dernier article publié est plus vieux que
- * deux intervalles de cadence (Scale 4/sem → 3,5 jours).
+ * deux intervalles de cadence (4 articles par semaine → 3,5 jours).
  */
 export function blogHealth(input: {
   plan: PlanId;
@@ -71,7 +70,7 @@ export function blogHealth(input: {
   now?: Date;
 }): BlogHealth {
   const cadence = PLANS[input.plan].blogArticlesPerWeek;
-  if (cadence === 0) return { status: "none", label: "Pas de blog (Starter)" };
+  if (cadence === 0) return { status: "none", label: "Pas de blog (formule Scale seule)" };
 
   const now = input.now ?? new Date();
   if (!input.lastPublishedAt) {

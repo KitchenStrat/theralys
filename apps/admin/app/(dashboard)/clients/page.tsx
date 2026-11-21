@@ -6,6 +6,7 @@ import {
   describeSubscriptionPricing,
   domains,
   getDb,
+  hasSite,
   PLANS,
   prospects,
   sites,
@@ -15,7 +16,9 @@ import {
 } from "@theralys/db";
 import { relativeTimeFr } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
+import { alignLegacyAccounts } from "@/lib/formulas";
 import { blogHealth } from "@/lib/metrics";
+import { FormulaSwitch } from "./formula-switch";
 import { ClientRowActions } from "./row-actions";
 
 export const metadata = { title: "Clients" };
@@ -32,12 +35,14 @@ const SUBSCRIPTION_BADGES: Record<
 };
 
 /**
- * Sites clients : abonnement, accès rapide au site public et au studio
- * (impersonation), santé du blog (derniers articles générés).
+ * Comptes clients : formules (Site, Scale, ou les deux), abonnement, accès
+ * rapide au site public et au studio (impersonation), santé du blog.
  */
 export default async function ClientsPage() {
   await requireAdmin();
   const db = getDb();
+  // Les comptes d'avant le découpage de l'offre ont les deux formules
+  await alignLegacyAccounts(db);
 
   const [rows, articleStats, externalRequests] = await Promise.all([
     db
@@ -72,12 +77,12 @@ export default async function ClientsPage() {
     <div>
       <h1 className="text-2xl font-bold">Clients</h1>
       <p className="mt-1 text-sm text-ink-500">
-        {rows.length} site{rows.length > 1 ? "s" : ""} client{rows.length > 1 ? "s" : ""}
+        {rows.length} compte{rows.length > 1 ? "s" : ""} client{rows.length > 1 ? "s" : ""}
       </p>
 
       {rows.length === 0 ? (
         <Card className="mt-6 p-10 text-center text-ink-500">
-          <p className="font-medium text-ink-700">Aucun site client pour l&apos;instant</p>
+          <p className="font-medium text-ink-700">Aucun client pour l&apos;instant</p>
           <p className="mt-1 text-sm">
             Convertissez une démo « Prête à vérifier » depuis sa page d&apos;édition.
           </p>
@@ -88,7 +93,7 @@ export default async function ClientsPage() {
             <thead>
               <tr className="border-b border-cream-200 text-left text-xs uppercase tracking-wide text-ink-500">
                 <th className="px-4 py-3 font-medium">Client</th>
-                <th className="px-4 py-3 font-medium">Formule</th>
+                <th className="px-4 py-3 font-medium">Formules</th>
                 <th className="px-4 py-3 font-medium">Abonnement</th>
                 <th className="px-4 py-3 font-medium">Santé du blog</th>
                 <th className="px-4 py-3 font-medium">Domaine</th>
@@ -118,9 +123,9 @@ export default async function ClientsPage() {
                       <p className="text-xs text-ink-500">{user?.email ?? "—"}</p>
                     </td>
                     <td className="px-4 py-3">
-                      {PLANS[site.plan as PlanId].label}
-                      <span className="block text-xs text-ink-500">
-                        {subscription ? describeSubscriptionPricing(subscription) : "—"}
+                      <FormulaSwitch siteId={site.id} plan={site.plan as PlanId} clientName={prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name} />
+                      <span className="mt-1 block text-xs text-ink-500" title={PLANS[site.plan as PlanId].label}>
+                        {subscription ? describeSubscriptionPricing({ plan: site.plan as PlanId, billingPeriod: subscription.billingPeriod }) : "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -145,7 +150,9 @@ export default async function ClientsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {site.domain ? (
+                      {!hasSite(site.plan as PlanId) ? (
+                        <span className="text-xs text-ink-500">Pas de site hébergé</span>
+                      ) : site.domain ? (
                         <span className="font-medium">{site.domain}</span>
                       ) : externalRequestBySite.has(site.id) ? (
                         <span>
@@ -161,15 +168,18 @@ export default async function ClientsPage() {
                     <td className="px-4 py-3 text-ink-500">{relativeTimeFr(site.updatedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
-                        <Link
-                          href={url}
-                          target="_blank"
-                          className="rounded-full border border-ink-300 px-3 py-1 text-xs font-medium text-ink-700 hover:bg-cream-100"
-                        >
-                          Site ↗
-                        </Link>
+                        {hasSite(site.plan as PlanId) ? (
+                          <Link
+                            href={url}
+                            target="_blank"
+                            className="rounded-full border border-ink-300 px-3 py-1 text-xs font-medium text-ink-700 hover:bg-cream-100"
+                          >
+                            Site ↗
+                          </Link>
+                        ) : null}
                         <ClientRowActions
                           siteId={site.id}
+                          hasSite={hasSite(site.plan as PlanId)}
                           invitePending={Boolean(user?.passwordHash.startsWith("invite:"))}
                         />
                       </div>

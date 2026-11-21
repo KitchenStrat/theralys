@@ -5,22 +5,31 @@ import { useState } from "react";
 import {
   BILLING_PERIOD_CADENCE,
   BILLING_PERIOD_LABELS,
+  FORMULAS,
+  FORMULA_DEFINITIONS,
   MIN_COMMITMENT_MONTHS,
-  OFFERED_PLANS,
   PLANS,
   periodTotal,
+  planFromFormulas,
   planPeriods,
   planPrice,
   type BillingPeriod,
-  type OfferedPlanId,
+  type FormulaId,
+  type PlanId,
 } from "@theralys/db/plans";
 import { Badge, Button, FieldHint, Input, Label, Modal, Select } from "@theralys/ui";
 import { convertDemoToClient, type ConversionResult } from "../../convert-actions";
 
 const euros = (value: number) => `${value.toLocaleString("fr-FR")} €`;
 
-/** « Annuel — 86 € TTC/mois, soit 1 032 € tous les ans » */
-function periodLabel(plan: OfferedPlanId, period: BillingPeriod): string {
+/** Ce qu'ouvre chaque formule, en une ligne */
+const FORMULA_HINTS: Record<FormulaId, string> = {
+  site: "Le site hébergé, 6 pages de spécialités et le blog (208 articles par an).",
+  scale: "Fiche Google, réseaux sociaux, Google Ads, Meta Ads et Académie. Sans le site.",
+};
+
+/** « Annuel — 98 € TTC/mois, soit 1 176 € tous les ans » */
+function periodLabel(plan: PlanId, period: BillingPeriod): string {
   const price = planPrice(plan, period) ?? 0;
   const label = `${BILLING_PERIOD_LABELS[period]} — ${euros(price)} TTC/mois`;
   return period === "monthly" ? label : `${label}, soit ${euros(periodTotal(plan, period) ?? 0)} ${BILLING_PERIOD_CADENCE[period]}`;
@@ -41,14 +50,14 @@ export function ConvertModal({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [plan, setPlan] = useState<OfferedPlanId>("scale");
+  // Une démo présente l'offre complète : les deux formules sont cochées au départ
+  const [formulas, setFormulas] = useState<FormulaId[]>([...FORMULAS]);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
-  const periods = planPeriods(plan);
+  const plan = planFromFormulas(formulas);
+  const periods = plan ? planPeriods(plan) : [];
 
-  // Une durée que la formule choisie ne propose pas retombe sur l'annuel
-  function choosePlan(next: OfferedPlanId) {
-    setPlan(next);
-    if (!planPeriods(next).includes(period)) setPeriod("annual");
+  function toggleFormula(formula: FormulaId) {
+    setFormulas((current) => (current.includes(formula) ? current.filter((entry) => entry !== formula) : FORMULAS.filter((entry) => entry === formula || current.includes(entry))));
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -57,7 +66,7 @@ export function ConvertModal({
     const form = new FormData(event.currentTarget);
     const outcome = await convertDemoToClient({
       siteId,
-      plan: form.get("plan"),
+      formulas,
       period: form.get("period"),
       clientEmail: form.get("clientEmail"),
     });
@@ -136,32 +145,39 @@ export function ConvertModal({
       ) : (
         <form onSubmit={onSubmit} className="space-y-4">
           <p className="text-sm text-ink-500">
-            Crée le compte client, démarre l&apos;abonnement Stripe et publie le site.
-            L&apos;expiration du lien de démo est levée.
+            Crée le compte client et démarre l&apos;abonnement Stripe. Avec la formule Site, le site est publié et l&apos;expiration du lien de
+            démo est levée.
           </p>
-          <div>
-            <Label htmlFor="plan">Formule</Label>
-            <Select id="plan" name="plan" value={plan} onChange={(event) => choosePlan(event.target.value as OfferedPlanId)}>
-              {OFFERED_PLANS.map((id) => (
-                <option key={id} value={id}>
-                  {PLANS[id].label} — à partir de {euros(Math.min(...planPeriods(id).map((p) => planPrice(id, p) ?? Infinity)))} TTC/mois
-                </option>
-              ))}
-            </Select>
-            <FieldHint>
-              Starter : 6 spécialités sur l&apos;accueil, sans pages dédiées, blog ni outils SEO.
-              Scale : 6 pages de spécialités, blog (208 articles/an), suivi et recherche de
-              mots-clés, Académie, contenus réseaux sociaux prêts à poster.
-            </FieldHint>
-          </div>
+          <fieldset>
+            <legend className="mb-1.5 block text-sm font-medium text-ink-900">Formules</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {FORMULAS.map((formula) => {
+                const checked = formulas.includes(formula);
+                return (
+                  <label key={formula} className={`flex cursor-pointer gap-3 rounded-xl border p-3 transition-colors ${checked ? "border-primary-400 bg-primary-50" : "border-cream-300 bg-white hover:border-primary-300"}`}>
+                    <input type="checkbox" name="formulas" value={formula} checked={checked} onChange={() => toggleFormula(formula)} className="mt-0.5 h-4 w-4 shrink-0 accent-primary-600" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-ink-900">
+                        {FORMULA_DEFINITIONS[formula].label} <span className="font-normal text-ink-700">· {euros(FORMULA_DEFINITIONS[formula].prices.monthly)}/mois</span>
+                      </span>
+                      <span className="mt-0.5 block text-xs text-ink-500">{FORMULA_HINTS[formula]}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <FieldHint>{plan ? `Le client aura : ${PLANS[plan].label}. Les deux formules s'additionnent.` : "Cochez au moins une formule."}</FieldHint>
+          </fieldset>
           <div>
             <Label htmlFor="period">Facturation</Label>
             <Select id="period" name="period" value={period} onChange={(event) => setPeriod(event.target.value as BillingPeriod)}>
-              {periods.map((id) => (
-                <option key={id} value={id}>
-                  {periodLabel(plan, id)}
-                </option>
-              ))}
+              {plan
+                ? periods.map((id) => (
+                    <option key={id} value={id}>
+                      {periodLabel(plan, id)}
+                    </option>
+                  ))
+                : null}
             </Select>
             <FieldHint>
               La somme est réglée d&apos;avance à chaque échéance. Engagement de {MIN_COMMITMENT_MONTHS} mois minimum, frais de création et
@@ -187,7 +203,7 @@ export function ConvertModal({
             <Button type="button" variant="secondary" onClick={onClose}>
               Annuler
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || !plan}>
               {submitting ? "Activation…" : "Activer le site client"}
             </Button>
           </div>

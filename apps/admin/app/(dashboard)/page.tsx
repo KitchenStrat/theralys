@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { and, count, eq, lt } from "drizzle-orm";
 import { Badge, Card } from "@theralys/ui";
-import { editorialCalendarEntries, getDb, PLANS, prospects, sites, type OfferedPlanId } from "@theralys/db";
+import { editorialCalendarEntries, getDb, OFFERED_PLANS, PLANS, prospects, sites } from "@theralys/db";
 import { resolveAiMode } from "@theralys/ai";
 import { API_PROVIDERS, isApiProviderId, resolveApiUsagePeriod } from "@theralys/shared";
 import { requireAdmin } from "@/lib/auth";
+import { alignLegacyAccounts } from "@/lib/formulas";
 import { computeMrr, type SubscriptionLike } from "@/lib/metrics";
 import {
   clientSitesCost,
@@ -68,6 +69,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   await requireAdmin();
   const params = await searchParams;
   const db = getDb();
+  // Les comptes d'avant le découpage de l'offre ont les deux formules
+  await alignLegacyAccounts(db);
   const now = new Date();
   const todayIso = now.toISOString().slice(0, 10);
   const period = resolveApiUsagePeriod(typeof params.periode === "string" ? params.periode : null, now);
@@ -300,18 +303,18 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <Card className="p-5">
             <h2 className="font-semibold">MRR par formule</h2>
             <ul className="mt-4 space-y-2">
-              {(Object.keys(mrr.byPlan) as OfferedPlanId[]).map((plan) => {
+              {OFFERED_PLANS.map((plan) => {
                 const value = mrr.byPlan[plan];
                 return (
                   <li key={plan} className="flex items-center gap-3 text-sm">
-                    <span className="w-16 font-medium">{PLANS[plan].label}</span>
+                    <span className="w-24 font-medium">{PLANS[plan].label}</span>
                     <Meter ratio={mrr.total > 0 ? value / mrr.total : 0} className="flex-1" />
                     <span className="w-16 text-right tabular-nums text-ink-700">{value} €</span>
                   </li>
                 );
               })}
             </ul>
-            <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">Actifs + impayés, au prix par mois de la durée souscrite (mensuel, trimestriel, annuel ou 3 ans). Un abonnement d&apos;avant le 17 novembre 2026 compte à son ancien tarif.</p>
+            <p className="mt-4 border-t border-cream-200 pt-3 text-xs text-ink-500">Actifs + impayés, au prix par mois de la durée souscrite (mensuel, trimestriel, annuel ou 3 ans). Un client qui a les deux formules compte sur la ligne « Site + Scale ».</p>
           </Card>
         </div>
         {usage ? <BalancesCard report={usage} className="min-w-0" /> : null}

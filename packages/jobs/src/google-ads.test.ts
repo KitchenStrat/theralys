@@ -124,6 +124,8 @@ describe("accès et fournisseur", () => {
   it("hasGoogleAdsAccess : démos toujours, clients selon la formule", () => {
     expect(hasGoogleAdsAccess({ type: "demo", plan: "starter" })).toBe(true);
     expect(hasGoogleAdsAccess({ type: "client", plan: "scale" })).toBe(true);
+    expect(hasGoogleAdsAccess({ type: "client", plan: "boost" })).toBe(true);
+    // « starter » = formule Site seule : sans les outils de la formule Scale
     expect(hasGoogleAdsAccess({ type: "client", plan: "starter" })).toBe(false);
   });
 

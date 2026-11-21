@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSocialMedia } from "@theralys/db";
+import { hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSite, hasSocialMedia } from "@theralys/db";
+import { activeExternalSite } from "@theralys/shared";
 import { AppShell, allowedSections } from "@/components/ds";
 import { destroySession, requireClient } from "@/lib/auth";
 import { getSite, publicSiteUrl } from "@/lib/data";
@@ -31,8 +32,9 @@ export default async function StudioLayout({ children }: { children: ReactNode }
         googleAds: demo || hasGoogleAds(site.plan),
         metaAds: demo || hasMetaAds(site.plan),
       })}
-      // Le site de référence : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony
-      siteHref={publicSiteUrl(site)}
+      // Le site de référence : celui du praticien s'il l'a connecté et activé (« Mon site »), sinon le site Harmony.
+      // Formule Scale seule, site pas encore connecté : aucun site à voir.
+      siteHref={demo || hasSite(site.plan) || activeExternalSite(site.theme) !== null ? publicSiteUrl(site) : null}
       logoutAction={logoutAction}
       userName={session.name}
       supportName={session.impersonated ? session.name : undefined}

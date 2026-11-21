@@ -6,7 +6,8 @@ statistiques).
 
 ## Deux règles
 
-1. **Les formules viennent du produit.** Le contenu des formules, leur prix par
+1. **Les formules viennent du produit.** Deux formules, Site et Scale, à prendre
+   seules ou ensemble. Le contenu des formules, leur prix par
    mois sur chaque durée de facturation (mensuel, trimestriel, annuel, 3 ans),
    la somme réglée à chaque échéance, les mois d'économies et l'engagement de
    12 mois minimum sont lus dans `@theralys/db` (`PLANS`, `planPrice`,
@@ -38,9 +39,12 @@ la personne) : remplacer `FEATURED` et `REVIEWS`, puis passer `PROVISIONAL` à
   `control` (« Vous gardez la main »), `method` (frise et semaine type),
   `own-site` (« Déjà un site ? »), `testimonials`, `band`, `pricing`, `roi-calculator`
   (simulateur de rentabilité), `faq`, `demo-form`.
-- `components/billing-period.tsx` — la durée de facturation choisie dans les
-  tarifs, partagée avec le simulateur : celui-ci calcule sur le prix de la
-  formule complète pour cette durée (mensuel, trimestriel, annuel, 3 ans).
+- `components/billing-period.tsx` — la durée de facturation et les formules
+  cochées dans les tarifs (l'une, l'autre ou les deux, jamais aucune),
+  partagées avec le simulateur : celui-ci calcule sur le prix de ce choix.
+- `components/pricing.tsx` — une carte par formule, à cocher, puis le bandeau
+  « Votre sélection » qui additionne : prix par mois, somme réglée à
+  l'échéance, mois d'économies.
 - `app/robot/page.tsx` — page publique du lecteur de sites (HarmonyBot).
 - `components/tools.ts` — **les outils**, source unique du haut de page, du
   schéma et de la visite guidée : nom, promesse, trois faits, ce que l'outil

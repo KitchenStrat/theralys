@@ -37,6 +37,14 @@ export const SETUP_COPY: Record<
     href: "/editor",
     action: "Ouvrir l'éditeur",
   },
+  connect_site: {
+    section: "mon-site",
+    todo: "Connectez votre site",
+    done: "Votre site est connecté",
+    description: `Indiquez son adresse${NBSP}: vos contenus reprennent ce que vous proposez vraiment, vos liens y mènent et vos statistiques comptent ses visites.`,
+    href: "/mon-site",
+    action: "Connecter mon site",
+  },
   install_measure: {
     section: "mon-site",
     todo: "Installez le code de mesure sur votre site",

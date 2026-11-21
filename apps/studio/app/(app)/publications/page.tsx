@@ -34,9 +34,9 @@ export default async function PublicationsPage({ searchParams }: Props) {
               </LinkButton>
             }
           >
-            Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> (208 articles/an, 6 pages de
-            spécialités dédiées, suivi et recherche de mots-clés, Académie, contenus réseaux sociaux) pour activer votre blog
-            et son référencement sur Google.
+            Le blog fait partie de la formule <strong className="font-semibold text-ds-ink-900">Site</strong>&nbsp;: votre site, ses
+            6 pages de spécialités et 208 articles par an pour votre référencement sur Google. Ajoutez-la à votre abonnement
+            pour l&apos;activer.
           </EmptyState>
         </Card>
       </Stagger>

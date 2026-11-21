@@ -2,7 +2,7 @@
  * Moteur éditorial — planification pure (sans DB, testée unitairement).
  * Le calendrier de sujets est généré automatiquement à partir des
  * spécialités du praticien + la ville (maillage SEO local), à la cadence de
- * la formule : Starter : pas de blog · Scale : 4/semaine (lun, mar, jeu, ven).
+ * la formule Site : 4/semaine (lun, mar, jeu, ven). Sans la formule Site, pas de blog.
  *
  * Les spécialités sont les pages de spécialité du site hébergé ou, quand le
  * site du client est la référence des outils, celles de son propre site
@@ -10,7 +10,7 @@
  * fait pas la différence. Les articles restent publiés sur le blog hébergé.
  */
 
-import type { BlogTheme, PlanId } from "@theralys/db";
+import { hasBlog, type BlogTheme, type PlanId } from "@theralys/db";
 
 /** Spécialité dont le blog tire ses sujets : identifiant stable et titre. */
 export type MotifRef = { slug: string; title: string };
@@ -22,15 +22,13 @@ export type PlannedTopic = {
   motifSlug: string | null;
 };
 
-/** Jours de publication par formule (1 = lundi … 7 = dimanche). */
+/**
+ * Jours de publication (1 = lundi … 7 = dimanche) : le blog fait partie de la
+ * formule Site. Avec elle, 4 articles par semaine (lun, mar, jeu, ven) ; sans
+ * elle (formule Scale seule), aucun.
+ */
 export function cadenceDays(plan: PlanId): number[] {
-  switch (plan) {
-    case "scale":
-    case "boost": // héritage : servie comme Scale
-      return [1, 2, 4, 5];
-    default:
-      return [];
-  }
+  return hasBlog(plan) ? [1, 2, 4, 5] : [];
 }
 
 /** Accroches « problème du quotidien » (croisées avec les spécialités). */

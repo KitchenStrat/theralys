@@ -439,6 +439,8 @@ export async function regenerateMotifPage(input: unknown): Promise<{ error?: str
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
   if (!site?.prospectId) return { error: "Site sans fiche praticien" };
+  // Les pages de spécialités font partie de la formule Site
+  if (site.type !== "demo" && motifPagesAllowance(site.plan) === 0) return { error: "Les pages de spécialités font partie de la formule Site." };
   const prospect = await db.query.prospects.findFirst({
     where: eq(prospects.id, site.prospectId),
   });

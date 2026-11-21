@@ -268,8 +268,11 @@ describe("mise au propre", () => {
     expect(dedupeKeys({ firstName: "", lastName: "Dupont", company: "", city: "Albi" })).toEqual([]);
     expect(displayName({ firstName: "", lastName: "", company: "Cabinet Dupont" })).toBe("Cabinet Dupont");
     expect(displayName({ firstName: "", lastName: "", company: "", email: "c@exemple.fr" })).toBe("c@exemple.fr");
-    expect(contactMonthlyValue({ plan: "scale", billingPeriod: null })).toBe(86);
-    expect(contactMonthlyValue({ plan: "starter", billingPeriod: "monthly" })).toBe(69);
+    // Valeurs enregistrées de l'offre : « scale » = les deux formules, « starter » = Site, « boost » = Scale seule
+    expect(contactMonthlyValue({ plan: "scale", billingPeriod: null })).toBe(98);
+    expect(contactMonthlyValue({ plan: "starter", billingPeriod: "monthly" })).toBe(59);
+    expect(contactMonthlyValue({ plan: "boost", billingPeriod: "quarterly" })).toBe(74);
+    expect(contactMonthlyValue({ plan: "inconnue", billingPeriod: "annual" })).toBe(0);
     expect(contactMonthlyValue({ plan: null, billingPeriod: "annual" })).toBe(0);
   });
 });

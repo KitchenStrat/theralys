@@ -1,27 +1,91 @@
 /**
- * Formules Harmony et gating des fonctionnalités.
- * Offre actuelle : 2 formules (Starter, Scale). Toutes les démos présentent
- * l'offre complète (équivalent Scale) — les restrictions ne s'appliquent
- * qu'aux clients ayant choisi Starter.
- * « boost » est une ancienne formule conservée pour compatibilité (valeur
- * encore présente dans l'enum Postgres) : elle est servie comme Scale.
+ * Offre Harmony et gating des fonctionnalités.
+ *
+ * Depuis le 21 novembre 2026, le produit se compose de **deux formules
+ * indépendantes** ; un client prend l'une, l'autre, ou les deux :
+ *
+ * - **Site** : le site internet hébergé, ses pages de spécialités et le blog
+ *   SEO automatisé ;
+ * - **Scale** : tout le reste (fiche Google, réseaux sociaux, Google Ads,
+ *   Meta Ads, Académie), sans le site. Les outils s'appuient alors sur le site
+ *   que le praticien possède déjà (section « Mon site » du studio).
+ *
+ * Les deux ensemble donnent l'offre complète, celle que présentent toutes les
+ * démos. Le prix des deux est la somme des deux prix.
+ *
+ * ── Ce qui est enregistré en base ──
+ * Un compte porte une seule valeur, dans l'enum Postgres `plan`, dont les noms
+ * datent de l'offre précédente. Leur sens aujourd'hui (voir `PLAN_FORMULAS`) :
+ *
+ *   `starter` → formule Site seule
+ *   `boost`   → formule Scale seule
+ *   `scale`   → les deux formules (offre complète)
+ *
+ * Ce choix garde justes toutes les lignes existantes sans migration : les
+ * démos et les comptes d'avant le découpage étaient en `scale`, l'offre
+ * complète d'alors. Hors de ce fichier, le code parle en formules
+ * (`planFormulas`, `hasSite`, `hasBlog`…) ou passe par les constantes
+ * `PLAN_SITE`, `PLAN_SCALE`, `PLAN_COMPLETE`, jamais par ces noms.
  */
 
+/**
+ * Découpage de l'offre en deux formules. Les comptes clients dont
+ * l'abonnement a été ouvert avant avaient l'offre d'alors : ils ont tout,
+ * Site et Scale (l'admin les aligne une fois, voir
+ * `apps/admin/lib/formulas.ts`).
+ */
+export const FORMULAS_SPLIT_AT = new Date("2026-11-21T00:00:00Z");
+
+/** Valeur de l'enum Postgres `plan` (noms hérités, voir l'en-tête). */
 export type PlanId = "starter" | "boost" | "scale";
 
-/** Formules réellement proposées à la vente. */
-export const OFFERED_PLANS = ["starter", "scale"] as const;
-export type OfferedPlanId = (typeof OFFERED_PLANS)[number];
+/** Les deux formules vendues. */
+export const FORMULAS = ["site", "scale"] as const;
+export type FormulaId = (typeof FORMULAS)[number];
 
-/** Ramène les valeurs héritées (boost) sur l'offre actuelle. */
-export function normalizePlan(plan: PlanId): OfferedPlanId {
-  return plan === "starter" ? "starter" : "scale";
+/** Formule Site seule. */
+export const PLAN_SITE: PlanId = "starter";
+/** Formule Scale seule (sans le site). */
+export const PLAN_SCALE: PlanId = "boost";
+/** Les deux formules : l'offre complète, celle des démos. */
+export const PLAN_COMPLETE: PlanId = "scale";
+
+const PLAN_FORMULAS: Record<PlanId, readonly FormulaId[]> = {
+  starter: ["site"],
+  boost: ["scale"],
+  scale: ["site", "scale"],
+};
+
+/** Les trois choix possibles, dans l'ordre où on les présente : Site, Scale, les deux. */
+export const OFFERED_PLANS = [PLAN_SITE, PLAN_SCALE, PLAN_COMPLETE] as const;
+export type OfferedPlanId = PlanId;
+
+/** Formules souscrites par un compte. */
+export function planFormulas(plan: PlanId): readonly FormulaId[] {
+  return PLAN_FORMULAS[plan];
+}
+
+export function hasFormula(plan: PlanId, formula: FormulaId): boolean {
+  return PLAN_FORMULAS[plan].includes(formula);
+}
+
+/** Valeur à enregistrer pour un choix de formules ; null si aucune n'est choisie. */
+export function planFromFormulas(formulas: Iterable<FormulaId>): PlanId | null {
+  const chosen = new Set(formulas);
+  if (chosen.has("site") && chosen.has("scale")) return PLAN_COMPLETE;
+  if (chosen.has("site")) return PLAN_SITE;
+  if (chosen.has("scale")) return PLAN_SCALE;
+  return null;
+}
+
+export function isPlanId(value: unknown): value is PlanId {
+  return value === "starter" || value === "boost" || value === "scale";
 }
 
 /**
  * Durées de facturation. Le prix d'une formule est toujours donné par mois ;
- * la somme est réglée d'avance pour toute la durée (107 € par mois en
- * trimestriel = 321 € tous les trimestres).
+ * la somme est réglée d'avance pour toute la durée (74 € par mois en
+ * trimestriel = 222 € tous les trimestres).
  */
 export const BILLING_PERIODS = ["monthly", "quarterly", "annual", "triennial"] as const;
 export type BillingPeriod = (typeof BILLING_PERIODS)[number];
@@ -41,7 +105,7 @@ export const BILLING_PERIOD_LABELS: Record<BillingPeriod, string> = {
   triennial: "3 ans",
 };
 
-/** Rythme des échéances, à lire après un montant : « 321 € tous les trimestres ». */
+/** Rythme des échéances, à lire après un montant : « 222 € tous les trimestres ». */
 export const BILLING_PERIOD_CADENCE: Record<BillingPeriod, string> = {
   monthly: "tous les mois",
   quarterly: "tous les trimestres",
@@ -52,94 +116,119 @@ export const BILLING_PERIOD_CADENCE: Record<BillingPeriod, string> = {
 /** Engagement minimal, en mois, quelle que soit la durée de facturation choisie. */
 export const MIN_COMMITMENT_MONTHS = 12;
 
+// ─── Les deux formules ───────────────────────────────────────────────────────
+
+/**
+ * Prix par mois sur chaque durée, à partir du mensuel : 10 mois réglés sur 12
+ * en trimestriel, 8 sur 12 en annuel, 18 sur 36 sur 3 ans, à l'euro inférieur.
+ */
+export function pricesFromMonthly(monthly: number): Record<BillingPeriod, number> {
+  return {
+    monthly,
+    quarterly: Math.floor((monthly * 10) / 12),
+    annual: Math.floor((monthly * 8) / 12),
+    triennial: Math.floor((monthly * 18) / 36),
+  };
+}
+
+export type FormulaDefinition = {
+  id: FormulaId;
+  label: string;
+  /** € TTC par mois, selon la durée de facturation */
+  prices: Record<BillingPeriod, number>;
+};
+
+export const FORMULA_DEFINITIONS: Record<FormulaId, FormulaDefinition> = {
+  // 59 € par mois ; 147 € par trimestre, 468 € par an, 1 044 € pour 3 ans
+  site: { id: "site", label: "Site", prices: pricesFromMonthly(59) },
+  // 89 € par mois ; 222 € par trimestre, 708 € par an, 1 584 € pour 3 ans
+  scale: { id: "scale", label: "Scale", prices: pricesFromMonthly(89) },
+};
+
+/** Prix par mois (€ TTC) d'une formule sur une durée. */
+export function formulaPrice(formula: FormulaId, period: BillingPeriod): number {
+  return FORMULA_DEFINITIONS[formula].prices[period];
+}
+
+// ─── Ce qu'ouvre chaque choix ────────────────────────────────────────────────
+
 export type PlanDefinition = {
   id: PlanId;
+  /** « Site », « Scale » ou « Site + Scale » */
   label: string;
-  /** € TTC par mois, selon la durée de facturation ; une durée absente n'est pas proposée pour la formule */
+  formulas: readonly FormulaId[];
+  /** € TTC par mois, selon la durée de facturation : la somme des formules souscrites */
   prices: Partial<Record<BillingPeriod, number>>;
-  /** Spécialités présentées sur la page d'accueil (toutes formules) */
+  /** Site internet hébergé par Harmony (éditeur, domaine, hébergement) — formule Site */
+  site: boolean;
+  /** Spécialités présentées sur la page d'accueil du site */
   homeSpecialties: number;
   /** Pages secondaires de spécialités (« motifs ») autorisées */
   maxMotifPages: number;
-  /** Articles SEO automatisés par semaine (0 = pas de blog automatisé) */
+  /** Articles SEO automatisés par semaine (0 = pas de blog automatisé) — formule Site */
   blogArticlesPerWeek: number;
   /** Articles par an (208 = 4/semaine) */
   blogArticlesPerYear: number;
-  /** Suivi des mots-clés Google (Search Console) */
+  /** Suivi des mots-clés Google du site (Search Console) — formule Site */
   searchConsoleAccess: boolean;
-  /** Académie (formations du studio) */
+  /** Académie (formations du studio) — formule Scale */
   academy: boolean;
-  /** Toujours inclus, toutes formules */
+  /** Toujours inclus */
   googleReviewsSync: true;
-  /** Section « Réseaux sociaux » du studio (contenus prêts à poster) — Scale uniquement */
+  /** Section « Réseaux sociaux » du studio (contenus prêts à poster) — formule Scale */
   socialMedia: boolean;
-  /** Section « Fiche Google » du studio (audit, visibilité, avis, posts) — Scale uniquement */
+  /** Section « Fiche Google » du studio (audit, visibilité, avis, posts) — formule Scale */
   googleProfile: boolean;
-  /** Section « Google Ads » du studio (diagnostic, mots-clés, plan d'action, tuto et suivi) — Scale uniquement */
+  /** Section « Google Ads » du studio (diagnostic, mots-clés, plan d'action, tuto et suivi) — formule Scale */
   googleAds: boolean;
-  /** Section « Meta Ads » du studio (diagnostic, veille, annonces, plan vidéo, plan de campagne) — Scale uniquement */
+  /** Section « Meta Ads » du studio (diagnostic, veille, annonces, plan vidéo, plan de campagne) — formule Scale */
   metaAds: boolean;
+  /** Toujours inclus : statistiques du site hébergé, ou du site du praticien une fois connecté */
   advancedAnalytics: true;
-  hostingAndDomain: true;
+  /** Hébergement et nom de domaine — formule Site */
+  hostingAndDomain: boolean;
 };
 
-const STARTER: PlanDefinition = {
-  id: "starter",
-  label: "Starter",
-  // Tarif du 18 novembre 2026, sur la même règle que Scale à partir du mensuel (10 mois réglés sur 12 en
-  // trimestriel, 8 sur 12 en annuel, 18 sur 36 sur 3 ans, à l'euro inférieur) :
-  // 171 € par trimestre, 552 € par an, 1 224 € pour 3 ans
-  prices: { monthly: 69, quarterly: 57, annual: 46, triennial: 34 },
-  homeSpecialties: 6,
-  maxMotifPages: 0,
-  blogArticlesPerWeek: 0,
-  blogArticlesPerYear: 0,
-  searchConsoleAccess: false,
-  academy: false,
-  googleReviewsSync: true,
-  socialMedia: false,
-  googleProfile: false,
-  googleAds: false,
-  metaAds: false,
-  advancedAnalytics: true,
-  hostingAndDomain: true,
-};
-
-const SCALE: PlanDefinition = {
-  id: "scale",
-  label: "Scale",
-  // Tarif du 17 novembre 2026 : 321 € par trimestre, 1 032 € par an, 2 304 € pour 3 ans
-  prices: { monthly: 129, quarterly: 107, annual: 86, triennial: 64 },
-  homeSpecialties: 6,
-  maxMotifPages: 6,
-  blogArticlesPerWeek: 4,
-  blogArticlesPerYear: 208,
-  searchConsoleAccess: true,
-  academy: true,
-  googleReviewsSync: true,
-  socialMedia: true,
-  googleProfile: true,
-  googleAds: true,
-  metaAds: true,
-  advancedAnalytics: true,
-  hostingAndDomain: true,
-};
+function definePlan(id: PlanId): PlanDefinition {
+  const formulas = PLAN_FORMULAS[id];
+  const site = formulas.includes("site");
+  const scale = formulas.includes("scale");
+  return {
+    id,
+    label: formulas.map((formula) => FORMULA_DEFINITIONS[formula].label).join(" + "),
+    formulas,
+    prices: Object.fromEntries(BILLING_PERIODS.map((period) => [period, formulas.reduce((total, formula) => total + formulaPrice(formula, period), 0)])),
+    site,
+    homeSpecialties: site ? 6 : 0,
+    maxMotifPages: site ? 6 : 0,
+    blogArticlesPerWeek: site ? 4 : 0,
+    blogArticlesPerYear: site ? 208 : 0,
+    searchConsoleAccess: site,
+    academy: scale,
+    googleReviewsSync: true,
+    socialMedia: scale,
+    googleProfile: scale,
+    googleAds: scale,
+    metaAds: scale,
+    advancedAnalytics: true,
+    hostingAndDomain: site,
+  };
+}
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
-  starter: STARTER,
-  scale: SCALE,
-  // Héritage : les anciens abonnements « Boost » sont servis comme Scale
-  boost: { ...SCALE, id: "boost" },
+  starter: definePlan("starter"),
+  boost: definePlan("boost"),
+  scale: definePlan("scale"),
 };
 
 // ─── Prix et durées ──────────────────────────────────────────────────────────
 
-/** Durées proposées pour une formule, de la plus courte à la plus longue. */
+/** Durées proposées pour un choix de formules, de la plus courte à la plus longue. */
 export function planPeriods(plan: PlanId): BillingPeriod[] {
   return BILLING_PERIODS.filter((period) => PLANS[plan].prices[period] !== undefined);
 }
 
-/** Prix par mois (€ TTC) d'une formule sur une durée ; null si la durée n'est pas proposée. */
+/** Prix par mois (€ TTC) d'un choix de formules sur une durée ; null si la durée n'est pas proposée. */
 export function planPrice(plan: PlanId, period: BillingPeriod): number | null {
   return PLANS[plan].prices[period] ?? null;
 }
@@ -157,8 +246,8 @@ export function commitmentMonths(period: BillingPeriod): number {
 
 /**
  * Économie d'une durée par rapport au mensuel, en mois de mensuel offerts sur
- * la durée d'engagement (arrondi vers le bas : jamais surestimée). Pour les
- * deux formules : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
+ * la durée d'engagement (arrondi vers le bas : jamais surestimée). Pour chaque
+ * formule comme pour les deux : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
  */
 export function savedMonths(plan: PlanId, period: BillingPeriod): number {
   const monthly = planPrice(plan, "monthly");
@@ -167,62 +256,34 @@ export function savedMonths(plan: PlanId, period: BillingPeriod): number {
   return Math.floor(((monthly - price) * commitmentMonths(period)) / monthly);
 }
 
-// ─── Abonnements souscrits avant le changement de tarif ──────────────────────
-
-/**
- * Le tarif a changé le 17 novembre 2026. Un abonnement souscrit avant garde
- * son prix : Stripe ne modifie pas un abonnement en cours. L'annuel d'alors
- * était un engagement d'un an réglé chaque mois.
- */
-export const TARIFF_CHANGED_AT = new Date("2026-11-17T16:15:00Z");
-
-const LEGACY_PRICES: Record<OfferedPlanId, Partial<Record<BillingPeriod, number>>> = {
-  starter: { monthly: 69, annual: 48 },
-  scale: { monthly: 79, annual: 55 },
-};
-
-/**
- * Starter a pris ses prix sur quatre durées le 18 novembre 2026. Entre les
- * deux changements, son annuel valait 48 € par mois, réglé à l'année (576 €) :
- * un abonnement souscrit alors garde ce prix.
- */
-export const STARTER_TARIFF_CHANGED_AT = new Date("2026-11-18T11:14:00Z");
-
-const STARTER_INTERIM_ANNUAL_PRICE = 48;
+// ─── Ce que paie un abonnement ───────────────────────────────────────────────
 
 export type SubscriptionPricing = {
   /** € TTC par mois */
   monthlyPrice: number;
   /** Mois réglés à chaque échéance */
   billedMonths: number;
-  /** Abonnement au tarif d'avant le 17 novembre 2026 */
-  legacy: boolean;
 };
 
-/** Prix réellement payé par un abonnement, selon sa formule, sa durée et sa date de souscription. */
-export function subscriptionPricing(subscription: {
-  plan: PlanId;
-  billingPeriod: BillingPeriod;
-  createdAt: Date;
-}): SubscriptionPricing {
-  const offered = normalizePlan(subscription.plan);
-  const legacyPrice = LEGACY_PRICES[offered][subscription.billingPeriod];
-  if (subscription.createdAt < TARIFF_CHANGED_AT && legacyPrice !== undefined) {
-    return { monthlyPrice: legacyPrice, billedMonths: 1, legacy: true };
-  }
-  if (offered === "starter" && subscription.billingPeriod === "annual" && subscription.createdAt < STARTER_TARIFF_CHANGED_AT) {
-    return { monthlyPrice: STARTER_INTERIM_ANNUAL_PRICE, billedMonths: BILLING_PERIOD_MONTHS.annual, legacy: false };
-  }
-  const price =
-    planPrice(subscription.plan, subscription.billingPeriod) ??
-    // Durée retirée de la formule depuis la souscription : on retient son prix mensuel
-    planPrice(subscription.plan, "monthly") ??
-    0;
-  return { monthlyPrice: price, billedMonths: BILLING_PERIOD_MONTHS[subscription.billingPeriod], legacy: false };
+/**
+ * Prix d'un abonnement selon ses formules et sa durée. Les comptes ouverts
+ * avant le découpage en deux formules étaient des comptes d'essai : ils
+ * suivent l'offre actuelle comme les autres.
+ */
+export function subscriptionPricing(subscription: { plan: PlanId; billingPeriod: BillingPeriod }): SubscriptionPricing {
+  const price = planPrice(subscription.plan, subscription.billingPeriod) ?? planPrice(subscription.plan, "monthly") ?? 0;
+  return { monthlyPrice: price, billedMonths: BILLING_PERIOD_MONTHS[subscription.billingPeriod] };
 }
 
 export function getPlan(id: PlanId): PlanDefinition {
   return PLANS[id];
+}
+
+// ─── Droits ──────────────────────────────────────────────────────────────────
+
+/** Site internet hébergé par Harmony : éditeur, domaine, pages publiques (formule Site). */
+export function hasSite(plan: PlanId): boolean {
+  return PLANS[plan].site;
 }
 
 /** Peut-on ajouter une page de motif supplémentaire à ce site ? */
@@ -235,6 +296,7 @@ export function motifPagesAllowance(plan: PlanId): number {
   return PLANS[plan].maxMotifPages;
 }
 
+/** Blog SEO automatisé (formule Site). */
 export function hasBlog(plan: PlanId): boolean {
   return PLANS[plan].blogArticlesPerWeek > 0;
 }
@@ -243,27 +305,27 @@ export function hasSearchConsole(plan: PlanId): boolean {
   return PLANS[plan].searchConsoleAccess;
 }
 
-/** Académie (formations du studio). */
+/** Académie, les formations du studio (formule Scale). */
 export function hasAcademy(plan: PlanId): boolean {
   return PLANS[plan].academy;
 }
 
-/** Section « Réseaux sociaux » du studio (Scale uniquement ; les démos y ont accès). */
+/** Section « Réseaux sociaux » du studio (formule Scale ; les démos y ont accès). */
 export function hasSocialMedia(plan: PlanId): boolean {
   return getPlan(plan).socialMedia;
 }
 
-/** Section « Fiche Google » du studio (Scale uniquement ; les démos y ont accès). */
+/** Section « Fiche Google » du studio (formule Scale ; les démos y ont accès). */
 export function hasGoogleProfile(plan: PlanId): boolean {
   return getPlan(plan).googleProfile;
 }
 
-/** Section « Google Ads » du studio (Scale uniquement ; les démos y ont accès). */
+/** Section « Google Ads » du studio (formule Scale ; les démos y ont accès). */
 export function hasGoogleAds(plan: PlanId): boolean {
   return getPlan(plan).googleAds;
 }
 
-/** Section « Meta Ads » du studio (Scale uniquement ; les démos y ont accès). */
+/** Section « Meta Ads » du studio (formule Scale ; les démos y ont accès). */
 export function hasMetaAds(plan: PlanId): boolean {
   return getPlan(plan).metaAds;
 }
@@ -273,20 +335,11 @@ const euros = (value: number) => `${value.toLocaleString("fr-FR")}${NBSP}€`;
 
 /**
  * Ce que paie un abonnement, en une phrase (page Compte du studio, liste des
- * clients de l'admin). Nouveau tarif : « Annuel — 86 € TTC par mois, soit
- * 1 032 € tous les ans ». Avant le 17 novembre 2026 : « Engagement annuel —
- * 55 € par mois (ancien tarif) ».
+ * clients de l'admin) : « Annuel — 98 € TTC par mois, soit 1 176 € tous les
+ * ans ».
  */
-export function describeSubscriptionPricing(subscription: {
-  plan: PlanId;
-  billingPeriod: BillingPeriod;
-  createdAt: Date;
-}): string {
+export function describeSubscriptionPricing(subscription: { plan: PlanId; billingPeriod: BillingPeriod }): string {
   const pricing = subscriptionPricing(subscription);
-  if (pricing.legacy) {
-    const label = subscription.billingPeriod === "annual" ? "Engagement annuel" : "Mensuel";
-    return `${label} — ${euros(pricing.monthlyPrice)} par mois (ancien tarif)`;
-  }
   const label = `${BILLING_PERIOD_LABELS[subscription.billingPeriod]} — ${euros(pricing.monthlyPrice)} TTC par mois`;
   if (pricing.billedMonths === 1) return label;
   return `${label}, soit ${euros(pricing.monthlyPrice * pricing.billedMonths)} ${BILLING_PERIOD_CADENCE[subscription.billingPeriod]}`;

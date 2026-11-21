@@ -25,7 +25,7 @@ export type HomeViewProps = {
     sources: { total: number; unit: "visitors" | "views"; rows: { source: AnalyticsSource; count: number; share: number }[] };
   };
   /** Le site de référence des outils : le site Harmony (`hosted`) ou celui du praticien (`external`) */
-  site: { reference: "hosted" | "external"; address: string; viewHref: string };
+  site: { reference: "hosted" | "external" | "none"; address: string; viewHref: string };
   /** Le site du praticien est la référence et son code de mesure n'a encore envoyé aucune visite */
   awaitingMeasure: { address: string } | null;
   /** La formule ouvre la section Réseaux sociaux (lien de bio) */

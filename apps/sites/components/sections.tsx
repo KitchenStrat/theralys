@@ -708,7 +708,7 @@ function Specialties({
 }) {
   // Toutes les spécialités restent affichées quelle que soit la formule ;
   // seules les cartes dont la page secondaire est accessible sont cliquables
-  // (Starter : cartes simples, sans lien « En savoir plus »).
+  // (au-delà du nombre de pages de la formule : cartes simples, sans lien « En savoir plus »).
   const items = section.items;
   const isLinked = (slug: string) =>
     !ctx.allowedMotifSlugs || ctx.allowedMotifSlugs.includes(slug);

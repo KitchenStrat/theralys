@@ -1,4 +1,5 @@
-import { PLANS, motifPagesAllowance } from "@theralys/db";
+import { redirect } from "next/navigation";
+import { PLANS, hasSite, motifPagesAllowance } from "@theralys/db";
 import {
   DEFAULT_NOT_FOUND,
   signSitePreviewToken,
@@ -21,15 +22,16 @@ export default async function EditorPage({ searchParams }: Props) {
   const { page: pageParam } = await searchParams;
 
   const site = await getSite(session.siteId);
+  // L'éditeur est celui du site Harmony : sans la formule Site, il n'y a pas de site à éditer
+  if (site.type !== "demo" && !hasSite(site.plan)) redirect("/mon-site");
   const [allPages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
   // Jeton signé pour l'aperçu : le site public affiche la démo même expirée et
   // les pages désactivées à l'éditeur seul (vérifié par le middleware des sites)
   const previewToken = process.env.AUTH_SECRET
     ? await signSitePreviewToken({ siteId: site.id }, process.env.AUTH_SECRET)
     : "";
-  // Les pages de spécialités suivent la formule (Starter : aucune page dédiée
-  // publique — on ne propose donc pas de les éditer) ; les démos, en formule
-  // complète, gardent les leurs. Les pages en cours de génération (créées
+  // Les pages de spécialités suivent la formule (6 avec la formule Site) ; les
+  // démos, en formule complète, gardent les leurs. Les pages en cours de génération (créées
   // depuis le studio, `sections: []`) sont toujours listées.
   const generatingMotifs: GeneratingMotif[] = (site.theme.generatingMotifs ?? []).map((g) => ({
     slug: g.slug,

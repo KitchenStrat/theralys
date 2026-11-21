@@ -19,12 +19,13 @@ import { linkedProfileOf } from "@/lib/google/data";
  *
  *   verify_pages     une page du site Harmony a été enregistrée depuis l'éditeur
  *   booking_link     le site a un lien de prise de rendez-vous
+ *   connect_site     formule Scale seule : le praticien a connecté son site et ses outils s'appuient dessus
  *   install_measure  le site du praticien a envoyé une première visite mesurée
  *   link_google      la fiche Google de l'établissement est reliée
  *   blog_settings    les paramètres du blog ont été enregistrés au moins une fois
  *   social_settings  le paramétrage des réseaux sociaux a été enregistré
  */
-export const SETUP_KEYS = ["verify_pages", "booking_link", "install_measure", "link_google", "blog_settings", "social_settings"] as const;
+export const SETUP_KEYS = ["verify_pages", "booking_link", "connect_site", "install_measure", "link_google", "blog_settings", "social_settings"] as const;
 
 export type SetupKey = (typeof SETUP_KEYS)[number];
 
@@ -53,14 +54,19 @@ export type SetupSignals = {
 
 /** Ce que la formule et le site de référence rendent faisable depuis le studio. */
 export type SetupAccess = {
-  /** Le site de référence des outils : le site Harmony (son éditeur est proposé) ou celui du praticien (son code de mesure l'est) */
-  reference: "hosted" | "external";
+  /**
+   * Le site de référence des outils : le site Harmony (son éditeur est proposé), celui du praticien (son code de
+   * mesure l'est), ou aucun — formule Scale seule, site du praticien pas encore connecté (le connecter est proposé)
+   */
+  reference: "hosted" | "external" | "none";
   /** La section « Fiche Google » est ouverte */
   google: boolean;
   /** La section « Publications » est ouverte */
   blog: boolean;
   /** La section « Réseaux sociaux » est ouverte */
   social: boolean;
+  /** Formule Scale seule : connecter son site fait partie de la mise en route (l'étape reste affichée une fois faite) */
+  connectRequired?: boolean;
 };
 
 /**
@@ -136,7 +142,7 @@ export async function readSetupSignals(
   return {
     pagesEdited,
     bookingLink: (site.bookingUrl ?? "").trim() !== "",
-    measureSeen: hosted ? null : measureSeen,
+    measureSeen: access.reference === "external" ? measureSeen : null,
     googleLinked,
     blogConfigured,
     socialConfigured,
@@ -158,7 +164,12 @@ export function deriveSetupTasks(signals: SetupSignals, access: SetupAccess): Se
   if (access.reference === "hosted") {
     add("verify_pages", signals.pagesEdited);
     add("booking_link", signals.bookingLink);
+  } else if (access.reference === "none") {
+    // Sans site Harmony, tout commence par là : les outils s'appuient sur le site du praticien
+    add("connect_site", false);
   } else {
+    // Arrivé ici avec la formule Scale seule, le site est connecté : l'étape reste affichée, faite
+    if (access.connectRequired) add("connect_site", true);
     add("install_measure", signals.measureSeen);
   }
   if (access.google) add("link_google", signals.googleLinked);

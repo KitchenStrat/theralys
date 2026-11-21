@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getDb } from "@theralys/db";
 import { runAllTicks } from "@theralys/jobs";
+import { alignLegacyAccounts } from "@/lib/formulas";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 800;
@@ -18,6 +20,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
+  // Comptes d'avant le découpage de l'offre : les deux formules, une fois pour toutes (aussi fait à l'ouverture de l'admin)
+  await alignLegacyAccounts(getDb()).catch((error) => console.error("[formules] alignement des comptes impossible", error instanceof Error ? error.name : "erreur"));
   const reports = await runAllTicks();
   return NextResponse.json({ ok: true, reports });
 }

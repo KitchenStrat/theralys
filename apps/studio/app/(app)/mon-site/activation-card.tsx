@@ -32,12 +32,15 @@ export function ActivationCard({
   usable,
   gaps,
   keepHostedIndexed,
+  hosted = true,
 }: {
   url: string;
   active: boolean;
   usable: boolean;
   gaps: string[];
   keepHostedIndexed: boolean;
+  /** `false` : formule Scale seule, sans site Harmony — rien à garder visible ni vers quoi revenir */
+  hosted?: boolean;
 }) {
   const [keepVisible, setKeepVisible] = useState(keepHostedIndexed);
   const [notice, setNotice] = useState<string | null>(null);
@@ -94,7 +97,7 @@ export function ActivationCard({
     });
   }
 
-  const keepVisibleField = (
+  const keepVisibleField = !hosted ? null : (
     <div className="rounded-ds-md bg-ds-ink-50 px-4 py-3.5 ring-1 ring-ds-ink-200">
       <CheckboxField
         id="keep-hosted-visible"
@@ -140,7 +143,7 @@ export function ActivationCard({
                   Vos outils s&apos;appuient sur ce site
                 </h2>
                 <p className="mt-2 max-w-[60ch] text-base text-pretty">
-                  Vos contenus, vos liens et vos statistiques reposent sur <strong className="wrap-anywhere font-semibold">{address}</strong>. Votre site Harmony reste en ligne.
+                  Vos contenus, vos liens et vos statistiques reposent sur <strong className="wrap-anywhere font-semibold">{address}</strong>.{hosted ? " Votre site Harmony reste en ligne." : null}
                 </p>
                 {/* Profil incomplet : les contenus retombent sur le site Harmony (l'avertissement plus bas le dit) — on ne les affiche pas comme acquis */}
                 {usable ? (
@@ -162,7 +165,9 @@ export function ActivationCard({
           <div className="px-5 py-6 sm:px-8">
             {!usable ? (
               <Notice tone="warning" className="mb-5" data-testid="activation-gaps">
-                <p className="font-semibold">Votre profil est incomplet&nbsp;: en attendant, vos contenus s&apos;appuient sur votre site Harmony.</p>
+                <p className="font-semibold">
+                  {hosted ? "Votre profil est incomplet\u00a0: en attendant, vos contenus s'appuient sur votre site Harmony." : "Votre profil est incomplet\u00a0: complétez-le pour que vos contenus reprennent ce que vous proposez vraiment."}
+                </p>
                 <GapList gaps={gaps} />
                 <p className="mt-3">
                   <AnchorButton href="#profil" icon={<PenLine size={16} aria-hidden />}>
@@ -172,7 +177,8 @@ export function ActivationCard({
               </Notice>
             ) : null}
             {keepVisibleField}
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-ds-ink-200 pt-5">
+            <div className={`flex flex-wrap items-center gap-2 ${hosted ? "mt-5 border-t border-ds-ink-200 pt-5" : ""}`}>
+              {hosted ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -186,6 +192,7 @@ export function ActivationCard({
               >
                 Revenir au site Harmony
               </Button>
+              ) : null}
               {disconnect}
             </div>
             <div className="[&:not(:empty)]:mt-4">{message}</div>
@@ -204,10 +211,10 @@ export function ActivationCard({
             Utiliser ce site pour mes outils
           </h2>
           <p className="mt-1.5 max-w-[62ch] text-base text-ds-ink-700">
-            Vos contenus, vos liens et vos statistiques s&apos;appuieront sur <span className="wrap-anywhere font-semibold text-ds-ink-900">{address}</span>. Votre site Harmony restera
-            accessible, mais il sera masqué des moteurs de recherche pour ne pas lui faire concurrence.
+            Vos contenus, vos liens et vos statistiques s&apos;appuieront sur <span className="wrap-anywhere font-semibold text-ds-ink-900">{address}</span>.
+            {hosted ? " Votre site Harmony restera accessible, mais il sera masqué des moteurs de recherche pour ne pas lui faire concurrence." : null}
           </p>
-          <div className="mt-5">{keepVisibleField}</div>
+          {keepVisibleField ? <div className="mt-5">{keepVisibleField}</div> : null}
           <div className="mt-5">
             <Button
               type="button"
@@ -265,7 +272,7 @@ export function ActivationCard({
           <p>
             Le profil lu sur <span className="wrap-anywhere font-semibold text-ds-ink-900">{address}</span> et toutes vos corrections seront supprimés.
           </p>
-          <p>Vos outils s&apos;appuieront de nouveau sur votre site Harmony. Rien ne change sur votre propre site.</p>
+          <p>{hosted ? "Vos outils s'appuieront de nouveau sur votre site Harmony. Rien ne change sur votre propre site." : "Vos outils n'auront plus de site sur lequel s'appuyer. Rien ne change sur votre propre site."}</p>
           <p className="text-ds-body text-ds-ink-600">Vous pourrez le reconnecter plus tard&nbsp;: il sera relu, et les lectures déjà faites ce mois-ci restent comptées.</p>
           <ActionMessage error={failure} testId="disconnect-error" />
         </div>

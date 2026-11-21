@@ -182,6 +182,7 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
           </ul>
 
           <ul className="mt-3 space-y-1 border-t border-ds-ink-200 pt-3">
+            {siteHref === null ? null : (
             <li>
               <a
                 href={siteHref}
@@ -197,6 +198,7 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
                 </span>
               </a>
             </li>
+            )}
             <li>
               <form action={logoutAction}>
                 <button

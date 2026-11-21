@@ -40,12 +40,12 @@ describe("groupEditorPages", () => {
     expect(motifCounterLabel(groups)).toBe("5/6 activées");
   });
 
-  it("formule Starter : aucune page de spécialité possible ; entrées orphelines ignorées", () => {
+  it("formule Scale seule (« boost ») : aucune page de spécialité possible ; entrées orphelines ignorées", () => {
     const groups = groupEditorPages([home], {
       disabledMotifs: [],
       generatingMotifs: [{ slug: "fantome", subject: "X", startedAt: "2026-10-25T10:00:00.000Z" }],
       now: Date.parse("2026-10-25T10:01:00.000Z"),
-      plan: "starter",
+      plan: "boost",
     });
     expect(groups.motifs).toEqual([]);
     expect(groups.canAdd).toBe(false);
@@ -56,7 +56,8 @@ describe("groupEditorPages", () => {
   it("canAddHomeCard suit PLANS[plan].homeSpecialties", () => {
     expect(canAddHomeCard(5, "scale")).toBe(true);
     expect(canAddHomeCard(6, "scale")).toBe(false);
-    expect(canAddHomeCard(6, "boost")).toBe(false);
+    expect(canAddHomeCard(5, "starter")).toBe(true);
+    expect(canAddHomeCard(0, "boost")).toBe(false);
   });
 });
 

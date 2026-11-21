@@ -34,7 +34,7 @@ export default async function GoogleProfilePage({ searchParams }: Props) {
         title="La section Fiche Google n'est pas incluse dans votre formule"
         action={<LinkButton href="/compte">Voir ma formule</LinkButton>}
       >
-        Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour auditer votre fiche Google,
+        Ajoutez la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour auditer votre fiche Google,
         suivre votre visibilité sur Google Maps mot-clé par mot-clé, répondre à vos avis avec des réponses proposées et publier
         chaque semaine un post Google préparé à partir de votre site.
       </Fallback>

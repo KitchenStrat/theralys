@@ -13,7 +13,11 @@ const QUESTIONS = [
   },
   {
     q: "J'ai déjà un site : puis-je utiliser Harmony ?",
-    a: "**Oui, et vous le gardez.** Vous indiquez son adresse dans votre espace : Harmony lit ses pages publiques pour comprendre votre activité, et vos contenus pour les réseaux sociaux, votre fiche Google et vos publicités s'appuient ensuite sur lui. Un petit code à coller permet de suivre ses visites. Les articles de blog restent rédigés dans votre espace : vous les copiez sur votre site en un clic.",
+    a: "**Oui, et vous le gardez.** Prenez la formule Scale seule et indiquez l'adresse de votre site dans votre espace : Harmony lit ses pages publiques pour comprendre votre activité, et vos contenus pour les réseaux sociaux, votre fiche Google et vos publicités s'appuient ensuite sur lui. Un petit code à coller permet de suivre ses visites.",
+  },
+  {
+    q: "Puis-je prendre une seule formule ?",
+    a: "**Oui.** Site et Scale se prennent séparément ou ensemble. **Site** : votre site professionnel et son blog. **Scale** : fiche Google, réseaux sociaux et publicité, sur votre site Harmony ou sur le vôtre. Vous pouvez ajouter l'autre formule plus tard.",
   },
   {
     q: "Dois-je m'occuper de la technique ?",
@@ -25,7 +29,7 @@ const QUESTIONS = [
   },
   {
     q: "Les articles du blog sont-ils écrits par une IA ?",
-    a: "**Oui, par une IA spécialisée**, à partir de vos spécialités, de votre ville et des thématiques que vous choisissez. Chaque article est rédigé sept jours avant sa date : vous pouvez le relire, le modifier, le reporter ou le retirer. Dans votre espace, un contenu rédigé par l'IA est toujours signalé.",
+    a: "**Oui, par une IA spécialisée** (formule Site), à partir de vos spécialités, de votre ville et des thématiques que vous choisissez. Chaque article est rédigé sept jours avant sa date : vous pouvez le relire, le modifier, le reporter ou le retirer. Dans votre espace, un contenu rédigé par l'IA est toujours signalé.",
   },
   {
     q: "La publicité est-elle comprise dans l'abonnement ?",
@@ -37,7 +41,7 @@ const QUESTIONS = [
   },
   {
     q: "Puis-je utiliser mon nom de domaine actuel ?",
-    a: "**Oui.** Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet. Sinon, nous achetons pour vous le domaine de votre choix : il est inclus dans l'abonnement.",
+    a: "**Oui.** Si vous possédez déjà un nom de domaine, vous nous l'indiquez depuis votre espace client et notre équipe s'occupe du rattachement complet. Sinon, nous achetons pour vous le domaine de votre choix : il est inclus dans la formule Site.",
   },
   {
     q: "Y a-t-il un engagement ?",

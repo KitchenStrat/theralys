@@ -572,9 +572,9 @@ describe("summarizeBySite", () => {
     const summary = summarizeBySite(rows, sites, "mois");
     expect(summary.map((s) => s.name)).toEqual(["Cabinet A", "Démo C", "Cabinet B", PLATFORM_SITE_LABEL, "Site supprimé"]);
     const a = summary[0];
-    expect(a).toMatchObject({ type: "client", planLabel: "Scale", calls: 11, errors: 1, revenueEur: 79, subscriptionStatus: "active" });
-    expect(a?.marginEur).toBeCloseTo(79 - 10 * USD_TO_EUR_RATE, 6);
-    expect(a?.marginRate).toBeCloseTo((79 - 10 * USD_TO_EUR_RATE) / 79, 6);
+    expect(a).toMatchObject({ type: "client", planLabel: "Site + Scale", calls: 11, errors: 1, revenueEur: 148, subscriptionStatus: "active" });
+    expect(a?.marginEur).toBeCloseTo(148 - 10 * USD_TO_EUR_RATE, 6);
+    expect(a?.marginRate).toBeCloseTo((148 - 10 * USD_TO_EUR_RATE) / 148, 6);
     // Abonnement en essai : pas de revenu, la marge est le coût en négatif
     const b = summary.find((s) => s.siteId === SITE_B);
     expect(b).toMatchObject({ revenueEur: 0, marginRate: null });
@@ -592,14 +592,14 @@ describe("summarizeBySite", () => {
     expect(periodRevenueShare("7j")).toBeCloseTo(7 / 30, 6);
     expect(periodRevenueShare("aujourdhui")).toBeCloseTo(1 / 30, 6);
     const a = summarizeBySite(rows, sites, "7j")[0];
-    expect(a?.revenueEur).toBe(79);
-    expect(a?.marginEur).toBeCloseTo((79 * 7) / 30 - 10 * USD_TO_EUR_RATE, 6);
+    expect(a?.revenueEur).toBe(148);
+    expect(a?.marginEur).toBeCloseTo((148 * 7) / 30 - 10 * USD_TO_EUR_RATE, 6);
   });
 
   it("ajoute sur demande les sites clients actifs sans appel, jamais les archivés ni les démos", () => {
     const summary = summarizeBySite(rows, sites, "mois", { includeIdleClients: true });
     const idle = summary.find((s) => s.name === "Cabinet D");
-    expect(idle).toMatchObject({ calls: 0, costUsd: 0, revenueEur: 55, marginEur: 55, marginRate: 1 });
+    expect(idle).toMatchObject({ calls: 0, costUsd: 0, revenueEur: 98, marginEur: 98, marginRate: 1 });
     expect(summary.some((s) => s.name === "Cabinet archivé")).toBe(false);
     expect(summarizeBySite([], [], "mois")).toEqual([]);
   });

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Hourglass, Link2 } from "lucide-react";
-import { getDb } from "@theralys/db";
+import { getDb, hasSite } from "@theralys/db";
 import { hostedHostsOf, loadExternalSite } from "@theralys/jobs";
 import { externalMeasureTag } from "@theralys/shared";
 import { Card, EmptyState, IconBadge, PageHeader, Stagger } from "@/components/ds";
@@ -31,7 +31,8 @@ export const maxDuration = 300;
  * « Mon site » : le site sur lequel s'appuient les outils du studio. Un
  * praticien qui a déjà son site le connecte ici — lecture, relecture du
  * profil, activation, code de mesure. Ouvert à toutes les formules et aux
- * sites de démonstration.
+ * sites de démonstration. Avec la formule Scale seule, il n'y a pas de site
+ * Harmony : la page ne montre que le site du praticien.
  *
  * L'écran suit l'état rendu par `loadExternalSite` : section pas encore
  * activée, aucun site connecté, lecture en cours, première lecture en échec,
@@ -48,6 +49,8 @@ export default async function MonSitePage() {
   const site = await getSite(session.siteId);
   const state = await loadExternalSite(getDb(), site);
   const hostedUrl = siteUrl(site);
+  // Formule Scale seule : pas de site Harmony. Les outils s'appuient sur le site du praticien, qu'il connecte ici.
+  const hosted = site.type === "demo" || hasSite(site.plan);
 
   if (!state.available) {
     return (
@@ -68,7 +71,7 @@ export default async function MonSitePage() {
   if (!view) {
     return (
       <Screen state="none">
-        <HostedSiteCard url={hostedUrl} role="reference" className="xl:col-span-2" />
+        {hosted ? <HostedSiteCard url={hostedUrl} role="reference" className="xl:col-span-2" /> : null}
         <section aria-labelledby="connect-title" className="xl:col-span-2" data-testid="connect-card">
           <Card padding="lg">
             {/* Le formulaire, et à côté (dessous sur un écran étroit) ce qui se passera ensuite */}
@@ -78,11 +81,12 @@ export default async function MonSitePage() {
                   icon={<IconBadge icon={Link2} size="md" />}
                   title={
                     <h2 id="connect-title" className={CARD_TITLE}>
-                      Vous avez déjà un site&nbsp;?
+                      {hosted ? "Vous avez déjà un site\u00a0?" : "Connectez votre site"}
                     </h2>
                   }
                 >
                   <p className="max-w-[62ch] text-base text-ds-ink-700">
+                    {hosted ? null : "Votre formule Scale s'appuie sur votre propre site. "}
                     Indiquez son adresse&nbsp;: nous lisons ses pages pour comprendre votre activité. Tous vos outils s&apos;appuient ensuite sur lui&nbsp;: vos contenus reprennent ce que
                     vous proposez vraiment, vos liens y mènent et vos statistiques comptent ses visites.
                   </p>
@@ -110,7 +114,7 @@ export default async function MonSitePage() {
     return (
       <Screen state="reading" journey={journey} rows={2}>
         <ReadingPanel address={siteAddressLabel(view.url)} hasPrevious={view.readAt !== null} />
-        <HostedSiteCard url={hostedUrl} role={hostedRole} />
+        {hosted ? <HostedSiteCard url={hostedUrl} role={hostedRole} /> : null}
       </Screen>
     );
   }
@@ -119,7 +123,7 @@ export default async function MonSitePage() {
     return (
       <Screen state="error" journey={journeyOf({ screen: "error" })} rows={2}>
         <ReadErrorPanel url={view.url} error={view.error ?? "internal"} reads={view.reads} ownHosts={ownHosts} />
-        <HostedSiteCard url={hostedUrl} role={hostedRole} />
+        {hosted ? <HostedSiteCard url={hostedUrl} role={hostedRole} /> : null}
       </Screen>
     );
   }
@@ -139,7 +143,7 @@ export default async function MonSitePage() {
         detected={detectedItems(view.facts)}
       />
       <ProfileSection siteUrl={view.url} source={view.source} profile={view.profile} overrides={view.overrides} />
-      <ActivationCard url={view.url} active={view.active} usable={view.usable} gaps={view.gaps} keepHostedIndexed={view.keepHostedIndexed} />
+      <ActivationCard url={view.url} active={view.active} usable={view.usable} gaps={view.gaps} keepHostedIndexed={view.keepHostedIndexed} hosted={hosted} />
       <MeasureCard
         // Même adresse de base que celle des sites Harmony (`siteUrl`) : c'est là que le code de mesure est servi
         tag={externalMeasureTag(process.env.SITES_BASE_URL ?? "http://localhost:3000", view.measure.key)}
@@ -149,7 +153,7 @@ export default async function MonSitePage() {
         privacyText={privacyParagraph(view.url)}
         next={currentStep(journey) === "mesurer"}
       />
-      <HostedSiteCard url={hostedUrl} role={hostedRole} />
+      {hosted ? <HostedSiteCard url={hostedUrl} role={hostedRole} /> : null}
     </Screen>
   );
 }

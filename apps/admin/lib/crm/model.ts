@@ -4,7 +4,7 @@
  * aux pages qu'aux composants du navigateur.
  */
 
-import { planPrice, type BillingPeriod, type PlanId } from "@theralys/db/plans";
+import { OFFERED_PLANS, planPrice, type BillingPeriod, type PlanId } from "@theralys/db/plans";
 
 // ─── Étapes du cycle de vente ────────────────────────────────────────────────
 
@@ -150,13 +150,14 @@ export function displayName(contact: { firstName: string; lastName: string; comp
 
 // ─── Valeur d'un prospect ────────────────────────────────────────────────────
 
-const PLAN_IDS: readonly string[] = ["starter", "scale"];
+// Les trois choix de l'offre : formule Site, formule Scale, ou les deux (valeurs de `OFFERED_PLANS`)
+const PLAN_IDS: readonly string[] = OFFERED_PLANS;
 const PERIOD_IDS: readonly string[] = ["monthly", "quarterly", "annual", "triennial"];
 
 /**
  * Revenu mensuel qu'un prospect représenterait s'il signait : le prix de la
- * formule envisagée sur la durée envisagée (annuel par défaut), lu dans la
- * définition des formules. 0 tant qu'aucune formule n'est renseignée.
+ * ou des formules envisagées sur la durée envisagée (annuel par défaut), lu
+ * dans la définition de l'offre. 0 tant qu'aucune formule n'est renseignée.
  */
 export function contactMonthlyValue(contact: { plan: string | null; billingPeriod: string | null }): number {
   if (!contact.plan || !PLAN_IDS.includes(contact.plan)) return 0;
@@ -164,7 +165,7 @@ export function contactMonthlyValue(contact: { plan: string | null; billingPerio
   return planPrice(contact.plan as PlanId, period) ?? 0;
 }
 
-export function isPlanInterest(value: unknown): value is "starter" | "scale" {
+export function isPlanInterest(value: unknown): value is PlanId {
   return typeof value === "string" && PLAN_IDS.includes(value);
 }
 

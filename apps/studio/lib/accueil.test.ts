@@ -199,7 +199,18 @@ describe("deriveSetupTasks : les étapes proposées, dans l'ordre où les mener"
   const keys = (tasks: SetupTask[]) => tasks.map((task) => task.key);
 
   it("ne connaît que des étapes dont un fait de la base dit l'achèvement", () => {
-    expect([...SETUP_KEYS]).toEqual(["verify_pages", "booking_link", "install_measure", "link_google", "blog_settings", "social_settings"]);
+    expect([...SETUP_KEYS]).toEqual(["verify_pages", "booking_link", "connect_site", "install_measure", "link_google", "blog_settings", "social_settings"]);
+  });
+
+  it("formule Scale seule : connecter son site d'abord, puis les outils ; ni éditeur ni blog", () => {
+    const scaleOnly: SetupAccess = { reference: "none", google: true, blog: false, social: true, connectRequired: true };
+    const tasks = deriveSetupTasks(nothing, scaleOnly);
+    expect(keys(tasks)).toEqual(["connect_site", "link_google", "social_settings"]);
+    expect(tasks[0]).toEqual({ key: "connect_site", done: false });
+    // Site connecté et actif : l'étape reste affichée, faite, et le code de mesure prend la suite
+    const connected = deriveSetupTasks({ ...nothing, measureSeen: false }, { ...scaleOnly, reference: "external" });
+    expect(keys(connected)).toEqual(["connect_site", "install_measure", "link_google", "social_settings"]);
+    expect(connected[0]).toEqual({ key: "connect_site", done: true });
   });
 
   it("site Harmony, formule complète : le site d'abord, puis la fiche Google, le blog et les réseaux", () => {

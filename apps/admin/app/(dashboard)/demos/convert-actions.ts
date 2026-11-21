@@ -6,9 +6,11 @@ import { z } from "zod";
 import {
   BILLING_PERIODS,
   BILLING_PERIOD_LABELS,
+  FORMULAS,
   PLANS,
   getDb,
   leads,
+  planFromFormulas,
   planPrice,
   prospects,
   sites,
@@ -24,7 +26,8 @@ import { createClientInvitation } from "@/lib/invitations";
 
 const convertSchema = z.object({
   siteId: z.string().uuid(),
-  plan: z.enum(["starter", "scale"]),
+  /** Formules souscrites : Site, Scale, ou les deux */
+  formulas: z.array(z.enum(FORMULAS)).min(1, "Choisissez au moins une formule"),
   period: z.enum(BILLING_PERIODS),
   clientEmail: z.string().trim().email("Email invalide"),
 });
@@ -57,15 +60,20 @@ async function periodStorable(period: BillingPeriod): Promise<boolean> {
 }
 
 /**
- * Conversion démo → site client (activation manuelle par l'admin) :
- * compte client + formule + abonnement Stripe + site publié.
- * Le lien de démo devient l'URL de production en attendant le domaine custom.
+ * Conversion démo → compte client (activation manuelle par l'admin) :
+ * compte client + formules + abonnement Stripe. Avec la formule Site, le site
+ * de la démo est publié et son lien devient l'URL de production en attendant
+ * le domaine custom ; avec la formule Scale seule, le client n'a pas de site
+ * hébergé (les pages publiques ne le servent pas) et connecte le sien dans le
+ * studio.
  */
 export async function convertDemoToClient(input: unknown): Promise<ConversionResult> {
   await requireAdmin();
   const parsed = convertSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Formulaire invalide" };
-  const { siteId, plan, period, clientEmail } = parsed.data;
+  const { siteId, period, clientEmail } = parsed.data;
+  const plan = planFromFormulas(parsed.data.formulas);
+  if (!plan) return { error: "Choisissez au moins une formule" };
   if (planPrice(plan, period) === null) {
     return { error: `La formule ${PLANS[plan].label} n'est pas proposée sur la durée « ${BILLING_PERIOD_LABELS[period]} ».` };
   }

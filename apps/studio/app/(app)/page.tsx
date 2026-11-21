@@ -1,4 +1,4 @@
-import { getDb, hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSocialMedia } from "@theralys/db";
+import { getDb, hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSite, hasSocialMedia } from "@theralys/db";
 import { loadExternalSite } from "@theralys/jobs";
 import { activeExternalSite } from "@theralys/shared";
 import { allowedSections } from "@/components/ds";
@@ -50,6 +50,8 @@ export default async function HomePage({ searchParams }: Props) {
   const blog = demo || hasBlog(site.plan);
   const socialAccess = demo || hasSocialMedia(site.plan);
   const googleAccess = demo || hasGoogleProfile(site.plan);
+  // Formule Scale seule : pas de site Harmony. Tant que le praticien n'a pas connecté le sien, ses outils n'ont aucun site de référence.
+  const hosted = demo || hasSite(site.plan);
   const sections = allowedSections({
     publications: blog,
     social: socialAccess,
@@ -62,7 +64,7 @@ export default async function HomePage({ searchParams }: Props) {
   const referenceUrl = publicSiteUrl(site);
   const [stats, upcoming, ownSiteState] = await Promise.all([
     // Les visites lues sont celles du site de référence : jamais les deux mesures additionnées
-    getDashboardStats(site.id, period, ownSite ? "external" : "hosted"),
+    getDashboardStats(site.id, period, ownSite || !hosted ? "external" : "hosted"),
     blog ? getUpcoming(site.id) : Promise.resolve([]),
     ownSite ? loadExternalSite(getDb(), site) : Promise.resolve(null),
   ]);
@@ -73,7 +75,7 @@ export default async function HomePage({ searchParams }: Props) {
   const measure = awaitingMeasure && ownSite ? { address: siteAddressLabel(ownSite.url) } : null;
 
   // Mise en route : lue sur l'état réel du compte, limitée aux étapes que la formule et le site de référence permettent
-  const access: SetupAccess = { reference: ownSite ? "external" : "hosted", google: googleAccess, blog, social: socialAccess };
+  const access: SetupAccess = { reference: ownSite ? "external" : hosted ? "hosted" : "none", google: googleAccess, blog, social: socialAccess, connectRequired: !hosted };
   const setup = deriveSetupTasks(await readSetupSignals(site, access, ownSiteRow ? ownSiteRow.measure.seenAt !== null : null), access);
 
   return (
@@ -85,7 +87,9 @@ export default async function HomePage({ searchParams }: Props) {
       site={
         ownSite
           ? { reference: "external", address: siteAddressLabel(ownSite.url), viewHref: referenceUrl }
-          : { reference: "hosted", address: siteAddressLabel(siteUrl(site)), viewHref: siteUrl(site) }
+          : hosted
+            ? { reference: "hosted", address: siteAddressLabel(siteUrl(site)), viewHref: siteUrl(site) }
+            : { reference: "none", address: "", viewHref: "" }
       }
       awaitingMeasure={measure}
       socialAccess={socialAccess}

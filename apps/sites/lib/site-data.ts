@@ -4,6 +4,7 @@ import {
   getDb,
   googleReviews,
   hasBlog,
+  hasSite,
   motifPagesAllowance,
   pages,
   prospects,
@@ -15,7 +16,7 @@ import {
 
 /**
  * Blog visible sur le site public ? Les démos présentent toujours l'offre
- * complète ; pour un client, le blog suit la formule (Starter : non).
+ * complète ; pour un client, le blog fait partie de la formule Site.
  */
 export function hasBlogAccess(site: Site): boolean {
   return site.type === "demo" || hasBlog(site.plan);
@@ -25,6 +26,10 @@ export function hasBlogAccess(site: Site): boolean {
  * Résout un site par clé de segment [site] :
  * - contient un point → domaine custom (Phase 3) ;
  * - sinon → slug (démos et dev).
+ *
+ * Le site hébergé fait partie de la formule Site : un client qui n'a que la
+ * formule Scale n'a pas de site Harmony, rien n'est servi à son adresse (les
+ * démos, elles, présentent toujours l'offre complète).
  */
 export async function getSiteByKey(key: string): Promise<Site | null> {
   const db = getDb();
@@ -35,7 +40,13 @@ export async function getSiteByKey(key: string): Promise<Site | null> {
   const site = decoded.includes(".")
     ? await db.query.sites.findFirst({ where: eq(sites.domain, host) })
     : await db.query.sites.findFirst({ where: eq(sites.slug, decoded) });
-  return site ?? null;
+  if (!site || !isHostedSiteServed(site)) return null;
+  return site;
+}
+
+/** Le site hébergé existe-t-il pour ce compte ? Démos : toujours ; clients : avec la formule Site. */
+export function isHostedSiteServed(site: Pick<Site, "type" | "plan">): boolean {
+  return site.type === "demo" || hasSite(site.plan);
 }
 
 export function isDemoExpired(site: Site): boolean {
@@ -55,10 +66,9 @@ export async function getHomePage(siteId: string): Promise<Page | null> {
 }
 
 /**
- * Pages de motifs visibles — le gating suit la formule (Starter 0, Scale 6).
- * Les pages restent en base : un passage à la formule supérieure les
- * réactive sans régénération. Les 6 spécialités restent affichées sur la
- * page d'accueil dans tous les cas (cartes non cliquables en Starter).
+ * Pages de motifs visibles — le nombre suit la formule (6 avec la formule
+ * Site). Les pages restent en base : retrouver la formule Site les réactive
+ * sans régénération.
  */
 export async function getMotifPages(site: Site): Promise<Page[]> {
   const db = getDb();

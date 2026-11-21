@@ -27,7 +27,7 @@ const STEPS = [
 type WeekItem = { icon: LucideIcon; label: string; from: string; to: string };
 const BLOG: WeekItem = { icon: Newspaper, label: "Un article paraît", from: "#01A2B9", to: "#0A88CC" };
 
-/* Exemple de semaine en formule Scale : 4 articles, 2 contenus pour les réseaux, et le relevé de visibilité (toutes les deux semaines) */
+/* Exemple de semaine avec les deux formules, Site et Scale : 4 articles, 2 contenus pour les réseaux, et le relevé de visibilité (toutes les deux semaines) */
 const WEEK: { day: string; items: WeekItem[] }[] = [
   { day: "Lundi", items: [BLOG, { icon: Share2, label: "Un visuel prêt à poster", from: "#0E97DD", to: "#8F6CE0" }] },
   { day: "Mardi", items: [BLOG] },
@@ -84,7 +84,7 @@ export function Method() {
                 <h3 className="font-display text-xl font-bold text-ink-900">
                   Une semaine avec <Brand />
                 </h3>
-                <p className="rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">Exemple, formule Scale</p>
+                <p className="rounded-full bg-primary-100 px-3 py-1 text-xs font-bold text-primary-800">Exemple, formules Site + Scale</p>
               </div>
               <ol className="mt-5 space-y-2.5">
                 {WEEK.map((entry) => (

@@ -35,8 +35,8 @@ export default async function AcademyPage() {
               </LinkButton>
             }
           >
-            Passez à la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour accéder aux formations —
-            visibilité, fidélisation, communication — en plus du blog et des outils de mots-clés.
+            Ajoutez la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour accéder aux formations —
+            visibilité, fidélisation, communication — avec la fiche Google, les réseaux sociaux et la publicité.
           </EmptyState>
         </Card>
       </Stagger>

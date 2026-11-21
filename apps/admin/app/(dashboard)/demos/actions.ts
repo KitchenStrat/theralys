@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  PLAN_COMPLETE,
   blogArticles,
   blogSettings,
   getDb,
@@ -133,7 +134,7 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
       status: "generating",
       slug,
       name: `${data.firstName} ${data.lastName}`,
-      plan: "scale", // les démos présentent l'offre complète (équivalent Scale)
+      plan: PLAN_COMPLETE, // les démos présentent l'offre complète : les deux formules
       language: data.language,
       bookingUrl: data.bookingUrl || null,
       theme: DEFAULT_THEME,

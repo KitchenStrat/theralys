@@ -155,7 +155,7 @@ describe("export CSV", () => {
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const [header, line] = csv.slice(1).split("\r\n");
     expect(header).toBe(EXPORT_HEADERS.join(";"));
-    expect(line).toContain('Claire;Dupont;"Cabinet ; Dupont";Sophrologue;claire@exemple.fr;06 12 34 56 78;14 rue de la Berbie;81000;Albi;;Rendez-vous;Demande sur la vitrine;salon, à rappeler;Scale (annuel);');
+    expect(line).toContain('Claire;Dupont;"Cabinet ; Dupont";Sophrologue;claire@exemple.fr;06 12 34 56 78;14 rue de la Berbie;81000;Albi;;Rendez-vous;Demande sur la vitrine;salon, à rappeler;Site + Scale (annuel);');
     expect(line).toContain(`"'=HYPERLINK(""http://x"")";20/11/2026;;oui;`);
     expect(csv.endsWith('18/11/2026\r\n')).toBe(true);
   });

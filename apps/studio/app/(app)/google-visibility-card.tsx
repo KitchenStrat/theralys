@@ -36,7 +36,7 @@ export function GoogleVisibilityCard({
           description={
             <>
               Le suivi de vos mots-clés Google est disponible avec la formule{" "}
-              <strong className="font-semibold text-ds-ink-900">Scale</strong>.
+              <strong className="font-semibold text-ds-ink-900">Site</strong>.
             </>
           }
         />

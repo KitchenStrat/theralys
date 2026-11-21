@@ -3,13 +3,17 @@ import {
   BILLING_PERIOD_CADENCE,
   BILLING_PERIOD_LABELS,
   MIN_COMMITMENT_MONTHS,
-  OFFERED_PLANS,
+  FORMULA_DEFINITIONS,
   PLANS,
+  PLAN_COMPLETE,
+  PLAN_SCALE,
+  PLAN_SITE,
   commitmentMonths,
   periodTotal,
   planPeriods,
   planPrice,
   savedMonths,
+  type PlanId,
 } from "@theralys/db";
 import { Band } from "./band";
 import { BillingPeriodProvider } from "./billing-period";
@@ -23,7 +27,7 @@ import { Hero } from "./hero";
 import { Logos } from "./logos";
 import { Method } from "./method";
 import { OwnSite } from "./own-site";
-import { Pricing, type PlanCard } from "./pricing";
+import { Pricing, type FormulaCard, type PlanPeriod } from "./pricing";
 import { RevealObserver } from "./reveal";
 import { RoiCalculator } from "./roi-calculator";
 import { ScrollProgress } from "./scroll-progress";
@@ -38,7 +42,8 @@ import { Tour } from "./tour";
  * statistiques), et non plus un seul outil de site internet.
  *
  * Deux règles tiennent la page :
- * - les formules, leurs prix sur chaque durée de facturation, les économies
+ * - les deux formules (Site, Scale — à prendre seules ou ensemble), leurs
+ *   prix sur chaque durée de facturation, les économies
  *   et l'engagement viennent de la définition produit (@theralys/db) : la
  *   vitrine, le studio et la facturation ne peuvent pas se contredire ;
  * - rien n'y est inventé. Les captures sont de vrais écrans du studio (compte
@@ -49,38 +54,48 @@ import { Tour } from "./tour";
  *   (cf. `PROVISIONAL` dans `testimonials.tsx`).
  */
 export function Landing() {
-  const plans: PlanCard[] = OFFERED_PLANS.map((id) => {
-    const plan = PLANS[id];
-    return {
-      id,
-      label: plan.label,
-      periods: planPeriods(id).map((period) => ({
-        id: period,
-        price: planPrice(id, period) ?? 0,
-        total: periodTotal(id, period) ?? 0,
-        cadence: BILLING_PERIOD_CADENCE[period],
-        savedMonths: savedMonths(id, period),
-        commitmentMonths: commitmentMonths(period),
-      })),
-      homeSpecialties: plan.homeSpecialties,
-      maxMotifPages: plan.maxMotifPages,
-      blogArticlesPerWeek: plan.blogArticlesPerWeek,
-      blogArticlesPerYear: plan.blogArticlesPerYear,
-      academy: plan.academy,
-      socialMedia: plan.socialMedia,
-      googleProfile: plan.googleProfile,
-      googleAds: plan.googleAds,
-      metaAds: plan.metaAds,
-    };
-  });
-  // Les durées proposées par au moins une formule, dans l'ordre du sélecteur
-  const periods = BILLING_PERIODS.filter((period) => OFFERED_PLANS.some((id) => planPrice(id, period) !== null)).map((period) => ({
-    id: period,
-    label: BILLING_PERIOD_LABELS[period],
-  }));
-  // Le simulateur raisonne sur la formule complète, au prix de la durée choisie dans les tarifs
-  const complete = PLANS.scale;
-  const completePrices = planPeriods("scale").map((period) => ({ id: period, price: planPrice("scale", period) ?? 0 }));
+  const pricesOf = (plan: PlanId): PlanPeriod[] =>
+    planPeriods(plan).map((period) => ({
+      id: period,
+      price: planPrice(plan, period) ?? 0,
+      total: periodTotal(plan, period) ?? 0,
+      cadence: BILLING_PERIOD_CADENCE[period],
+      savedMonths: savedMonths(plan, period),
+      commitmentMonths: commitmentMonths(period),
+    }));
+  const site = PLANS[PLAN_SITE];
+  const scale = PLANS[PLAN_SCALE];
+  const ads = [scale.googleAds && "Google Ads", scale.metaAds && "Meta Ads"].filter(Boolean).join(" et ");
+  // Ce que comprend chaque formule, lu dans sa définition : une ligne par outil
+  const formulas: FormulaCard[] = [
+    {
+      id: "site",
+      label: FORMULA_DEFINITIONS.site.label,
+      periods: pricesOf(PLAN_SITE),
+      features: [
+        "Site professionnel clé en main, à vos couleurs",
+        `${site.maxMotifPages} pages de spécialités pour le référencement local`,
+        `Blog SEO : ${site.blogArticlesPerYear} articles par an`,
+        "Hébergement et nom de domaine inclus",
+      ],
+    },
+    {
+      id: "scale",
+      label: FORMULA_DEFINITIONS.scale.label,
+      periods: pricesOf(PLAN_SCALE),
+      features: [
+        scale.googleProfile && "Fiche Google : audit, visibilité, avis et posts",
+        scale.socialMedia && "Réseaux sociaux : contenus prêts à poster",
+        ads && `${ads} : diagnostic, plan d'action et contenus`,
+        "Sur votre site Harmony, ou sur le vôtre connecté",
+      ].filter((line): line is string => Boolean(line)),
+    },
+  ];
+  // Les prix de chaque choix : une formule seule, ou les deux (la somme)
+  const totals = { site: pricesOf(PLAN_SITE), scale: pricesOf(PLAN_SCALE), both: pricesOf(PLAN_COMPLETE) };
+  const labels = { site: site.label, scale: scale.label, both: PLANS[PLAN_COMPLETE].label };
+  // Les durées du sélecteur, dans l'ordre
+  const periods = BILLING_PERIODS.map((period) => ({ id: period, label: BILLING_PERIOD_LABELS[period] }));
 
   return (
     <>
@@ -104,8 +119,8 @@ export function Landing() {
         <Testimonials />
         <Band />
         <BillingPeriodProvider>
-          <Pricing plans={plans} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
-          <RoiCalculator prices={completePrices} planLabel={complete.label} />
+          <Pricing formulas={formulas} totals={totals} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
+          <RoiCalculator prices={totals} labels={labels} />
         </BillingPeriodProvider>
         <Faq />
         <DemoForm />

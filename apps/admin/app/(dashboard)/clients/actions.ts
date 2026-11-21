@@ -2,7 +2,9 @@
 
 import { and, eq } from "drizzle-orm";
 import { SignJWT } from "jose";
-import { getDb, users } from "@theralys/db";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { FORMULAS, getDb, planFromFormulas, sites, subscriptions, users } from "@theralys/db";
 import { requireAdmin } from "@/lib/auth";
 import { createClientInvitation } from "@/lib/invitations";
 
@@ -62,4 +64,29 @@ export async function resendClientInvitation(
     name: clientUser.name,
   });
   return { setupUrl: invitation.setupUrl, emailSent: invitation.emailSent };
+}
+
+const formulasSchema = z.object({ siteId: z.string().uuid(), formulas: z.array(z.enum(FORMULAS)).min(1) });
+
+/**
+ * Change les formules d'un client (Site, Scale, ou les deux) : ses droits
+ * dans le studio suivent aussitôt. L'abonnement enregistré est mis à jour ;
+ * le montant prélevé par Stripe, lui, se modifie dans Stripe.
+ */
+export async function setClientFormulas(input: unknown): Promise<{ ok: true } | { error: string }> {
+  await requireAdmin();
+  const parsed = formulasSchema.safeParse(input);
+  if (!parsed.success) return { error: "Un client garde au moins une formule." };
+  const plan = planFromFormulas(parsed.data.formulas);
+  if (!plan) return { error: "Un client garde au moins une formule." };
+  const db = getDb();
+  const [site] = await db
+    .update(sites)
+    .set({ plan, updatedAt: new Date() })
+    .where(and(eq(sites.id, parsed.data.siteId), eq(sites.type, "client")))
+    .returning({ id: sites.id });
+  if (!site) return { error: "Client introuvable." };
+  await db.update(subscriptions).set({ plan }).where(eq(subscriptions.siteId, site.id));
+  revalidatePath("/clients");
+  return { ok: true };
 }

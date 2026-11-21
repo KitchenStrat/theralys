@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BILLING_PERIOD_LABELS, PLANS, planPeriods, type BillingPeriod } from "@theralys/db/plans";
+import { BILLING_PERIOD_LABELS, OFFERED_PLANS, PLANS, planPeriods, type BillingPeriod } from "@theralys/db/plans";
 import { Button, FieldHint, Input, Label, Modal, Select } from "@theralys/ui";
 import { euros } from "@/lib/crm/format";
-import { CRM_STAGES, STAGE_META, contactMonthlyValue, type CrmStage } from "@/lib/crm/model";
+import { CRM_STAGES, STAGE_META, contactMonthlyValue, isPlanInterest, type CrmStage } from "@/lib/crm/model";
 import { formatPhone } from "@/lib/crm/normalize";
 import { saveContact } from "./actions";
 
@@ -74,7 +74,7 @@ export function ContactModal({ open, onClose, initial, defaultStage }: { open: b
   }
 
   const value = contactMonthlyValue({ plan: values.plan || null, billingPeriod: values.billingPeriod || null });
-  const periods = values.plan === "starter" || values.plan === "scale" ? planPeriods(values.plan) : [];
+  const periods = isPlanInterest(values.plan) ? planPeriods(values.plan) : [];
 
   return (
     <Modal open={open} onClose={onClose} title={editing ? "Modifier la fiche" : "Nouveau prospect"} size="lg">
@@ -128,8 +128,11 @@ export function ContactModal({ open, onClose, initial, defaultStage }: { open: b
               }}
             >
               <option value="">Non renseignée</option>
-              <option value="starter">{PLANS.starter.label}</option>
-              <option value="scale">{PLANS.scale.label}</option>
+              {OFFERED_PLANS.map((plan) => (
+                <option key={plan} value={plan}>
+                  {PLANS[plan].label}
+                </option>
+              ))}
             </Select>
           </div>
           <div>

@@ -22,7 +22,7 @@ export default async function BlogIndexPage({ params }: Props) {
   const { site: siteKey } = await params;
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
-  // Formule sans blog (Starter) : la rubrique n'existe pas sur le site public
+  // Formule sans blog : la rubrique n'existe pas sur le site public
   if (!hasBlogAccess(site)) notFound();
   const articles = await getPublishedArticles(site.id);
   const prefix = publicPathPrefix(siteKey);

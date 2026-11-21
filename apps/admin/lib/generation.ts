@@ -11,6 +11,7 @@ import {
 } from "@theralys/ai";
 import type { PageSections, ThemePreset } from "@theralys/shared";
 import {
+  PLAN_COMPLETE,
   blogArticles,
   blogSettings,
   getDb,
@@ -410,7 +411,7 @@ function buildGenerationInput(site: Site, prospect: Prospect): GenerationInput {
     highlightedMotifs: site.highlightedMotifs,
     // Les démos présentent toujours l'offre complète (équivalent Scale)
     motifPageCount:
-      site.type === "demo" ? motifPagesAllowance("scale") : motifPagesAllowance(site.plan),
+      site.type === "demo" ? motifPagesAllowance(PLAN_COMPLETE) : motifPagesAllowance(site.plan),
     googleEnrichment: prospect.googlePlaceId
       ? {
           businessName: prospect.googleBusinessName ?? undefined,

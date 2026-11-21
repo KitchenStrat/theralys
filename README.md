@@ -293,9 +293,10 @@ dégradé par section, un seul accent chaud.
   studio), annulation → `canceled` + site archivé, réactivation → site republié ;
   portail de facturation client. **Le gating suit l&apos;abonnement** : la formule en
   base est synchronisée depuis Stripe.
-- **Gating au rendu public** : seules les pages de motifs de la formule sont
-  servies et maillées (Boost = 3, Scale = 6) ; les pages excédentaires restent en
-  base et se réactivent en cas d&apos;upgrade.
+- **Gating au rendu public** : le site hébergé fait partie de la formule Site —
+  sans elle (formule Scale seule), rien n&apos;est servi à l&apos;adresse du site ;
+  avec elle, 6 pages de motifs sont servies et maillées (les pages excédentaires
+  restent en base).
 - **Sync des avis Google** : tick périodique (upsert par identifiant source,
   jamais de doublon, jamais d&apos;avis factices sur un site client), affichés
   sur le site public.
@@ -348,8 +349,8 @@ un environnement de préproduction sans aucun compte externe.
   Automatique/Manuelle ; voix : Nous/Je/On, Féminin/Masculin, Vous/Tu, 5 tons —
   appliqués aux futurs articles).
 - **Moteur éditorial** : sujets générés depuis les pages de spécialités + la
-  ville (maillage SEO local, sans doublon), cadence 2/sem (Boost) ou 4/sem
-  (Scale) ; tick J-7 : rédaction (Claude/mock, voix du client) + image IA →
+  ville (maillage SEO local, sans doublon), cadence 4/sem avec la formule
+  Site (pas de blog sans elle) ; tick J-7 : rédaction (Claude/mock, voix du client) + image IA →
   brouillon ou planifié selon le réglage ; tick de publication automatique ;
   tick de sync Search Console. Cron + état Postgres (ticks idempotents),
   migration vers une file durable prévue si besoin.
@@ -378,8 +379,42 @@ un environnement de préproduction sans aucun compte externe.
 - **Marketing éthique** : liste de formulations interdites (promesses de guérison,
   vocabulaire médical, pathologies, promesses de résultat) appliquée à tout contenu
   généré — mock comme API — avec tests.
-- **Gating par formule** en base : Starter (0 page secondaire), Boost (3, blog 2/sem),
-  Scale (6, blog 4/sem) — testé.
+- **Gating par formule** en base — testé (voir « L&apos;offre : deux formules »).
+
+## L&apos;offre : deux formules, à prendre seules ou ensemble
+
+Source unique : `packages/db/src/plans.ts` (prix, droits, libellés) — la vitrine,
+l&apos;admin, le studio, la facturation et les tâches planifiées la lisent toutes.
+
+| | Formule **Site** | Formule **Scale** | Les deux |
+|---|---|---|---|
+| Mensuel | 59 € | 89 € | 148 € |
+| Trimestriel (par mois) | 49 € | 74 € | 123 € |
+| Annuel (par mois) | 39 € | 59 € | 98 € |
+| 3 ans (par mois) | 29 € | 44 € | 73 € |
+
+- Règle de prix, à l&apos;euro inférieur : 10 mois réglés sur 12 en trimestriel, 8
+  sur 12 en annuel, 18 sur 36 sur 3 ans (`pricesFromMonthly`). Les deux formules
+  ensemble = la somme des deux prix, sans remise. Changer un tarif = changer le
+  prix mensuel de la formule dans `FORMULA_DEFINITIONS`.
+- **Site** : site hébergé (éditeur, hébergement, nom de domaine), 6 pages de
+  spécialités, blog (4 articles par semaine), suivi des mots-clés.
+- **Scale** : fiche Google, réseaux sociaux, Google Ads, Meta Ads, Académie —
+  **sans le site**. Les outils s&apos;appuient sur le site Harmony si le client a
+  aussi la formule Site, sinon sur son propre site, qu&apos;il connecte dans
+  « Mon site » (première étape de sa mise en route).
+- Toujours inclus : avis Google synchronisés et statistiques.
+- **Ce qui est enregistré** : l&apos;enum Postgres `plan` garde ses trois valeurs
+  historiques, avec un nouveau sens — `starter` = Site seule, `boost` = Scale
+  seule, `scale` = les deux (aucune migration). Le code ne les nomme jamais :
+  il passe par `PLAN_SITE` / `PLAN_SCALE` / `PLAN_COMPLETE`, `planFormulas`,
+  `hasFormula`, `planFromFormulas` et les droits (`hasSite`, `hasBlog`,
+  `hasSocialMedia`…). Les démos présentent toujours l&apos;offre complète.
+- **Admin** : la conversion d&apos;une démo coche une ou deux formules ; l&apos;onglet
+  Clients permet d&apos;en ajouter ou d&apos;en retirer une ensuite (les droits suivent
+  aussitôt ; le montant d&apos;un abonnement Stripe en cours se modifie dans Stripe).
+  Les comptes créés avant le découpage sont alignés sur les deux formules à
+  l&apos;ouverture de l&apos;admin (`apps/admin/lib/formulas.ts`).
 
 ## Commandes
 

@@ -296,6 +296,8 @@ describe("accès, fournisseur et messages", () => {
   it("hasMetaAdsAccess : démos toujours, clients selon la formule", () => {
     expect(hasMetaAdsAccess({ type: "demo", plan: "starter" })).toBe(true);
     expect(hasMetaAdsAccess({ type: "client", plan: "scale" })).toBe(true);
+    expect(hasMetaAdsAccess({ type: "client", plan: "boost" })).toBe(true);
+    // « starter » = formule Site seule : sans les outils de la formule Scale
     expect(hasMetaAdsAccess({ type: "client", plan: "starter" })).toBe(false);
   });
 

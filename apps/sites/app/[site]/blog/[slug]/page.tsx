@@ -52,7 +52,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
 
   const site = await getSiteByKey(siteKey);
   if (!site) notFound();
-  // Formule sans blog (Starter) : la rubrique n'existe pas sur le site public
+  // Formule sans blog : la rubrique n'existe pas sur le site public
   if (!hasBlogAccess(site)) notFound();
   const article = await getArticleBySlug(site.id, slug);
   if (!article) notFound();

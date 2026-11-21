@@ -9,18 +9,21 @@ import { OpenStudioButton } from "./open-studio-button";
 const BUTTON_CLASS =
   "inline-flex items-center gap-1 rounded-full border border-ink-300 px-3 py-1 text-xs font-medium text-ink-700 hover:bg-cream-100 disabled:opacity-50";
 
-/** Accès admin à un site client : éditeur visuel, studio, renvoi d'invitation. */
+/** Accès admin à un compte client : éditeur visuel (formule Site), studio, renvoi d'invitation. */
 export function ClientRowActions({
   siteId,
+  hasSite,
   invitePending,
 }: {
   siteId: string;
+  /** Le client a la formule Site : son site s'édite */
+  hasSite: boolean;
   invitePending: boolean;
 }) {
   return (
     <div className="flex items-center justify-end gap-2">
       {invitePending ? <ResendInviteButton siteId={siteId} /> : null}
-      <EditSiteButton siteId={siteId} />
+      {hasSite ? <EditSiteButton siteId={siteId} /> : null}
       <OpenStudioButton siteId={siteId} />
     </div>
   );

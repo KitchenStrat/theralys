@@ -18,8 +18,8 @@ import {
 export type ShellNavProps = {
   /** Sections ouvertes par la formule, dans l'ordre du registre */
   sections: readonly SectionKey[];
-  /** Adresse de « Voir mon site » */
-  siteHref: string;
+  /** Adresse de « Voir mon site » ; `null` : aucun site à voir (formule Scale seule, site pas encore connecté) */
+  siteHref: string | null;
   /** Action serveur de déconnexion */
   logoutAction: (formData: FormData) => void | Promise<void>;
   /** Nom du praticien, rappelé sous « Compte » */
@@ -168,6 +168,7 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
       <div className="mt-auto pt-5">
         <ul className="space-y-1 border-t border-ds-ink-200 pt-3">
           {allowed.has("compte") ? item("compte", userName) : null}
+          {siteHref === null ? null : (
           <li>
             {/* `data-testid` : le même que le lien de la mise en page actuelle (un seul par page ; les liens du mobile n'en portent pas) */}
             <a
@@ -186,6 +187,7 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
               </span>
             </a>
           </li>
+          )}
           <li>
             <form action={logoutAction}>
               <button type="submit" className={clsx(ROW, "w-full text-left")} data-ds-section="compte">

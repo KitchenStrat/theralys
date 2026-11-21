@@ -32,7 +32,7 @@ export default async function GoogleAdsPage({ searchParams }: Props) {
           </LinkButton>
         }
       >
-        Passez à la formule <strong className="font-semibold text-ds-ink-800">Scale</strong> pour savoir si Google Ads est pertinent pour votre
+        Ajoutez la formule <strong className="font-semibold text-ds-ink-800">Scale</strong> pour savoir si Google Ads est pertinent pour votre
         cabinet, obtenir les mots-clés à cibler avec leurs volumes et coûts réels, un plan d&apos;action complet (campagne, annonces, budget) et{" "}
         {/* Site du client en référence : le studio n'y rattache aucune visite à une annonce, il ne promet pas ce suivi */}
         {activeExternalSite(site.theme)

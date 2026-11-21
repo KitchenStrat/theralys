@@ -56,9 +56,11 @@ export function AppShell({ supportName, brand = "Harmony", children, ...nav }: A
         <Link href={homeHref} className="ds-brand-word inline-flex min-h-11 items-center rounded-lg text-2xl ds-focus">
           {brand}
         </Link>
-        <LinkButton href={nav.siteHref} external variant="secondary" size="sm" icon={<ExternalLink size={16} aria-hidden />}>
-          Voir mon site
-        </LinkButton>
+        {nav.siteHref === null ? null : (
+          <LinkButton href={nav.siteHref} external variant="secondary" size="sm" icon={<ExternalLink size={16} aria-hidden />}>
+            Voir mon site
+          </LinkButton>
+        )}
       </header>
 
       <div className="lg:flex">
