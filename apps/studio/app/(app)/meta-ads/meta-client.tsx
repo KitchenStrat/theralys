@@ -15,6 +15,7 @@ import { PlanTab } from "./plan-tab";
 import { SetupTab } from "./setup-tab";
 import { META_TABS, isMetaTab, metaTabHref, type MetaTab } from "./tabs";
 import { useAnalysisLaunch } from "./use-analysis-launch";
+import { useMarketRefresh } from "./use-market-refresh";
 
 export type MetaSiteInfo = {
   name: string;
@@ -52,6 +53,8 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
   const [tab, setTab] = useState<MetaTab>(initialTab);
   // Un seul lancement pour toute la section : suivi depuis « Diagnostic » comme depuis « Marché »
   const launcher = useAnalysisLaunch({ latest: data.latest, usage: data.usage });
+  // Veille enregistrée avec d'anciennes règles et devenue maigre : rattrapée d'office, quel que soit l'onglet ouvert
+  const marketRefresh = useMarketRefresh(data.marketRefresh);
 
   function select(next: MetaTab) {
     setTab(next);
@@ -137,6 +140,7 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
             mediaByAdId={data.mediaByAdId}
             visuals={data.visuals}
             launcher={launcher}
+            refresh={marketRefresh}
             analysesRemaining={data.usage.analysesRemaining}
             onSelectTab={jump}
           />

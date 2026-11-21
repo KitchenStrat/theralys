@@ -234,6 +234,21 @@ depuis son compte. Onglets
     formation et les services vendus aux praticiens, le hors-sujet ; une
     veille enregistrée avant le filtre est filtrée à l'affichage
     (`withRelevanceFilter` de `lib/meta-ads/data.ts`).
+  - **Sélection et plancher** : `selectMarketAds` garde au plus 60 annonces,
+    3 par page Facebook ; quand ce plafond laisserait la veille sous
+    `META_MARKET_MIN_ADS` (30) alors que le relevé compte d'autres annonces
+    pertinentes, il est relevé d'un cran à la fois — jamais avec une annonce
+    que le filtre a écartée. Le plancher ne crée pas d'annonces : un marché
+    qui en compte moins de 30 pertinentes les montre toutes.
+  - **Veille seule** : une veille enregistrée avec d'anciennes règles
+    (`market.selection` absent) et devenue maigre (`marketNeedsRefresh`) est
+    rattrapée d'office à l'ouverture de la section (`use-market-refresh.ts` →
+    `POST /api/meta-ads/market/refresh` → `refreshMetaMarket` de
+    `@theralys/jobs`) : nouvelle collecte, sélection, visuels, synthèse et
+    diagnostic recalculé, sans toucher aux annonces ni aux plans et sans
+    décompter d'analyse. Une tentative par 24 h (`market.refreshAttemptedAt`),
+    réussie ou non ; l'ancienne veille est gardée si la collecte échoue ou
+    rend moins d'annonces.
   - **Visuels** : l'API officielle ne renvoie que les textes ; images, vidéos
     et carrousels viennent de ScrapeCreators (`SCRAPECREATORS_API_KEY`,
     `@theralys/providers/meta/media`), mis en cache dans `meta_ad_media`,

@@ -40,7 +40,15 @@
  *   (quota non consommé) ; le diagnostic est recalculé avec le contexte
  *   courant (Pixel, bandeau, liens) sur la veille conservée ; `assets` est
  *   remis à vide — les chemins Blob des rendus sont déterministes et écrasés
- *   en place, `removedRenderUrls` est donc toujours vide.
+ *   en place, `removedRenderUrls` est donc toujours vide ;
+ * - la « veille seule » (`refreshMetaMarket`) rattrape d'office une veille
+ *   enregistrée avec d'anciennes règles de sélection et devenue maigre
+ *   (`marketNeedsRefresh`) : nouvelle collecte, sélection, visuels, synthèse
+ *   et diagnostic recalculé sur la dernière analyse `done`, sans toucher aux
+ *   créas ni aux plans et sans décompter d'analyse ; la tentative est
+ *   réservée de façon atomique (`market.refreshAttemptedAt`), une par
+ *   META_MARKET_REFRESH_RETRY_MS, réussie ou non ; l'ancienne veille est
+ *   gardée si la collecte échoue ou rend moins d'annonces.
  */
 
 import { and, between, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
@@ -55,15 +63,20 @@ import {
   META_LIBRARY_TERMS_MAX,
   META_MARKET_MAX_ADS,
   META_MARKET_MEDIA_SPARE,
+  META_MARKET_MIN_ADS,
   META_MARKET_MIN_LOCAL,
+  META_MARKET_REFRESH_RETRY_MS,
   META_MARKET_SAMPLE_FOR_AI,
   META_MARKET_SCOPES,
+  META_MARKET_SELECTION,
   buildMetaLocalIndex,
   buildMetaSeed,
   cleanSocialInstructions,
   diagnoseMetaAds,
   isCommercialPageCategory,
   isMockPlaceId,
+  marketNeedsRefresh,
+  marketShownCount,
   selectMarketAds,
   usageMonthKey,
   type MetaAdMedia,
@@ -482,13 +495,16 @@ export type BuildMarketOptions = {
   localIndex?: MetaLocalIndex | null;
   /** Annonces conservées au plus (défaut META_MARKET_MAX_ADS) */
   max?: number;
+  /** Plancher visé (défaut META_MARKET_MIN_ADS) */
+  minAds?: number;
 };
 
 /**
  * Veille enregistrée : filtre de pertinence (métier de la graine : commerce,
  * formation et hors sujet écartés d'office), annonces supprimées retirées,
- * annonces classées par zone (`selectMarketAds`), comptes et signaux forts
- * par zone, sans synthèse.
+ * annonces classées par zone (`selectMarketAds`, plancher compris), comptes
+ * et signaux forts par zone, sans synthèse ; `selection` porte la version
+ * des règles appliquées.
  */
 export function buildMetaMarket(
   collection: Pick<MarketCollection, "records" | "matchedTerms" | "terms" | "calls" | "truncated">,
@@ -503,6 +519,7 @@ export function buildMetaMarket(
     ...(opts.excludedIds ? { excludedIds: opts.excludedIds } : {}),
     ...(opts.localIndex ? { localIndex: opts.localIndex } : {}),
     ...(opts.max ? { max: opts.max } : {}),
+    ...(opts.minAds !== undefined ? { minAds: opts.minAds } : {}),
   });
   return {
     version: 1,
@@ -519,6 +536,7 @@ export function buildMetaMarket(
     insights: null,
     ...(filtered ? { filtered } : {}),
     ...(dismissed > 0 ? { dismissed } : {}),
+    selection: META_MARKET_SELECTION,
   };
 }
 
@@ -697,6 +715,71 @@ export async function generateMetaAds(planner: MetaAdsPlanner, brief: SocialSite
   return { creatives, videoPlan, plan, error };
 }
 
+/** Visuels des annonces retenues (cache, fournisseur, copies) : échec toléré, la veille s'affiche alors sans visuels. */
+export type MetaMediaEnricher = (ads: MetaMarketAd[]) => Promise<Record<string, MetaAdMedia>>;
+
+/**
+ * Veille seule, sans base : collecte (`collectMarketAds`), sélection avec
+ * quelques annonces de réserve quand les visuels sont demandés, pages
+ * commerciales écartées (`dropCommercialPages`), synthèse IA sur
+ * l'échantillon (échec toléré : `insights: null`). Ne lève pas : `market`
+ * null seulement si aucun terme n'a abouti, `marketError` porte le message
+ * utilisateur d'une veille en échec, en tout ou en partie. `progress.calls`
+ * suit les appels même en cas d'échec.
+ */
+export async function executeMetaMarket(
+  ctx: Pick<MetaAdsContextData, "seed" | "brief" | "localIndex" | "dismissedAdIds" | "favorites">,
+  deps: { provider: AdLibraryProvider; planner: MetaAdsPlanner; now: Date; label?: string; progress?: { calls: number }; enrichMedia?: MetaMediaEnricher },
+): Promise<{ market: MetaAdsMarket | null; marketError: string | null }> {
+  const { provider, planner, now } = deps;
+  const label = deps.label ?? "veille";
+  const progress = deps.progress ?? { calls: 0 };
+  let market: MetaAdsMarket | null = null;
+  let marketError: string | null = null;
+  try {
+    const collection = await collectMarketAds(provider, ctx.seed, { progress });
+    if (collection.error !== null) {
+      marketError = metaErrorMessage(collection.error, "market");
+      console.error(`[meta-ads] ${label} : veille partielle (termes en échec : ${collection.failedTerms.join(", ")}) après ${progress.calls} appel(s) :`, collection.error);
+    }
+    const marketOptions: BuildMarketOptions = {
+      ...(ctx.dismissedAdIds && ctx.dismissedAdIds.length > 0 ? { excludedIds: new Set(ctx.dismissedAdIds) } : {}),
+      ...(ctx.localIndex ? { localIndex: ctx.localIndex } : {}),
+    };
+    if (deps.enrichMedia) {
+      // Quelques annonces de réserve, plancher compris : celles qu'une catégorie de page commerciale écarte sont remplacées
+      market = buildMetaMarket(collection, ctx.seed, provider.mode, now, {
+        ...marketOptions,
+        max: META_MARKET_MAX_ADS + META_MARKET_MEDIA_SPARE,
+        minAds: META_MARKET_MIN_ADS + META_MARKET_MEDIA_SPARE,
+      });
+      let mediaByAdId: Record<string, MetaAdMedia> = {};
+      try {
+        mediaByAdId = await deps.enrichMedia(market.ads);
+      } catch (err) {
+        console.error(`[meta-ads] ${label} : visuels non obtenus :`, errorMessage(err));
+      }
+      market = dropCommercialPages(market, mediaByAdId);
+    } else {
+      market = buildMetaMarket(collection, ctx.seed, provider.mode, now, marketOptions);
+    }
+    let insights: MetaMarketInsights | null = null;
+    if (market.ads.length > 0) {
+      try {
+        insights = insightsForMarket(await planner.analyzeMarket(ctx.brief, marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, ctx.favorites ?? [])), market);
+      } catch (err) {
+        console.error(`[meta-ads] ${label} : synthèse de la veille non générée :`, err);
+      }
+    }
+    market = { ...market, insights };
+  } catch (err) {
+    market = null;
+    marketError = metaErrorMessage(err, "market");
+    console.error(`[meta-ads] ${label} : veille indisponible (${provider.mode}) après ${progress.calls} appel(s) :`, err);
+  }
+  return { market, marketError };
+}
+
 export type MetaAnalysisResult = {
   market: MetaAdsMarket | null;
   /** Mode du fournisseur (`none` seulement sans fournisseur : une veille en échec garde `meta` ou `mock`) */
@@ -732,7 +815,7 @@ export async function executeMetaAnalysis(
     progress?: { calls: number };
     heartbeat?: () => Promise<void>;
     /** Visuels des annonces retenues (cache, fournisseur, copies) : échec toléré, la veille s'affiche alors sans visuels */
-    enrichMedia?: (ads: MetaMarketAd[]) => Promise<Record<string, MetaAdMedia>>;
+    enrichMedia?: MetaMediaEnricher;
   },
 ): Promise<MetaAnalysisResult> {
   const { provider, planner, now } = deps;
@@ -743,43 +826,7 @@ export async function executeMetaAnalysis(
   let marketError: string | null = null;
 
   if (provider) {
-    try {
-      const collection = await collectMarketAds(provider, ctx.seed, { progress });
-      if (collection.error !== null) {
-        marketError = metaErrorMessage(collection.error, "market");
-        console.error(`[meta-ads] ${label} : veille partielle (termes en échec : ${collection.failedTerms.join(", ")}) après ${progress.calls} appel(s) :`, collection.error);
-      }
-      const marketOptions: BuildMarketOptions = {
-        ...(ctx.dismissedAdIds && ctx.dismissedAdIds.length > 0 ? { excludedIds: new Set(ctx.dismissedAdIds) } : {}),
-        ...(ctx.localIndex ? { localIndex: ctx.localIndex } : {}),
-      };
-      if (deps.enrichMedia) {
-        // Quelques annonces de réserve : celles qu'une catégorie de page commerciale écarte sont remplacées
-        market = buildMetaMarket(collection, ctx.seed, provider.mode, now, { ...marketOptions, max: META_MARKET_MAX_ADS + META_MARKET_MEDIA_SPARE });
-        let mediaByAdId: Record<string, MetaAdMedia> = {};
-        try {
-          mediaByAdId = await deps.enrichMedia(market.ads);
-        } catch (err) {
-          console.error(`[meta-ads] ${label} : visuels non obtenus :`, errorMessage(err));
-        }
-        market = dropCommercialPages(market, mediaByAdId);
-      } else {
-        market = buildMetaMarket(collection, ctx.seed, provider.mode, now, marketOptions);
-      }
-      let insights: MetaMarketInsights | null = null;
-      if (market.ads.length > 0) {
-        try {
-          insights = insightsForMarket(await planner.analyzeMarket(ctx.brief, marketSampleForAi(market, META_MARKET_SAMPLE_FOR_AI, ctx.favorites ?? [])), market);
-        } catch (err) {
-          console.error(`[meta-ads] ${label} : synthèse de la veille non générée :`, err);
-        }
-      }
-      market = { ...market, insights };
-    } catch (err) {
-      market = null;
-      marketError = metaErrorMessage(err, "market");
-      console.error(`[meta-ads] ${label} : veille indisponible (${providerMode}) après ${progress.calls} appel(s) :`, err);
-    }
+    ({ market, marketError } = await executeMetaMarket(ctx, { provider, planner, now, label, progress, ...(deps.enrichMedia ? { enrichMedia: deps.enrichMedia } : {}) }));
     if (deps.heartbeat) {
       try {
         await deps.heartbeat();
@@ -1237,5 +1284,183 @@ async function regenerateMetaAdsAttributed(
     }
   } finally {
     endMetaRegeneration(siteId);
+  }
+}
+
+// ─── Veille seule (rattrapage) ───────────────────────────────────────────────
+
+export type MetaMarketRefreshResult =
+  | { status: "done"; market: MetaAdsMarket; diagnostic: MetaAdsDiagnostic; marketError: string | null; calls: number }
+  /** Ancienne veille gardée : collecte en échec (`failed`) ou nouvelle veille moins fournie que l'ancienne (`thinner`) ; `message` : erreur de collecte, null si tout a abouti */
+  | { status: "kept"; reason: "failed" | "thinner"; message: string | null; calls: number };
+
+/**
+ * Veille seule, sans base : nouvelle veille (`executeMetaMarket`) et
+ * diagnostic recalculé dessus (déterministe, contexte courant). L'ancienne
+ * veille est gardée si aucun terme n'a abouti, ou si la nouvelle montre moins
+ * d'annonces que l'ancienne (`previousShown`) : un rattrapage n'appauvrit
+ * jamais la galerie. La veille rendue porte l'heure de la tentative.
+ */
+export async function executeMetaMarketRefresh(
+  ctx: MetaAdsContextData,
+  deps: { provider: AdLibraryProvider; planner: MetaAdsPlanner; now: Date; previousShown: number; label?: string; progress?: { calls: number }; enrichMedia?: MetaMediaEnricher },
+): Promise<MetaMarketRefreshResult> {
+  const progress = deps.progress ?? { calls: 0 };
+  const { market, marketError } = await executeMetaMarket(ctx, {
+    provider: deps.provider,
+    planner: deps.planner,
+    now: deps.now,
+    label: deps.label ?? "veille seule",
+    progress,
+    ...(deps.enrichMedia ? { enrichMedia: deps.enrichMedia } : {}),
+  });
+  if (!market) return { status: "kept", reason: "failed", message: marketError, calls: progress.calls };
+  if (market.ads.length < deps.previousShown) return { status: "kept", reason: "thinner", message: marketError, calls: progress.calls };
+  const refreshed: MetaAdsMarket = { ...market, refreshAttemptedAt: deps.now.toISOString() };
+  return { status: "done", market: refreshed, diagnostic: diagnoseMetaAds(metaDiagnosticInputFrom(ctx.diagnosticInput, refreshed), deps.now), marketError, calls: progress.calls };
+}
+
+export type MetaMarketRefreshOutcome =
+  | { status: "done"; analysisId: string; /** Annonces de la nouvelle veille */ ads: number; /** Annonces montrées avant le rattrapage */ previous: number }
+  | { status: "kept"; analysisId: string; reason: "failed" | "thinner"; message: string | null }
+  | { status: "skipped"; reason: "no_access" | "no_provider" | "no_analysis" | "not_needed" | "recent" | "busy" }
+  | { status: "error"; analysisId: string | null; message: string };
+
+/**
+ * Message de la colonne `error` après une veille seule : un message de
+ * génération (à relancer) est gardé, sinon celui de la nouvelle veille (null
+ * quand elle a abouti en entier).
+ */
+export function metaRefreshError(previous: string | null | undefined, marketError: string | null): string | null {
+  return previous && !isMetaMarketMessage(previous) ? previous : marketError;
+}
+
+/**
+ * Veille seule : rattrape la veille de la dernière analyse `done` du site
+ * quand elle a été enregistrée avec d'anciennes règles de sélection et montre
+ * moins de META_MARKET_MIN_ADS annonces (`marketNeedsRefresh`) — nouvelle
+ * collecte, sélection (plancher compris), visuels dans le quota existant,
+ * pages commerciales écartées, synthèse, diagnostic recalculé. `market`,
+ * `seed`, `diagnostic` et `calls` sont réécrits ; créas, plan vidéo et plan
+ * ne sont pas touchés, et aucune analyse n'est décomptée du mois.
+ *
+ * La tentative est réservée d'abord, de façon atomique, sous le verrou
+ * `<siteId>:meta-ads` : refusée (`busy`) tant qu'une analyse `running` non
+ * périmée existe, et (`recent`) si une tentative date de moins de
+ * META_MARKET_REFRESH_RETRY_MS — `market.refreshAttemptedAt` est posé par une
+ * mise à jour conditionnelle, deux appels simultanés n'en réservent qu'une.
+ * Réussie ou non, la tentative n'est donc pas rejouée avant ce délai. Si la
+ * collecte échoue ou rend moins d'annonces, l'ancienne veille reste telle
+ * quelle ; une nouvelle veille complète mais moins fournie clôt le
+ * rattrapage (`selection` posé sur l'ancienne : rien de mieux à obtenir).
+ */
+export function refreshMetaMarket(...args: Parameters<typeof refreshMetaMarketAttributed>): ReturnType<typeof refreshMetaMarketAttributed> {
+  // Registre des appels API : tout ce que fait cette fonction est rattaché à la fonctionnalité et au site
+  return withApiUsage({ feature: "meta_ads", siteId: args[1] }, () => refreshMetaMarketAttributed(...args));
+}
+
+async function refreshMetaMarketAttributed(
+  db: Database,
+  siteId: string,
+  opts: { now?: Date; env?: NodeJS.ProcessEnv; mediaStore?: MetaMediaStore | null; loadReference?: AdsReferenceLoader; loadBrief?: typeof loadGoogleBrief } = {},
+): Promise<MetaMarketRefreshOutcome> {
+  const now = opts.now ?? new Date();
+  const env = opts.env ?? process.env;
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
+  if (!site) return { status: "error", analysisId: null, message: "Site introuvable" };
+  if (!hasMetaAdsAccess(site)) return { status: "skipped", reason: "no_access" };
+  const marketMode = marketProviderFor(env, site.type)?.mode ?? "none";
+  if (marketMode === "none") return { status: "skipped", reason: "no_provider" };
+  const analysis = await db.query.metaAdsAnalyses.findFirst({
+    where: and(eq(metaAdsAnalyses.siteId, siteId), eq(metaAdsAnalyses.status, "done")),
+    orderBy: [desc(metaAdsAnalyses.createdAt)],
+  });
+  if (!analysis?.market) return { status: "skipped", reason: "no_analysis" };
+  const previous = analysis.market;
+  const previousShown = marketShownCount(previous, analysis.seed.profession);
+  // Règles courantes, veille fournie ou rien de plus à espérer : pas de rattrapage ; sinon, une tentative par délai
+  if (!marketNeedsRefresh({ selection: previous.selection, counts: previous.counts }, previousShown, now)) return { status: "skipped", reason: "not_needed" };
+  if (!marketNeedsRefresh(previous, previousShown, now)) return { status: "skipped", reason: "recent" };
+
+  // Réservation atomique de la tentative, sous le même verrou que le lancement d'une analyse
+  const attemptedAt = now.toISOString();
+  const cutoff = new Date(now.getTime() - META_MARKET_REFRESH_RETRY_MS).toISOString();
+  const claim = await db.transaction(async (tx): Promise<"ok" | "busy" | "recent"> => {
+    const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(hashtext(${`${siteId}:meta-ads`})) as locked`);
+    if (lock.rows[0]?.locked !== true) return "busy";
+    if (hasFreshMetaRunning(await runningMetaAnalyses(tx, siteId), now)) return "busy";
+    // Dates ISO de même forme (`toISOString`) : l'ordre des chaînes est celui des dates
+    const rows = await tx
+      .update(metaAdsAnalyses)
+      .set({ market: sql`jsonb_set(${metaAdsAnalyses.market}, '{refreshAttemptedAt}', to_jsonb(${attemptedAt}::text), true)` })
+      .where(
+        and(
+          eq(metaAdsAnalyses.id, analysis.id),
+          eq(metaAdsAnalyses.status, "done"),
+          isNotNull(metaAdsAnalyses.market),
+          sql`coalesce(${metaAdsAnalyses.market}->>'refreshAttemptedAt', '') <= ${cutoff}`,
+        ),
+      )
+      .returning({ id: metaAdsAnalyses.id });
+    return rows.length > 0 ? "ok" : "recent";
+  });
+  if (claim !== "ok") return { status: "skipped", reason: claim };
+
+  const label = `veille seule ${analysis.id} (${site.slug})`;
+  let ctx: MetaAdsContext;
+  try {
+    ctx = await loadMetaAdsContext(db, siteId, env, { geography: marketMode === "meta", library: marketMode === "mock" ? "mock" : "meta", loadReference: opts.loadReference, loadBrief: opts.loadBrief });
+  } catch (err) {
+    console.error(`[meta-ads] ${label} : contexte du site indisponible :`, err);
+    return { status: "error", analysisId: analysis.id, message: metaErrorMessage(err) };
+  }
+  const provider = marketProviderFor(env, site.type, { now, locality: localityOf(ctx.seed) });
+  if (!provider) return { status: "skipped", reason: "no_provider" };
+  const planner = createMetaAdsPlanner(env);
+  // Visuels des annonces retenues : cache, puis fournisseur — recherches réservées sur le quota mensuel du site, comme à l'analyse
+  const mediaProvider = mediaProviderFor(env, provider.mode);
+  const enrichMedia: MetaMediaEnricher | undefined = mediaProvider
+    ? async (ads) => {
+        const enriched = await enrichSiteAdsMedia(db, siteId, ads.map((ad) => ad.id), { provider: mediaProvider, store: opts.mediaStore ?? null, now: opts.now ?? new Date(), exclusive: true });
+        console.info(
+          `[meta-ads] ${label} : visuels de ${Object.keys(enriched.mediaByAdId).length}/${ads.length} annonce(s), ${enriched.lookups} recherche(s) (${mediaProvider.mode})${enriched.blocked ? ", lot interrompu" : ""}${enriched.busy ? ", autre lot en cours" : ""}${enriched.overQuota > 0 ? `, ${enriched.overQuota} hors quota` : ""}`,
+        );
+        return enriched.mediaByAdId;
+      }
+    : undefined;
+
+  try {
+    const result = await executeMetaMarketRefresh(ctx, { provider, planner, now, previousShown, label, ...(enrichMedia ? { enrichMedia } : {}) });
+    const stillDone = and(eq(metaAdsAnalyses.id, analysis.id), eq(metaAdsAnalyses.status, "done"), isNotNull(metaAdsAnalyses.market));
+    if (result.status === "kept") {
+      // Collecte complète mais moins fournie que l'ancienne veille : rien de mieux à obtenir, le rattrapage est clos
+      if (result.reason === "thinner" && result.message === null) {
+        await db
+          .update(metaAdsAnalyses)
+          .set({ market: sql`jsonb_set(${metaAdsAnalyses.market}, '{selection}', to_jsonb(${META_MARKET_SELECTION}::int), true)` })
+          .where(stillDone);
+      }
+      console.info(`[meta-ads] ${label} : ancienne veille gardée (${result.reason === "failed" ? "collecte en échec" : "nouvelle veille moins fournie"}, ${result.calls} appel(s))`);
+      return { status: "kept", analysisId: analysis.id, reason: result.reason, message: result.message };
+    }
+    await db
+      .update(metaAdsAnalyses)
+      .set({
+        market: result.market,
+        seed: ctx.seed,
+        diagnostic: result.diagnostic,
+        provider: provider.mode,
+        calls: sql`${metaAdsAnalyses.calls} + ${result.calls}`,
+        error: metaRefreshError(analysis.error, result.marketError),
+        updatedAt: new Date(),
+      })
+      .where(stillDone);
+    console.info(
+      `[meta-ads] ${label} : ${result.market.ads.length} annonces (${previousShown} montrées avant, zone ${result.market.scopeUsed}, ${result.calls} appel(s), ${provider.mode}), diagnostic recalculé (${result.diagnostic.verdict})`,
+    );
+    return { status: "done", analysisId: analysis.id, ads: result.market.ads.length, previous: previousShown };
+  } catch (err) {
+    console.error(`[meta-ads] ${label} en échec :`, err);
+    return { status: "error", analysisId: analysis.id, message: metaErrorMessage(err, "market") };
   }
 }

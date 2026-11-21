@@ -11,9 +11,12 @@ import {
   META_LIBRARY_TERM_MAX,
   META_MARKET_MAX_ADS,
   META_MARKET_MAX_PER_PAGE,
+  META_MARKET_MIN_ADS,
   META_MARKET_MIN_LOCAL,
+  META_MARKET_REFRESH_RETRY_MS,
   META_MARKET_SCOPES,
   META_MARKET_SCOPE_LABELS,
+  META_MARKET_SELECTION,
   META_MARKET_STRONG_DAYS,
   META_MARKET_STRONG_REACH,
   META_PERSONAL_ATTRIBUTE_PATTERNS,
@@ -33,7 +36,9 @@ import {
   isMetaAdsLanding,
   marketNearCount,
   marketNearbyCount,
+  marketNeedsRefresh,
   marketScopeNote,
+  marketShownCount,
   marketTotalCount,
   metaCreativeIssues,
   metaLibraryUrl,
@@ -1317,6 +1322,8 @@ describe("selectMarketAds : pertinence, annonces supprimées, rang, index des co
 describe("selectMarketAds : complément des zones plus larges et plafond par page", () => {
   const strong = { startedAt: daysAgo(90), euTotalReach: 40_000 };
   const weak = { startedAt: daysAgo(3), euTotalReach: 200 };
+  /** Plafond par page strict : sans le plancher (`minAds`), qui le relève quand la veille est maigre */
+  const strict = { minAds: 0 };
 
   it("zone locale maigre : ses annonces d'abord, puis les mieux notées des zones plus larges, toutes zones confondues", () => {
     const records = [
@@ -1368,14 +1375,14 @@ describe("selectMarketAds : complément des zones plus larges et plafond par pag
       record("moyenne", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 5_000 }),
       record("correcte", { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 1_000 }),
     ];
-    const selected = selectMarketAds([...variants, record("autre", { pageId: "page-2", euTotalReach: 10 })], toulouse, now);
+    const selected = selectMarketAds([...variants, record("autre", { pageId: "page-2", euTotalReach: 10 })], toulouse, now, strict);
     expect(selected.ads.map((a) => a.id)).toEqual(["forte", "moyenne", "correcte", "autre"]);
     // Le plafond ne touche que `ads` : comptes et rangs portent sur toutes les annonces repérées
     expect(selected.counts.france).toBe(5);
     expect(selected.ads.every((a) => a.rankTotal === 5)).toBe(true);
     expect(selected.ads.map((a) => a.rank)).toEqual([1, 2, 3, 5]);
     // Trois annonces ou moins : rien n'est écarté
-    expect(selectMarketAds(variants.slice(0, 3), toulouse, now).ads).toHaveLength(3);
+    expect(selectMarketAds(variants.slice(0, 3), toulouse, now, strict).ads).toHaveLength(3);
   });
 
   it("plafond par page : sans `pageId`, la page se reconnaît à son nom normalisé (casse, accents, traits d'union) ; deux `pageId` différents restent deux pages", () => {
@@ -1385,22 +1392,22 @@ describe("selectMarketAds : complément des zones plus larges et plafond par pag
       record("n3", { pageName: "cabinet-zénith", euTotalReach: 2_000 }),
       record("n4", { pageName: "Cabinet Zenith", euTotalReach: 1_000 }),
     ];
-    expect(selectMarketAds(sameName, toulouse, now).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3"]);
+    expect(selectMarketAds(sameName, toulouse, now, strict).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3"]);
     // Homonymes aux identifiants de page différents : chacun garde ses annonces
     const homonyms = sameName.map((ad, i) => ({ ...ad, pageId: i < 2 ? "page-a" : "page-b" }));
-    expect(selectMarketAds(homonyms, toulouse, now).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3", "n4"]);
+    expect(selectMarketAds(homonyms, toulouse, now, strict).ads.map((a) => a.id)).toEqual(["n1", "n2", "n3", "n4"]);
   });
 
   it("plafond par page : des pages sans rapport ne sont jamais confondues (noms en cyrillique, en idéogrammes, en émojis, ou sans nom)", () => {
     const names = ["Йога Студия", "瑜伽", "🌿", "✨✨", "Ёлка"];
     const distinct = names.map((pageName, i) => record(`d${i + 1}`, { pageName, euTotalReach: 5_000 - i * 500 }));
-    expect(selectMarketAds(distinct, toulouse, now).ads.map((a) => a.id)).toEqual(["d1", "d2", "d3", "d4", "d5"]);
+    expect(selectMarketAds(distinct, toulouse, now, strict).ads.map((a) => a.id)).toEqual(["d1", "d2", "d3", "d4", "d5"]);
     // Sans nom du tout : chaque annonce est sa propre page
     const nameless = Array.from({ length: 5 }, (_, i) => record(`s${i + 1}`, { pageName: i % 2 === 0 ? "" : "   ", euTotalReach: 5_000 - i * 500 }));
-    expect(selectMarketAds(nameless, toulouse, now).ads).toHaveLength(5);
+    expect(selectMarketAds(nameless, toulouse, now, strict).ads).toHaveLength(5);
     // La même page au nom non latin reste plafonnée
     const same = Array.from({ length: 5 }, (_, i) => record(`c${i + 1}`, { pageName: i % 2 === 0 ? "Йога Студия" : " йога студия ", euTotalReach: 5_000 - i * 500 }));
-    expect(selectMarketAds(same, toulouse, now).ads.map((a) => a.id)).toEqual(["c1", "c2", "c3"]);
+    expect(selectMarketAds(same, toulouse, now, strict).ads.map((a) => a.id)).toEqual(["c1", "c2", "c3"]);
   });
 
   it("plafond par page appliqué dans l'ordre de `ads` : la zone retenue prend les places de la page avant le complément, une annonce écartée ne consomme pas de place", () => {
@@ -1413,27 +1420,145 @@ describe("selectMarketAds : complément des zones plus larges et plafond par pag
       record("voisin", { pageId: "page-2", targetLocations: [loc("Toulouse")], euTotalReach: 10 }),
       record("ailleurs", { pageId: "page-3", euTotalReach: 10 }),
     ];
-    const selected = selectMarketAds(records, toulouse, now, { minLocal: 3 });
+    const selected = selectMarketAds(records, toulouse, now, { ...strict, minLocal: 3 });
     expect(selected.scopeUsed).toBe("ville");
     // Les deux annonces locales de la page passent, puis sa meilleure annonce nationale ; la quatrième saute
     expect(selected.ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1", "ailleurs"]);
     // `max` compte les annonces conservées, pas celles que le plafond a écartées
-    expect(selectMarketAds(records, toulouse, now, { minLocal: 3, max: 5 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1", "ailleurs"]);
-    expect(selectMarketAds(records, toulouse, now, { minLocal: 3, max: 4 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1"]);
+    expect(selectMarketAds(records, toulouse, now, { ...strict, minLocal: 3, max: 5 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1", "ailleurs"]);
+    expect(selectMarketAds(records, toulouse, now, { ...strict, minLocal: 3, max: 4 }).ads.map((a) => a.id)).toEqual(["local-1", "local-2", "voisin", "national-1"]);
   });
 
   it("`maxPerPage` remplace le plafond : 1 → une annonce par page, large → aucune limite ; la zone retenue se décide avant le plafond", () => {
     const variants = Array.from({ length: 5 }, (_, i) => record(`v${i + 1}`, { pageId: "page-1", pageName: "Cabinet Zen", euTotalReach: 10_000 - i * 1_000, targetLocations: [loc("Toulouse")] }));
     const records = [...variants, record("autre", { pageId: "page-2", euTotalReach: 10 })];
-    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 1 }).ads.map((a) => a.id)).toEqual(["v1", "autre"]);
-    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 2 }).ads.map((a) => a.id)).toEqual(["v1", "v2", "autre"]);
-    expect(selectMarketAds(records, toulouse, now).ads.map((a) => a.id)).toEqual(["v1", "v2", "v3", "autre"]);
-    expect(selectMarketAds(records, toulouse, now, { maxPerPage: 99 }).ads).toHaveLength(6);
+    expect(selectMarketAds(records, toulouse, now, { ...strict, maxPerPage: 1 }).ads.map((a) => a.id)).toEqual(["v1", "autre"]);
+    expect(selectMarketAds(records, toulouse, now, { ...strict, maxPerPage: 2 }).ads.map((a) => a.id)).toEqual(["v1", "v2", "autre"]);
+    expect(selectMarketAds(records, toulouse, now, strict).ads.map((a) => a.id)).toEqual(["v1", "v2", "v3", "autre"]);
+    expect(selectMarketAds(records, toulouse, now, { ...strict, maxPerPage: 99 }).ads).toHaveLength(6);
     // 5 annonces repérées en ville suffisent à retenir la zone, même si 3 seulement sont conservées
-    const local = selectMarketAds(records, toulouse, now, { minLocal: 5 });
+    const local = selectMarketAds(records, toulouse, now, { ...strict, minLocal: 5 });
     expect(local.scopeUsed).toBe("ville");
     expect(local.counts.ville).toBe(5);
     expect(marketNearCount(local)).toBe(META_MARKET_MAX_PER_PAGE);
+  });
+});
+
+describe("selectMarketAds : plancher META_MARKET_MIN_ADS", () => {
+  /** `pages` pages de `perPage` annonces chacune, toutes nationales ; la portée décroît nettement d'une annonce à l'autre, un peu d'une page à l'autre (notes distinctes). */
+  const pool = (pages: number, perPage: number) =>
+    Array.from({ length: pages }, (_, p) =>
+      Array.from({ length: perPage }, (_, i) =>
+        record(`p${p + 1}-a${String(i + 1).padStart(2, "0")}`, { pageId: `page-${p + 1}`, pageName: `Cabinet ${p + 1}`, euTotalReach: Math.round(90_000 * 0.85 ** i * 0.97 ** p) }),
+      ),
+    ).flat();
+  const perPageOf = (ads: readonly MetaMarketAd[]) => {
+    const counts = new Map<string, number>();
+    for (const ad of ads) counts.set(ad.pageId ?? "", (counts.get(ad.pageId ?? "") ?? 0) + 1);
+    return [...counts.values()];
+  };
+
+  it("peu de pages : le plafond par page est relevé d'un cran à la fois, pour toutes les pages, jusqu'au plancher", () => {
+    expect(META_MARKET_MIN_ADS).toBe(30);
+    // 4 pages de 20 annonces : 12 annonces au plafond de 3 — le plancher en demande 30 : 8, 8, 7 et 7 par page
+    const selected = selectMarketAds(pool(4, 20), toulouse, now);
+    expect(selected.ads).toHaveLength(META_MARKET_MIN_ADS);
+    expect(perPageOf(selected.ads).sort()).toEqual([7, 7, 8, 8]);
+    // Les annonces prises sont les mieux notées de chaque page, et l'ordre de la veille est gardé (note décroissante)
+    expect(selected.ads.filter((a) => a.pageId === "page-1").map((a) => a.id)).toEqual(Array.from({ length: 8 }, (_, i) => `p1-a0${i + 1}`));
+    expect(selected.ads.map((a) => a.score)).toEqual([...selected.ads.map((a) => a.score)].sort((a, b) => b - a));
+    expect(selected.counts.france).toBe(80);
+  });
+
+  it("assez de pages : le plafond reste strict, le plancher ne change rien", () => {
+    const selected = selectMarketAds(pool(12, 5), toulouse, now);
+    expect(selected.ads).toHaveLength(36);
+    expect(perPageOf(selected.ads).every((n) => n === META_MARKET_MAX_PER_PAGE)).toBe(true);
+    // Juste au plancher : 10 pages × 3
+    expect(perPageOf(selectMarketAds(pool(10, 5), toulouse, now).ads)).toEqual(Array.from({ length: 10 }, () => 3));
+  });
+
+  it("relevé plus petit que le plancher : tout est conservé, rien n'est inventé", () => {
+    const selected = selectMarketAds(pool(2, 9), toulouse, now);
+    expect(selected.ads).toHaveLength(18);
+    expect(new Set(selected.ads.map((a) => a.id)).size).toBe(18);
+  });
+
+  it("le plancher ne réintroduit aucune annonce écartée par le filtre de pertinence ni supprimée par le praticien", () => {
+    const practitioner = (id: string, page: number, reach: number) =>
+      record(id, { pageId: `page-${page}`, pageName: `Sophrologue Albi ${page}`, bodies: ["Séances de sophrologie sur rendez-vous au cabinet."], targetLocations: [zone("Albi", "city")], euTotalReach: reach });
+    const shop = (id: string) => record(id, { pageId: "boutique", pageName: "Zen Shop", bodies: ["Livraison offerte, code promo -20% sur nos produits."], captions: ["zen-shop.fr"], euTotalReach: 90_000 });
+    const records = [
+      ...Array.from({ length: 12 }, (_, i) => practitioner(`a${i + 1}`, 1, 9_000 - i)),
+      ...Array.from({ length: 12 }, (_, i) => practitioner(`b${i + 1}`, 2, 8_000 - i)),
+      ...Array.from({ length: 12 }, (_, i) => shop(`s${i + 1}`)),
+    ];
+    const selected = selectMarketAds(records, toulouse, now, { profession: "Sophrologue", excludedIds: new Set(["a1", "b1"]) });
+    // 24 annonces de praticiens, 2 supprimées : 22 conservées, toutes de praticiens — les 12 annonces de la boutique restent écartées
+    expect(selected.filtered).toEqual({ formation: 0, commerce: 12, autre: 0 });
+    expect(selected.dismissed).toBe(2);
+    expect(selected.ads).toHaveLength(22);
+    expect(selected.ads.some((a) => a.pageId === "boutique" || a.id === "a1" || a.id === "b1")).toBe(false);
+  });
+
+  it("`minAds` ajustable, borné par `max` ; 0 garde le plafond strict", () => {
+    const records = pool(2, 20);
+    expect(selectMarketAds(records, toulouse, now, { minAds: 0 }).ads).toHaveLength(6);
+    expect(selectMarketAds(records, toulouse, now, { minAds: 9 }).ads).toHaveLength(9);
+    expect(selectMarketAds(records, toulouse, now, { minAds: 36 }).ads).toHaveLength(36);
+    // `max` l'emporte sur le plancher
+    expect(selectMarketAds(records, toulouse, now, { max: 8 }).ads).toHaveLength(8);
+  });
+
+  it("zone retenue d'abord, même relevée : le plancher complète avec les mêmes pages, dans l'ordre de la veille", () => {
+    const local = Array.from({ length: 10 }, (_, i) => record(`l${i + 1}`, { pageId: "page-locale", pageName: "Cabinet Zen", euTotalReach: Math.round(900 * 0.8 ** i), targetLocations: [loc("Toulouse")] }));
+    const wider = Array.from({ length: 10 }, (_, i) => record(`n${i + 1}`, { pageId: "page-nationale", pageName: "Cabinet National", euTotalReach: Math.round(40_000 * 0.8 ** i) }));
+    const selected = selectMarketAds([...wider, ...local], toulouse, now, { minLocal: 8, minAds: 12 });
+    expect(selected.scopeUsed).toBe("ville");
+    // 3 + 3 au plafond, puis un cran de plus par page jusqu'à 12 : 6 locales en tête, 6 nationales ensuite
+    expect(selected.ads.map((a) => a.id)).toEqual(["l1", "l2", "l3", "l4", "l5", "l6", "n1", "n2", "n3", "n4", "n5", "n6"]);
+  });
+});
+
+describe("marketShownCount et marketNeedsRefresh", () => {
+  const counts = (france: number) => ({ ville: 0, departement: 0, region: 0, france });
+  const day = 86_400_000;
+
+  it("marketShownCount : toutes les annonces d'une veille filtrée à l'enregistrement ; celles que le filtre garde pour une veille antérieure", () => {
+    const practitioner = record("p1", { pageName: "Sophrologue Albi", bodies: ["Séances de sophrologie sur rendez-vous au cabinet."], targetLocations: [zone("Albi", "city")] });
+    const shop = record("s1", { pageName: "Zen Shop", bodies: ["Livraison offerte, code promo -20% sur nos produits."], captions: ["zen-shop.fr"] });
+    const ads = selectMarketAds([practitioner, shop], toulouse, now).ads;
+    expect(ads).toHaveLength(2);
+    // Avant le filtre : la boutique est écartée à l'affichage
+    expect(marketShownCount({ ads }, "Sophrologue")).toBe(1);
+    // Filtrée à l'enregistrement : ce qui est enregistré est montré
+    expect(marketShownCount({ ads, filtered: { formation: 0, commerce: 0, autre: 0 } }, "Sophrologue")).toBe(2);
+  });
+
+  it("veille aux anciennes règles, maigre alors que le relevé en comptait plus : à rattraper", () => {
+    expect(META_MARKET_SELECTION).toBe(2);
+    expect(marketNeedsRefresh({ counts: counts(701) }, 12, now)).toBe(true);
+    expect(marketNeedsRefresh({ counts: counts(701), selection: 1 }, 12, now)).toBe(true);
+    expect(marketNeedsRefresh({ counts: counts(40) }, META_MARKET_MIN_ADS - 1, now)).toBe(true);
+  });
+
+  it("règles courantes, veille fournie, ou rien de plus à espérer : jamais rattrapée", () => {
+    expect(marketNeedsRefresh({ counts: counts(701), selection: META_MARKET_SELECTION }, 12, now)).toBe(false);
+    expect(marketNeedsRefresh({ counts: counts(701) }, META_MARKET_MIN_ADS, now)).toBe(false);
+    expect(marketNeedsRefresh({ counts: counts(701) }, 45, now)).toBe(false);
+    // Tout ce qui a été repéré est déjà montré : une nouvelle collecte n'y changerait rien
+    expect(marketNeedsRefresh({ counts: counts(12) }, 12, now)).toBe(false);
+    expect(marketNeedsRefresh({ counts: counts(0) }, 0, now)).toBe(false);
+  });
+
+  it("une tentative par délai : rien avant META_MARKET_REFRESH_RETRY_MS, de nouveau possible après ; date illisible ignorée", () => {
+    expect(META_MARKET_REFRESH_RETRY_MS).toBe(day);
+    const attempted = (ago: number) => ({ counts: counts(701), refreshAttemptedAt: new Date(now.getTime() - ago).toISOString() });
+    expect(marketNeedsRefresh(attempted(60_000), 12, now)).toBe(false);
+    expect(marketNeedsRefresh(attempted(day - 1), 12, now)).toBe(false);
+    expect(marketNeedsRefresh(attempted(day), 12, now)).toBe(true);
+    expect(marketNeedsRefresh(attempted(3 * day), 12, now)).toBe(true);
+    expect(marketNeedsRefresh({ counts: counts(701), refreshAttemptedAt: "hier" }, 12, now)).toBe(true);
   });
 });
 

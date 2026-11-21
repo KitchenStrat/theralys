@@ -6,10 +6,11 @@ import { Button, Card, CardHeader, InlineSuccess, Spinner } from "@/components/d
 import { META_ADS_ANALYSES_PER_MONTH, marketScopeNote, type MetaAdsMarket, type MetaAdsSeed, type MetaMarketScope } from "@theralys/shared";
 import { formatDayFr } from "@/lib/calendar";
 import type { MetaVisualsView } from "@/lib/meta-ads/data";
-import { dismissedNote, filteredNote, scopeCounters, visualsLoadingNote, visualsNote } from "@/lib/meta-ads/market-view";
+import { MARKET_REFRESH_PENDING, dismissedNote, filteredNote, marketRefreshedMessage, scopeCounters, visualsLoadingNote, visualsNote } from "@/lib/meta-ads/market-view";
 import { AnalysisProgress } from "./analysis-progress";
 import { Notice } from "./parts";
 import type { AnalysisLaunch } from "./use-analysis-launch";
+import type { MarketRefresh } from "./use-market-refresh";
 import type { VisualsLoader } from "./use-visuals-loader";
 
 /** Lieu d'une zone (« Albi », « Tarn ») ; null pour les autres zones et la France, que le libellé dit déjà. */
@@ -23,13 +24,15 @@ function zoneName(scope: MetaMarketScope, seed: MetaAdsSeed): string | null {
 /**
  * En-tête de la veille : zone retenue, source et date du relevé, compteurs
  * par zone, annonces écartées (d'office ou par le praticien), actualisation
- * de l'analyse et rappel de ce qu'est le signal.
+ * de l'analyse, rattrapage d'office d'une veille ancienne (« veille seule »)
+ * et rappel de ce qu'est le signal.
  */
 export function MarketHeader({
   market,
   seed,
   dismissed,
   launcher,
+  refresh,
   analysesRemaining,
 }: {
   market: MetaAdsMarket;
@@ -38,6 +41,8 @@ export function MarketHeader({
   dismissed: number;
   /** Lancement de l'analyse (partagé avec l'onglet « Diagnostic ») */
   launcher: AnalysisLaunch;
+  /** Rattrapage d'office de la veille : sans décompter d'analyse */
+  refresh: MarketRefresh;
   analysesRemaining: number;
 }) {
   const counters = useMemo(() => scopeCounters(market), [market]);
@@ -107,6 +112,17 @@ export function MarketHeader({
               </p>
             ) : null}
             {launcher.message && !launcher.running ? <InlineSuccess className="mt-3">{launcher.message}</InlineSuccess> : null}
+            {refresh.pending && !launcher.running ? (
+              <p className="mt-3 flex items-start gap-2 text-ds-body text-ds-ink-700" data-testid="meta-market-refresh">
+                <Spinner className="mt-0.5 size-[1.125rem] shrink-0 text-ds-section-accent" />
+                {MARKET_REFRESH_PENDING}
+              </p>
+            ) : null}
+            {!refresh.pending && refresh.refreshedAds !== null && !launcher.running && !launcher.message ? (
+              <div data-testid="meta-market-refreshed">
+                <InlineSuccess className="mt-3">{marketRefreshedMessage(refresh.refreshedAds)}</InlineSuccess>
+              </div>
+            ) : null}
           </div>
         </div>
 

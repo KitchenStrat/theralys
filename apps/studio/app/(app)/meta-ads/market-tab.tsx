@@ -16,6 +16,7 @@ import { frTypo } from "./parts";
 import type { MetaTab } from "./tabs";
 import type { AnalysisLaunch } from "./use-analysis-launch";
 import { useMarketLibrary } from "./use-market-library";
+import type { MarketRefresh } from "./use-market-refresh";
 import { MarketVisualsContext, useVisualsLoader } from "./use-visuals-loader";
 
 type MarketView = "annonces" | "bibliotheque" | "synthese";
@@ -38,6 +39,7 @@ export function MarketTab({
   mediaByAdId,
   visuals,
   launcher,
+  refresh,
   analysesRemaining,
   onSelectTab,
 }: {
@@ -58,6 +60,8 @@ export function MarketTab({
   visuals: MetaVisualsView;
   /** Lancement de l'analyse, partagé avec l'onglet « Diagnostic » */
   launcher: AnalysisLaunch;
+  /** Rattrapage d'office de la veille (« veille seule »), lancé à l'ouverture de la section */
+  refresh: MarketRefresh;
   analysesRemaining: number;
   onSelectTab: (tab: MetaTab) => void;
 }) {
@@ -89,7 +93,7 @@ export function MarketTab({
     );
   }
 
-  return <MarketWatch market={market} seed={seed} source={library} mediaByAdId={mediaByAdId} visuals={visuals} launcher={launcher} analysesRemaining={analysesRemaining} />;
+  return <MarketWatch market={market} seed={seed} source={library} mediaByAdId={mediaByAdId} visuals={visuals} launcher={launcher} refresh={refresh} analysesRemaining={analysesRemaining} />;
 }
 
 /**
@@ -104,6 +108,7 @@ function MarketWatch({
   mediaByAdId,
   visuals,
   launcher,
+  refresh,
   analysesRemaining,
 }: {
   market: MetaAdsMarket;
@@ -112,6 +117,7 @@ function MarketWatch({
   mediaByAdId: Record<string, MetaAdMedia>;
   visuals: MetaVisualsView;
   launcher: AnalysisLaunch;
+  refresh: MarketRefresh;
   analysesRemaining: number;
 }) {
   const [chosenView, setView] = useState<MarketView>("annonces");
@@ -120,8 +126,8 @@ function MarketWatch({
   const [libraryFilters, setLibraryFilters] = useState<MetaGalleryFilters>(META_GALLERY_DEFAULT_FILTERS);
   const library = useMarketLibrary({ market, mediaByAdId, library: source });
   const adsById = useMemo(() => new Map(market.ads.map((a) => [a.id, a])), [market]);
-  // Visuels manquants : chargés d'office, les cartes savent lesquels restent à chercher
-  const loader = useVisualsLoader({ visuals, available: source.available, watchKey: `${market.fetchedAt}:${market.ads.length}` });
+  // Visuels manquants : chargés d'office, les cartes savent lesquels restent à chercher — pas pendant un rattrapage, qui remplace ces annonces
+  const loader = useVisualsLoader({ visuals, available: source.available && !refresh.pending, watchKey: `${market.fetchedAt}:${market.ads.length}` });
   const visualsContext = useMemo(() => ({ pendingIds: new Set(visuals.pendingIds), loading: loader.loading }), [visuals.pendingIds, loader.loading]);
 
   const views = VIEWS.filter((v) => v.id !== "synthese" || market.insights !== null);
@@ -132,8 +138,8 @@ function MarketWatch({
   return (
     <MarketVisualsContext.Provider value={visualsContext}>
     <div className="space-y-6">
-      <MarketHeader market={market} seed={seed} dismissed={dismissed} launcher={launcher} analysesRemaining={analysesRemaining} />
-      <VisualsBanner visuals={visuals} available={source.available} loader={loader} />
+      <MarketHeader market={market} seed={seed} dismissed={dismissed} launcher={launcher} refresh={refresh} analysesRemaining={analysesRemaining} />
+      <VisualsBanner visuals={visuals} available={source.available && !refresh.pending} loader={loader} />
 
       {/* Sélecteur de vue, au dessin du sélecteur à segments du design system : la vue active est une pastille blanche, en gras */}
       <div role="group" aria-label="Vue de la veille" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full bg-ds-ink-100 p-1 inset-ring inset-ring-ds-ink-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

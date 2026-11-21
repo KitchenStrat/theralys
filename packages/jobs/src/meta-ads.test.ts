@@ -13,14 +13,20 @@ import {
   META_LIBRARY_TERMS_MAX,
   META_MARKET_MAX_ADS,
   META_MARKET_MEDIA_SPARE,
+  META_MARKET_MIN_ADS,
+  META_MARKET_REFRESH_RETRY_MS,
   META_MARKET_SAMPLE_FOR_AI,
+  META_MARKET_SELECTION,
   META_MEDIA_LOOKUPS_PER_MONTH,
   META_MEDIA_LOOKUP_COST_USD,
   META_MEDIA_POSTER_WIDTH,
   buildMetaLocalIndex,
   buildMetaSeed,
   buildSocialBrief,
+  diagnoseMetaAds,
   externalBriefPages,
+  marketNeedsRefresh,
+  marketShownCount,
   metaCreativeIssues,
   metaPlanIssues,
   metaVideoPlanIssues,
@@ -59,6 +65,7 @@ import {
   dropCommercialPages,
   endMetaRegeneration,
   executeMetaAnalysis,
+  executeMetaMarketRefresh,
   generateMetaAds,
   hasFreshMetaRunning,
   hasMetaAdsAccess,
@@ -77,7 +84,9 @@ import {
   metaDiagnosticInputFrom,
   metaErrorMessage,
   metaProfileFrom,
+  metaRefreshError,
   metaRegenerationError,
+  refreshMetaMarket,
   regenerateMetaAds,
   renderUrlsOf,
   runMetaAdsAnalysis,
@@ -2063,6 +2072,254 @@ describe("regenerateMetaAds (base simulée)", () => {
       expect(fake.inserts).toHaveLength(0);
       expect(fake.updates).toHaveLength(0);
     });
+  });
+});
+
+// ─── Veille seule (rattrapage) ───────────────────────────────────────────────
+
+/** `pages` pages de praticiens d'Albi, `perPage` annonces chacune (toutes gardées par le filtre de pertinence), notes distinctes. */
+function practitionerPool(pages: number, perPage: number): MetaAdRecord[] {
+  return Array.from({ length: pages }, (_, p) =>
+    Array.from({ length: perPage }, (_, i) => record(`pool-${p + 1}-${String(i + 1).padStart(2, "0")}`, { pageId: `page-${p + 1}`, pageName: `Sophrologue ${p + 1}`, euTotalReach: Math.round(60_000 * 0.85 ** i * 0.97 ** p) })),
+  ).flat();
+}
+
+/**
+ * Veille enregistrée avant le filtre de pertinence et le plancher : ni
+ * `filtered` ni `selection`, 3 annonces de praticiens et 2 d'une boutique
+ * conservées sur 40 repérées — 3 seulement sont montrées.
+ */
+function legacyMarket(overrides: Partial<MetaAdsMarket> = {}): MetaAdsMarket {
+  const collection = { records: [nationalRecord("old-1"), nationalRecord("old-2"), nationalRecord("old-3"), shopRecord("old-4"), shopRecord("old-5")], matchedTerms: {}, terms: ["sophrologue"], calls: 2, truncated: false };
+  const legacy: MetaAdsMarket = { ...buildMetaMarket(collection, { ...SEED, profession: "" }, "mock", NOW), counts: { ville: 0, departement: 0, region: 0, france: 40 } };
+  delete legacy.selection;
+  return { ...legacy, ...overrides };
+}
+
+describe("buildMetaMarket : plancher et version des règles", () => {
+  const collection = (records: MetaAdRecord[]) => ({ records, matchedTerms: {}, terms: ["sophrologue"], calls: 1, truncated: false });
+
+  it("`selection` porte la version courante des règles ; peu de pages : le plafond par page est relevé jusqu'au plancher, `minAds` ajustable", () => {
+    const records = practitionerPool(3, 15);
+    const market = buildMetaMarket(collection(records), SEED, "meta", NOW);
+    expect(market.selection).toBe(META_MARKET_SELECTION);
+    expect(market.filtered).toEqual({ formation: 0, commerce: 0, autre: 0 });
+    expect(market.ads).toHaveLength(META_MARKET_MIN_ADS);
+    expect(new Set(market.ads.map((ad) => ad.pageId)).size).toBe(3);
+    expect(buildMetaMarket(collection(records), SEED, "meta", NOW, { minAds: 0 }).ads).toHaveLength(9);
+    expect(buildMetaMarket(collection(records), SEED, "meta", NOW, { minAds: META_MARKET_MIN_ADS + META_MARKET_MEDIA_SPARE }).ads).toHaveLength(36);
+    // Une veille aux règles courantes n'est jamais rattrapée, même maigre
+    expect(marketNeedsRefresh(buildMetaMarket(collection(records.slice(0, 20)), SEED, "meta", NOW, { minAds: 0 }), 3, NOW)).toBe(false);
+  });
+
+  it("veille d'avant le filtre et le plancher (fixture) : 3 annonces montrées sur 5 conservées et 40 repérées — à rattraper", () => {
+    const legacy = legacyMarket();
+    expect(legacy.ads).toHaveLength(5);
+    expect(legacy).not.toHaveProperty("filtered");
+    expect(legacy).not.toHaveProperty("selection");
+    expect(marketShownCount(legacy, "Sophrologue")).toBe(3);
+    expect(marketNeedsRefresh(legacy, 3, NOW)).toBe(true);
+  });
+});
+
+describe("executeMetaMarketRefresh (veille seule, sans base)", () => {
+  const planner = createMetaAdsPlanner(MOCK_ENV);
+
+  it("nouvelle veille : plancher atteint, règles courantes, heure de la tentative, diagnostic recalculé dessus, appels comptés", async () => {
+    const { provider, inputs } = fakeProvider(() => ({ ads: practitionerPool(4, 12), calls: 1, truncated: false }));
+    const progress = { calls: 0 };
+    const result = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider, planner, now: NOW, previousShown: 12, progress }));
+    expect(result.status).toBe("done");
+    if (result.status !== "done") return;
+    expect(result.market.ads).toHaveLength(META_MARKET_MIN_ADS);
+    expect(result.market).toMatchObject({ source: "meta", selection: META_MARKET_SELECTION, refreshAttemptedAt: NOW.toISOString(), filtered: { formation: 0, commerce: 0, autre: 0 } });
+    expect(result.market.insights).not.toBeNull();
+    expect(result.marketError).toBeNull();
+    expect(result.calls).toBe(inputs.length);
+    expect(progress.calls).toBe(inputs.length);
+    // Diagnostic recalculé sur la nouvelle veille, à l'heure du rattrapage
+    expect(result.diagnostic.generatedAt).toBe(NOW.toISOString());
+    expect(result.diagnostic).toEqual(diagnoseMetaAds(metaDiagnosticInputFrom(DIAGNOSTIC_INPUT, result.market), NOW));
+    // Rattrapée : plus de nouvelle tentative, même bien plus tard
+    expect(marketNeedsRefresh(result.market, result.market.ads.length, new Date(NOW.getTime() + 30 * META_MARKET_REFRESH_RETRY_MS))).toBe(false);
+  });
+
+  it("visuels demandés : quelques annonces de réserve au-dessus du plancher, pages commerciales écartées ensuite", async () => {
+    const { provider } = fakeProvider(() => ({ ads: practitionerPool(4, 12), calls: 1, truncated: false }));
+    const seen: string[][] = [];
+    const enrichMedia = async (ads: MetaMarketAd[]) => {
+      seen.push(ads.map((ad) => ad.id));
+      // La première page est classée boutique : ses annonces sortent de la veille
+      return Object.fromEntries(ads.filter((ad) => ad.pageId === "page-1").map((ad) => [ad.id, mediaOf(["Shopping & Retail"])]));
+    };
+    const result = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider, planner, now: NOW, previousShown: 12, enrichMedia }));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toHaveLength(META_MARKET_MIN_ADS + META_MARKET_MEDIA_SPARE);
+    expect(result.status).toBe("done");
+    if (result.status !== "done") return;
+    expect(result.market.ads.some((ad) => ad.pageId === "page-1")).toBe(false);
+    expect(result.market.ads).toHaveLength(27);
+    expect(result.market.filtered).toEqual({ formation: 0, commerce: 9, autre: 0 });
+  });
+
+  it("aucun terme n'aboutit → ancienne veille gardée (`failed`) avec le message utilisateur", async () => {
+    const { provider } = fakeProvider(() => {
+      throw rateLimited();
+    });
+    const result = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider, planner, now: NOW, previousShown: 3 }));
+    expect(result).toEqual({ status: "kept", reason: "failed", message: META_ERROR_MESSAGES.transient, calls: 0 });
+  });
+
+  it("nouvelle veille moins fournie que l'ancienne → gardée (`thinner`) : sans message si la collecte a abouti, avec si elle est partielle", async () => {
+    const few = fakeProvider(() => ({ ads: practitionerPool(2, 2), calls: 1, truncated: false }));
+    const complete = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider: few.provider, planner, now: NOW, previousShown: 12 }));
+    expect(complete).toEqual({ status: "kept", reason: "thinner", message: null, calls: few.inputs.length });
+    const partial = fakeProvider((_input, index) => {
+      if (index === 1) throw serverError();
+      return { ads: practitionerPool(2, 2), calls: 1, truncated: false };
+    });
+    const interrupted = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider: partial.provider, planner, now: NOW, previousShown: 12 }));
+    expect(interrupted).toMatchObject({ status: "kept", reason: "thinner", message: META_ERROR_MESSAGES.transient });
+    // Autant d'annonces que l'ancienne : la nouvelle, aux règles courantes, la remplace
+    const same = await silenced(() => executeMetaMarketRefresh(CONTEXT, { provider: few.provider, planner, now: NOW, previousShown: 4 }));
+    expect(same.status).toBe("done");
+  });
+
+  it("metaRefreshError : un message de génération est gardé, sinon celui de la nouvelle veille", () => {
+    expect(metaRefreshError(null, null)).toBeNull();
+    expect(metaRefreshError(META_ERROR_MESSAGES.token, null)).toBeNull();
+    expect(metaRefreshError(META_ERROR_MESSAGES.marketMissing, META_ERROR_MESSAGES.transient)).toBe(META_ERROR_MESSAGES.transient);
+    expect(metaRefreshError(META_ERROR_MESSAGES.generation, null)).toBe(META_ERROR_MESSAGES.generation);
+    expect(metaRefreshError(META_ERROR_MESSAGES.generation, META_ERROR_MESSAGES.transient)).toBe(META_ERROR_MESSAGES.generation);
+  });
+});
+
+describe("refreshMetaMarket (base simulée)", () => {
+  const dialect = new PgDialect();
+  const analysisUpdates = (updates: FakeWrite[]) => updates.filter((u) => u.table === metaAdsAnalyses);
+  /** Requête d'une écriture `market = jsonb_set(…)` (réservation de la tentative, clôture du rattrapage). */
+  const marketSql = (write: FakeWrite) => dialect.sqlToQuery(write.values.market as SQL);
+  const quotaInserts = (inserts: FakeWrite[]) => inserts.filter((i) => i.table === googleUsage && (i.values.kind === "meta_analysis" || i.values.kind === "meta_regen"));
+
+  it("veille ancienne et maigre : tentative réservée, puis nouvelle veille, graine, diagnostic et appels enregistrés — créas, plans et quota d'analyses intacts", async () => {
+    const analysis = doneAnalysis({ market: legacyMarket(), provider: "mock", error: null, calls: 2 });
+    // Fiche praticien d'Albi : la veille de démonstration y compte plus d'annonces de praticiens que le plancher
+    const fake = fakeDb({ analysis, site: { ...SITE_WITH_PIXEL, prospectId: PROSPECT.id } as Site, prospect: PROSPECT });
+    const outcome = await silenced(() => refreshMetaMarket(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }));
+    expect(outcome).toMatchObject({ status: "done", analysisId: analysis.id, previous: 3 });
+    const [claim, write, ...others] = analysisUpdates(fake.updates);
+    expect(others).toHaveLength(0);
+    // Réservation : seule la clé `refreshAttemptedAt` de la veille est écrite, à l'heure de la tentative
+    expect(Object.keys(claim!.values)).toEqual(["market"]);
+    expect(marketSql(claim!).sql).toContain("jsonb_set(\"meta_ads_analyses\".\"market\", '{refreshAttemptedAt}'");
+    expect(marketSql(claim!).params).toEqual([NOW.toISOString()]);
+    // Enregistrement : veille, graine, diagnostic, fournisseur, appels et message — rien d'autre
+    expect(Object.keys(write!.values).sort()).toEqual(["calls", "diagnostic", "error", "market", "provider", "seed", "updatedAt"]);
+    const market = write!.values.market as MetaAdsMarket;
+    expect(market).toMatchObject({ source: "mock", selection: META_MARKET_SELECTION, refreshAttemptedAt: NOW.toISOString() });
+    expect(market.filtered).toBeDefined();
+    expect(market.ads.length).toBeGreaterThanOrEqual(META_MARKET_MIN_ADS);
+    expect(outcome).toMatchObject({ ads: market.ads.length });
+    expect(write!.values).toMatchObject({ provider: "mock", error: null });
+    expect(write!.values.seed).toMatchObject({ profession: "Sophrologue", city: "Albi", department: { code: "81" } });
+    // Appels ajoutés à ceux de l'analyse, en SQL
+    const calls = dialect.sqlToQuery(write!.values.calls as SQL);
+    expect(calls.sql).toContain('"meta_ads_analyses"."calls" + ');
+    expect(calls.params[0]).toBeGreaterThan(0);
+    // Diagnostic recalculé sur la nouvelle veille et le contexte courant (Pixel du site)
+    const diagnostic = write!.values.diagnostic as MetaAdsDiagnostic;
+    expect(diagnostic.generatedAt).toBe(NOW.toISOString());
+    expect(diagnostic.checks.find((c) => c.id === "pixel")?.status).toBe("ok");
+    // Aucune analyse ni régénération décomptée, aucune nouvelle ligne d'analyse ; les visuels passent par le quota de visuels
+    expect(quotaInserts(fake.inserts)).toHaveLength(0);
+    expect(fake.inserts.some((i) => i.table === metaAdsAnalyses)).toBe(false);
+    expect(mediaInserts(fake.inserts).length).toBeGreaterThanOrEqual(market.ads.length);
+    expect(mediaReservations(fake.inserts)).toHaveLength(1);
+  });
+
+  it("message de génération en attente : gardé dans `error` après le rattrapage", async () => {
+    const fake = fakeDb({ analysis: doneAnalysis({ market: legacyMarket(), provider: "mock", error: META_ERROR_MESSAGES.generation }) });
+    expect((await silenced(() => refreshMetaMarket(fake.db, SITE.id, { now: NOW, env: MOCK_ENV }))).status).toBe("done");
+    expect(analysisUpdates(fake.updates).at(-1)!.values.error).toBe(META_ERROR_MESSAGES.generation);
+  });
+
+  it("rien à rattraper → not_needed, sans aucune écriture : règles courantes, tout le relevé déjà montré, veille absente", async () => {
+    const current = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ selection: META_MARKET_SELECTION }), provider: "mock" }) });
+    expect(await refreshMetaMarket(current.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "not_needed" });
+    const complete = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ counts: { ville: 0, departement: 0, region: 0, france: 3 } }), provider: "mock" }) });
+    expect(await refreshMetaMarket(complete.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "not_needed" });
+    expect(current.updates).toHaveLength(0);
+    expect(complete.updates).toHaveLength(0);
+    expect(await refreshMetaMarket(fakeDb({ analysis: doneAnalysis({ market: null }) }).db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "no_analysis" });
+    expect(await refreshMetaMarket(fakeDb({ analysis: undefined }).db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "no_analysis" });
+  });
+
+  it("une tentative par délai : tentative récente → recent sans écriture ; délai écoulé → nouvelle tentative", async () => {
+    const hourAgo = new Date(NOW.getTime() - 3_600_000).toISOString();
+    const recent = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ refreshAttemptedAt: hourAgo }), provider: "mock" }) });
+    expect(await refreshMetaMarket(recent.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "recent" });
+    expect(recent.updates).toHaveLength(0);
+    expect(recent.inserts).toHaveLength(0);
+    const longAgo = new Date(NOW.getTime() - META_MARKET_REFRESH_RETRY_MS - 60_000).toISOString();
+    const again = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ refreshAttemptedAt: longAgo }), provider: "mock", error: null }) });
+    expect((await silenced(() => refreshMetaMarket(again.db, SITE.id, { now: NOW, env: MOCK_ENV }))).status).toBe("done");
+  });
+
+  it("réservation perdue (un autre appel l'a prise) → recent : aucune collecte, aucune autre écriture", async () => {
+    const fake = fakeDb({ analysis: doneAnalysis({ market: legacyMarket(), provider: "mock" }), updateReturning: () => [] });
+    expect(await refreshMetaMarket(fake.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "recent" });
+    expect(fake.updates).toHaveLength(1);
+    expect(fake.inserts).toHaveLength(0);
+    expect(fake.selects).toHaveLength(0);
+  });
+
+  it("verrou refusé ou analyse `running` récente → busy sans réservation ; analyse périmée → le rattrapage passe", async () => {
+    const analysis = doneAnalysis({ market: legacyMarket(), provider: "mock", error: null });
+    const unlocked = fakeDb({ analysis, locked: false });
+    expect(await refreshMetaMarket(unlocked.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "busy" });
+    expect(unlocked.updates).toHaveLength(0);
+    const running = fakeDb({ analysis, running: [{ id: "run", updatedAt: new Date(NOW.getTime() - 60_000) }] });
+    expect(await refreshMetaMarket(running.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "busy" });
+    expect(running.updates).toHaveLength(0);
+    const stale = fakeDb({ analysis, running: [{ id: "run", updatedAt: new Date(NOW.getTime() - (META_ADS_ANALYSIS_STALE_MINUTES + 1) * 60_000) }] });
+    expect((await silenced(() => refreshMetaMarket(stale.db, SITE.id, { now: NOW, env: MOCK_ENV }))).status).toBe("done");
+  });
+
+  it("sans accès → no_access ; site client sans jeton → no_provider (jamais de veille simulée) ; rien n'est lu ni écrit", async () => {
+    const analysis = doneAnalysis({ market: legacyMarket(), provider: "meta" });
+    const starter = fakeDb({ analysis, site: { ...SITE, type: "client", plan: "starter" } as Site });
+    expect(await refreshMetaMarket(starter.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "no_access" });
+    const tokenless = fakeDb({ analysis, site: { ...SITE, type: "client" } as Site });
+    expect(await refreshMetaMarket(tokenless.db, SITE.id, { now: NOW, env: MOCK_ENV })).toEqual({ status: "skipped", reason: "no_provider" });
+    expect(starter.updates).toHaveLength(0);
+    expect(tokenless.updates).toHaveLength(0);
+  });
+
+  it("site client, collecte en échec : tentative réservée, ancienne veille gardée telle quelle, message utilisateur rendu", async () => {
+    const fake = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ source: "meta" }), provider: "meta" }), site: { ...SITE, type: "client" } as Site });
+    const network = stubFetch(() => jsonResponse({ error: { message: "Session has expired", code: 190 } }, 400));
+    const env = { AI_MOCK: "1", META_ADS_MOCK: "1", META_AD_LIBRARY_TOKEN: "EAAB-jeton" } as NodeJS.ProcessEnv;
+    const outcome = await withGlobalFetch(network.impl, () => silenced(() => refreshMetaMarket(fake.db, SITE.id, { now: NOW, env })));
+    expect(outcome).toEqual({ status: "kept", analysisId: doneAnalysis().id, reason: "failed", message: META_ERROR_MESSAGES.token });
+    // Seule la réservation a été écrite
+    expect(analysisUpdates(fake.updates)).toHaveLength(1);
+    expect(marketSql(fake.updates[0]!).sql).toContain("'{refreshAttemptedAt}'");
+    expect(quotaInserts(fake.inserts)).toHaveLength(0);
+  });
+
+  it("site client, collecte aboutie mais moins fournie que l'ancienne veille : ancienne gardée et rattrapage clos (`selection` posé)", async () => {
+    const fake = fakeDb({ analysis: doneAnalysis({ market: legacyMarket({ source: "meta" }), provider: "meta" }), site: { ...SITE, type: "client" } as Site });
+    const ad = { id: "700000000000001", page_name: "Sophrologue Martin", ad_delivery_start_time: "2026-09-01", ad_creative_bodies: ["Une séance de sophrologie pour souffler."], languages: ["fr"], target_locations: [{ name: "Albi", type: "city", excluded: false }] };
+    const network = stubFetch((url) => (url.hostname === "graph.facebook.com" ? jsonResponse({ data: [ad] }) : new Response("inattendu", { status: 418 })));
+    const env = { AI_MOCK: "1", META_ADS_MOCK: "1", META_AD_LIBRARY_TOKEN: "EAAB-jeton" } as NodeJS.ProcessEnv;
+    const outcome = await withGlobalFetch(network.impl, () => silenced(() => refreshMetaMarket(fake.db, SITE.id, { now: NOW, env })));
+    expect(outcome).toEqual({ status: "kept", analysisId: doneAnalysis().id, reason: "thinner", message: null });
+    const [claim, closing, ...others] = analysisUpdates(fake.updates);
+    expect(others).toHaveLength(0);
+    expect(marketSql(claim!).sql).toContain("'{refreshAttemptedAt}'");
+    expect(Object.keys(closing!.values)).toEqual(["market"]);
+    expect(marketSql(closing!).sql).toContain("'{selection}'");
+    expect(marketSql(closing!).params).toEqual([META_MARKET_SELECTION]);
   });
 });
 

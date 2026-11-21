@@ -276,6 +276,14 @@ export function dismissedNote(count: number): string | null {
   return count > 1 ? `${plural(count, "annonce")} que vous avez supprimées ne sont plus proposées.` : "1 annonce que vous avez supprimée n'est plus proposée.";
 }
 
+/** Rattrapage d'office d'une veille enregistrée avec d'anciennes règles (« veille seule ») : phrase d'attente de l'en-tête. */
+export const MARKET_REFRESH_PENDING = "La veille se met à jour avec les nouveaux critères de sélection — moins d'une minute, sans décompter d'analyse.";
+
+/** Bilan du rattrapage : « Veille mise à jour : 49 annonces. » */
+export function marketRefreshedMessage(ads: number): string {
+  return `Veille mise à jour : ${plural(ads, "annonce")}.`;
+}
+
 /** « Les visuels de 3 annonces ne sont pas encore affichés. » */
 export function visualsNote(missing: number): string {
   return `Les visuels de ${plural(missing, "annonce")} ne sont pas encore affichés.`;

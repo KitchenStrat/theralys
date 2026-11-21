@@ -45,8 +45,18 @@ export const META_ADS_LANDING_SUFFIX = "?src=meta";
 export const META_MARKET_MIN_LOCAL = 8;
 /** Annonces conservées dans la veille. */
 export const META_MARKET_MAX_ADS = 60;
-/** Annonces conservées au plus par page Facebook : un annonceur qui décline dix fois la même annonce ne remplit pas la veille. */
+/**
+ * Annonces conservées au plus par page Facebook : un annonceur qui décline dix
+ * fois la même annonce ne remplit pas la veille. Plafond relevé cran par cran
+ * quand il laisserait la veille sous META_MARKET_MIN_ADS annonces.
+ */
 export const META_MARKET_MAX_PER_PAGE = 3;
+/** Annonces que la veille vise au moins, tant que le relevé en compte autant de pertinentes. */
+export const META_MARKET_MIN_ADS = 30;
+/** Version des règles de sélection, inscrite sur chaque veille enregistrée (`MetaAdsMarket.selection`) : 2 = plancher META_MARKET_MIN_ADS. */
+export const META_MARKET_SELECTION = 2;
+/** Délai entre deux tentatives de rattrapage d'une veille enregistrée avec d'anciennes règles (ms). */
+export const META_MARKET_REFRESH_RETRY_MS = 24 * 3_600_000;
 /** Annonces transmises à l'IA pour la synthèse (les mieux notées). */
 export const META_MARKET_SAMPLE_FOR_AI = 30;
 /** Durée de diffusion signant une annonce qui « marche » (jours). */
@@ -588,9 +598,10 @@ export type MetaAdsMarket = {
   strongCounts?: Record<MetaMarketScope, number>;
   /**
    * Annonces conservées (≤ META_MARKET_MAX_ADS, au plus META_MARKET_MAX_PER_PAGE
-   * par page) : celles de la zone retenue et des plus étroites d'abord, puis,
-   * s'il reste de la place, les mieux notées des zones plus larges. Les veilles
-   * antérieures ne contiennent que la zone retenue.
+   * par page tant que la veille atteint META_MARKET_MIN_ADS annonces) : celles
+   * de la zone retenue et des plus étroites d'abord, puis, s'il reste de la
+   * place, les mieux notées des zones plus larges. Les veilles antérieures ne
+   * contiennent que la zone retenue.
    */
   ads: MetaMarketAd[];
   /** Appels HTTP effectués */
@@ -605,6 +616,14 @@ export type MetaAdsMarket = {
   filtered?: MetaRelevanceSummary;
   /** Annonces écartées parce que le praticien les a supprimées de sa veille */
   dismissed?: number;
+  /**
+   * Version des règles de sélection à l'enregistrement (META_MARKET_SELECTION).
+   * Absent des veilles antérieures au plancher : celles-là sont rattrapées
+   * d'office quand elles sont maigres (`marketNeedsRefresh`).
+   */
+  selection?: number;
+  /** ISO 8601 — dernière tentative de rattrapage (« veille seule ») ; pas de nouvelle tentative avant META_MARKET_REFRESH_RETRY_MS */
+  refreshAttemptedAt?: string;
 };
 
 export function metaLibraryUrl(adId: string): string {
@@ -834,6 +853,8 @@ export type SelectMarketAdsOptions = {
   localIndex?: MetaLocalIndex;
   /** Annonces conservées au plus par page (défaut META_MARKET_MAX_PER_PAGE) */
   maxPerPage?: number;
+  /** Plancher visé (défaut META_MARKET_MIN_ADS, borné par `max`) : en dessous, le plafond par page est relevé cran par cran ; 0 = plafond strict */
+  minAds?: number;
 };
 
 export type MarketSelection = {
@@ -856,8 +877,11 @@ export type MarketSelection = {
  * annonces pertinentes repérées ; `ads` (≤ `max`, au plus `maxPerPage` par
  * page) prend la zone retenue et les plus étroites d'abord, puis complète
  * avec les mieux notées des zones plus larges : une veille locale maigre
- * reste une galerie fournie. `rank` situe chaque annonce parmi toutes les
- * annonces pertinentes repérées.
+ * reste une galerie fournie. Plancher : si le plafond par page laisse moins
+ * de `minAds` annonces alors que le relevé en compte d'autres, il est relevé
+ * d'un cran à la fois (une annonce de plus par page, dans le même ordre)
+ * jusqu'au plancher — jamais avec une annonce que le filtre a écartée.
+ * `rank` situe chaque annonce parmi toutes les annonces pertinentes repérées.
  */
 export function selectMarketAds(
   records: MetaAdRecord[],
@@ -868,6 +892,7 @@ export function selectMarketAds(
   const minLocal = opts.minLocal ?? META_MARKET_MIN_LOCAL;
   const max = opts.max ?? META_MARKET_MAX_ADS;
   const maxPerPage = opts.maxPerPage ?? META_MARKET_MAX_PER_PAGE;
+  const minAds = Math.min(max, Math.max(0, opts.minAds ?? META_MARKET_MIN_ADS));
   const unique = new Map<string, MetaAdRecord>();
   for (const record of records) if (record.id && !unique.has(record.id)) unique.set(record.id, record);
   let pool = [...unique.values()];
@@ -921,22 +946,59 @@ export function selectMarketAds(
   // Zone retenue (et plus étroites) d'abord, la plus proche en tête ; puis les mieux notées des zones plus larges
   const near = all.filter((ad) => rank(ad.scope) <= rank(scopeUsed)).sort((a, b) => rank(a.scope) - rank(b.scope) || b.score - a.score || byName(a, b));
   const wider = all.filter((ad) => rank(ad.scope) > rank(scopeUsed)).sort((a, b) => b.score - a.score || byName(a, b));
+  const ordered = [...near, ...wider];
   const perPage = new Map<string, number>();
-  const ads: MetaMarketAd[] = [];
-  for (const ad of [...near, ...wider]) {
-    if (ads.length >= max) break;
-    const page = metaPageKey(ad);
-    const taken = perPage.get(page) ?? 0;
-    if (taken >= maxPerPage) continue;
-    perPage.set(page, taken + 1);
-    ads.push(ad);
-  }
+  const kept = new Set<MetaMarketAd>();
+  /** Une passe dans l'ordre de la veille : au plus `cap` annonces par page, arrêt à `limit` annonces conservées. */
+  const pass = (cap: number, limit: number) => {
+    for (const ad of ordered) {
+      if (kept.size >= limit) break;
+      if (kept.has(ad)) continue;
+      const page = metaPageKey(ad);
+      const taken = perPage.get(page) ?? 0;
+      if (taken >= cap) continue;
+      perPage.set(page, taken + 1);
+      kept.add(ad);
+    }
+  };
+  pass(maxPerPage, max);
+  // Plancher : peu de pages distinctes — chaque page donne une annonce de plus, tour après tour, jusqu'au plancher ou à épuisement
+  for (let cap = maxPerPage + 1; kept.size < minAds && kept.size < ordered.length; cap++) pass(cap, minAds);
+  // L'ordre de la veille est conservé (zone retenue d'abord, puis les mieux notées), quelle que soit la passe qui a pris l'annonce
+  const ads = ordered.filter((ad) => kept.has(ad));
   return { ads, scopeUsed, counts, strongCounts, filtered, dismissed };
 }
 
 /** Annonces repérées en tout (toutes zones). */
 export function marketTotalCount(counts: Record<MetaMarketScope, number>): number {
   return META_MARKET_SCOPES.reduce((sum, scope) => sum + counts[scope], 0);
+}
+
+/**
+ * Annonces de la veille réellement montrées au praticien : toutes celles
+ * d'une veille filtrée à l'enregistrement ; pour une veille enregistrée avant
+ * le filtre de pertinence (`filtered` absent), celles que le filtre garde à
+ * l'affichage.
+ */
+export function marketShownCount(market: Pick<MetaAdsMarket, "ads" | "filtered">, profession: string): number {
+  return market.filtered ? market.ads.length : filterRelevantAds(market.ads, { profession }).kept.length;
+}
+
+/**
+ * Veille à rattraper d'office (« veille seule », sans décompter d'analyse) :
+ * enregistrée avec d'anciennes règles de sélection (`selection` absent ou
+ * inférieur à META_MARKET_SELECTION), elle montre moins de
+ * META_MARKET_MIN_ADS annonces (`shownCount`) alors que le relevé en avait
+ * repéré davantage, et aucune tentative n'a eu lieu depuis
+ * META_MARKET_REFRESH_RETRY_MS. Une veille aux règles courantes n'est jamais
+ * rattrapée : maigre, elle l'est parce que le marché l'est.
+ */
+export function marketNeedsRefresh(market: Pick<MetaAdsMarket, "selection" | "counts" | "refreshAttemptedAt">, shownCount: number, now = new Date()): boolean {
+  if ((market.selection ?? 1) >= META_MARKET_SELECTION) return false;
+  if (shownCount >= META_MARKET_MIN_ADS) return false;
+  if (marketTotalCount(market.counts) <= shownCount) return false;
+  const attempted = dateOrNull(market.refreshAttemptedAt);
+  return attempted === null || now.getTime() - attempted.getTime() >= META_MARKET_REFRESH_RETRY_MS;
 }
 
 /**

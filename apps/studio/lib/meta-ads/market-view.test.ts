@@ -20,8 +20,10 @@ import {
   rankLabel,
   scopeCounters,
   selectionLabel,
+  MARKET_REFRESH_PENDING,
   META_VISUALS_MAX_ROUNDS,
   VISUAL_STATE_LABELS,
+  marketRefreshedMessage,
   visualStateOf,
   visualsLoadedMessage,
   visualsLoadingNote,
@@ -236,6 +238,17 @@ describe("phrases de l'en-tête et de la barre d'outils", () => {
       { scope: "france", label: "Autres zones et France", spotted: 5, kept: 1 },
     ]);
     expect(scopeCounters({ counts: { ville: 0, departement: 0, region: 0, france: 0 }, ads: [ad({ scope: "departement" })] }).map((c) => c.scope)).toEqual(["departement"]);
+  });
+});
+
+describe("rattrapage d'office de la veille : phrases de l'en-tête", () => {
+  it("attente : dit pourquoi, combien de temps, et qu'aucune analyse n'est décomptée", () => {
+    expect(MARKET_REFRESH_PENDING).toBe("La veille se met à jour avec les nouveaux critères de sélection — moins d'une minute, sans décompter d'analyse.");
+  });
+
+  it("bilan : nombre d'annonces de la nouvelle veille, accordé", () => {
+    expect(marketRefreshedMessage(49)).toBe("Veille mise à jour : 49 annonces.");
+    expect(marketRefreshedMessage(1)).toBe("Veille mise à jour : 1 annonce.");
   });
 });
 

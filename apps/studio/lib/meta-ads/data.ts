@@ -10,9 +10,10 @@
 
 import { and, desc, eq, gte } from "drizzle-orm";
 import { analyticsEvents, getDb, metaAdsAnalyses, type Site } from "@theralys/db";
-import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage, loadMetaLibrary, mediaLookupsRemaining, mediaProviderFor, mediaSourceFor, planAdsMedia } from "@theralys/jobs";
+import { META_ADS_ANALYSIS_STALE_MINUTES, getMetaAdsUsage, loadMetaLibrary, marketProviderFor, mediaLookupsRemaining, mediaProviderFor, mediaSourceFor, planAdsMedia } from "@theralys/jobs";
 import {
   filterRelevantAds,
+  marketNeedsRefresh,
   type MetaAdMedia,
   type MetaAdsAnalysisStatus,
   type MetaAdsCreativeSet,
@@ -98,6 +99,12 @@ export type MetaAdsData = {
   mediaByAdId: Record<string, MetaAdMedia>;
   visuals: MetaVisualsView;
   /**
+   * Veille enregistrée avec d'anciennes règles de sélection et devenue maigre
+   * (`marketNeedsRefresh`) : le studio la rattrape d'office à l'ouverture de
+   * la section (« veille seule », sans décompter d'analyse).
+   */
+  marketRefresh: boolean;
+  /**
    * Site pour lequel l'analyse affichée a été préparée (`diagnostic.externalSite`) :
    * son adresse et ses pages d'atterrissage servent à tout ce qui est montré,
    * copié ou exporté depuis les créas.
@@ -122,6 +129,20 @@ export function withRelevanceFilter(market: MetaAdsMarket | null, seed: Pick<Met
   const { kept, filtered } = filterRelevantAds(market.ads, { profession: seed.profession });
   const keptIds = new Set(kept.map((ad) => ad.id));
   return { ...market, ads: market.ads.filter((ad) => keptIds.has(ad.id)), filtered };
+}
+
+/**
+ * La veille affichée est-elle à rattraper d'office ? Oui si elle a été
+ * enregistrée avec d'anciennes règles de sélection, qu'elle montre moins
+ * d'annonces que le plancher alors que le relevé en comptait davantage
+ * (`marketNeedsRefresh`, sur les annonces réellement montrées après le filtre
+ * de pertinence), qu'aucune analyse ne tourne et qu'un fournisseur de veille
+ * existe pour ce site (`providerAvailable`).
+ */
+export function marketRefreshNeeded(input: { market: MetaAdsMarket | null; latestStatus: MetaAdsAnalysisStatus | null; providerAvailable: boolean; now: Date }): boolean {
+  const { market } = input;
+  if (!market || input.latestStatus === "running" || !input.providerAvailable) return false;
+  return marketNeedsRefresh(market, market.ads.length, input.now);
 }
 
 /** Statut affiché : une analyse `running` trop ancienne devient une erreur (processus interrompu). */
@@ -219,6 +240,12 @@ export async function getMetaAdsData(site: Site, now = new Date()): Promise<Meta
     library,
     mediaByAdId: plan.cached,
     visuals: { provider, missing: pendingIds.length, remaining, pendingIds },
+    marketRefresh: marketRefreshNeeded({
+      market: analyses.current?.market ?? null,
+      latestStatus: analyses.latest?.status ?? null,
+      providerAvailable: marketProviderFor(process.env, site.type) !== null,
+      now,
+    }),
     analysisSite: analysisSiteOf(analyses.current?.diagnostic ?? null, siteContext.sources),
     externalTracking: siteContext.externalTracking,
   };
