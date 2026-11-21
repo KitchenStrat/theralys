@@ -157,12 +157,27 @@ automatique, ScrollTrigger pour tout ce qui est lié au défilement,
   lecture (`scroll-progress.tsx`).
 - `count-to.tsx` : les prix filent vers leur nouvelle valeur ; `pricing.tsx` :
   la coche et le bandeau « Votre sélection » accusent réception d'un choix.
+- `tool-orbit.tsx` — **l'anneau des outils** du haut de page, façon Saturne,
+  seule scène dessinée image par image (`gsap.ticker`). Deux calques
+  `<canvas>`, derrière et devant la sphère, portent les anneaux en bandes, les
+  poussières (plus rapides près de la planète) et la traînée colorée de chaque
+  outil ; la sphère et les pastilles restent du HTML, les pastilles sont de
+  vrais liens vers la visite guidée. À l'entrée, la sphère se pose, les
+  anneaux s'ouvrent et les outils rejoignent l'orbite en spirale. Ensuite le
+  plan des anneaux s'incline sous le pointeur, l'orbite prend de l'élan quand
+  on fait défiler la page, elle s'arrête en douceur au survol d'une pastille,
+  et la planète répond d'une onde à la couleur de l'outil qui passe devant
+  elle. Au clavier, la pastille qui reçoit le focus vient se placer devant.
+  Rien n'est dessiné quand la scène est hors de l'écran ; en mouvement réduit
+  elle est posée, immobile. Dimensions dans `globals.css` (`.saturn`).
 
 Règles tenues (passe « unslop », d'après le skill de Damir Sokolovsky,
 `heydamir/unslop`, CC BY 4.0) : le mouvement explique quelque chose ou n'existe
 pas. Une seule entrée au chargement, aucun rebond, aucun survol qui soulève,
 pas de halo, de reflet ni d'aimant. Restent en boucle, voulus : l'anneau des
-outils, les bandeaux qui défilent et la barre de la visite guidée. Les blocs
+outils — la pièce maîtresse du haut de page, la seule à porter traînées,
+reflets et relief au pointeur —, les bandeaux qui défilent et la barre de la
+visite guidée. Les blocs
 pas encore entrés sont masqués par leur seule opacité : ils restent lus par
 les lecteurs d'écran et trouvés par la recherche dans la page.
 

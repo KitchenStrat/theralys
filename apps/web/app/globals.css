@@ -278,18 +278,13 @@ body {
   mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, black, transparent);
 }
 /* ── Outils en orbite, à la manière des anneaux de Saturne ───────────────────
-   Un anneau incliné (--tilt) de demi-axes --rx et --ry autour d'une sphère.
-   L'angle --orbit avance sans fin ; chaque pastille en déduit sa place sur
-   l'ellipse, sa taille et son plan : devant la sphère sur la moitié proche,
-   derrière sur la moitié lointaine. Sans prise en charge de @property, les
-   pastilles restent simplement à leur place sur l'anneau. */
-@property --orbit {
-  syntax: "<angle>";
-  inherits: true;
-  initial-value: 0deg;
-}
+   La scène vit dans `ToolOrbit` : anneaux, poussières et traînées sont
+   dessinés sur deux calques (derrière et devant la sphère), les pastilles
+   sont placées à chaque image. La feuille de style donne les dimensions —
+   demi-axes --rx et --ry de l'orbite, inclinaison --tilt, sphère --planet —
+   et habille la sphère et les pastilles. */
 .saturn {
-  --rx: min(10.5rem, calc(50vw - 2.5rem));
+  --rx: min(10.5rem, calc(50vw - 3.4rem));
   --ry: 2rem;
   --tilt: -8deg;
   --planet: 4.75rem;
@@ -297,84 +292,151 @@ body {
   height: 9.75rem;
 }
 @media (min-width: 640px) {
-  .saturn { --rx: min(17rem, calc(50vw - 3.5rem)); --ry: 2.5rem; --tilt: -7deg; --planet: 5.75rem; height: 12rem; }
+  .saturn { --rx: min(17rem, calc(50vw - 4.5rem)); --ry: 2.6rem; --tilt: -7deg; --planet: 5.9rem; height: 12.5rem; }
 }
 @media (min-width: 1024px) {
-  .saturn { --rx: min(27rem, calc(50vw - 6rem)); --ry: 3.1rem; --tilt: -6deg; --planet: 7.25rem; height: 15rem; }
+  .saturn { --rx: min(27rem, calc(50vw - 7.5rem)); --ry: 3.7rem; --tilt: -6deg; --planet: 7.6rem; height: 16rem; }
 }
-.saturn-tilt {
+/* La scène dessinée : un peu plus large que l'orbite, pour l'anneau extérieur (1,2 rayon) */
+.saturn-stage {
   position: absolute;
-  inset: 0;
-  rotate: var(--tilt);
-  animation: saturn-orbit 38s linear infinite;
+  inset-block: 0;
+  left: 50%;
+  width: min(100%, calc(var(--rx) * 2.44 + 1rem));
+  translate: -50% 0;
 }
-@keyframes saturn-orbit { to { --orbit: 360deg; } }
-/* Le temps de viser une pastille, à la souris ou au clavier, l'anneau s'arrête */
-.saturn-tilt:has(.saturn-chip:hover),
-.saturn-tilt:has(.saturn-chip:focus-visible) { animation-play-state: paused; }
-
-.saturn-ring {
+.saturn-canvas {
+  position: absolute;
+  top: -1.75rem;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 3.5rem);
+  pointer-events: none;
+}
+.saturn-canvas--back { z-index: 1; }
+.saturn-canvas--front { z-index: 11; }
+/* Gabarit invisible : `ToolOrbit` y lit les demi-axes de l'orbite, en pixels */
+.saturn-gauge {
   position: absolute;
   top: 50%;
   left: 50%;
   width: calc(2 * var(--rx));
   height: calc(2 * var(--ry));
-  translate: -50% -50%;
-  border-radius: 50%;
-  border: 1.5px solid rgb(14 151 221 / 0.38);
-  box-shadow:
-    0 0 0 0.5rem rgb(14 151 221 / 0.06),
-    inset 0 0 0 0.5rem rgb(91 79 201 / 0.06);
+  visibility: hidden;
   pointer-events: none;
 }
-/* Moitié lointaine sous la sphère, moitié proche par-dessus */
-.saturn-ring--back { z-index: 10; clip-path: inset(-1rem -1rem 50% -1rem); }
-.saturn-ring--front { z-index: 21; clip-path: inset(50% -1rem -1rem -1rem); }
 
+/* La sphère : --lx et --ly placent la lumière (elles suivent le pointeur) */
 .saturn-planet {
+  --lx: 32%;
+  --ly: 26%;
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 20;
+  z-index: 10;
   display: grid;
   place-items: center;
   width: var(--planet);
   height: var(--planet);
   translate: -50% -50%;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 26%, #8ad7fa 0%, #1ea4e6 30%, #2f6dd3 66%, #4b3fb4 100%);
+  /* Un liseré d'atmosphère, puis l'ombre portée */
   box-shadow:
-    inset -0.6rem -0.9rem 1.6rem rgb(24 28 96 / 0.38),
-    inset 0.35rem 0.45rem 1rem rgb(255 255 255 / 0.28),
-    0 0 0 0.4rem rgb(255 255 255 / 0.55),
-    0 1.6rem 3rem -1.1rem rgb(47 109 211 / 0.75);
+    0 0 0 1px rgb(255 255 255 / 0.32),
+    0 0 0 0.3rem rgb(170 215 255 / 0.13),
+    0 1.6rem 3rem -1.1rem rgb(18 38 120 / 0.8);
   font-size: calc(var(--planet) * 0.158);
 }
-/* Le mot-marque et les libellés restent à l'horizontale malgré l'inclinaison de l'anneau */
-.saturn-level { rotate: calc(-1 * var(--tilt)); }
-
-/* Sur la vidéo du haut de page : anneau clair */
-.saturn--dark .saturn-ring {
-  border-color: rgb(255 255 255 / 0.5);
-  box-shadow:
-    0 0 0 0.5rem rgb(255 255 255 / 0.08),
-    inset 0 0 0 0.5rem rgb(255 255 255 / 0.05);
+.saturn-globe {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(circle at var(--lx) var(--ly), #a5e0fc 0%, #2ba9ea 26%, #2f6dd3 60%, #3d35a6 100%);
 }
-
-.saturn-item {
-  --angle: calc(var(--orbit) + var(--i) * 360deg / var(--n));
-  /* 1 au plus près du lecteur, -1 au plus loin */
-  --depth: sin(var(--angle));
+/* Bandes et nuages de la planète : un ruban deux fois plus long que son motif, qui défile sans raccord */
+.saturn-bands {
+  position: absolute;
+  inset: -12%;
+  overflow: hidden;
+  rotate: var(--tilt);
+  mix-blend-mode: soft-light;
+}
+.saturn-bands::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 400%;
+  background-image:
+    radial-gradient(ellipse 9% 5% at 12% 34%, rgb(255 255 255 / 0.6), transparent 70%),
+    radial-gradient(ellipse 14% 4% at 58% 62%, rgb(255 255 255 / 0.42), transparent 70%),
+    radial-gradient(ellipse 7% 6% at 34% 22%, rgb(10 20 90 / 0.5), transparent 70%),
+    radial-gradient(ellipse 11% 4% at 82% 78%, rgb(10 20 90 / 0.42), transparent 70%),
+    repeating-linear-gradient(180deg, transparent 0 8%, rgb(255 255 255 / 0.3) 10% 14%, transparent 16% 24%, rgb(10 20 90 / 0.32) 27% 33%, transparent 36% 44%);
+  background-size: 50% 100%;
+  animation: saturn-spin 46s linear infinite;
+}
+@keyframes saturn-spin { to { translate: -50% 0; } }
+/* L'ombre des anneaux sur la sphère : l'arc proche, décalé vers le bas */
+.saturn-shadow {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: calc(20 + var(--depth) * 10);
-  translate: calc(-50% + cos(var(--angle)) * var(--rx)) calc(-50% + var(--depth) * var(--ry));
-  rotate: calc(-1 * var(--tilt));
-  scale: calc(0.88 + 0.12 * var(--depth));
-  opacity: calc(0.86 + 0.14 * var(--depth));
+  width: calc(var(--rx) * 1.8);
+  height: calc(var(--ry) * 1.8);
+  translate: -50% calc(-50% + var(--planet) * 0.07);
+  rotate: var(--tilt);
+  border: calc(var(--ry) * 0.22) solid transparent;
+  border-bottom-color: rgb(8 12 64 / 0.4);
+  border-radius: 50%;
+  filter: blur(1.5px);
 }
-.saturn-chip:hover { translate: 0 -2px; }
+/* Le modelé : reflet du côté de la lumière, nuit de l'autre */
+.saturn-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at var(--lx) var(--ly), rgb(255 255 255 / 0.5) 0%, rgb(255 255 255 / 0) 24%),
+    radial-gradient(circle at calc(var(--lx) + 4%) calc(var(--ly) + 2%), rgb(12 16 78 / 0) 42%, rgb(12 16 78 / 0.66) 100%);
+}
+/* L'onde qui répond au passage d'un outil : `ToolOrbit` pose --rim et joue l'opacité */
+.saturn-rim {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px var(--rim, #fff),
+    0 0 1.1rem 0.1rem var(--rim, #fff);
+  opacity: 0;
+  pointer-events: none;
+}
+.saturn-level {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 3px rgb(10 14 70 / 0.5));
+}
+
+/* Les pastilles : placées par `ToolOrbit` (translate, scale, opacité, plan). --near va de 0 à 1 quand la pastille
+   passe au plus près : elle s'y pare de la couleur de son outil. */
+.saturn-item {
+  --near: 0;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 12;
+  translate: -50% -50%;
+  will-change: translate, scale, opacity;
+}
+.saturn-chip {
+  box-shadow:
+    0 0 0 calc(var(--near) * 2.5px) color-mix(in srgb, var(--t-from) 55%, transparent),
+    0 0.5rem 1.1rem -0.5rem rgb(8 12 40 / 0.45),
+    0 calc(var(--near) * 0.7rem) calc(var(--near) * 1.6rem) calc(var(--near) * -0.5rem) color-mix(in srgb, var(--t-to) 70%, transparent);
+  transition: border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.saturn-chip:hover { border-color: var(--t-from); }
 
 /* ── Capture du haut de page : arrive inclinée, se redresse au défilement
    (--tilt et --lift sont tenues à jour par ScrollTilt) ──────────────────── */
@@ -594,7 +656,7 @@ body {
   .marquee-track,
   .header-in,
   .pop-in,
-  .saturn-tilt {
+  .saturn-bands::before {
     animation: none;
   }
   /* Le bandeau des plateformes ne défile plus : il tient sur plusieurs lignes, centré */
