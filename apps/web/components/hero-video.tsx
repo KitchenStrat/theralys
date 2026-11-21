@@ -6,8 +6,9 @@ import { Pause, Play } from "lucide-react";
 import poster from "@/assets/photos/hero-poster.jpg";
 
 /*
- * Fond vidéo du haut de page : des praticiens au travail, en lumière
- * naturelle (deux plans de banque d'images montés en boucle, sans coupure).
+ * Fond vidéo du haut de page : une marche en forêt dans la brume du matin,
+ * puis une main qui effleure les blés (deux plans de banque d'images montés
+ * en boucle, sans coupure).
  *
  * - La première image s'affiche d'emblée (optimisée, prioritaire) ; la vidéo
  *   se charge ensuite et la remplace en fondu. La page n'attend jamais la vidéo.
@@ -72,8 +73,10 @@ export function HeroVideo() {
           onPlaying={() => setPlaying(true)}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${playing ? "opacity-100" : "opacity-0"}`}
         />
-        {/* Voile brun très sombre plutôt que bleu : la lumière chaude de l'image est conservée, et le titre blanc reste lisible partout */}
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgb(22_17_13/0.7)_0%,rgb(22_17_13/0.5)_38%,rgb(22_17_13/0.56)_70%,rgb(22_17_13/0.74)_100%)]" />
+        {/* Voile brun plutôt que bleu : la lumière chaude de l'image est conservée. Il est aussi léger que la lisibilité le
+            permet : le montage plafonne les hautes lumières à 74 % (cf. scripts/monter-video-hero.sh), et sous un voile d'au
+            moins 0,42 le texte blanc garde un contraste d'au moins 4,5:1 même sur le point le plus clair de la vidéo. */}
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgb(22_17_13/0.58)_0%,rgb(22_17_13/0.42)_38%,rgb(22_17_13/0.44)_70%,rgb(22_17_13/0.62)_100%)]" />
       </div>
       {enabled ? (
         <button
