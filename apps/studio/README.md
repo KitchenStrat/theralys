@@ -357,6 +357,37 @@ Règles :
   pas cliquable pendant la visite. La découpe change de place sans transition :
   seul le contenu de la carte arrive en fondu.
 
+## Compte, connexion et sécurité
+
+- **Session** (`lib/auth.ts`, `lib/session-cookie.ts`) : jeton signé en cookie `httpOnly`, sous
+  préfixe `__Host-` en production. Il porte l'empreinte du mot de passe (`pv`) ; `getSession()`
+  relit le compte en base à chaque requête — compte supprimé, déplacé ou mot de passe changé, la
+  session cesse aussitôt. Fermer une session pose le cookie vide avec ses attributs (`Secure`
+  compris) : un `delete()` nu est refusé par les navigateurs pour ce préfixe.
+- **Connexion** (`app/login`) : essais limités par compte et par adresse (`hitRateLimit`), adresse
+  insensible à la casse, même temps de réponse qu'un compte existe ou non.
+- **Mot de passe** : changement dans « Mon compte » (`compte/password-card.tsx` — l'actuel est
+  redemandé, les autres appareils sont déconnectés) ; « Mot de passe oublié »
+  (`app/mot-de-passe-oublie`, e-mail avec un lien d'une heure à usage unique — demande
+  `RESEND_API_KEY` et `MAIL_FROM` sur ce projet, sinon la page renvoie vers Harmony) ; les liens
+  d'invitation et de réinitialisation passent par `lib/password-links.ts` et ne servent qu'une fois.
+- **Abonnement terminé** (site archivé) : `getSession()` ne rend plus de session — pages, actions
+  et routes sont fermées — et le praticien arrive sur `app/abonnement-termine`. Une session de
+  l'équipe (« agence ») garde l'accès.
+- **Entrée de l'équipe** (`app/impersonate`) : lien signé de 2 minutes, à usage unique, inscrit dans
+  `impersonations` (`lib/impersonation-log.ts`).
+- **Éditeur** : chaque section enregistrée passe par `lib/editor/section-input.ts` (champs connus,
+  types, plafonds ; images en `https://`, chemin du site ou photo embarquée) ; les générations
+  payantes (pages de spécialité, images) ont un plafond par site sur 30 jours.
+- **Téléversement** (`app/api/upload`) : même origine, quota quotidien par site, format lu dans les
+  premiers octets du fichier (`lib/upload/sniff.ts`).
+- **Nom de domaine** (`compte/actions.ts`) : la commande, payée par Harmony, demande un site client
+  en formule Site, un abonnement actif, une extension courante au tarif du forfait ; un seul nom par
+  site, réservé sous verrou avant la commande.
+- **Search Console** : le suivi simulé n'existe que pour les démonstrations
+  (`lib/google/search-console.ts`) ; un site client voit « Bientôt disponible », jamais de chiffres
+  inventés.
+
 ## Développement local
 
 Depuis la **racine** du monorepo (pnpm ne trouve pas les workspaces ailleurs) :
