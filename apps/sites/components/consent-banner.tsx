@@ -65,14 +65,14 @@ export function ConsentBanner({ thirdParties = [] }: { thirdParties?: string[] }
           <button
             type="button"
             onClick={() => choose("denied")}
-            className="rounded-full border border-black/15 px-4 py-2 text-sm hover:bg-black/5"
+            className="rounded-full border border-black/15 px-4 py-2 text-sm hover:bg-black/5 pointer-coarse:py-3"
           >
             Continuer sans accepter
           </button>
           <button
             type="button"
             onClick={() => choose("granted")}
-            className="rounded-full bg-[var(--site-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--site-primary-dark)]"
+            className="rounded-full bg-[var(--site-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--site-primary-dark)] pointer-coarse:py-3"
           >
             Accepter
           </button>

@@ -31,7 +31,7 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-black/5 bg-[var(--site-bg)]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 lg:py-4">
-        <Link href={home} className="flex min-w-0 items-center">
+        <Link href={home} className="flex min-h-11 min-w-0 items-center">
           {site.theme.logoUrl ? (
             <img
               src={site.theme.logoUrl}

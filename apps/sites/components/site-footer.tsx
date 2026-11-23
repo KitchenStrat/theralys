@@ -71,6 +71,9 @@ export function SiteFooter({
 
   const columnTitle = "text-[0.8rem] font-semibold uppercase tracking-wider opacity-60";
   const link = "transition-opacity hover:opacity-100 opacity-85";
+  // Au doigt, un lien de liste fait au moins 40 px de haut : sa marge intérieure remplace l'espace entre les lignes
+  const tap = "pointer-coarse:inline-block pointer-coarse:py-2.5";
+  const tapList = "space-y-2 pointer-coarse:space-y-0";
 
   return (
     <footer className="border-t border-white/10 bg-[var(--site-deep)] pb-8 pt-14 text-[var(--site-on-deep)]">
@@ -125,7 +128,7 @@ export function SiteFooter({
                   <li>
                     <span className="block font-semibold">{googleName ?? site.name}</span>
                     {googleMapsUrl ? (
-                      <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" className={`${link} mt-0.5 block`}>
+                      <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" className={`${link} mt-0.5 block pointer-coarse:py-2.5`}>
                         {googleAddress}
                       </a>
                     ) : (
@@ -136,14 +139,14 @@ export function SiteFooter({
                 {cabinets.map((cabinet, i) => (
                   <li key={i}>
                     <span className="block font-semibold">{cabinet.name}</span>
-                    <a href={cabinetMapsUrl(cabinet)} target="_blank" rel="noopener noreferrer" className={`${link} mt-0.5 block`}>
+                    <a href={cabinetMapsUrl(cabinet)} target="_blank" rel="noopener noreferrer" className={`${link} mt-0.5 block pointer-coarse:py-2.5`}>
                       {cabinetAddressLine(cabinet)}
                     </a>
                   </li>
                 ))}
                 {phone ? (
                   <li>
-                    <a href={`tel:${phone.replace(/\s/g, "")}`} className={`${link} inline-flex items-center gap-2 font-medium`}>
+                    <a href={`tel:${phone.replace(/\s/g, "")}`} className={`${link} inline-flex items-center gap-2 font-medium pointer-coarse:min-h-11`}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
                         <path
                           d="M5 4h4l2 5-2.5 1.5a12 12 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"
@@ -165,38 +168,38 @@ export function SiteFooter({
           {/* Liens */}
           <div>
             <p className={columnTitle}>Liens</p>
-            <ul className="mt-4 space-y-2 text-[0.95rem]">
+            <ul className={`mt-4 text-[0.95rem] ${tapList}`}>
               <li>
-                <Link href={home} className={link}>
+                <Link href={home} className={`${link} ${tap}`}>
                   Accueil
                 </Link>
               </li>
               {motifPages.map((page) => (
                 <li key={page.id}>
-                  <Link href={`${prefix}/motifs/${page.slug}`} className={link}>
+                  <Link href={`${prefix}/motifs/${page.slug}`} className={`${link} ${tap}`}>
                     {page.title}
                   </Link>
                 </li>
               ))}
               {hasBlogAccess(site) ? (
                 <li>
-                  <Link href={`${prefix}/blog`} className={link}>
+                  <Link href={`${prefix}/blog`} className={`${link} ${tap}`}>
                     Blog
                   </Link>
                 </li>
               ) : null}
             </ul>
-            <ul className="mt-5 space-y-2 border-t border-white/10 pt-5 text-sm">
+            <ul className={`mt-5 border-t border-white/10 pt-5 text-sm ${tapList}`}>
               {LEGAL_PAGES.map((page) => (
                 <li key={page.slug}>
-                  <Link href={`${prefix}/${page.slug}`} className={link}>
+                  <Link href={`${prefix}/${page.slug}`} className={`${link} ${tap}`}>
                     {page.title}
                   </Link>
                 </li>
               ))}
               {cookieBanner ? (
                 <li>
-                  <ManageCookiesButton className={`${link} underline decoration-current/40 underline-offset-2`} />
+                  <ManageCookiesButton className={`${link} ${tap} underline decoration-current/40 underline-offset-2`} />
                 </li>
               ) : null}
             </ul>

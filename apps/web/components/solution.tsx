@@ -105,7 +105,7 @@ export function Solution() {
                   <span className="tool-chip grid h-9 w-9 place-items-center rounded-xl sm:h-11 sm:w-11">
                     <tool.icon size={20} strokeWidth={2.1} aria-hidden />
                   </span>
-                  <span className="text-[0.7rem] leading-tight font-semibold whitespace-nowrap text-ink-900 sm:text-sm">{tool.short}</span>
+                  <span className="text-xs leading-tight font-semibold whitespace-nowrap text-ink-900 sm:text-sm">{tool.short}</span>
                 </span>
               </li>
             ))}

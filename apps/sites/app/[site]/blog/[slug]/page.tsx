@@ -109,7 +109,7 @@ export default async function ArticlePage({ params, searchParams }: Props) {
         {article.publishedAt ? `${formatDateFr(article.publishedAt)} · ` : null}
         {article.readingTimeMin} min de lecture
       </p>
-      <h1 className="mt-3 text-4xl font-bold leading-tight sm:text-[2.9rem]">{article.title}</h1>
+      <h1 className="mt-3 text-[clamp(1.75rem,8.6vw,2.25rem)] font-bold leading-tight sm:text-[2.9rem]">{article.title}</h1>
 
       <div className="mt-6 flex items-center gap-3 border-b border-[var(--site-primary)]/15 pb-6">
         {authorPhoto ? (

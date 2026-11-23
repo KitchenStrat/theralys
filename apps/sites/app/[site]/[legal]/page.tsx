@@ -86,7 +86,7 @@ export default async function LegalPage({ params, searchParams }: Props) {
         <span className="inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-5 py-2 text-[0.85rem] font-medium uppercase tracking-wider text-[var(--site-primary-dark)]">
           Informations légales
         </span>
-        <h1 className="mt-6 text-[2.4rem] font-semibold leading-[1.1] text-[var(--site-primary-dark)] sm:text-[3rem]">
+        <h1 className="mt-6 text-[clamp(1.8rem,9vw,2.4rem)] font-semibold leading-[1.1] text-[var(--site-primary-dark)] sm:text-[3rem]">
           {page.title}
         </h1>
         <div className="mt-8 text-[1.05rem] leading-relaxed">
