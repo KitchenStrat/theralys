@@ -34,6 +34,7 @@
   --color-night-800: #0a1e30;
   --color-night-700: #10304a;
 
+  --color-success-700: #166534; /* 6,5:1 sur success-100, 7,1:1 sur blanc : économies des tarifs */
   --color-success-600: #15803d;
   --color-success-500: #16a34a;
   --color-success-100: #dcfce7;

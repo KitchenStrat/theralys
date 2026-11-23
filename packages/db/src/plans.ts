@@ -245,15 +245,36 @@ export function commitmentMonths(period: BillingPeriod): number {
 }
 
 /**
- * Économie d'une durée par rapport au mensuel, en mois de mensuel offerts sur
- * la durée d'engagement (arrondi vers le bas : jamais surestimée). Pour chaque
- * formule comme pour les deux : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
+ * Économie d'une durée par rapport au mensuel, en euros sur la durée
+ * d'engagement : l'écart de prix par mois × les mois d'engagement. Site en
+ * annuel : (59 − 39) × 12 = 240 €.
  */
-export function savedMonths(plan: PlanId, period: BillingPeriod): number {
+export function savedAmount(plan: PlanId, period: BillingPeriod): number {
   const monthly = planPrice(plan, "monthly");
   const price = planPrice(plan, period);
   if (monthly === null || price === null || price >= monthly) return 0;
-  return Math.floor(((monthly - price) * commitmentMonths(period)) / monthly);
+  return (monthly - price) * commitmentMonths(period);
+}
+
+/**
+ * La même économie, en mois de mensuel offerts sur la durée d'engagement
+ * (arrondi vers le bas : jamais surestimée). Pour chaque formule comme pour
+ * les deux : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans.
+ */
+export function savedMonths(plan: PlanId, period: BillingPeriod): number {
+  const monthly = planPrice(plan, "monthly");
+  return monthly ? Math.floor(savedAmount(plan, period) / monthly) : 0;
+}
+
+/**
+ * La même économie, en pourcentage du prix mensuel (arrondi vers le bas) :
+ * 16 % en trimestriel, 33 % en annuel, 50 % sur 3 ans.
+ */
+export function savedPercent(plan: PlanId, period: BillingPeriod): number {
+  const monthly = planPrice(plan, "monthly");
+  const price = planPrice(plan, period);
+  if (monthly === null || price === null || price >= monthly) return 0;
+  return Math.floor(((monthly - price) * 100) / monthly);
 }
 
 // ─── Ce que paie un abonnement ───────────────────────────────────────────────

@@ -33,7 +33,9 @@ import {
   planPeriods,
   planPrice,
   pricesFromMonthly,
+  savedAmount,
   savedMonths,
+  savedPercent,
   subscriptionPricing,
 } from "./plans";
 
@@ -106,6 +108,21 @@ describe("prix (€ TTC par mois)", () => {
   it("économies : 2 mois en trimestriel, 4 en annuel, 18 sur 3 ans, pour chaque choix", () => {
     for (const plan of OFFERED_PLANS) {
       expect(BILLING_PERIODS.map((period) => savedMonths(plan, period))).toEqual([0, 2, 4, 18]);
+    }
+  });
+
+  it("les mêmes économies en euros sur la durée d'engagement, et en pourcentage du mensuel (jamais surestimé)", () => {
+    // Site : (59 − 49) × 12, (59 − 39) × 12, (59 − 29) × 36
+    expect(BILLING_PERIODS.map((period) => savedAmount(PLAN_SITE, period))).toEqual([0, 120, 240, 1080]);
+    expect(BILLING_PERIODS.map((period) => savedAmount(PLAN_SCALE, period))).toEqual([0, 180, 360, 1620]);
+    expect(BILLING_PERIODS.map((period) => savedAmount(PLAN_COMPLETE, period))).toEqual([0, 300, 600, 2700]);
+    for (const plan of OFFERED_PLANS) {
+      expect(BILLING_PERIODS.map((period) => savedPercent(plan, period))).toEqual([0, 16, 33, 50]);
+      // L'économie annoncée est exactement ce qu'on ne paie pas : le mensuel sur l'engagement, moins le prix de la durée
+      for (const period of BILLING_PERIODS) {
+        const months = commitmentMonths(period);
+        expect(savedAmount(plan, period)).toBe((planPrice(plan, "monthly") ?? 0) * months - (planPrice(plan, period) ?? 0) * months);
+      }
     }
   });
 

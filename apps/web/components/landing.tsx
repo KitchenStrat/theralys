@@ -12,7 +12,9 @@ import {
   periodTotal,
   planPeriods,
   planPrice,
+  savedAmount,
   savedMonths,
+  savedPercent,
   type PlanId,
 } from "@theralys/db";
 import { Band } from "./band";
@@ -26,7 +28,7 @@ import { Hero } from "./hero";
 import { Logos } from "./logos";
 import { Method } from "./method";
 import { OwnSite } from "./own-site";
-import { Pricing, type FormulaCard, type PlanPeriod } from "./pricing";
+import { Pricing, type FormulaCard, type FormulaFeature, type PlanPeriod } from "./pricing";
 import { MotionDirector } from "./motion/director";
 import { RoiCalculator } from "./roi-calculator";
 import { ScrollProgress } from "./scroll-progress";
@@ -57,25 +59,31 @@ export function Landing() {
     planPeriods(plan).map((period) => ({
       id: period,
       price: planPrice(plan, period) ?? 0,
+      monthlyPrice: planPrice(plan, "monthly") ?? 0,
       total: periodTotal(plan, period) ?? 0,
       cadence: BILLING_PERIOD_CADENCE[period],
       savedMonths: savedMonths(plan, period),
+      savedAmount: savedAmount(plan, period),
+      savedPercent: savedPercent(plan, period),
       commitmentMonths: commitmentMonths(period),
     }));
   const site = PLANS[PLAN_SITE];
   const scale = PLANS[PLAN_SCALE];
   const ads = [scale.googleAds && "Google Ads", scale.metaAds && "Meta Ads"].filter(Boolean).join(" et ");
-  // Ce que comprend chaque formule, lu dans sa définition : une ligne par outil
+  // Dans chaque formule, quelle qu'elle soit
+  const included: FormulaFeature = { icon: "stats", text: "Statistiques et avis Google" };
+  // Ce que comprend chaque formule, lu dans sa définition : une ligne par outil, les deux premières mises en avant
   const formulas: FormulaCard[] = [
     {
       id: "site",
       label: FORMULA_DEFINITIONS.site.label,
       periods: pricesOf(PLAN_SITE),
       features: [
-        "Site professionnel clé en main, à vos couleurs",
-        `${site.maxMotifPages} pages de spécialités pour le référencement local`,
-        `Blog SEO : ${site.blogArticlesPerYear} articles par an`,
-        "Hébergement et nom de domaine inclus",
+        { icon: "site", text: "Site professionnel clé en main, à vos couleurs", strong: true },
+        { icon: "blog", text: `Blog SEO : ${site.blogArticlesPerYear} articles par an`, strong: true },
+        { icon: "pages", text: `${site.maxMotifPages} pages de spécialités pour le référencement local` },
+        { icon: "hosting", text: "Hébergement et nom de domaine inclus" },
+        included,
       ],
     },
     {
@@ -83,11 +91,12 @@ export function Landing() {
       label: FORMULA_DEFINITIONS.scale.label,
       periods: pricesOf(PLAN_SCALE),
       features: [
-        scale.googleProfile && "Fiche Google : audit, visibilité, avis et posts",
-        scale.socialMedia && "Réseaux sociaux : contenus prêts à poster",
-        ads && `${ads} : diagnostic, plan d'action et contenus`,
-        "Sur votre site Harmony, ou sur le vôtre connecté",
-      ].filter((line): line is string => Boolean(line)),
+        scale.googleProfile && { icon: "google" as const, text: "Fiche Google : audit, visibilité, avis et posts", strong: true },
+        scale.socialMedia && { icon: "social" as const, text: "Réseaux sociaux : contenus prêts à poster", strong: true },
+        ads && { icon: "ads" as const, text: `${ads} : diagnostic, plan d'action et contenus` },
+        { icon: "link" as const, text: "Sur votre site Harmony, ou sur le vôtre connecté" },
+        included,
+      ].filter((line): line is FormulaFeature => Boolean(line)),
     },
   ];
   // Les prix de chaque choix : une formule seule, ou les deux (la somme)

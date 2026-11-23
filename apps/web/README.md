@@ -9,9 +9,10 @@ statistiques).
 1. **Les formules viennent du produit.** Deux formules, Site et Scale, à prendre
    seules ou ensemble. Le contenu des formules, leur prix par
    mois sur chaque durée de facturation (mensuel, trimestriel, annuel, 3 ans),
-   la somme réglée à chaque échéance, les mois d'économies et l'engagement de
-   12 mois minimum sont lus dans `@theralys/db` (`PLANS`, `planPrice`,
-   `periodTotal`, `savedMonths`) : la vitrine, le studio et la facturation ne
+   la somme réglée à chaque échéance, les économies (mois offerts, euros,
+   pourcentage) et l'engagement de 12 mois minimum sont lus dans
+   `@theralys/db` (`PLANS`, `planPrice`, `periodTotal`, `savedMonths`,
+   `savedAmount`, `savedPercent`) : la vitrine, le studio et la facturation ne
    peuvent pas se contredire. Changer un tarif = changer `prices` dans
    `packages/db/src/plans.ts`, rien d'autre.
 2. **Rien n'est inventé.** Chaque phrase décrit un comportement réel du studio,
@@ -66,9 +67,11 @@ pas des informaticiens — plutôt que les réflexes d'une page générée.
 - `components/billing-period.tsx` — la durée de facturation et les formules
   cochées dans les tarifs (l'une, l'autre ou les deux, jamais aucune),
   partagées avec le simulateur : celui-ci calcule sur le prix de ce choix.
-- `components/pricing.tsx` — une carte par formule, à cocher, puis le bandeau
-  « Votre sélection » qui additionne : prix par mois, somme réglée à
-  l'échéance, mois d'économies.
+- `components/pricing.tsx` — le sélecteur de durée (chaque durée annonce ses
+  mois offerts ; le curseur glisse de l'une à l'autre), une carte par formule,
+  à cocher (prix du mensuel barré, prix de la durée, économie en euros et en
+  pourcentage sur l'engagement, somme réglée à l'échéance, puis ce qu'elle
+  comprend), et le bandeau « Votre sélection » qui additionne.
 - `app/robot/page.tsx` — page publique du lecteur de sites (HarmonyBot).
 - `components/tools.ts` — **les outils**, source unique du haut de page, du
   schéma et de la visite guidée : nom, promesse, trois faits, ce que l'outil
