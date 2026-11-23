@@ -10,9 +10,17 @@ import { LEGACY_SESSION_COOKIE, SESSION_COOKIE, acceptsLegacyToken, sessionToken
 export { SESSION_COOKIE };
 const SESSION_DURATION_S = 60 * 60 * 24 * 30; // 30 jours
 
+let weakSecretReported = false;
+
 function secretKey(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET manquante");
+  // Un secret court se devine hors ligne à partir d'un seul jeton (cookie, lien d'invitation) : signalé une fois
+  // dans les journaux, sans bloquer le service — le remplacer déconnecte tout le monde, c'est à l'exploitant de choisir le moment
+  if (!weakSecretReported && (secret.length < 32 || secret.startsWith("change-me"))) {
+    weakSecretReported = true;
+    console.error("[auth] AUTH_SECRET est trop court ou vaut la valeur d'exemple : remplacez-le par une valeur aléatoire d'au moins 32 caractères.");
+  }
   return new TextEncoder().encode(secret);
 }
 

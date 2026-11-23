@@ -9,6 +9,21 @@ import {
 import { periodEnd } from "./period";
 import type { BillingProvider, SubscriptionResult } from "./types";
 
+/**
+ * Adresse publique de la vitrine, où le praticien revient après la page de
+ * paiement (`WEB_BASE_URL`, sinon la production). Jamais une adresse écrite en
+ * dur vers un ancien domaine : après avoir payé, on arrive chez Harmony.
+ */
+export function webBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const fallback = "https://www.harmony-web.fr";
+  try {
+    const url = new URL(env.WEB_BASE_URL ?? fallback);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.origin : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /** Rythme de prélèvement Stripe de chaque durée (Stripe accepte jusqu'à 3 ans entre deux échéances). */
 const STRIPE_RECURRING: Record<BillingPeriod, Stripe.PriceCreateParams.Recurring> = {
   monthly: { interval: "month" },
@@ -81,8 +96,8 @@ export class StripeBillingProvider implements BillingProvider {
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: { metadata: { siteId: opts.siteId, plan: opts.plan } },
-      success_url: "https://theralys-web.fr/merci",
-      cancel_url: "https://theralys-web.fr",
+      success_url: `${webBaseUrl()}/merci`,
+      cancel_url: webBaseUrl(),
     });
 
     return {

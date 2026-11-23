@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { and, desc, eq } from "drizzle-orm";
 import {
   blogArticles,
@@ -13,6 +14,15 @@ import {
   type Page,
   type Site,
 } from "@theralys/db";
+
+/**
+ * Lectures d'un site public. Chaque lecture est mémorisée le temps d'une
+ * requête (`cache` de React) : la mise en page, la page et ses métadonnées
+ * demandent toutes le site, sa page d'accueil et ses pages de spécialités —
+ * une seule requête SQL par donnée au lieu de trois ou quatre. Rien n'est
+ * gardé d'une requête à l'autre : une modification publiée depuis l'éditeur
+ * se voit tout de suite.
+ */
 
 /**
  * Blog visible sur le site public ? Les démos présentent toujours l'offre
@@ -31,7 +41,7 @@ export function hasBlogAccess(site: Site): boolean {
  * formule Scale n'a pas de site Harmony, rien n'est servi à son adresse (les
  * démos, elles, présentent toujours l'offre complète).
  */
-export async function getSiteByKey(key: string): Promise<Site | null> {
+export const getSiteByKey = cache(async (key: string): Promise<Site | null> => {
   const db = getDb();
   const decoded = decodeURIComponent(key);
   // www.<domaine> est redirigé vers le domaine nu par Vercel ; on résout
@@ -42,7 +52,7 @@ export async function getSiteByKey(key: string): Promise<Site | null> {
     : await db.query.sites.findFirst({ where: eq(sites.slug, decoded) });
   if (!site || !isHostedSiteServed(site)) return null;
   return site;
-}
+});
 
 /** Le site hébergé existe-t-il pour ce compte ? Démos : toujours ; clients : avec la formule Site. */
 export function isHostedSiteServed(site: Pick<Site, "type" | "plan">): boolean {
@@ -57,20 +67,20 @@ export function isDemoExpired(site: Site): boolean {
   );
 }
 
-export async function getHomePage(siteId: string): Promise<Page | null> {
+export const getHomePage = cache(async (siteId: string): Promise<Page | null> => {
   const db = getDb();
   const page = await db.query.pages.findFirst({
     where: and(eq(pages.siteId, siteId), eq(pages.type, "home")),
   });
   return page ?? null;
-}
+});
 
 /**
  * Pages de motifs visibles — le nombre suit la formule (6 avec la formule
  * Site). Les pages restent en base : retrouver la formule Site les réactive
  * sans régénération.
  */
-export async function getMotifPages(site: Site): Promise<Page[]> {
+export const getMotifPages = cache(async (site: Site): Promise<Page[]> => {
   const db = getDb();
   const all = await db.query.pages.findMany({
     where: and(eq(pages.siteId, site.id), eq(pages.type, "motif")),
@@ -83,7 +93,7 @@ export async function getMotifPages(site: Site): Promise<Page[]> {
   // Les démos présentent toujours l'offre complète
   if (site.type === "demo") return enabled;
   return enabled.slice(0, motifPagesAllowance(site.plan));
-}
+});
 
 export async function getMotifPage(
   site: Site,
@@ -109,7 +119,7 @@ export async function getMotifPage(
  * publique doit rester servie même si la base n'a pas encore reçu les
  * colonnes ajoutées par une migration (réponse du propriétaire, analyse…).
  */
-export async function getReviews(siteId: string) {
+export const getReviews = cache(async (siteId: string) => {
   const db = getDb();
   return db.query.googleReviews.findMany({
     where: eq(googleReviews.siteId, siteId),
@@ -127,15 +137,25 @@ export async function getReviews(siteId: string) {
       syncedAt: true,
     },
   });
-}
+});
 
-export async function getPublishedArticles(siteId: string): Promise<BlogArticle[]> {
+/** Un article sans son texte : ce qu'il faut à une liste, à une carte ou au plan du site. */
+export type ArticleSummary = Omit<BlogArticle, "content">;
+
+/**
+ * Articles publiés, du plus récent au plus ancien, SANS leur texte : la liste
+ * du blog, les articles similaires et le plan du site n'en lisent que le
+ * titre, l'extrait et l'image. Charger le texte de tous les articles pour en
+ * afficher trois pesait de plus en plus lourd à chaque publication.
+ */
+export const getPublishedArticles = cache(async (siteId: string): Promise<ArticleSummary[]> => {
   const db = getDb();
   return db.query.blogArticles.findMany({
     where: and(eq(blogArticles.siteId, siteId), eq(blogArticles.status, "published")),
     orderBy: [desc(blogArticles.publishedAt)],
+    columns: { content: false },
   });
-}
+});
 
 export async function getArticleBySlug(siteId: string, slug: string): Promise<BlogArticle | null> {
   const db = getDb();
@@ -151,19 +171,19 @@ export async function getRelatedArticles(
   excludeId: string,
   motifSlug: string | null,
   limit = 3,
-): Promise<BlogArticle[]> {
+): Promise<ArticleSummary[]> {
   const all = (await getPublishedArticles(siteId)).filter((a) => a.id !== excludeId);
   const sameMotif = motifSlug ? all.filter((a) => a.motifSlug === motifSlug) : [];
   const others = all.filter((a) => !sameMotif.includes(a));
   return [...sameMotif, ...others].slice(0, limit);
 }
 
-export async function getProspect(prospectId: string | null) {
+export const getProspect = cache(async (prospectId: string | null) => {
   if (!prospectId) return null;
   const db = getDb();
   const prospect = await db.query.prospects.findFirst({ where: eq(prospects.id, prospectId) });
   return prospect ?? null;
-}
+});
 
 /**
  * URL publique canonique d'un site (domaine custom ou chemin de démo). Pour

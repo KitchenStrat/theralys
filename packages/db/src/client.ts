@@ -10,6 +10,25 @@ declare global {
 }
 
 /**
+ * Pool de connexions d'une instance.
+ * - `connectionTimeoutMillis` : pool saturé ou base injoignable, la requête
+ *   échoue au bout de 10 s au lieu d'attendre sans fin (la page répond par une
+ *   erreur lisible plutôt que de rester suspendue jusqu'à la coupure de la
+ *   fonction) ;
+ * - écouteur `error` : une connexion inactive coupée par le serveur (mise en
+ *   veille de la base, redémarrage du pooler) émet une erreur sur le pool ;
+ *   sans écouteur, elle ferait tomber le processus. Le pool retire de lui-même
+ *   la connexion fautive.
+ */
+function createPool(connectionString: string): Pool {
+  const pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 });
+  pool.on("error", (error) => {
+    console.warn("[db] connexion inactive perdue :", error instanceof Error ? error.name : "erreur");
+  });
+  return pool;
+}
+
+/**
  * Client partagé — pool unique par processus (survit au HMR de Next en dev).
  */
 export function getDb(): Database {
@@ -17,8 +36,7 @@ export function getDb(): Database {
   if (!connectionString) {
     throw new Error("DATABASE_URL manquante : copier .env.example vers .env et l'adapter.");
   }
-  const pool =
-    globalThis.__theralysPool ?? new Pool({ connectionString, max: 10 });
+  const pool = globalThis.__theralysPool ?? createPool(connectionString);
   globalThis.__theralysPool = pool;
   const db = drizzle(pool, { schema });
   // Registre des appels API : dès qu'une base existe, chaque appel fournisseur s'y inscrit

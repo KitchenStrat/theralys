@@ -215,9 +215,23 @@ export async function getMonthItems(siteId: string, year: number, month: number)
   const monthEnd = new Date(Date.UTC(year, month, 1));
 
   const [articles, entries, motifPages] = await Promise.all([
+    // Le calendrier n'affiche que le titre, l'état et l'image : le texte des articles n'est pas chargé
+    // (plus de 200 articles par an et par site, lus à chaque ouverture de l'accueil et des publications)
     db.query.blogArticles.findMany({
       where: eq(blogArticles.siteId, siteId),
       orderBy: [desc(blogArticles.publishAt)],
+      columns: {
+        id: true,
+        title: true,
+        status: true,
+        aiGenerated: true,
+        motifSlug: true,
+        readingTimeMin: true,
+        imageUrl: true,
+        publishAt: true,
+        publishedAt: true,
+        createdAt: true,
+      },
     }),
     db.query.editorialCalendarEntries.findMany({
       where: and(

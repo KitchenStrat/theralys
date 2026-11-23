@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { BILLING_PERIOD_LABELS, PLANS, planPrice, type BillingPeriod, type PlanId } from "@theralys/db";
 import { periodEnd } from "./period";
 import type { BillingProvider, SubscriptionResult } from "./types";
 
-/** Mode mock : abonnement actif immédiatement, identifiants factices stables. */
+/** Mode mock : abonnement actif immédiatement, identifiants factices aléatoires. */
 export class MockBillingProvider implements BillingProvider {
   readonly mode = "mock" as const;
 
@@ -17,7 +18,8 @@ export class MockBillingProvider implements BillingProvider {
     if (planPrice(opts.plan, opts.period) === null) {
       throw new Error(`La formule ${PLANS[opts.plan].label} n'est pas proposée sur la durée « ${BILLING_PERIOD_LABELS[opts.period]} ».`);
     }
-    const suffix = opts.siteId.slice(0, 8);
+    // Identifiants imprévisibles : l'identifiant d'un site est public (il figure dans ses pages), on n'en dérive rien
+    const suffix = randomUUID().replace(/-/g, "");
     return {
       stripeCustomerId: `cus_mock_${suffix}`,
       stripeSubscriptionId: `sub_mock_${suffix}`,

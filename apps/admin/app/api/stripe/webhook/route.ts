@@ -1,15 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { getDb, sites, subscriptions } from "@theralys/db";
-import { handleStripeEvent, type StripeEventLike } from "@theralys/providers/billing";
+import { canAttachSubscription, handleStripeEvent, subscriptionEffect, type StripeEventLike } from "@theralys/providers/billing";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Webhooks Stripe Billing : impayés → past_due, annulation → canceled + site
- * archivé, changements de formule → gating synchronisé. La logique de
- * traduction (handleStripeEvent) est pure et testée unitairement.
+ * Webhooks Stripe Billing : paiement terminé → abonnement rattaché, impayés →
+ * past_due, annulation → canceled + site archivé. La logique de traduction
+ * (`handleStripeEvent`, `subscriptionEffect`) est pure et testée unitairement.
+ *
+ * Authenticité : en production, un événement n'est accepté que signé par
+ * Stripe (`STRIPE_WEBHOOK_SECRET`). Sans ce secret la route refuse tout — elle
+ * est publique, et un événement fabriqué pourrait archiver le site d'un
+ * client. Le JSON non signé n'est lu qu'en développement.
  */
 export async function POST(request: NextRequest) {
   const payload = await request.text();
@@ -28,8 +33,10 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Signature invalide" }, { status: 400 });
     }
+  } else if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Webhook non configuré" }, { status: 503 });
   } else {
-    // Sans secret configuré (dev/mock), accepte le JSON brut
+    // Développement sans secret : accepte le JSON brut
     try {
       event = JSON.parse(payload) as StripeEventLike;
     } catch {
@@ -43,32 +50,49 @@ export async function POST(request: NextRequest) {
   }
 
   const db = getDb();
-  const subscription = await db.query.subscriptions.findFirst({
+
+  // Paiement terminé : la ligne créée à la conversion (elle ne porte que le client Stripe) reçoit son abonnement
+  if (action.kind === "link") {
+    const linked = await db
+      .update(subscriptions)
+      .set({ stripeSubscriptionId: action.stripeSubscriptionId })
+      .where(
+        and(
+          eq(subscriptions.stripeCustomerId, action.stripeCustomerId),
+          or(isNull(subscriptions.stripeSubscriptionId), eq(subscriptions.stripeSubscriptionId, ""), eq(subscriptions.stripeSubscriptionId, action.stripeSubscriptionId)),
+        ),
+      )
+      .returning({ id: subscriptions.id });
+    return NextResponse.json(linked.length > 0 ? { received: true } : { received: true, ignored: "abonnement inconnu" });
+  }
+
+  // Par identifiant d'abonnement ; à défaut par client Stripe (premier événement avant le rattachement, réabonnement)
+  let subscription = await db.query.subscriptions.findFirst({
     where: eq(subscriptions.stripeSubscriptionId, action.stripeSubscriptionId),
   });
+  if (!subscription && action.stripeCustomerId) {
+    const byCustomer = await db.query.subscriptions.findFirst({
+      where: eq(subscriptions.stripeCustomerId, action.stripeCustomerId),
+    });
+    if (byCustomer && canAttachSubscription(byCustomer, action.stripeSubscriptionId)) subscription = byCustomer;
+  }
   if (!subscription) {
     return NextResponse.json({ received: true, ignored: "abonnement inconnu" });
   }
 
-  await db
-    .update(subscriptions)
-    .set({
-      status: action.status,
-      ...(action.plan ? { plan: action.plan } : {}),
-      ...(action.currentPeriodEnd ? { currentPeriodEnd: action.currentPeriodEnd } : {}),
-    })
-    .where(eq(subscriptions.id, subscription.id));
+  const effect = subscriptionEffect(subscription, action);
+  if (effect.kind === "ignore") {
+    return NextResponse.json({ received: true, ignored: effect.reason });
+  }
 
-  // Le gating des fonctionnalités suit l'abonnement
-  const siteUpdates: Partial<{ plan: typeof action.plan; status: "archived" | "published" }> = {};
-  if (action.plan) siteUpdates.plan = action.plan;
-  if (action.archiveSite) siteUpdates.status = "archived";
-  else if (action.status === "active") siteUpdates.status = "published";
-  if (Object.keys(siteUpdates).length > 0) {
+  await db.update(subscriptions).set(effect.subscription).where(eq(subscriptions.id, subscription.id));
+
+  // Le site suit l'abonnement : archivé à l'annulation, republié à la reprise d'un abonnement terminé
+  if (effect.site) {
     await db
       .update(sites)
-      .set({ ...siteUpdates, updatedAt: new Date() } as never)
-      .where(eq(sites.id, subscription.siteId));
+      .set({ status: effect.site, updatedAt: new Date() })
+      .where(effect.site === "published" ? and(eq(sites.id, subscription.siteId), eq(sites.status, "archived")) : eq(sites.id, subscription.siteId));
   }
 
   return NextResponse.json({ received: true });
