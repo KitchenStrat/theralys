@@ -220,7 +220,7 @@ function AnalysisCard({
   const messageDetail = messageRest.join(" : ");
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" data-tour="meta-analyse">
       <CardHeader
         icon={Radar}
         title="Analyse Meta Ads"

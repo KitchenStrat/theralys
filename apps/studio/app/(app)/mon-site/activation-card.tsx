@@ -121,7 +121,7 @@ export function ActivationCard({
   );
 
   return (
-    <section id="reference" aria-labelledby="activation-title" className="scroll-mt-6" data-testid="activation-card" data-active={active} data-usable={usable}>
+    <section id="reference" aria-labelledby="activation-title" className="scroll-mt-6" data-testid="activation-card" data-active={active} data-usable={usable} data-tour="site-activation">
       {active ? (
         <Card padding="none" className="overflow-hidden">
           <div className="relative isolate overflow-hidden bg-ds-section-gradient-deep px-5 py-6 text-ds-section-on-deep sm:px-8 sm:py-8">

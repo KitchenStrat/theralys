@@ -277,7 +277,7 @@ function AnalysisCard({
   const [messageHead, ...messageRest] = (message ?? "").split(" : ");
   const messageDetail = messageRest.join(" : ");
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col" data-tour="ads-analyse">
       <CardHeader
         icon={ScanSearch}
         title="Analyse de la demande"

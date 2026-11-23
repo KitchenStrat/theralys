@@ -72,7 +72,7 @@ export default async function MonSitePage() {
     return (
       <Screen state="none">
         {hosted ? <HostedSiteCard url={hostedUrl} role="reference" className="xl:col-span-2" /> : null}
-        <section aria-labelledby="connect-title" className="xl:col-span-2" data-testid="connect-card">
+        <section aria-labelledby="connect-title" className="xl:col-span-2" data-testid="connect-card" data-tour="site-connecter">
           <Card padding="lg">
             {/* Le formulaire, et à côté (dessous sur un écran étroit) ce qui se passera ensuite */}
             <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,23rem)] xl:gap-10">
@@ -168,7 +168,7 @@ function Screen({ state, journey, rows = 1, children }: { state: ReadScreenState
   return (
     <Stagger className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_21rem]">
       <div className="min-w-0 xl:col-span-2">
-        <PageHeader section="mon-site" />
+        <PageHeader section="mon-site" tour="mon-site" />
         <ReadAnnouncer state={state} />
       </div>
       {journey ? <JourneyAside journey={journey} rows={rows} /> : null}

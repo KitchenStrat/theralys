@@ -30,7 +30,7 @@ const ROLE_BADGE: Record<HostedSiteRole, { tone: BadgeTone; icon: LucideIcon; la
 export function HostedSiteCard({ url, role, className }: { url: string; role: HostedSiteRole; className?: string }) {
   const badge = ROLE_BADGE[role];
   return (
-    <section aria-labelledby="hosted-site-title" className={className} data-testid="hosted-site-card" data-role={role}>
+    <section aria-labelledby="hosted-site-title" className={className} data-testid="hosted-site-card" data-role={role} data-tour="site-harmony">
       <Card padding="lg" className="h-full">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-5">
           <CardHead

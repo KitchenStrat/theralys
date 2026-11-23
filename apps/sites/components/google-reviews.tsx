@@ -103,7 +103,7 @@ function ReviewCard({ review }: { review: GoogleReviewCard }) {
   const [expanded, setExpanded] = useState(false);
   const truncatable = review.text.length > 160;
   return (
-    <figure className="relative w-[22rem] shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 shadow-sm sm:w-[24rem]">
+    <figure className="relative w-[22rem] max-w-full shrink-0 snap-start rounded-[var(--r-lg)] bg-[var(--site-surface)] p-7 shadow-sm sm:w-[24rem]">
       <GoogleG className="absolute right-6 top-6 h-6 w-6" />
       <figcaption className="flex min-w-0 items-center gap-3 pr-10">
         <ReviewAvatar name={review.authorName} photoUrl={review.authorPhotoUrl} />

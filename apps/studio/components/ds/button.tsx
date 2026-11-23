@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import Link from "next/link";
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { Spinner } from "./spinner";
 
 /** `ghost` : nom hérité du `Button` partagé, synonyme de `quiet` (l'échange d'import ne casse rien). */
@@ -83,6 +83,8 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   iconRight?: ReactNode;
   /** Action en cours : le libellé reste, un indicateur remplace l'icône, le bouton est inactif */
   loading?: boolean;
+  /** Accès à l'élément (placer le focus, mesurer) : transmis tel quel au `<button>` */
+  ref?: Ref<HTMLButtonElement>;
 };
 
 /**

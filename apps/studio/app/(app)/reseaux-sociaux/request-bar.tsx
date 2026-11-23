@@ -141,6 +141,7 @@ export function RequestBar({
       as="section"
       variant="tinted"
       id="demande-sur-mesure"
+      data-tour="social-demande"
       aria-labelledby="demande-sur-mesure-titre"
       className="scroll-mt-24"
     >

@@ -66,7 +66,7 @@ export function SiteSummary({
   }
 
   return (
-    <section aria-labelledby="site-summary-title" data-testid="site-summary">
+    <section aria-labelledby="site-summary-title" data-testid="site-summary" data-tour="site-resume">
       <Card padding="lg">
         <Eyebrow icon={Check}>{stepLabel("connecter")}</Eyebrow>
         <CardHead

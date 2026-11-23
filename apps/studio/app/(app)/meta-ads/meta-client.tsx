@@ -117,11 +117,11 @@ export function MetaClient({ initialTab, data, site }: { initialTab: MetaTab; da
 
   return (
     <Stagger className="space-y-6" data-ds-section="meta-ads">
-      <PageHeader section="meta-ads" />
+      <PageHeader section="meta-ads" tour="meta-ads" />
 
       {siteNotice ? <AnalysisSiteNotice notice={siteNotice} onRelaunch={tab === "diagnostic" ? undefined : () => jump("diagnostic")} /> : null}
 
-      <div onClickCapture={onTabClick}>
+      <div onClickCapture={onTabClick} data-tour="meta-onglets">
         <Tabs idBase={TABS_ID} label="Sections Meta Ads" tabs={tabs} value={tab} />
       </div>
 

@@ -198,6 +198,9 @@ h3,
 h4 {
   font-family: var(--site-font-heading);
   letter-spacing: var(--site-heading-tracking, -0.01em);
+  /* Dernier recours sur un écran étroit : un mot plus large que la colonne (« Psychopraticienne ») se coupe au lieu
+     d'être rogné par le bord de l'écran. La taille des grands titres suit déjà la largeur (`clamp` dans les classes). */
+  overflow-wrap: break-word;
 }
 
 html {

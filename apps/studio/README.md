@@ -309,6 +309,54 @@ depuis son compte. Onglets
   `loadGoogleBrief`).
 - **Tests** : `lib/meta-ads/*.test.ts` (config `lib/vitest.config.ts`).
 
+## Visite guidée
+
+Le parcours de prise en main du studio : une visite d'accueil à la première
+connexion, puis une mini-visite par espace à sa première ouverture.
+
+- **Logique pure** : `lib/visite/engine.ts` (étapes jouables, placement de la
+  carte, lancement automatique, clés de l'état « déjà vu ») et
+  `lib/visite/tours.ts` (les textes). Tests : `lib/visite/engine.test.ts`.
+- **Écran** : `components/visite/` — `TourProvider` (monté dans
+  `app/(app)/layout.tsx` et `app/(editor)/layout.tsx`), `TourOverlay` (voile,
+  découpe autour de l'élément montré, carte), `TourLauncher` (bouton « Visite
+  guidée » + proposition à la première ouverture).
+- **Ajouter une étape** : poser `data-tour="<repère>"` sur l'élément à montrer,
+  puis l'étape dans `tours.ts` (`target`, `title`, `body`). Une étape dont la
+  cible n'est pas à l'écran est passée — formule qui n'ouvre pas l'espace,
+  carte absente de cet état de la page. `target` accepte plusieurs repères par
+  ordre de préférence : une entrée de la barre latérale sur ordinateur, à
+  défaut le bouton « Plus » de la barre basse sur téléphone (`fallbackNote`
+  ajoute alors une précision).
+- **Ajouter une visite à une page** : un identifiant dans `TOUR_IDS`, sa
+  définition dans `TOURS`, puis `tour="<identifiant>"` sur le `PageHeader` de
+  la page (bouton de relance et proposition automatique).
+
+Règles :
+
+- La visite d'accueil passe d'abord : elle s'ouvre par une fenêtre de
+  bienvenue (« Faire le tour » / « Plus tard »). « Plus tard » la repropose à
+  la session suivante, une fois ; au deuxième refus, plus aucune visite ne se
+  propose d'elle-même. La mini-visite d'un espace attend que la visite
+  d'accueil ait été vue.
+- Une visite ne se propose jamais par-dessus une fenêtre (les paramètres
+  ouverts par `#parametres`), pendant une autre visite, dans une iframe, ni à
+  l'équipe en mode support — qui peut toujours la lancer à la main, sans que
+  rien ne soit noté.
+- Toutes restent relançables : bouton « Visite guidée » de l'en-tête de chaque
+  page, entrée « Visite guidée » du menu (barre latérale, feuille « Plus ») pour
+  la visite d'accueil, ou l'adresse `/?visite=accueil`. Dans l'éditeur, le
+  bouton n'apparaît qu'à partir de 640 px.
+- État « déjà vu » : une ligne `tour:<identifiant>` par site dans la table
+  `onboarding_tasks` (aucune migration ; ces clés n'entrent dans aucune liste
+  existante), doublée d'un repli dans le navigateur
+  (`localStorage`, `hy:visite:vues:<site>`) si l'écriture échoue. État
+  illisible : rien ne se propose.
+- Accessibilité : la carte est une boîte de dialogue (focus retenu puis rendu,
+  Échap ferme, flèches gauche et droite, chaque étape annoncée) ; la page n'est
+  pas cliquable pendant la visite. La découpe change de place sans transition :
+  seul le contenu de la carte arrive en fondu.
+
 ## Développement local
 
 Depuis la **racine** du monorepo (pnpm ne trouve pas les workspaces ailleurs) :

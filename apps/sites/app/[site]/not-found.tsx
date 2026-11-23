@@ -56,7 +56,7 @@ export default async function SiteNotFound() {
         <span className="inline-block rounded-[var(--r-pill)] bg-[var(--site-soft)] px-5 py-2 text-[0.85rem] font-medium uppercase tracking-wider text-[var(--site-primary-dark)]">
           Erreur 404
         </span>
-        <h1 className="mt-6 text-[2.4rem] font-semibold leading-[1.1] text-[var(--site-primary-dark)] sm:text-[3.2rem]">
+        <h1 className="mt-6 text-[clamp(1.8rem,9vw,2.4rem)] font-semibold leading-[1.1] text-[var(--site-primary-dark)] sm:text-[3.2rem]">
           {settings.title}
         </h1>
         {settings.message ? <p className="mt-5 max-w-xl text-xl opacity-80">{settings.message}</p> : null}

@@ -252,8 +252,8 @@ function PhoneButton({ phone, onDark = false }: { phone: string; onDark?: boolea
       href={`tel:${phone.replace(/\s/g, "")}`}
       className={
         onDark
-          ? "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-current/40 px-7 py-3.5 text-[1.05rem] font-medium transition-opacity hover:opacity-80"
-          : "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-[var(--site-primary)]/50 px-7 py-3.5 text-[1.05rem] font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)]"
+          ? "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-current/40 max-w-full px-5 py-3.5 text-base font-medium min-[360px]:px-7 min-[360px]:text-[1.05rem] transition-opacity hover:opacity-80"
+          : "inline-flex items-center justify-center gap-2 rounded-[var(--r-pill)] border border-[var(--site-primary)]/50 max-w-full px-5 py-3.5 text-base font-medium text-[var(--site-primary)] transition-colors hover:bg-[var(--site-soft)] min-[360px]:px-7 min-[360px]:text-[1.05rem]"
       }
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -489,12 +489,12 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
       target="_blank"
       rel="noopener noreferrer"
       title="Voir la fiche sur Google Maps"
-      className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className="inline-flex max-w-full items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
     >
       {cardInner}
     </a>
   ) : (
-    <div className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
+    <div className="inline-flex max-w-full items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm">
       {cardInner}
     </div>
   );
@@ -510,7 +510,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           target="_blank"
           rel="noopener noreferrer"
           title="Voir sur Google Maps"
-          className="inline-flex items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          className="inline-flex max-w-full items-center gap-3 rounded-[var(--r-md)] bg-[var(--site-surface)] px-5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
         >
           {cabinet.photoUrl ? (
             <img src={cabinet.photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
@@ -529,7 +529,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
   const content = (
     <>
       {section.badge ? <Pill>{section.badge}</Pill> : null}
-      <h1 className="mt-6 text-[2.75rem] font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[4.3rem]">
+      <h1 className="mt-6 text-[clamp(2rem,10.5vw,2.75rem)] font-semibold leading-[1.06] text-[var(--site-primary-dark)] sm:text-[4.3rem]">
         <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
       </h1>
       <div className="mt-7 max-w-xl space-y-4 text-xl opacity-85">
@@ -553,7 +553,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
   if (!section.imageUrl) {
     return (
       <section className="relative overflow-hidden">
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-20">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 py-12 lg:grid-cols-[1.05fr_1fr] lg:py-20">
           <div className="hy-rise">{content}</div>
           <div className="relative">
             <ArchImage url={undefined} alt="" className="h-full max-h-[30rem] min-h-[20rem] w-full lg:min-h-[26rem]" />
@@ -640,7 +640,7 @@ function Hero({ section, ctx }: { section: Extract<Section, { type: "hero" }>; c
           la colonne suit la largeur de l'écran, pas un conteneur centré, sinon
           les deux se chevauchent entre 1024 et 1600 px. */}
       <div className="relative flex px-4 pb-14 pt-2 lg:min-h-[40rem] lg:items-center lg:py-24 lg:pl-[calc(47%+3rem)] lg:pr-6 xl:pl-[calc(47%+4rem)] xl:pr-10">
-        <div className="hy-rise w-full lg:max-w-[46rem]">{content}</div>
+        <div className="hy-rise w-full min-w-0 lg:max-w-[46rem]">{content}</div>
       </div>
       <DotsRow className="pb-10 text-[var(--site-primary)] lg:pb-12" />
     </section>
@@ -722,7 +722,7 @@ function Specialties({
       <div className="relative mx-auto max-w-7xl px-4">
         <div className="reveal text-center">
           <Pill onDark>Motifs de consultation</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
+          <h2 className="mx-auto mt-5 max-w-2xl text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]">
             <Rich text={section.title} strongClass="font-black" />
           </h2>
           <DotsRow className="mt-6" />
@@ -826,7 +826,7 @@ function Future({ section, ctx }: { section: Extract<Section, { type: "future" }
       <div className="relative mx-auto flex max-w-7xl px-4 py-12 lg:min-h-[42rem] lg:items-center lg:py-24">
         <div className="reveal lg:w-[55%] lg:pr-8">
           {section.badge ? <Pill>{section.badge}</Pill> : null}
-          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]">
+          <h2 className="mt-5 text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]">
             <Rich text={section.title} strongClass="text-[var(--site-primary)]" />
           </h2>
           <div className="mt-6 text-[1.1rem] leading-relaxed opacity-90 [&_ul]:my-4 [&_ul]:space-y-3 [&_ol]:my-4 [&_ol]:space-y-3">
@@ -884,7 +884,7 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
         <div className="relative mx-auto flex max-w-7xl px-4 py-12 lg:min-h-[42rem] lg:items-center lg:justify-end lg:py-24">
           <div className="reveal lg:w-[55%] lg:pl-8">
             <Pill>Votre praticien·ne</Pill>
-            <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
+            <h2 className="mt-5 text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
             <div className="mt-7 space-y-4 text-xl opacity-85">
               {section.paragraphs.map((p, i) => (
                 <div key={i} className="leading-relaxed">
@@ -938,7 +938,7 @@ function About({ section, ctx }: { section: Extract<Section, { type: "about" }>;
       <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="reveal">
           <Pill>Votre praticien·ne</Pill>
-          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
+          <h2 className="mt-5 text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <div className="mt-7 space-y-4 text-xl opacity-85">
             {section.paragraphs.map((p, i) => (
               <div key={i} className="leading-relaxed">
@@ -1043,7 +1043,7 @@ function Reviews({
                 href={`https://search.google.com/local/writereview?placeid=${encodeURIComponent(ctx.googlePlaceId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-block rounded-[var(--r-pill)] border border-current/25 px-5 py-2 text-sm font-medium transition hover:bg-[var(--site-soft)]"
+                className="mt-4 inline-block rounded-[var(--r-pill)] border border-current/25 px-5 py-2 text-sm font-medium transition hover:bg-[var(--site-soft)] pointer-coarse:py-3"
               >
                 Écrire un avis
               </a>
@@ -1070,10 +1070,10 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
       <div className="relative mx-auto max-w-6xl px-4">
         <div className="reveal text-center">
           <Pill>À quoi s&apos;attendre ?</Pill>
-          <h2 className="mx-auto mt-5 max-w-2xl text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
+          <h2 className="mx-auto mt-5 max-w-2xl text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <DotsRow className="mt-6 text-[var(--site-primary)]" />
         </div>
-        <ol className="mt-14 grid gap-7 sm:grid-cols-2">
+        <ol className="mt-14 grid gap-7 lg:grid-cols-2">
           {section.steps.map((step, i) => (
             <li
               key={i}
@@ -1082,13 +1082,13 @@ function Process({ section, ctx }: { section: Extract<Section, { type: "process"
             >
               <span
                 aria-hidden
-                className="flex w-28 shrink-0 items-center justify-center border-r border-[var(--site-primary)]/30 text-8xl font-semibold text-[var(--site-primary)]"
+                className="flex w-16 shrink-0 items-center justify-center border-r border-[var(--site-primary)]/30 text-6xl font-semibold text-[var(--site-primary)] sm:w-28 sm:text-8xl"
                 style={{ fontFamily: "var(--site-font-heading)" }}
               >
                 {i + 1}
               </span>
-              <span className="p-8">
-                <h3 className="text-2xl font-semibold">
+              <span className="min-w-0 p-5 sm:p-8">
+                <h3 className="text-xl font-semibold sm:text-2xl">
                   <Rich text={step.title} strongClass="text-[var(--site-primary)]" />
                 </h3>
                 <div className="mt-3 text-[1.05rem] leading-relaxed opacity-80">
@@ -1112,7 +1112,7 @@ function Faq({ section, ctx }: { section: Extract<Section, { type: "faq" }>; ctx
       <div className="mx-auto grid max-w-7xl gap-10 px-4 lg:grid-cols-[0.75fr_1.25fr]">
         <div className="reveal">
           <Pill>Vos questions</Pill>
-          <h2 className="mt-5 text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
+          <h2 className="mt-5 text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="text-[var(--site-primary)]" /></h2>
           <p className="mt-4 opacity-75">
             Une autre question ? Le plus simple est d&apos;en parler directement.
           </p>
@@ -1247,7 +1247,7 @@ function Contact({
           ))}
         </div>
         <div className="reveal" style={{ transitionDelay: "120ms" }}>
-          <h2 className="text-[2.6rem] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="font-black" /></h2>
+          <h2 className="text-[clamp(1.9rem,9.6vw,2.6rem)] font-semibold leading-[1.08] sm:text-[3.4rem]"><Rich text={section.title} strongClass="font-black" /></h2>
           <p className="mt-4 text-lg opacity-85">Prendre rendez-vous en ligne ou par téléphone :</p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <RdvButton siteId={ctx.site.id} bookingUrl={ctx.site.bookingUrl} />
@@ -1317,7 +1317,7 @@ function Cta({ section, ctx }: { section: Extract<Section, { type: "cta" }>; ctx
   return (
     <section className="mx-auto max-w-5xl px-4 py-14">
       <div className="reveal wave-bg-light rounded-[var(--r-xl)] bg-[var(--site-primary)] px-8 py-16 text-center text-white shadow-xl shadow-black/10">
-        <h2 className="mx-auto max-w-2xl text-[2.2rem] font-semibold leading-[1.15] sm:text-[2.6rem]"><Rich text={section.title} strongClass="font-black" /></h2>
+        <h2 className="mx-auto max-w-2xl text-[clamp(1.75rem,8.4vw,2.2rem)] font-semibold leading-[1.15] sm:text-[2.6rem]"><Rich text={section.title} strongClass="font-black" /></h2>
         {section.body ? (
           <div className="mx-auto mt-5 max-w-2xl text-xl opacity-90 [&_ol]:mx-auto [&_ol]:w-fit [&_ol]:text-left [&_ul]:mx-auto [&_ul]:w-fit [&_ul]:text-left">
             <RichBlocks text={section.body} markerClass="marker:text-current" />

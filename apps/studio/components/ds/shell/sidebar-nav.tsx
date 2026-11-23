@@ -1,10 +1,11 @@
 "use client";
 
 import { clsx } from "clsx";
-import { ExternalLink, LogOut } from "lucide-react";
+import { Compass, ExternalLink, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
+import { useTour } from "@/components/visite/provider";
 import { Badge } from "../badge";
 import {
   SECTIONS,
@@ -54,6 +55,8 @@ function NavItem({
     <Link
       href={href}
       data-ds-section={section}
+      // Repère de la visite guidée (le même sur la barre basse du téléphone : seule l'entrée affichée répond)
+      data-tour={`nav-${section}`}
       aria-current={active ? "page" : undefined}
       className={clsx(ROW, active && "font-semibold text-ds-section-ink")}
     >
@@ -87,6 +90,7 @@ function NavItem({
  */
 export function SidebarNav({ sections, siteHref, logoutAction, userName, badges, hrefs }: ShellNavProps) {
   const pathname = usePathname();
+  const tour = useTour();
   const navRef = useRef<HTMLElement>(null);
   const indicatorRef = useRef<HTMLSpanElement>(null);
   const headingBase = useId();
@@ -148,7 +152,7 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
         const heading = !(keys.length === 1 && SECTIONS[first].label === group.label);
         const headingId = `${headingBase}-${group.key}`;
         return (
-          <div key={group.key} className={heading ? "mt-4" : "mt-1"}>
+          <div key={group.key} data-tour={`nav-groupe-${group.key}`} className={heading ? "mt-4" : "mt-1"}>
             {heading ? (
               <p id={headingId} className="px-2.5 pb-1.5 text-ds-meta font-semibold text-ds-ink-500">
                 {group.label}
@@ -168,6 +172,17 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
       <div className="mt-auto pt-5">
         <ul className="space-y-1 border-t border-ds-ink-200 pt-3">
           {allowed.has("compte") ? item("compte", userName) : null}
+          {/* Relance de la visite d'accueil ; absente hors du studio connecté (pages d'aperçu) */}
+          {tour ? (
+            <li>
+              <button type="button" onClick={() => tour.launch("accueil")} className={clsx(ROW, "w-full text-left")} data-ds-section="accueil" data-testid="tour-menu">
+                <span className="grid size-9 shrink-0 place-items-center rounded-[0.625rem] bg-ds-brand-50 text-ds-brand-700">
+                  <Compass size={18} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1 truncate">Visite guidée</span>
+              </button>
+            </li>
+          ) : null}
           {siteHref === null ? null : (
           <li>
             {/* `data-testid` : le même que le lien de la mise en page actuelle (un seul par page ; les liens du mobile n'en portent pas) */}

@@ -82,7 +82,7 @@ export function BioLinkCard({ siteLink }: { siteLink: SocialSiteLink }) {
   }
 
   return (
-    <Card as="section" aria-labelledby="lien-bio-titre">
+    <Card as="section" aria-labelledby="lien-bio-titre" data-tour="social-bio">
       <CardHeader
         icon={Link2}
         title={<span id="lien-bio-titre">Votre lien de bio</span>}

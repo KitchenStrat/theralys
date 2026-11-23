@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import type { AnalyticsSource } from "@theralys/shared";
 import { SetupChecklist, Stagger, type SectionKey } from "@/components/ds";
+import { TourAutoStart } from "@/components/visite";
 import { remainingSetupTasks, type NextStep, type SetupTask } from "@/lib/accueil";
 import type { CalendarItem, Period } from "@/lib/data";
 import { StatsPanel } from "../stats-panel";
@@ -70,6 +71,9 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
   if (upcoming) aside.push({ key: "publications", render: (wide) => <UpcomingCard items={upcoming} wide={wide} /> });
 
   return (
+    <>
+    {/* La visite d'accueil se propose d'elle-même à la première connexion (repères `data-tour` ci-dessous) */}
+    <TourAutoStart tour="accueil" />
     <Stagger className="space-y-6">
       <Greeting
         firstName={firstName}
@@ -79,7 +83,7 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
         // La prochaine étape cite déjà le prochain contenu quand elle porte sur lui
         nextPublication={nextStep?.kind === "review" || nextStep?.kind === "upcoming" ? null : (upcoming?.[0]?.date ?? null)}
         awaitingMeasure={awaitingMeasure}
-        aside={nextStep ? <NextStepAside step={nextStep} /> : undefined}
+        aside={nextStep ? <div data-tour="accueil-etape"><NextStepAside step={nextStep} /></div> : undefined}
       />
 
       {/*
@@ -121,7 +125,7 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
           }
         >
           {aside.map((card, index) => (
-            <div key={card.key} className={clsx("grid min-w-0", awaitingMeasure ? null : ASIDE_SLOTS[index])}>
+            <div key={card.key} data-tour={`accueil-${card.key}`} className={clsx("grid min-w-0", awaitingMeasure ? null : ASIDE_SLOTS[index])}>
               {card.render(!awaitingMeasure && index === WIDE_SLOT)}
             </div>
           ))}
@@ -130,5 +134,6 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
 
       <Shortcuts sections={sections} />
     </Stagger>
+    </>
   );
 }

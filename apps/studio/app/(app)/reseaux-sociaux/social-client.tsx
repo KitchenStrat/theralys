@@ -149,6 +149,7 @@ export function SocialClient({
       <Stagger className="space-y-6">
         <PageHeader
           section="reseaux-sociaux"
+          tour="reseaux-sociaux"
           action={
             // Simple raccourci vers la carte de demande, donc secondaire : le bouton principal de la page reste
             // « Créer ce contenu » (ou « Préparer mon mois »). À partir de 1 280 px la carte est à côté de la
@@ -199,6 +200,7 @@ export function SocialClient({
               size="sm"
               icon={<SlidersHorizontal size={16} aria-hidden />}
               onClick={() => setSettingsOpen(true)}
+              data-tour="social-parametrage"
               title={settings.saved ? "Voix, consignes et jours de publication enregistrés" : undefined}
             >
               Paramétrage
