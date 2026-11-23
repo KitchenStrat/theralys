@@ -64,7 +64,7 @@ export function MeasureCard({
   }, [checking]);
 
   return (
-    <section id="statistiques" aria-labelledby="measure-title" className="scroll-mt-6" data-testid="measure-card">
+    <section id="statistiques" aria-labelledby="measure-title" className="scroll-mt-6" data-testid="measure-card" data-tour="site-mesure">
       {/* Le même élément dans les deux cas (et non `Card` d'un côté, un bloc de l'autre) : la carte ne se remonte pas quand elle devient la prochaine étape */}
       <div className={clsx("rounded-ds-card p-6 sm:p-8", next ? "shadow-ds-pop ds-border-gradient" : "bg-white shadow-ds-card ring-1 ring-ds-ink-900/5")}>
         <div className="flex flex-wrap items-center justify-between gap-2">

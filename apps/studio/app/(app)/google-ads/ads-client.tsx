@@ -61,6 +61,7 @@ function TabsRow({ onClickCapture, children }: { onClickCapture: (event: MouseEv
     <div
       ref={ref}
       onClickCapture={onClickCapture}
+      data-tour="ads-onglets"
       className={more.start && more.end ? EDGE_FADE.both : more.end ? EDGE_FADE.end : more.start ? EDGE_FADE.start : undefined}
     >
       {children}
@@ -118,6 +119,7 @@ export function AdsClient({ initialTab, data, site }: { initialTab: AdsTab; data
     <Stagger className="space-y-6">
       <PageHeader
         section="google-ads"
+        tour="google-ads"
         purpose={
           data.externalTracking ? (
             // Site du client : le studio n'y rattache aucune visite à une annonce, il ne promet donc pas ce suivi

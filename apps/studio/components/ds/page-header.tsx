@@ -1,5 +1,7 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
+import { TourLauncher } from "@/components/visite/launcher";
+import type { TourId } from "@/lib/visite/engine";
 import { SECTIONS, type SectionKey } from "./sections";
 
 export type PageHeaderProps = {
@@ -13,6 +15,12 @@ export type PageHeaderProps = {
   action?: ReactNode;
   /** Action d'appoint (bouton `secondary` ou `quiet`) */
   secondary?: ReactNode;
+  /**
+   * Visite guidée de la page : ajoute le bouton discret « Visite guidée » après les actions, et propose la visite
+   * d'elle-même à la première ouverture. À ne poser que sur l'en-tête de la page elle-même — pas sur celui d'un état
+   * d'erreur ou d'une section non souscrite, où il n'y a rien à montrer.
+   */
+  tour?: TourId;
   /**
    * Rangée d'appoint sous le titre : navigation de mois, filtres. Sur le bandeau
    * doux, tout texte est `ink-600` ou plus foncé (ou `brand-800`, l'encre de
@@ -42,6 +50,7 @@ export function PageHeader({
   purpose,
   action,
   secondary,
+  tour,
   children,
   tone = "soft",
   ambient = true,
@@ -92,10 +101,11 @@ export function PageHeader({
             </p>
           </div>
         </div>
-        {action || secondary ? (
+        {action || secondary || tour ? (
           <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
             {action}
             {secondary}
+            {tour ? <TourLauncher tour={tour} /> : null}
           </div>
         ) : null}
       </div>

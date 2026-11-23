@@ -296,7 +296,7 @@ export function MonthCard({
   }
 
   return (
-    <Card as="section" aria-labelledby="contenus-du-mois-titre">
+    <Card as="section" aria-labelledby="contenus-du-mois-titre" data-tour="social-mois">
       <CardHeader
         icon={LayoutList}
         title={

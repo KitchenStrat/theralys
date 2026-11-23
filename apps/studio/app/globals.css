@@ -1397,6 +1397,62 @@ html:has(.ds-app) {
       animation: ds-ripple 700ms var(--ease-ds-out) 120ms backwards;
     }
   }
+
+  /* Visite guidée (`components/visite`) : un écran qui retient les gestes, une découpe autour de l'élément montré,
+     une carte posée à côté. Au-dessus de tout le studio, fenêtres comprises (une visite ne démarre jamais sous l'une
+     d'elles). La découpe change de place sans transition : seul le contenu de la carte arrive en fondu. */
+  .ds-tour-shield {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    touch-action: none;
+  }
+  .ds-tour-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background-color: oklch(28.5% 0.062 240.3 / 0.56);
+    pointer-events: none;
+  }
+  /* Le voile est l'ombre portée de la découpe : un seul élément, donc aucun raccord visible autour de la cible */
+  .ds-tour-hole {
+    position: fixed;
+    z-index: 70;
+    border-radius: 1rem;
+    pointer-events: none;
+    box-shadow:
+      0 0 0 2px #fff,
+      0 0 0 6px color-mix(in oklab, var(--ds-s-from, var(--color-ds-brand-500)) 60%, transparent),
+      0 0 0 200vmax oklch(28.5% 0.062 240.3 / 0.56);
+  }
+  .ds-tour-card {
+    position: fixed;
+    z-index: 71;
+    width: min(23.5rem, calc(100vw - 1.5rem));
+    max-height: calc(100vh - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: var(--radius-ds-card);
+    background: #fff;
+    color: var(--color-ds-ink-900);
+    box-shadow: var(--shadow-ds-pop);
+    outline: none;
+  }
+  /* Téléphone : la carte prend la largeur de l'écran */
+  @media (max-width: 639px) {
+    .ds-tour-card {
+      width: calc(100vw - 1.5rem);
+    }
+  }
+  @media (forced-colors: active) {
+    .ds-tour-hole {
+      outline: 3px solid Highlight;
+    }
+    .ds-tour-card {
+      border: 1px solid CanvasText;
+    }
+  }
 }
 
 /* ── 5. Composants hérités (packages/ui) sous le design system ─────────────────

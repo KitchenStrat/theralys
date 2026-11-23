@@ -1,10 +1,11 @@
 "use client";
 
 import { clsx } from "clsx";
-import { ChevronRight, Ellipsis, ExternalLink, LogOut, X } from "lucide-react";
+import { ChevronRight, Compass, Ellipsis, ExternalLink, LogOut, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useTour } from "@/components/visite/provider";
 import { Badge } from "../badge";
 import { SectionBadge } from "../icon-badge";
 import {
@@ -26,6 +27,7 @@ const SLOT =
  */
 export function MobileNav({ sections, siteHref, logoutAction, userName, badges, hrefs }: ShellNavProps) {
   const pathname = usePathname();
+  const tour = useTour();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const sheetId = useId();
@@ -86,6 +88,7 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
                 <Link
                   href={sectionHref(key, hrefs)}
                   data-ds-section={key}
+                  data-tour={`nav-${key}`}
                   aria-current={current ? "page" : undefined}
                   className={clsx(SLOT, current && "font-semibold text-ds-section-ink")}
                 >
@@ -107,6 +110,9 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
               aria-haspopup="dialog"
               aria-expanded={open}
               aria-controls={sheetId}
+              // Repère de la visite guidée, avec les espaces que la feuille range : une étape ne s'y replie que pour eux
+              data-tour="nav-plus"
+              data-tour-more={more.join(" ")}
               data-ds-section={active && !primary.includes(active) ? active : undefined}
               onClick={() => {
                 dialogRef.current?.showModal();
@@ -182,6 +188,25 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
           </ul>
 
           <ul className="mt-3 space-y-1 border-t border-ds-ink-200 pt-3">
+            {tour ? (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // La feuille se referme d'abord : une visite ne démarre jamais sous une fenêtre
+                    dialogRef.current?.close();
+                    tour.launch("accueil");
+                  }}
+                  className="flex min-h-14 w-full items-center gap-3.5 rounded-ds-md px-2.5 text-left text-base font-medium text-ds-ink-800 ds-focus"
+                  data-testid="tour-menu-mobile"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[0.625rem] bg-ds-brand-50 text-ds-brand-700">
+                    <Compass size={18} aria-hidden />
+                  </span>
+                  <span className="flex-1">Visite guidée</span>
+                </button>
+              </li>
+            ) : null}
             {siteHref === null ? null : (
             <li>
               <a

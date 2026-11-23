@@ -133,15 +133,16 @@ export function PublicationsClient({
       <Stagger className="space-y-6">
         <PageHeader
           section="publications"
+          tour="publications"
           action={
             nextUp ? (
-              <Button icon={<Eye size={18} aria-hidden />} onClick={() => setSelected(nextUp)}>
+              <Button icon={<Eye size={18} aria-hidden />} onClick={() => setSelected(nextUp)} data-tour="blog-relire">
                 Relire le prochain article
               </Button>
             ) : undefined
           }
           secondary={
-            <Button variant="secondary" icon={<Settings size={18} aria-hidden />} onClick={() => setSettingsOpen(true)}>
+            <Button variant="secondary" icon={<Settings size={18} aria-hidden />} onClick={() => setSettingsOpen(true)} data-tour="blog-parametres">
               Paramètres
             </Button>
           }
@@ -151,7 +152,7 @@ export function PublicationsClient({
 
         <Card as="section" padding="none" aria-labelledby="calendrier-mois">
           {/* En-tête de la feuille du mois : mois affiché, navigation, résumé */}
-          <div className="rounded-t-ds-card border-b border-ds-section-line/70 bg-ds-section-tint p-4 sm:p-6">
+          <div data-tour="blog-mois" className="rounded-t-ds-card border-b border-ds-section-line/70 bg-ds-section-tint p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               <nav aria-label="Mois affiché" className="flex items-center gap-1.5 sm:gap-2.5">
                 <MonthLink href={`/publications?mois=${prev}`} label="Mois précédent" icon={ChevronLeft} />
@@ -249,7 +250,7 @@ export function PublicationsClient({
                 </div>
 
                 {/* Une seule liste : une ligne par jour sous 1 280 px, une grille de sept colonnes au-delà */}
-                <ol className={clsx("mt-4 grid gap-2 xl:mt-2", columns)}>
+                <ol data-tour="blog-calendrier" className={clsx("mt-4 grid gap-2 xl:mt-2", columns)}>
                   {weeks.flat().map((day, index) =>
                     day === null ? (
                       <li key={`hors-mois-${index}`} aria-hidden className="hidden xl:block" />

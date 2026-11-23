@@ -96,17 +96,20 @@ export function GoogleClient({
     <Stagger className="space-y-6" data-ds-section="fiche-google">
       <PageHeader
         section="fiche-google"
+        tour="fiche-google"
         purpose={`${SECTIONS["fiche-google"].purpose} Harmony prépare, vous publiez sur Google.`}
       />
 
-      {data.linked ? (
-        <ProfileCard linked={data.linked} latestAudit={data.latestAudit} notice={linkNotice} />
-      ) : (
-        <LinkCard siteName={siteName} onLinked={setLinkNotice} />
-      )}
+      <div data-tour="google-fiche">
+        {data.linked ? (
+          <ProfileCard linked={data.linked} latestAudit={data.latestAudit} notice={linkNotice} />
+        ) : (
+          <LinkCard siteName={siteName} onLinked={setLinkNotice} />
+        )}
+      </div>
 
       <div className="space-y-6">
-        <div onClickCapture={onTabClickCapture}>
+        <div onClickCapture={onTabClickCapture} data-tour="google-onglets">
           <Tabs
             idBase={ID_BASE}
             label="Sections de la fiche Google"
@@ -117,7 +120,7 @@ export function GoogleClient({
           />
         </div>
 
-        <TabPanel key={tab} idBase={ID_BASE} tab={tab}>
+        <TabPanel key={tab} idBase={ID_BASE} tab={tab} data-tour="google-vue">
           {tab === "audit" ? (
             <AuditTab linked={linked} latestAudit={data.latestAudit} history={data.history} onLinkRequest={focusLinkSearch} />
           ) : null}

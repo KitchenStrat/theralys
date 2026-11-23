@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { Segmented, useDialogFocus } from "@theralys/ui";
 import { Badge, Button, IconBadge, LinkButton, Spinner, TabPanel, Tabs } from "@/components/ds";
+import { TourLauncher } from "@/components/visite";
 import type { PlanId } from "@theralys/db/plans";
 import {
   FOOTER_SOCIAL_NETWORKS,
@@ -1170,6 +1171,7 @@ export function SiteEditor({
           <div
             role="group"
             aria-label="Panneaux de l'éditeur"
+            data-tour="editeur-onglets"
             className="-ml-3 flex min-w-0 flex-1 overflow-x-auto pl-3 ds-tabs-scroll max-lg:[mask-image:linear-gradient(to_right,transparent,#000_0.75rem,#000_calc(100%_-_1.75rem),transparent)] sm:-ml-4 sm:pl-4 lg:ml-0 lg:flex-none lg:overflow-visible lg:pl-0"
           >
             <PanelTab label="Pages" icon={Files} active={panel === "pages"} aria-pressed={panel === "pages"} onClick={() => setPanel("pages")} />
@@ -1190,6 +1192,8 @@ export function SiteEditor({
             {/* Sous 640 px, le bouton se réduit à son icône ; son nom reste lu */}
             <span className="max-sm:sr-only">Voir mon site</span>
           </LinkButton>
+          {/* Visite guidée de l'éditeur : proposée à la première ouverture, relançable ici à partir de 640 px */}
+          <TourLauncher tour="editeur" compact />
         </div>
       </header>
 
@@ -1582,7 +1586,7 @@ export function SiteEditor({
           </div>
 
           {panel !== "pages" ? (
-            <div className="border-t border-ds-ink-200 bg-white px-4 py-3 shadow-ds-bar md:py-4">
+            <div data-tour="editeur-publier" className="border-t border-ds-ink-200 bg-white px-4 py-3 shadow-ds-bar md:py-4">
               {/* Réussite : la coche surgit ; échec : le message du service, annoncé aussitôt */}
               {feedback ? (
                 <ActionMessage tone={feedback.startsWith("Publié") ? "success" : "error"} className="mb-3">
@@ -1617,6 +1621,7 @@ export function SiteEditor({
             toute la place au panneau. */}
         <section
           aria-label="Aperçu du site"
+          data-tour="editeur-apercu"
           className="flex min-w-0 flex-col bg-ds-section-soft max-md:h-[34dvh] max-md:shrink-0 max-md:[@media(max-height:35rem)]:hidden md:flex-1"
         >
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 pt-2.5 sm:px-4 sm:pt-3">
