@@ -65,3 +65,20 @@ export function localBusinessJsonLd(opts: {
   }
   return jsonLd;
 }
+
+/**
+ * Sérialise des données structurées pour une balise `<script type="application/ld+json">`.
+ * `JSON.stringify` laisse passer `<`, `>` et `&` : un champ saisi par le
+ * praticien qui contiendrait `</script>` fermerait la balise et ferait
+ * exécuter la suite comme du HTML. Ces caractères (et les séparateurs de
+ * ligne Unicode) sont donc écrits en échappements `\uXXXX`, que tout lecteur
+ * JSON relit à l'identique.
+ */
+export function serializeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}

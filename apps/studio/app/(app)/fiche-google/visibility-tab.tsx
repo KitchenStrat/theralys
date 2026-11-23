@@ -154,7 +154,7 @@ export function VisibilityTab({
 
   return (
     <div className="space-y-6">
-      <GoogleVisibilityCard gscAccess connected={searchVisibility.connected} visibility={searchVisibility.visibility} />
+      <GoogleVisibilityCard gscAccess available={searchVisibility.available} connected={searchVisibility.connected} visibility={searchVisibility.visibility} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-[auto_1fr] xl:items-start">
         <Card>

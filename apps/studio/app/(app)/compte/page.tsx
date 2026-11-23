@@ -19,6 +19,7 @@ import { Badge, Card, CardHeader, EmptyState, PageHeader, Sequence, Stagger, typ
 import { requireClient } from "@/lib/auth";
 import { getSite, siteUrl } from "@/lib/data";
 import { DomainSection } from "./domain-section";
+import { PasswordCard } from "./password-card";
 import { PortalButton } from "./portal-button";
 
 export const metadata = { title: "Mon compte" };
@@ -219,6 +220,9 @@ export default async function AccountPage() {
           primaryPurchase={!subscription}
         />
         ) : null}
+
+        {/* Le mot de passe est celui du praticien : rien à changer depuis une session de l'équipe */}
+        {session.impersonated ? null : <PasswordCard />}
       </div>
     </Stagger>
   );

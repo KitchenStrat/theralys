@@ -28,6 +28,7 @@ import type {
   GoogleScanSummary,
 } from "@theralys/shared";
 import { getGoogleConnection, getGoogleVisibility, type GoogleVisibility } from "../data";
+import { searchConsoleAvailable } from "./search-console";
 import { isGridRadius } from "./keywords";
 import { getGoogleMonth, getGoogleRequestUsage, getRegenerationUsage, type GoogleMonthData, type GoogleRequestUsage } from "./posts";
 import { summarizeReviews, type GoogleReviewView, type ReviewsSummary } from "./reviews";
@@ -103,7 +104,12 @@ export type GoogleProfileData = {
   /** Régénérations de posts (instructions) restantes ce mois-ci */
   regenRemaining: number;
   /** Carte « Visibilité Google » (Search Console) : compte connecté et impressions du mois */
-  searchVisibility: { connected: boolean; visibility: GoogleVisibility | null };
+  /**
+   * `available` : le suivi Search Console existe pour ce site. Tant que la
+   * connexion réelle à Google n'est pas ouverte, seules les démonstrations
+   * l'affichent (données simulées) — jamais un site client.
+   */
+  searchVisibility: { available: boolean; connected: boolean; visibility: GoogleVisibility | null };
 };
 
 /** Fiche reliée (prospect) : null tant que `googlePlaceId` est vide. */
@@ -255,10 +261,12 @@ export async function countGoogleReviews(siteId: string): Promise<number> {
 }
 
 /** Compte Google connecté (Search Console) et visibilité du mois, pour la carte en tête de l'onglet Visibilité. */
-async function getSearchVisibility(siteId: string): Promise<GoogleProfileData["searchVisibility"]> {
-  const connection = await getGoogleConnection(siteId);
-  if (!connection) return { connected: false, visibility: null };
-  return { connected: true, visibility: await getGoogleVisibility(siteId) };
+async function getSearchVisibility(site: Pick<Site, "id" | "type">): Promise<GoogleProfileData["searchVisibility"]> {
+  // Site client : aucune donnée simulée ne lui est montrée, même si une connexion factice a été créée par le passé
+  if (!searchConsoleAvailable(site)) return { available: false, connected: false, visibility: null };
+  const connection = await getGoogleConnection(site.id);
+  if (!connection) return { available: true, connected: false, visibility: null };
+  return { available: true, connected: true, visibility: await getGoogleVisibility(site.id) };
 }
 
 /** Toutes les données de la section, en parallèle. */
@@ -281,7 +289,7 @@ export async function getGoogleProfileData(
     monthlyReplyGenerations(getDb(), site.id, now),
     getSocialSettings(site.id),
     getRegenerationUsage(site.id, now),
-    getSearchVisibility(site.id),
+    getSearchVisibility(site),
   ]);
   return {
     linked: linkedProfileOf(prospect, { realProviders: hasRealGoogleProvider() }),

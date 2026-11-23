@@ -12,7 +12,7 @@ import {
   getSiteByKey,
   siteBaseUrl,
 } from "@/lib/site-data";
-import { localBusinessJsonLd } from "@/lib/seo";
+import { localBusinessJsonLd, serializeJsonLd } from "@/lib/seo";
 import { publicPathPrefix } from "@/lib/site-paths";
 
 type Props = { params: Promise<{ site: string }> };
@@ -84,7 +84,7 @@ export default async function HomePage({ params }: Props) {
     <main>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       {/* Accueil : chaque section porte son index dans page.sections (refs = identité) */}
       <Sections

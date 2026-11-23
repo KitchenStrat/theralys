@@ -12,15 +12,19 @@ const TITLE = "Visibilité Google";
 /**
  * Carte « Visibilité Google » (Search Console) : combien de personnes ont vu
  * le cabinet dans les résultats de Google ce mois-ci, et ce qu'elles
- * cherchaient. Quatre états : formule sans suivi, compte à connecter, données
- * en attente, données.
+ * cherchaient. Cinq états : formule sans suivi, suivi pas encore ouvert (site
+ * client : aucun chiffre simulé), compte à connecter, données en attente,
+ * données.
  */
 export function GoogleVisibilityCard({
   gscAccess,
+  available,
   connected,
   visibility,
 }: {
   gscAccess: boolean;
+  /** Faux : le suivi Search Console n'est pas encore ouvert pour ce site */
+  available: boolean;
   connected: boolean;
   visibility: GoogleVisibility | null;
 }) {
@@ -39,6 +43,19 @@ export function GoogleVisibilityCard({
               <strong className="font-semibold text-ds-ink-900">Site</strong>.
             </>
           }
+        />
+      </Card>
+    );
+  }
+
+  if (!available) {
+    return (
+      <Card id="visibilite">
+        <CardHeader
+          icon={Eye}
+          title={TITLE}
+          description="Le détail des recherches Google qui mènent à votre cabinet (Search Console) arrive bientôt dans votre espace. En attendant, vos mots-clés ci-dessous suivent déjà votre position dans les résultats."
+          action={<StatusPill status="en-cours">Bientôt disponible</StatusPill>}
         />
       </Card>
     );

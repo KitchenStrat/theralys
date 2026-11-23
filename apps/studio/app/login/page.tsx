@@ -1,5 +1,9 @@
+import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
+import { LOGIN_RATE_LIMITS, clearRateLimit, getDb, hitRateLimit, rateLimitMessage } from "@theralys/db";
+import { requestIp } from "@theralys/shared";
 import { Card, Stagger } from "@/components/ds";
 import { authenticateClient, createSession, getSession } from "@/lib/auth";
 import { AuthFrame } from "./auth-frame";
@@ -12,10 +16,21 @@ async function loginAction(_prev: { error?: string }, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Email et mot de passe requis." };
+  if (email.length > 320 || password.length > 200) return { error: "Identifiants incorrects." };
+
+  // Essais répétés : limités par compte visé et par adresse d'origine, avant tout calcul de mot de passe
+  const db = getDb();
+  const [byEmail, byIp] = await Promise.all([
+    hitRateLimit(db, LOGIN_RATE_LIMITS.email, email),
+    hitRateLimit(db, LOGIN_RATE_LIMITS.ip, requestIp(await headers())),
+  ]);
+  const refused = !byEmail.allowed ? byEmail : !byIp.allowed ? byIp : null;
+  if (refused) return { error: rateLimitMessage(refused) };
 
   const user = await authenticateClient(email, password);
   if (!user) return { error: "Identifiants incorrects." };
 
+  await clearRateLimit(db, LOGIN_RATE_LIMITS.email, email);
   await createSession(user);
   redirect("/");
 }
@@ -45,6 +60,14 @@ export default async function LoginPage({ searchParams }: Props) {
           <h1 className="font-ds-voice text-ds-title font-bold text-ds-ink-900 text-balance">Connectez-vous</h1>
           <p className="mt-1.5 mb-6 text-base text-ds-ink-600">Saisissez l&apos;email et le mot de passe de votre espace.</p>
           <LoginForm action={loginAction} />
+          <p className="mt-5 text-center text-ds-body">
+            <Link
+              href="/mot-de-passe-oublie"
+              className="inline-flex min-h-11 items-center font-semibold text-ds-brand-700 underline decoration-ds-brand-700/40 underline-offset-4 hover:decoration-ds-brand-700"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </p>
         </Card>
       </Stagger>
     </AuthFrame>

@@ -20,6 +20,15 @@ import { themeCssVars } from "@/lib/theme";
 
 type Props = { children: ReactNode; params: Promise<{ site: string }> };
 
+/** Adresse publique du studio (`STUDIO_BASE_URL`, sinon la production) : repli pour un jeton d'aperçu sans origine. */
+function studioBaseOrigin(): string {
+  try {
+    return new URL(process.env.STUDIO_BASE_URL ?? "").origin;
+  } catch {
+    return "https://app.harmony-web.fr";
+  }
+}
+
 export async function generateMetadata({ params }: Omit<Props, "children">): Promise<Metadata> {
   const { site: siteKey } = await params;
   const site = await getSiteByKey(siteKey);
@@ -61,7 +70,10 @@ export default async function SiteLayout({ children, params }: Props) {
 
   // Aperçu depuis l'éditeur du studio (jeton signé vérifié par le middleware) :
   // la démo reste affichée même expirée — le public, lui, voit le message.
-  const editorPreview = (await headers()).get("x-hy-preview") === site.id;
+  const requestHeaders = await headers();
+  const editorPreview = requestHeaders.get("x-hy-preview") === site.id;
+  // Origine de l'éditeur : celle signée dans le jeton d'aperçu, sinon l'adresse publique du studio
+  const editorOrigin = requestHeaders.get("x-hy-preview-origin") ?? studioBaseOrigin();
   if (isDemoExpired(site) && !editorPreview) {
     return (
       <main className="flex min-h-screen items-center justify-center p-8 text-center">
@@ -114,9 +126,10 @@ export default async function SiteLayout({ children, params }: Props) {
         }
         phone={phone}
       />
-      {/* Aperçu de l'éditeur : ni bandeau cookies, ni mesure d'audience, ni
-          traceurs — le praticien n'est pas un visiteur */}
-      {editorPreview ? null : (
+      {/* Aperçu de l'éditeur ou d'un article non publié : ni bandeau cookies, ni
+          mesure d'audience, ni traceurs — le praticien n'est pas un visiteur, et
+          l'adresse d'un aperçu porte un jeton qui ne doit pas partir chez un tiers */}
+      {editorPreview || requestHeaders.get("x-hy-no-track") === "1" ? null : (
         <>
           {/* Bandeau retirable depuis le studio (Paramètres → Tracking) */}
           {site.theme.tracking?.cookieBanner === false ? null : (
@@ -129,7 +142,7 @@ export default async function SiteLayout({ children, params }: Props) {
         </>
       )}
       {/* Pont avec l'éditeur : seulement dans l'aperçu authentifié (jeton signé) */}
-      {editorPreview ? <EditorBridge /> : null}
+      {editorPreview ? <EditorBridge allowedOrigin={editorOrigin} /> : null}
       <ScrollReveal />
     </div>
   );

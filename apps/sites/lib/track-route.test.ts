@@ -18,7 +18,7 @@ const SITE_ID = "b6bed027-6656-4734-926f-501605751fdc";
 const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const db = vi.hoisted(() => ({
-  site: null as { id: string; domain: string | null } | null,
+  site: null as { id: string; domain: string | null; status?: string } | null,
   rows: [] as Record<string, unknown>[],
   lookups: 0,
   /** Colonnes que la base simulée n'a pas encore reçues (migration non appliquée) */
@@ -234,5 +234,51 @@ describe("POST /api/track — déployé avant une migration", () => {
     db.failure = { on: "execute", error: timeout };
     await expect(track(visit, headers)).rejects.toBe(timeout);
     expect(db.rows).toEqual([]);
+  });
+});
+
+describe("POST /api/track — garde-fous contre le bourrage des statistiques", () => {
+  it("requête d'une autre origine (page tierce) : ignorée avant toute lecture en base", async () => {
+    const response = await track({ siteId: SITE_ID, type: "rdv_click", path: "/" }, { origin: "https://autre-site.exemple", host: "demo.harmony-web.fr" });
+    expect(await response.json()).toEqual({ ok: true, ignored: "origin" });
+    expect(db.lookups).toBe(0);
+    expect(db.rows).toEqual([]);
+    // Le traceur du site, lui, poste à sa propre origine
+    const own = await track({ siteId: SITE_ID, type: "pageview", path: "/" }, { origin: "https://demo.harmony-web.fr", host: "demo.harmony-web.fr", "x-forwarded-for": "203.0.113.20" });
+    expect(await own.json()).toEqual({ ok: true });
+    expect(db.rows).toHaveLength(1);
+  });
+
+  it("site archivé : rien ne s'y mesure", async () => {
+    db.site = { id: SITE_ID, domain: null, status: "archived" };
+    const response = await track({ siteId: SITE_ID, type: "pageview", path: "/" }, { "x-forwarded-for": "203.0.113.21" });
+    expect(await response.json()).toEqual({ ok: true, ignored: "archived" });
+    expect(db.rows).toEqual([]);
+  });
+
+  it("cookie visiteur trafiqué : remplacé par un nouvel identifiant, jamais stocké tel quel", async () => {
+    const response = await track(
+      { siteId: SITE_ID, type: "pageview", path: "/" },
+      { cookie: "tl_consent=granted; tl_vid=" + "x".repeat(400), "x-forwarded-for": "203.0.113.22" },
+    );
+    expect(response.status).toBe(200);
+    const stored = String(db.rows[0]?.visitorId);
+    expect(stored).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(response.headers.get("set-cookie")).toContain(`tl_vid=${stored}`);
+    // Un identifiant posé par la route est gardé
+    const again = await track(
+      { siteId: SITE_ID, type: "pageview", path: "/" },
+      { cookie: `tl_consent=granted; tl_vid=${stored}`, "x-forwarded-for": "203.0.113.22" },
+    );
+    expect(again.headers.get("set-cookie")).toBeNull();
+    expect(db.rows[1]?.visitorId).toBe(stored);
+  });
+
+  it("rafale depuis une même adresse : au-delà de 120 événements par minute, le reste est ignoré", async () => {
+    const headers = { "x-forwarded-for": "203.0.113.99" };
+    const answers: unknown[] = [];
+    for (let i = 0; i < 125; i++) answers.push(await (await track({ siteId: SITE_ID, type: "pageview", path: "/" }, headers)).json());
+    expect(answers.filter((answer) => (answer as { ignored?: string }).ignored === "rate")).toHaveLength(5);
+    expect(db.rows).toHaveLength(120);
   });
 });

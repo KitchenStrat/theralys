@@ -1,7 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { z } from "zod";
-import { getDb, leads } from "@theralys/db";
+import { getDb, hitRateLimit, leads, requestIp, type RateLimitRule } from "@theralys/db";
+
+/** Demandes de démo acceptées par adresse IP : assez pour un cabinet à plusieurs, trop peu pour noyer le CRM. */
+const DEMO_RATE_LIMIT: RateLimitRule = { scope: "demo:ip", limit: 5, windowSeconds: 60 * 60 };
 
 const demoRequestSchema = z.object({
   name: z.string().trim().min(2, "Indiquez votre nom").max(120),
@@ -44,6 +48,11 @@ export async function requestDemo(
 
   try {
     const db = getDb();
+    // Un script qui rejoue le formulaire : refusé au-delà de quelques demandes par heure et par adresse
+    const decision = await hitRateLimit(db, DEMO_RATE_LIMIT, requestIp(await headers()));
+    if (!decision.allowed) {
+      return { ok: false, error: "Trop de demandes depuis cette connexion. Réessayez un peu plus tard." };
+    }
     await db.insert(leads).values({
       name: data.name,
       email: data.email || null,

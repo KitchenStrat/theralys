@@ -1175,7 +1175,8 @@ function Contact({
               className="h-64 w-full rounded-[var(--r-lg)] border-0 bg-white/5 sm:h-72"
               loading="lazy"
               allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
+              // Seule l'origine part vers Google : jamais l'adresse complète, qui peut porter un jeton d'aperçu
+              referrerPolicy="strict-origin-when-cross-origin"
             />
           ) : null}
           <DotsRow className="mt-9 justify-start! text-[var(--site-primary)]" />

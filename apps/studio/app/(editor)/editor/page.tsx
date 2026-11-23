@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PLANS, hasSite, motifPagesAllowance } from "@theralys/db";
 import {
@@ -6,7 +7,9 @@ import {
   type GeneratingMotif,
   type Section,
 } from "@theralys/shared";
+import { DEFAULT_STUDIO_BASE_URL } from "@theralys/jobs";
 import { requireClient } from "@/lib/auth";
+import { studioOrigin } from "../../(app)/compte/studio-origin";
 import { getEditablePages, getProspect, getSite, siteUrl } from "@/lib/data";
 import { SiteEditor } from "./site-editor";
 
@@ -27,8 +30,20 @@ export default async function EditorPage({ searchParams }: Props) {
   const [allPages, prospect] = await Promise.all([getEditablePages(site.id), getProspect(site)]);
   // Jeton signé pour l'aperçu : le site public affiche la démo même expirée et
   // les pages désactivées à l'éditeur seul (vérifié par le middleware des sites)
+  // Le jeton porte l'origine de CET éditeur (celle de la requête en cours) : le site n'écoute que lui
+  const requestHeaders = await headers();
+  const editorOrigin = studioOrigin(
+    undefined,
+    {
+      origin: null,
+      host: requestHeaders.get("host"),
+      forwardedHost: requestHeaders.get("x-forwarded-host"),
+      forwardedProto: requestHeaders.get("x-forwarded-proto"),
+    },
+    DEFAULT_STUDIO_BASE_URL,
+  );
   const previewToken = process.env.AUTH_SECRET
-    ? await signSitePreviewToken({ siteId: site.id }, process.env.AUTH_SECRET)
+    ? await signSitePreviewToken({ siteId: site.id, origin: editorOrigin }, process.env.AUTH_SECRET)
     : "";
   // Les pages de spécialités suivent la formule (6 avec la formule Site) ; les
   // démos, en formule complète, gardent les leurs. Les pages en cours de génération (créées

@@ -7,7 +7,9 @@ import { useEffect } from "react";
  * dans l'iframe de l'éditeur ET que celui-ci s'est annoncé par postMessage
  * (`hy:hello`). Hors éditeur, ce composant ne fait rien.
  *
- * ── Protocole (postMessage, origine de l'éditeur mémorisée au `hy:hello`) ──
+ * ── Protocole (postMessage, uniquement avec `allowedOrigin` : l'origine du
+ *    studio signée dans le jeton d'aperçu — une page tierce qui encadrerait le
+ *    site ne peut ni activer le mode édition ni recevoir les clics) ──
  *
  * Reçu par le site :
  *  - `hy:hello`                     active le mode édition : surbrillance au
@@ -33,7 +35,7 @@ import { useEffect } from "react";
  *
  * Les attributs `data-hy-*` sont posés par `Sections` (components/sections.tsx).
  */
-export function EditorBridge() {
+export function EditorBridge({ allowedOrigin }: { allowedOrigin: string }) {
   useEffect(() => {
     if (window.self === window.top) return;
 
@@ -97,6 +99,8 @@ export function EditorBridge() {
         ambiance?: string;
       } | null;
       if (!data || typeof data.type !== "string") return;
+      // Seul le studio qui a signé l'aperçu est écouté
+      if (event.origin !== allowedOrigin) return;
       if (data.type === "hy:hello") {
         editorOrigin = event.origin;
         editorWindow = event.source as Window;
@@ -154,7 +158,7 @@ export function EditorBridge() {
       style.remove();
       document.documentElement.classList.remove("hy-editing");
     };
-  }, []);
+  }, [allowedOrigin]);
 
   return null;
 }

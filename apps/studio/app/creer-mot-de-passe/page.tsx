@@ -1,9 +1,10 @@
-import { jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { ArrowRight, CircleCheck, LinkIcon, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { getDb, users } from "@theralys/db";
 import { Card, LinkButton, Stagger } from "@/components/ds";
+import { passwordFingerprint } from "@/lib/auth";
+import { PASSWORD_RESET_PURPOSE, passwordLinkState, readPasswordLink } from "@/lib/password-links";
 import { AuthFrame } from "../login/auth-frame";
 import { SetPasswordForm } from "./set-password-form";
 
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ token?: string }> };
 
-/** Arrivée depuis l'e-mail d'invitation : le client choisit son mot de passe. */
+/** Arrivée depuis l'e-mail d'invitation ou de réinitialisation : le client choisit son mot de passe. */
 export default async function SetPasswordPage({ searchParams }: Props) {
   const { token } = await searchParams;
   const state = await inspectToken(token);
@@ -23,12 +24,24 @@ export default async function SetPasswordPage({ searchParams }: Props) {
         <Card padding="lg">
           {state.kind === "ok" ? (
             <>
-              <h1 className="font-ds-voice text-ds-title font-bold text-ds-ink-900 text-balance">Bienvenue {state.firstName}</h1>
+              <h1 className="font-ds-voice text-ds-title font-bold text-ds-ink-900 text-balance">
+                {state.reset ? "Nouveau mot de passe" : `Bienvenue ${state.firstName}`}
+              </h1>
               <p className="mt-1.5 text-base text-ds-ink-600">
-                Choisissez le mot de passe de votre espace (<span className="[overflow-wrap:anywhere]">{state.email}</span>).
+                {state.reset ? "Choisissez le nouveau mot de passe" : "Choisissez le mot de passe"} de votre espace (
+                <span className="[overflow-wrap:anywhere]">{state.email}</span>).
               </p>
-              <SetPasswordForm token={token!} />
+              <SetPasswordForm token={token!} reset={state.reset} />
             </>
+          ) : state.kind === "stale-reset" ? (
+            <Notice icon={LinkIcon} tone="warning" title="Lien expiré ou déjà utilisé">
+              <p className="mt-2 text-base text-ds-ink-600">
+                Un lien de réinitialisation ne sert qu&apos;une fois, pendant une heure. Demandez-en un nouveau : il arrive par e-mail.
+              </p>
+              <LinkButton href="/mot-de-passe-oublie" size="lg" iconRight={<ArrowRight size={20} aria-hidden />} className="mt-6 w-full">
+                Recevoir un nouveau lien
+              </LinkButton>
+            </Notice>
           ) : state.kind === "already" ? (
             <Notice icon={CircleCheck} tone="success" title="Compte déjà activé">
               <p className="mt-2 text-base text-ds-ink-600">Votre mot de passe a déjà été créé — connectez-vous simplement.</p>
@@ -86,23 +99,18 @@ function Notice({
 async function inspectToken(
   token: string | undefined,
 ): Promise<
-  | { kind: "ok"; firstName: string; email: string }
+  | { kind: "ok"; firstName: string; email: string; reset: boolean }
   | { kind: "already" }
+  | { kind: "stale-reset" }
   | { kind: "invalid" }
 > {
-  const secret = process.env.AUTH_SECRET;
-  if (!token || !secret) return { kind: "invalid" };
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-    if (payload.purpose !== "studio-password-setup" || typeof payload.sub !== "string") {
-      return { kind: "invalid" };
-    }
-    const db = getDb();
-    const user = await db.query.users.findFirst({ where: eq(users.id, payload.sub) });
-    if (!user || user.role !== "client") return { kind: "invalid" };
-    if (!user.passwordHash.startsWith("invite:")) return { kind: "already" };
-    return { kind: "ok", firstName: user.name.split(" ")[0] ?? user.name, email: user.email };
-  } catch {
-    return { kind: "invalid" };
-  }
+  const link = await readPasswordLink(token, process.env.AUTH_SECRET);
+  if (!link) return { kind: "invalid" };
+  const reset = link.purpose === PASSWORD_RESET_PURPOSE;
+  const user = await getDb().query.users.findFirst({ where: eq(users.id, link.userId) });
+  if (!user || user.role !== "client") return reset ? { kind: "stale-reset" } : { kind: "invalid" };
+  const state = passwordLinkState(link, user, passwordFingerprint);
+  if (state === "already") return { kind: "already" };
+  if (state === "stale") return reset ? { kind: "stale-reset" } : { kind: "invalid" };
+  return { kind: "ok", firstName: user.name.split(" ")[0] ?? user.name, email: user.email, reset };
 }

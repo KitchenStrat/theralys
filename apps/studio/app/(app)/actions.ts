@@ -11,6 +11,8 @@ import {
   getDb,
   googleConnections,
   googleReviews,
+  hasBlog,
+  hitRateLimit,
   motifPagesAllowance,
   onboardingTasks,
   pages,
@@ -20,6 +22,7 @@ import {
   PLANS,
   type Page,
   type Prospect,
+  type RateLimitRule,
   type Site,
 } from "@theralys/db";
 import {
@@ -54,6 +57,8 @@ import {
   type SpecialtiesSection,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
+import { mergeSectionInput } from "@/lib/editor/section-input";
+import { SIMULATED_GOOGLE_EMAIL, searchConsoleAvailable } from "@/lib/google/search-console";
 import { isGenerationStale } from "@/lib/editor/page-groups";
 import { siteUrl } from "@/lib/data";
 import { firstSocialError, normalizeSocialLinks } from "@/lib/editor/social-links";
@@ -83,6 +88,22 @@ export async function completeOnboardingTask(key: string): Promise<void> {
   revalidatePath("/");
 }
 
+// ─── Garde-fous des générations payantes de l'éditeur ───────────────────────
+
+/**
+ * Plafonds par site sur 30 jours glissants, très au-dessus d'un usage normal
+ * (une formule compte 6 pages de spécialités) : ils n'arrêtent que la boucle
+ * d'un script, dont chaque tour coûte un appel au modèle et une image.
+ */
+const PAGE_GENERATION_LIMIT: RateLimitRule = { scope: "editor:page-generation", limit: 40, windowSeconds: 30 * 24 * 60 * 60 };
+const IMAGE_GENERATION_LIMIT: RateLimitRule = { scope: "editor:image-generation", limit: 150, windowSeconds: 30 * 24 * 60 * 60 };
+const PLACES_SEARCH_LIMIT: RateLimitRule = { scope: "editor:places-search", limit: 80, windowSeconds: 60 * 60 };
+const GENERATION_LIMIT_REACHED = "Vous avez atteint le nombre de générations possible ce mois-ci. Contactez Harmony si vous avez besoin d'en faire davantage.";
+
+async function withinLimit(rule: RateLimitRule, siteId: string): Promise<boolean> {
+  return (await hitRateLimit(getDb(), rule, siteId)).allowed;
+}
+
 // ─── Connexion Google (OAuth — mock tant que GOOGLE_CLIENT_ID est absent) ────
 
 /** Recherche de fiche Google depuis l'éditeur (client ou accès agence). */
@@ -90,6 +111,8 @@ export async function searchGoogle(query: unknown): Promise<GooglePlaceResult[]>
   const session = await requireClient();
   const parsed = z.string().trim().min(3).max(120).safeParse(query);
   if (!parsed.success) return [];
+  // Chaque recherche est un appel facturé : la saisie au clavier en fait quelques-unes, pas des centaines
+  if (!(await withinLimit(PLACES_SEARCH_LIMIT, session.siteId))) return [];
   try {
     return await attributeApiUsage(createGooglePlacesProvider(), { feature: "site_editor", siteId: session.siteId }).search(parsed.data);
   } catch {
@@ -101,16 +124,21 @@ export async function searchGoogle(query: unknown): Promise<GooglePlaceResult[]>
  * Relie la fiche Google du praticien à son site : met à jour la fiche
  * prospect (note, nombre d'avis) et récupère immédiatement les vrais avis
  * quand l'API Places est configurée.
+ *
+ * La note et le nombre d'avis s'affichent sur le site public à côté du logo
+ * Google : avec l'API réelle, ils sont relus chez Google pour la fiche
+ * choisie — jamais repris du navigateur, qui pourrait envoyer « 5/5, 900
+ * avis ». Une fiche que Google ne connaît pas n'est pas reliée.
  */
 export async function connectGooglePlace(input: unknown): Promise<{ error?: string }> {
   const session = await requireClient();
   const parsed = z
     .object({
-      placeId: z.string().min(3),
-      name: z.string(),
-      address: z.string(),
-      rating: z.number(),
-      reviewCount: z.number(),
+      placeId: z.string().min(3).max(200),
+      name: z.string().max(200),
+      address: z.string().max(300),
+      rating: z.number().min(0).max(5),
+      reviewCount: z.number().int().min(0).max(1_000_000),
     })
     .safeParse(input);
   if (!parsed.success) return { error: "Fiche invalide" };
@@ -125,64 +153,64 @@ export async function connectGooglePlace(input: unknown): Promise<{ error?: stri
   // Même fiche reliée à nouveau : les avis déjà synchronisés (et leurs analyses) sont conservés
   const placeChanged = previous?.googlePlaceId !== parsed.data.placeId;
 
+  // API réelle : la fiche est relue chez Google avant toute écriture
+  const places = attributeApiUsage(createGooglePlacesProvider(), { feature: "site_editor", siteId: site.id });
+  let details: Awaited<ReturnType<typeof places.fetchDetails>> | null = null;
+  if (places.mode === "google") {
+    try {
+      details = await places.fetchDetails(parsed.data.placeId);
+    } catch (err) {
+      console.warn("[reviews] fiche Google illisible :", err instanceof Error ? err.name : "erreur");
+      return { error: "Cette fiche Google est introuvable pour le moment. Relancez la recherche, puis réessayez." };
+    }
+  }
+
   await db
     .update(prospects)
     .set({
       googlePlaceId: parsed.data.placeId,
       googleBusinessName: parsed.data.name,
       googleAddress: parsed.data.address,
-      googleRating: parsed.data.rating,
-      googleReviewCount: parsed.data.reviewCount,
+      // Sans API réelle (démonstration), les valeurs de la recherche simulée sont gardées
+      googleRating: details ? details.rating : parsed.data.rating,
+      googleReviewCount: details ? (details.reviewCount ?? 0) : parsed.data.reviewCount,
+      ...(details?.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
     })
     .where(eq(prospects.id, site.prospectId));
 
   // Vrais avis tout de suite (API réelle uniquement — best-effort)
-  const places = attributeApiUsage(createGooglePlacesProvider(), { feature: "site_editor", siteId: site.id });
-  if (places.mode === "google") {
+  if (details && details.reviews.length > 0) {
     try {
-      const details = await places.fetchDetails(parsed.data.placeId);
-      if (details.reviews.length > 0) {
-        if (placeChanged) await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
-        const existing = placeChanged
-          ? new Set<string>()
-          : new Set(
-              (
-                await db.query.googleReviews.findMany({
-                  where: eq(googleReviews.siteId, site.id),
-                  columns: { sourceReviewId: true },
-                })
-              )
-                .map((r) => r.sourceReviewId)
-                .filter((id): id is string => id !== null),
-            );
-        const fresh = details.reviews.filter((r) => !r.sourceReviewId || !existing.has(r.sourceReviewId));
-        if (fresh.length > 0) {
-          await db.insert(googleReviews).values(
-            fresh.map((r) => ({
-              siteId: site.id,
-              sourceReviewId: r.sourceReviewId,
-              authorName: r.authorName,
-              authorPhotoUrl: r.authorPhotoUrl,
-              rating: r.rating,
-              text: r.text,
-              reviewedAt: r.reviewedAt,
-              source: "places",
-            })),
+      if (placeChanged) await db.delete(googleReviews).where(eq(googleReviews.siteId, site.id));
+      const existing = placeChanged
+        ? new Set<string>()
+        : new Set(
+            (
+              await db.query.googleReviews.findMany({
+                where: eq(googleReviews.siteId, site.id),
+                columns: { sourceReviewId: true },
+              })
+            )
+              .map((r) => r.sourceReviewId)
+              .filter((id): id is string => id !== null),
           );
-        }
-        if (details.rating !== null) {
-          await db
-            .update(prospects)
-            .set({
-              googleRating: details.rating,
-              googleReviewCount: details.reviewCount,
-              ...(details.photoUrl ? { googlePhotoUrl: details.photoUrl } : {}),
-            })
-            .where(eq(prospects.id, site.prospectId));
-        }
+      const fresh = details.reviews.filter((r) => !r.sourceReviewId || !existing.has(r.sourceReviewId));
+      if (fresh.length > 0) {
+        await db.insert(googleReviews).values(
+          fresh.map((r) => ({
+            siteId: site.id,
+            sourceReviewId: r.sourceReviewId,
+            authorName: r.authorName,
+            authorPhotoUrl: r.authorPhotoUrl,
+            rating: r.rating,
+            text: r.text,
+            reviewedAt: r.reviewedAt,
+            source: "places",
+          })),
+        );
       }
     } catch (err) {
-      console.warn("[reviews] récupération des avis de la fiche impossible :", err);
+      console.warn("[reviews] enregistrement des avis de la fiche impossible :", err instanceof Error ? err.name : "erreur");
     }
   }
 
@@ -200,6 +228,12 @@ export async function connectGoogle(): Promise<{ error?: string } | void> {
     return { error: "Flux OAuth Google réel à venir — retirer GOOGLE_CLIENT_ID pour le mode mock." };
   }
 
+  // Connexion simulée : réservée aux démonstrations. Un site client ne reçoit jamais de chiffres inventés.
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId), columns: { type: true } });
+  if (!site || !searchConsoleAvailable(site)) {
+    return { error: "Le suivi des recherches Google n'est pas encore disponible dans votre espace." };
+  }
+
   const existing = await db.query.googleConnections.findFirst({
     where: eq(googleConnections.siteId, session.siteId),
   });
@@ -207,7 +241,7 @@ export async function connectGoogle(): Promise<{ error?: string } | void> {
     await db.insert(googleConnections).values({
       siteId: session.siteId,
       status: "connected",
-      googleEmail: "compte.google@exemple.fr",
+      googleEmail: SIMULATED_GOOGLE_EMAIL,
       searchConsoleSiteUrl: "sc-domain:exemple.fr",
       scopes: ["webmasters.readonly", "business.manage"],
     });
@@ -244,6 +278,9 @@ export async function saveBlogSettings(input: unknown): Promise<{ error?: string
   if (!parsed.success) return { error: "Réglages invalides" };
 
   const db = getDb();
+  // Le blog fait partie de la formule Site : sans elle, pas de réglages (ni d'articles rédigés par la suite)
+  const owner = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId), columns: { type: true, plan: true } });
+  if (!owner || (owner.type !== "demo" && !hasBlog(owner.plan))) return { error: "Le blog fait partie de la formule Site." };
   const existing = await db.query.blogSettings.findFirst({
     where: eq(blogSettings.siteId, session.siteId),
   });
@@ -441,6 +478,7 @@ export async function regenerateMotifPage(input: unknown): Promise<{ error?: str
   if (!site?.prospectId) return { error: "Site sans fiche praticien" };
   // Les pages de spécialités font partie de la formule Site
   if (site.type !== "demo" && motifPagesAllowance(site.plan) === 0) return { error: "Les pages de spécialités font partie de la formule Site." };
+  if (!(await withinLimit(PAGE_GENERATION_LIMIT, site.id))) return { error: GENERATION_LIMIT_REACHED };
   const prospect = await db.query.prospects.findFirst({
     where: eq(prospects.id, site.prospectId),
   });
@@ -494,6 +532,9 @@ export async function regenerateArticleImage(articleId: string): Promise<{ image
   const db = getDb();
 
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
+  // Formule sans blog, ou plafond mensuel atteint : l'image en place est gardée
+  if (!site || (site.type !== "demo" && !hasBlog(site.plan))) return { imageUrl: article.imageUrl ?? "" };
+  if (!(await withinLimit(IMAGE_GENERATION_LIMIT, site.id))) return { imageUrl: article.imageUrl ?? "" };
   // La graine change à chaque clic → une photo différente à chaque régénération
   const blogUsage = { feature: "blog", siteId: session.siteId } as const;
   const image = await findStockOrGenerate(attributeApiUsage(createStockImageProvider(), blogUsage), attributeApiUsage(createImageProvider(), blogUsage), {
@@ -597,7 +638,7 @@ export async function getArticleViewUrl(articleId: string): Promise<{ url: strin
 
 // ─── Éditeur de site ──────────────────────────────────────────────────────────
 
-const sectionsSchema = z.array(z.record(z.unknown()));
+const sectionsSchema = z.array(z.record(z.unknown())).max(60);
 
 export async function savePageSections(input: unknown): Promise<{ error?: string }> {
   const session = await requireClient();
@@ -612,23 +653,18 @@ export async function savePageSections(input: unknown): Promise<{ error?: string
   });
   if (!page) return { error: "Page introuvable" };
 
-  // Structure vérifiée : on ne remplace que les champs texte des sections
-  // existantes (types et ordre inchangés — jamais de HTML libre).
+  // Structure vérifiée : on ne remplace que les champs connus des sections
+  // existantes, chacun avec son type (types et ordre inchangés — jamais de
+  // HTML libre ni de clé inconnue, cf. lib/editor/section-input.ts).
   const current = page.sections;
   const incoming = parsed.data.sections;
   if (incoming.length !== current.length) return { error: "Structure de page inattendue" };
-  const merged = current.map((section, i) => {
-    const patch = { ...(incoming[i] as Partial<Section>) };
-    if (patch.type !== section.type) return section;
-    // Visibilité : un booléen strict, `true` seulement (absent = visible)
-    if ("hidden" in patch) {
-      if (patch.hidden === true) patch.hidden = true;
-      else delete patch.hidden;
-    }
-    const next = { ...section, ...patch } as Section;
-    if (!("hidden" in patch)) delete next.hidden;
-    return next;
-  });
+  const merged: Section[] = [];
+  for (const [i, section] of current.entries()) {
+    const result = mergeSectionInput(section, incoming[i]);
+    if (!result.ok) return { error: "Contenu invalide" };
+    merged.push(result.section);
+  }
 
   await db
     .update(pages)
@@ -701,13 +737,24 @@ export async function saveSiteSettings(input: unknown): Promise<{ error?: string
   const session = await requireClient();
   const parsed = z
     .object({
-      name: z.string().trim().min(2),
+      name: z.string().trim().min(2).max(120, "Nom trop long (120 caractères maximum)"),
+      // Lien de rendez-vous : une adresse web ou un numéro, d'un seul tenant (ni espace, ni guillemet, ni chevron)
       bookingUrl: z
         .string()
         .trim()
-        .refine((v) => v === "" || /^(https?:\/\/|tel:)/.test(v), "Lien invalide"),
-      city: z.string().trim().min(1),
-      logoUrl: z.string().trim().optional(),
+        .max(500, "Lien trop long")
+        .refine((v) => v === "" || /^(https?:\/\/|tel:)[^\s<>"'`]+$/.test(v), "Lien invalide"),
+      city: z.string().trim().min(1).max(120, "Ville trop longue (120 caractères maximum)"),
+      // Logo : adresse web, chemin du site ou image embarquée (stockage de secours)
+      logoUrl: z
+        .string()
+        .trim()
+        .max(3_600_000)
+        .refine(
+          (v) => v === "" || /^(https?:\/\/[^\s<>"']+|\/[^\s<>"']*|data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+)$/.test(v),
+          "Logo invalide",
+        )
+        .optional(),
       phone: z
         .string()
         .trim()
@@ -1200,6 +1247,7 @@ export async function createMotifPage(input: unknown): Promise<{ error?: string;
   const site = await db.query.sites.findFirst({ where: eq(sites.id, session.siteId) });
   if (!site) return { error: "Site introuvable" };
   if (!site.prospectId) return { error: "Site sans fiche praticien" };
+  if (!(await withinLimit(PAGE_GENERATION_LIMIT, site.id))) return { error: GENERATION_LIMIT_REACHED };
 
   // Transaction sous verrou de la ligne du site : le plafond de la formule est
   // recompté après le verrou (deux créations simultanées ne le dépassent
@@ -1280,6 +1328,7 @@ export async function retryMotifGeneration(input: unknown): Promise<{ error?: st
     return { error: "La génération de cette page est déjà en cours" };
   }
   if (!(await ownedMotifPage(site.id, slug))) return { error: "Page de spécialité introuvable" };
+  if (!(await withinLimit(PAGE_GENERATION_LIMIT, site.id))) return { error: GENERATION_LIMIT_REACHED };
 
   await patchGeneratingMotifs(site.id, (list) =>
     list.map((g) =>

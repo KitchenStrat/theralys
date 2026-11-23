@@ -31,13 +31,15 @@ function baseHosts(): string[] {
 }
 
 /** Id du site dont la prévisualisation est autorisée, sinon null. */
-async function previewSiteId(request: NextRequest): Promise<{ siteId: string; fromQuery: boolean } | null> {
+async function previewSiteId(
+  request: NextRequest,
+): Promise<{ siteId: string; origin: string | null; fromQuery: boolean } | null> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) return null;
   const fromQuery = request.nextUrl.searchParams.get("apercu");
   if (fromQuery) {
     const payload = await verifySitePreviewToken(fromQuery, secret);
-    if (payload) return { siteId: payload.siteId, fromQuery: true };
+    if (payload) return { siteId: payload.siteId, origin: payload.origin ?? null, fromQuery: true };
   }
   // Le cookie ne vaut que pour les navigations dans l'iframe de l'éditeur :
   // le praticien qui ouvre son site dans le même navigateur (onglet de premier
@@ -46,7 +48,7 @@ async function previewSiteId(request: NextRequest): Promise<{ siteId: string; fr
   const fromCookie = request.cookies.get(PREVIEW_COOKIE)?.value;
   if (fromCookie && (dest === null || dest === "iframe")) {
     const payload = await verifySitePreviewToken(fromCookie, secret);
-    if (payload) return { siteId: payload.siteId, fromQuery: false };
+    if (payload) return { siteId: payload.siteId, origin: payload.origin ?? null, fromQuery: false };
   }
   return null;
 }
@@ -60,8 +62,14 @@ export async function middleware(request: NextRequest) {
   // Jamais de confiance aux en-têtes x-hy-* entrants : un client pourrait
   // sinon forger l'aperçu (pages désactivées, démo expirée) ou la clé du site
   requestHeaders.delete("x-hy-preview");
+  requestHeaders.delete("x-hy-preview-origin");
   requestHeaders.delete("x-hy-site");
+  requestHeaders.delete("x-hy-no-track");
+  // Aperçu d'un article non publié (`?preview_token=`) : aucun traceur tiers, l'adresse porte un jeton
+  if (request.nextUrl.searchParams.has("preview_token")) requestHeaders.set("x-hy-no-track", "1");
   if (preview) requestHeaders.set("x-hy-preview", preview.siteId);
+  // Origine du studio qui a signé l'aperçu : seule origine dont le pont de l'éditeur accepte les messages
+  if (preview?.origin) requestHeaders.set("x-hy-preview-origin", preview.origin);
   // Clé du segment [site] (slug sur l'hôte de base, domaine sinon) : lue par
   // la page introuvable, qui ne reçoit pas les paramètres de route
   const isBaseHost = baseHosts().includes(host);

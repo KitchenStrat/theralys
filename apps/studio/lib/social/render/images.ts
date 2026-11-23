@@ -130,13 +130,27 @@ async function fetchImage(url: string): Promise<Buffer | null> {
     redirect: "manual",
   });
   if (!response.ok) return null;
-  const type = response.headers.get("content-type") ?? "";
-  if (!type.startsWith("image/")) return null;
+  const type = (response.headers.get("content-type") ?? "").toLowerCase();
+  // Photos matricielles seulement : un SVG distant (rasterisé côté serveur) n'a rien à faire dans un visuel
+  if (!type.startsWith("image/") || type.startsWith("image/svg")) return null;
   const length = Number(response.headers.get("content-length") ?? "0");
   if (length > MAX_BYTES) return null;
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > MAX_BYTES) return null;
-  return buffer;
+  // Lecture bornée : sans `Content-Length`, un flux sans fin ne remplit pas la mémoire de la fonction
+  const reader = response.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.byteLength;
+    if (received > MAX_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
 }
 
 const lru = new Map<string, string>();

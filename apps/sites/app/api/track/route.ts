@@ -9,7 +9,7 @@ import {
   type AnalyticsEventType,
 } from "@theralys/analytics";
 import { analyticsEvents, getDb, sites, type Database } from "@theralys/db";
-import type { AnalyticsSource } from "@theralys/shared";
+import { createMemoryRateLimiter, isCrossOriginRequest, requestIp, type AnalyticsSource } from "@theralys/shared";
 import { eq, sql } from "drizzle-orm";
 import { isInvalidEnumError, isMissingColumnError } from "@/lib/pg-errors";
 import { ownHostsFor, resolveTrackSource } from "@/lib/track-source";
@@ -39,6 +39,16 @@ export const dynamic = "force-dynamic";
  * `lib/visitor.ts`, partagés avec la mesure du site du client (`/api/m`).
  */
 type TrackRow = { siteId: string; type: AnalyticsEventType; visitorId: string; path: string };
+
+/** Identifiant visiteur posé par cette route : un UUID, rien d'autre n'est accepté du cookie. */
+const VISITOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Garde-fou contre le bourrage des statistiques : au plus 120 événements par
+ * minute et par adresse (une visite réelle en envoie une poignée). Compteur
+ * en mémoire, propre à l'instance — pas d'écriture en base par page vue.
+ */
+const trackLimiter = createMemoryRateLimiter({ limit: 120, windowMs: 60_000, maxKeys: 50_000 });
 
 /**
  * Inscrit l'événement. Drizzle liste toutes les colonnes du schéma dans son
@@ -82,11 +92,23 @@ export async function POST(request: NextRequest) {
   if (isBotUserAgent(request.headers.get("user-agent"))) {
     return NextResponse.json({ ok: true, ignored: "bot" });
   }
+  // Le traceur n'écrit qu'à sa propre origine : une page tierce qui posterait ici (pour gonfler les chiffres d'un
+  // site) est ignorée, comme une rafale venue d'une même adresse
+  if (isCrossOriginRequest(request.headers)) {
+    return NextResponse.json({ ok: true, ignored: "origin" });
+  }
+  if (!trackLimiter.hit(requestIp(request.headers)).allowed) {
+    return NextResponse.json({ ok: true, ignored: "rate" });
+  }
 
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, payload.siteId) });
   if (!site) {
     return NextResponse.json({ error: "Site inconnu" }, { status: 404 });
+  }
+  // Site archivé : il n'est plus servi, rien ne s'y mesure
+  if (site.status === "archived") {
+    return NextResponse.json({ ok: true, ignored: "archived" });
   }
 
   const consent = parseConsent(request.cookies.get(CONSENT_COOKIE)?.value);
@@ -94,7 +116,9 @@ export async function POST(request: NextRequest) {
   let setVisitorCookie = false;
 
   if (consent === "granted") {
-    visitorId = request.cookies.get(VISITOR_COOKIE)?.value ?? null;
+    const fromCookie = request.cookies.get(VISITOR_COOKIE)?.value;
+    // Cookie absent ou trafiqué (autre chose qu'un identifiant posé ici) : nouvel identifiant
+    visitorId = fromCookie && VISITOR_ID.test(fromCookie) ? fromCookie : null;
     if (!visitorId) {
       visitorId = randomUUID();
       setVisitorCookie = true;

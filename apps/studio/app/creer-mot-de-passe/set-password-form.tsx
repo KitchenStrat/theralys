@@ -6,7 +6,7 @@ import { Button } from "@/components/ds";
 import { PasswordField } from "../login/password-field";
 import { setPassword } from "./actions";
 
-export function SetPasswordForm({ token }: { token: string }) {
+export function SetPasswordForm({ token, reset = false }: { token: string; reset?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -53,7 +53,7 @@ export function SetPasswordForm({ token }: { token: string }) {
         </p>
       ) : null}
       <Button type="submit" size="lg" loading={submitting} icon={<KeyRound size={20} aria-hidden />} className="w-full">
-        Créer mon mot de passe et entrer
+        {reset ? "Enregistrer et entrer" : "Créer mon mot de passe et entrer"}
       </Button>
     </form>
   );

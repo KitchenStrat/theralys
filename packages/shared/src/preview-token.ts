@@ -44,14 +44,34 @@ export async function verifyPreviewToken(
  * l'aperçu, sans ouvrir ces accès au public. Vérifié par le middleware des
  * sites (Edge) — même secret partagé (AUTH_SECRET).
  */
-export type SitePreviewTokenPayload = { siteId: string };
+export type SitePreviewTokenPayload = {
+  siteId: string;
+  /**
+   * Origine du studio qui a émis le jeton (`https://app.exemple.fr`) : le site
+   * n'accepte les messages de l'éditeur que de cette origine. Absente des
+   * jetons émis avant ce champ.
+   */
+  origin?: string;
+};
+
+/** Origine web (`https://hôte[:port]`) bien formée, sinon null. */
+function webOrigin(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.origin === value ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function signSitePreviewToken(
   payload: SitePreviewTokenPayload,
   secret: string,
   expiresInSeconds = 60 * 60 * 24,
 ): Promise<string> {
-  return new SignJWT({ scope: "site", siteId: payload.siteId })
+  const origin = webOrigin(payload.origin);
+  return new SignJWT({ scope: "site", siteId: payload.siteId, ...(origin ? { origin } : {}) })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + expiresInSeconds)
@@ -65,7 +85,8 @@ export async function verifySitePreviewToken(
   try {
     const { payload } = await jwtVerify(token, encoder.encode(secret));
     if (payload.scope !== "site" || typeof payload.siteId !== "string") return null;
-    return { siteId: payload.siteId };
+    const origin = webOrigin(payload.origin);
+    return { siteId: payload.siteId, ...(origin ? { origin } : {}) };
   } catch {
     return null;
   }
