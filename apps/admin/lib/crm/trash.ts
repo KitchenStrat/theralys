@@ -19,27 +19,27 @@ type Executor = Pick<Database, "select" | "insert" | "update" | "delete" | "exec
 export const NOT_TRASHED = sql`${crmContacts.stage} not like ${`${TRASH_PREFIX}%`}`;
 export const IN_TRASH = sql`${crmContacts.stage} like ${`${TRASH_PREFIX}%`}`;
 
-/** Met des fiches à la corbeille. Renvoie le nombre de fiches déplacées (celles qui y sont déjà ne comptent pas). */
-export async function trashContacts(db: Executor, ids: string[], now = new Date()): Promise<number> {
+/** Met des fiches à la corbeille, au nom de `authorId`. Renvoie le nombre de fiches déplacées (celles qui y sont déjà ne comptent pas). */
+export async function trashContacts(db: Executor, ids: string[], authorId: string, now = new Date()): Promise<number> {
   if (ids.length === 0) return 0;
   const moved = await db
     .update(crmContacts)
     .set({ stage: sql`${TRASH_PREFIX} || ${crmContacts.stage}`, updatedAt: now })
     .where(and(inArray(crmContacts.id, ids), NOT_TRASHED))
     .returning({ id: crmContacts.id });
-  if (moved.length > 0) await db.insert(crmActivities).values(moved.map((row) => ({ contactId: row.id, kind: "system", body: "Mise à la corbeille", createdAt: now })));
+  if (moved.length > 0) await db.insert(crmActivities).values(moved.map((row) => ({ contactId: row.id, kind: "system", body: "Mise à la corbeille", authorId, createdAt: now })));
   return moved.length;
 }
 
 /** Sort des fiches de la corbeille : elles retrouvent leur étape d'avant. */
-export async function restoreContacts(db: Executor, ids: string[], now = new Date()): Promise<number> {
+export async function restoreContacts(db: Executor, ids: string[], authorId: string, now = new Date()): Promise<number> {
   if (ids.length === 0) return 0;
   const restored = await db
     .update(crmContacts)
     .set({ stage: sql`substr(${crmContacts.stage}, ${TRASH_PREFIX.length + 1}::int)`, updatedAt: now })
     .where(and(inArray(crmContacts.id, ids), IN_TRASH))
     .returning({ id: crmContacts.id });
-  if (restored.length > 0) await db.insert(crmActivities).values(restored.map((row) => ({ contactId: row.id, kind: "system", body: "Restaurée depuis la corbeille", createdAt: now })));
+  if (restored.length > 0) await db.insert(crmActivities).values(restored.map((row) => ({ contactId: row.id, kind: "system", body: "Restaurée depuis la corbeille", authorId, createdAt: now })));
   return restored.length;
 }
 

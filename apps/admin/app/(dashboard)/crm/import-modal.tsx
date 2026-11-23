@@ -9,6 +9,7 @@ import { TARGET_OPTIONS, applyMapping, guessMapping, type TargetField } from "@/
 import { CRM_STAGES, STAGE_META, displayName, type CrmStage } from "@/lib/crm/model";
 import { formatPhone } from "@/lib/crm/normalize";
 import { ACCEPTED_EXTENSIONS, FORMAT_LABELS, MAX_IMPORT_ROWS, parseImportFile, parsePasted, tableOf, type ParsedImport } from "@/lib/crm/parse";
+import type { RepOption } from "@/lib/crm/team";
 import { finishImport, importRows, startImport, type ImportCounts } from "./actions";
 
 const BATCH = 200;
@@ -22,8 +23,10 @@ type Step = "source" | "mapping" | "running" | "done";
  * copier-coller), la correspondance de ses colonnes avec les champs d'un
  * prospect, puis l'enregistrement par lots avec dédoublonnage. Le fichier est
  * lu dans le navigateur ; seules les lignes mises au propre partent au serveur.
+ * `reps` : commerciaux à qui la liste peut être attribuée d'emblée.
  */
-export function ImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ImportModal({ open, onClose, reps }: { open: boolean; onClose: () => void; reps: RepOption[] }) {
+  const assignable = reps.filter((rep) => !rep.disabled);
   const router = useRouter();
   const [step, setStep] = useState<Step>("source");
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
   const [stage, setStage] = useState<CrmStage>("new");
   const [tags, setTags] = useState("");
   const [duplicates, setDuplicates] = useState<Duplicates>("skip");
+  const [ownerId, setOwnerId] = useState("");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [counts, setCounts] = useState<ImportCounts & { rejected: number }>({ created: 0, updated: 0, skipped: 0, rejected: 0 });
   const [importId, setImportId] = useState<string | null>(null);
@@ -56,6 +60,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
     setTags("");
     setStage("new");
     setDuplicates("skip");
+    setOwnerId("");
     setImportId(null);
   }, [open]);
 
@@ -120,7 +125,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
       .slice(0, 12);
     for (let start = 0; start < total; start += BATCH) {
       if (cancelled.current) break;
-      const result = await importRows({ importId: started.importId, rows: mapped.drafts.slice(start, start + BATCH), duplicates, stage, tags: listTags });
+      const result = await importRows({ importId: started.importId, rows: mapped.drafts.slice(start, start + BATCH), duplicates, stage, tags: listTags, ownerId: ownerId || null });
       if (!result.ok) {
         setError(`${result.error} L'import s'est arrêté à la ligne ${start + 1} : ce qui précède est enregistré.`);
         break;
@@ -277,7 +282,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
             </table>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className={clsx("grid gap-4", assignable.length > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
             <div>
               <Label htmlFor="crm-import-source">Provenance de la liste</Label>
               <Input id="crm-import-source" value={source} onChange={(event) => setSource(event.target.value)} maxLength={60} placeholder="Annuaire, salon, achat de fichier…" />
@@ -299,6 +304,20 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
               <Input id="crm-import-tags" value={tags} onChange={(event) => setTags(event.target.value)} placeholder="salon 2026, sophrologues" />
               <FieldHint>Séparées par des virgules.</FieldHint>
             </div>
+            {assignable.length > 0 ? (
+              <div>
+                <Label htmlFor="crm-import-owner">Attribuer à</Label>
+                <Select id="crm-import-owner" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
+                  <option value="">Personne (non attribué)</option>
+                  {assignable.map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+                </Select>
+                <FieldHint>Pour les prospects créés ; les fiches existantes gardent leur commercial.</FieldHint>
+              </div>
+            ) : null}
           </div>
 
           <fieldset>

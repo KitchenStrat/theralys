@@ -16,6 +16,7 @@ import {
   REACH_OPTIONS,
   SORT_OPTIONS,
   TOUCHED_OPTIONS,
+  UNASSIGNED,
   activeCriteria,
   criterionLabel,
   filtersHref,
@@ -27,6 +28,8 @@ import {
 import { dueLabel, euros, shortDate } from "@/lib/crm/format";
 import { CRM_STAGES, STAGE_META, displayName, isCrmStage, sourceLabel, type CrmStage } from "@/lib/crm/model";
 import { formatPhone } from "@/lib/crm/normalize";
+import type { RepOption } from "@/lib/crm/team";
+import type { StaffRole } from "@/lib/staff";
 import { bulkUpdate, setStage } from "./actions";
 import { ContactModal } from "./contact-modal";
 import { ImportModal } from "./import-modal";
@@ -38,6 +41,10 @@ import { STAGE_COLOR } from "@/lib/crm/stage-style";
 type ListResult = { rows: ContactListRow[]; total: number; page: number; pageCount: number };
 
 export type CrmClientProps = {
+  /** L'admin voit tout et pilote ; un commercial travaille ses prospects (ce que l'écran ne propose pas, le serveur le refuse) */
+  role: StaffRole;
+  /** Commerciaux, pour le filtre et l'attribution (admin seulement ; vide pour un commercial) */
+  reps: RepOption[];
   filters: CrmFilters;
   kpis: CrmKpis;
   facets: CrmFacets;
@@ -47,7 +54,9 @@ export type CrmClientProps = {
   nowIso: string;
 };
 
-export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIso }: CrmClientProps) {
+export function CrmClient({ role, reps, filters, kpis, facets, summary, list, columns, nowIso }: CrmClientProps) {
+  const admin = role === "admin";
+  const repNames = useMemo(() => Object.fromEntries(reps.map((rep) => [rep.id, rep.name])), [reps]);
   const router = useRouter();
   const [navigating, startNavigation] = useTransition();
   const now = useMemo(() => new Date(nowIso), [nowIso]);
@@ -66,21 +75,25 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
   const empty = kpis.total === 0;
 
   return (
-    <div>
+    <div data-touch>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">CRM</h1>
-          <p className="mt-1 text-sm text-ink-500">Vos prospects, de la première liste à la signature.</p>
+          <p className="mt-1 text-sm text-ink-500">{admin ? "Vos prospects, de la première liste à la signature." : "Vos prospects, du premier contact à la signature."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/crm/corbeille" className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-white hover:text-primary-700">
-            <Trash2 size={15} aria-hidden />
-            Corbeille{kpis.trashed > 0 ? ` · ${kpis.trashed.toLocaleString("fr-FR")}` : ""}
-          </Link>
-          <Button variant="secondary" onClick={() => setModal("import")}>
-            <Upload size={15} aria-hidden className="mr-1.5 inline-block align-[-2px]" />
-            Importer une liste
-          </Button>
+          {admin ? (
+            <>
+              <Link href="/crm/corbeille" className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-ink-700 transition-colors hover:bg-white hover:text-primary-700 pointer-coarse:min-h-11">
+                <Trash2 size={15} aria-hidden />
+                Corbeille{kpis.trashed > 0 ? ` · ${kpis.trashed.toLocaleString("fr-FR")}` : ""}
+              </Link>
+              <Button variant="secondary" onClick={() => setModal("import")}>
+                <Upload size={15} aria-hidden className="mr-1.5 inline-block align-[-2px]" />
+                Importer une liste
+              </Button>
+            </>
+          ) : null}
           <Button onClick={() => { setNewStage("new"); setModal("contact"); }}>
             <Plus size={16} strokeWidth={2.6} aria-hidden className="mr-1 inline-block align-[-3px]" />
             Nouveau prospect
@@ -109,11 +122,13 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
         <Card className="mt-6 p-10 text-center">
           <p className="text-lg font-semibold text-ink-900">Aucun prospect pour l&apos;instant</p>
           <p className="mx-auto mt-2 max-w-xl text-sm text-ink-700">
-            Importez une liste (CSV, Excel, JSON, carnet d&apos;adresses vCard, ou un simple copier-coller) ou ajoutez un prospect à la main. Les demandes de démo de la vitrine et les démos que vous créez arrivent ici d&apos;elles-mêmes.
+            {admin
+              ? "Importez une liste (CSV, Excel, JSON, carnet d'adresses vCard, ou un simple copier-coller) ou ajoutez un prospect à la main. Les demandes de démo de la vitrine et les démos que vous créez arrivent ici d'elles-mêmes."
+              : "Ajoutez votre premier prospect : il vous est attribué. Ceux que votre responsable vous confie arrivent ici d'eux-mêmes."}
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <Button onClick={() => setModal("import")}>Importer une liste</Button>
-            <Button variant="secondary" onClick={() => { setNewStage("new"); setModal("contact"); }}>
+            {admin ? <Button onClick={() => setModal("import")}>Importer une liste</Button> : null}
+            <Button variant={admin ? "secondary" : "primary"} onClick={() => { setNewStage("new"); setModal("contact"); }}>
               Ajouter un prospect
             </Button>
           </div>
@@ -161,7 +176,8 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
                 <FilterSelect id="crm-filter-ville" label="Ville" value={filters.city} onChange={(city) => update({ city })} options={facets.cities.map((facet) => ({ value: facet.value, label: `${facet.value} (${facet.count})` }))} />
                 <FilterSelect id="crm-filter-dept" label="Département" value={filters.department} onChange={(department) => update({ department })} options={facets.departments.map((facet) => ({ value: facet.value, label: `${facet.value} (${facet.count})` }))} />
                 <FilterSelect id="crm-filter-tag" label="Étiquette" value={filters.tag} onChange={(tag) => update({ tag })} options={facets.tags.map((facet) => ({ value: facet.value, label: `${facet.value} (${facet.count})` }))} />
-                <FilterSelect id="crm-filter-liste" label="Liste importée" value={filters.importId} onChange={(importId) => update({ importId })} options={facets.imports.map((entry) => ({ value: entry.id, label: `${entry.filename} (${entry.contacts})` }))} />
+                {admin ? <FilterSelect id="crm-filter-liste" label="Liste importée" value={filters.importId} onChange={(importId) => update({ importId })} options={facets.imports.map((entry) => ({ value: entry.id, label: `${entry.filename} (${entry.contacts})` }))} /> : null}
+                {admin ? <FilterSelect id="crm-filter-commercial" label="Commercial" value={filters.owner} onChange={(owner) => update({ owner })} options={[...reps.map((entry) => ({ value: entry.id, label: entry.disabled ? `${entry.name} (désactivé)` : entry.name })), { value: UNASSIGNED, label: "Non attribué" }]} /> : null}
                 <FilterSelect id="crm-filter-joindre" label="Moyen de contact" value={filters.reach} onChange={(reach) => update({ reach: reach as CrmFilters["reach"] })} options={entries(REACH_OPTIONS)} />
                 <FilterSelect id="crm-filter-action" label="Tâches" value={filters.action} onChange={(action) => update({ action: action as CrmFilters["action"] })} options={entries(ACTION_OPTIONS)} />
                 <FilterSelect id="crm-filter-cree" label="Date d'ajout" value={filters.created} onChange={(created) => update({ created: created as CrmFilters["created"] })} options={entries(CREATED_OPTIONS)} />
@@ -169,10 +185,14 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
                 <FilterSelect id="crm-filter-formule" label="Formule envisagée" value={filters.plan} onChange={(plan) => update({ plan: plan as CrmFilters["plan"] })} options={entries(PLAN_OPTIONS)} />
                 <FilterSelect id="crm-filter-opposition" label="Ne pas contacter" value={filters.dnc} onChange={(dnc) => update({ dnc: dnc as CrmFilters["dnc"] })} options={entries(DNC_OPTIONS)} />
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 pt-3">
-                <button type="button" onClick={() => setModal("lists")} className="rounded text-sm font-medium text-primary-700 underline underline-offset-4 hover:text-primary-900">
-                  Gérer les listes importées ({facets.imports.length})
-                </button>
+              <div className={clsx("mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 pt-3", !admin && criteria.length === 0 && "hidden")}>
+                {admin ? (
+                  <button type="button" onClick={() => setModal("lists")} className="rounded text-sm font-medium text-primary-700 underline underline-offset-4 hover:text-primary-900">
+                    Gérer les listes importées ({facets.imports.length})
+                  </button>
+                ) : (
+                  <span />
+                )}
                 {criteria.length > 0 ? (
                   <Button variant="ghost" size="sm" onClick={() => go({ ...EMPTY_FILTERS, view: filters.view, sort: filters.sort })}>
                     Tout effacer
@@ -210,8 +230,8 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
                 .filter((criterion) => criterion !== "stages")
                 .map((criterion) => (
                   <span key={criterion} className="inline-flex items-center gap-1 rounded-full bg-primary-50 py-1 pr-1 pl-3 text-sm text-primary-900">
-                    {criterionLabel(filters, criterion, listNames)}
-                    <button type="button" onClick={() => go(withoutCriterion(filters, criterion))} aria-label={`Retirer le filtre « ${criterionLabel(filters, criterion, listNames)} »`} className="grid h-6 w-6 place-items-center rounded-full text-primary-700 hover:bg-primary-100">
+                    {criterionLabel(filters, criterion, listNames, repNames)}
+                    <button type="button" onClick={() => go(withoutCriterion(filters, criterion))} aria-label={`Retirer le filtre « ${criterionLabel(filters, criterion, listNames, repNames)} »`} className="grid h-6 w-6 place-items-center rounded-full text-primary-700 hover:bg-primary-100 pointer-coarse:h-11 pointer-coarse:w-11">
                       ×
                     </button>
                   </span>
@@ -224,17 +244,17 @@ export function CrmClient({ filters, kpis, facets, summary, list, columns, nowIs
 
           <div className={clsx("mt-4 transition-opacity", navigating && "opacity-60")} aria-busy={navigating}>
             {list ? (
-              <ContactTable list={list} filters={filters} now={now} total={list.total} exportHref={exportHref} onNavigate={go} tags={facets.tags.map((facet) => facet.value)} />
+              <ContactTable admin={admin} reps={reps} list={list} filters={filters} now={now} total={list.total} exportHref={exportHref} onNavigate={go} tags={facets.tags.map((facet) => facet.value)} />
             ) : columns ? (
-              <PipelineBoard columns={columns} summary={summary} now={now} filters={filters} onAdd={(stage) => { setNewStage(stage); setModal("contact"); }} />
+              <PipelineBoard canDelete={admin} owners={admin && reps.length > 0 ? repNames : null} columns={columns} summary={summary} now={now} filters={filters} onAdd={(stage) => { setNewStage(stage); setModal("contact"); }} />
             ) : null}
           </div>
         </>
       )}
 
-      <ImportModal open={modal === "import"} onClose={() => setModal(null)} />
-      <ContactModal open={modal === "contact"} onClose={() => setModal(null)} defaultStage={newStage} />
-      <ListsModal open={modal === "lists"} onClose={() => setModal(null)} imports={facets.imports} now={now} />
+      {admin ? <ImportModal open={modal === "import"} onClose={() => setModal(null)} reps={reps} /> : null}
+      <ContactModal open={modal === "contact"} onClose={() => setModal(null)} defaultStage={newStage} reps={admin ? reps : undefined} />
+      {admin ? <ListsModal open={modal === "lists"} onClose={() => setModal(null)} imports={facets.imports} now={now} /> : null}
     </div>
   );
 }
@@ -294,7 +314,8 @@ function FilterSelect({ id, label, value, onChange, options }: { id: string; lab
 
 // ─── Liste ───────────────────────────────────────────────────────────────────
 
-function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags }: { list: ListResult; filters: CrmFilters; now: Date; total: number; exportHref: string; onNavigate: (filters: CrmFilters) => void; tags: string[] }) {
+function ContactTable({ admin, reps, list, filters, now, total, exportHref, onNavigate, tags }: { admin: boolean; reps: RepOption[]; list: ListResult; filters: CrmFilters; now: Date; total: number; exportHref: string; onNavigate: (filters: CrmFilters) => void; tags: string[] }) {
+  const repNames = useMemo(() => new Map(reps.map((rep) => [rep.id, rep.name])), [reps]);
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [everything, setEverything] = useState(false);
@@ -346,9 +367,11 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
               ))}
             </Select>
           </div>
-          <a href={exportHref} className="rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 hover:bg-cream-100">
-            Exporter en CSV
-          </a>
+          {admin ? (
+            <a href={exportHref} className="inline-flex items-center rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 hover:bg-cream-100 pointer-coarse:min-h-11">
+              Exporter en CSV
+            </a>
+          ) : null}
         </div>
       </div>
 
@@ -407,9 +430,38 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
               <Button variant="secondary" size="sm" disabled={working} onClick={() => run("dnc")}>
                 Ne pas contacter
               </Button>
-              <Button variant="danger" size="sm" disabled={working} onClick={() => run("delete", "", `Mettre ${count.toLocaleString("fr-FR")} prospect${count > 1 ? "s" : ""} à la corbeille ? Vous pourrez les restaurer.`)}>
-                Supprimer
-              </Button>
+              {admin && reps.length > 0 ? (
+                <>
+                  <label htmlFor="crm-bulk-owner" className="sr-only">
+                    Attribuer la sélection à un commercial
+                  </label>
+                  <div className="w-44">
+                    <Select
+                      id="crm-bulk-owner"
+                      value=""
+                      disabled={working}
+                      onChange={(event) => {
+                        if (event.target.value) run("assign", event.target.value);
+                      }}
+                    >
+                      <option value="">Attribuer à…</option>
+                      {reps
+                        .filter((entry) => !entry.disabled)
+                        .map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.name}
+                          </option>
+                        ))}
+                      <option value={UNASSIGNED}>Personne (non attribué)</option>
+                    </Select>
+                  </div>
+                </>
+              ) : null}
+              {admin ? (
+                <Button variant="danger" size="sm" disabled={working} onClick={() => run("delete", "", `Mettre ${count.toLocaleString("fr-FR")} prospect${count > 1 ? "s" : ""} à la corbeille ? Vous pourrez les restaurer.`)}>
+                  Supprimer
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -424,21 +476,24 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
         <table className="w-full min-w-[56rem] text-sm">
           <thead>
             <tr className="border-b border-cream-200 text-left text-xs tracking-wide text-ink-500 uppercase">
-              <th className="w-10 px-3 py-3">
-                <input
-                  type="checkbox"
-                  aria-label="Sélectionner tous les prospects de la page"
-                  checked={allOnPage}
-                  onChange={(event) => {
-                    setEverything(false);
-                    setSelected(event.target.checked ? new Set(pageIds) : new Set());
-                  }}
-                  className="h-4 w-4 accent-primary-600"
-                />
+              <th className="w-10 px-3 py-3 pointer-coarse:px-1">
+                <label className="grid place-items-center pointer-coarse:h-11 pointer-coarse:w-11">
+                  <input
+                    type="checkbox"
+                    aria-label="Sélectionner tous les prospects de la page"
+                    checked={allOnPage}
+                    onChange={(event) => {
+                      setEverything(false);
+                      setSelected(event.target.checked ? new Set(pageIds) : new Set());
+                    }}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                </label>
               </th>
               <th className="px-3 py-3 font-medium">Prospect</th>
               <th className="px-3 py-3 font-medium">Contact</th>
               <th className="px-3 py-3 font-medium">Étape</th>
+              {admin ? <th className="px-3 py-3 font-medium">Commercial</th> : null}
               <th className="px-3 py-3 font-medium">Prochaine tâche</th>
               <th className="px-3 py-3 font-medium">Provenance</th>
               <th className="px-3 py-3 font-medium">Ajouté</th>
@@ -447,12 +502,12 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
           <tbody>
             {list.rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-ink-500">
+                <td colSpan={admin ? 8 : 7} className="px-4 py-12 text-center text-ink-500">
                   Aucun prospect ne répond à ces critères.
                 </td>
               </tr>
             ) : (
-              list.rows.map((row, index) => <ContactRow key={row.id} index={index} row={row} now={now} checked={everything || selected.has(row.id)} onCheck={(checked) => {
+              list.rows.map((row, index) => <ContactRow key={row.id} index={index} row={row} now={now} owner={admin ? { name: row.ownerId ? (repNames.get(row.ownerId) ?? null) : null } : null} checked={everything || selected.has(row.id)} onCheck={(checked) => {
                 setEverything(false);
                 setSelected((current) => {
                   const next = new Set(current);
@@ -486,13 +541,14 @@ function ContactTable({ list, filters, now, total, exportHref, onNavigate, tags 
 function PageLink({ href, disabled, children }: { href: string; disabled: boolean; children: ReactNode }) {
   if (disabled) return <span className="rounded-full px-4 py-2 text-sm text-ink-300">{children}</span>;
   return (
-    <Link href={href} scroll={false} className="rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 hover:bg-cream-100">
+    <Link href={href} scroll={false} className="inline-flex items-center rounded-full border border-ink-300 bg-white px-4 py-2 text-sm font-medium text-ink-900 hover:bg-cream-100 pointer-coarse:min-h-11">
       {children}
     </Link>
   );
 }
 
-function ContactRow({ row, index, now, checked, onCheck }: { row: ContactListRow; index: number; now: Date; checked: boolean; onCheck: (checked: boolean) => void }) {
+/** `owner` : colonne « Commercial » de l'admin (nom, ou null si la fiche n'est attribuée à personne) ; absente pour un commercial. */
+function ContactRow({ row, index, now, owner, checked, onCheck }: { row: ContactListRow; index: number; now: Date; owner: { name: string | null } | null; checked: boolean; onCheck: (checked: boolean) => void }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const name = displayName(row);
@@ -500,14 +556,16 @@ function ContactRow({ row, index, now, checked, onCheck }: { row: ContactListRow
   const place = [row.profession, [row.postalCode, row.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
   return (
     <tr style={{ "--row": Math.min(index, 14) } as CSSProperties} className={clsx("crm-row border-b border-cream-200 align-top transition-colors last:border-0", checked ? "bg-primary-50/60" : "hover:bg-cream-50")}>
-      <td className="px-3 py-3">
-        <input type="checkbox" aria-label={`Sélectionner ${name}`} checked={checked} onChange={(event) => onCheck(event.target.checked)} className="h-4 w-4 accent-primary-600" />
+      <td className="px-3 py-3 pointer-coarse:px-1 pointer-coarse:py-1">
+        <label className="grid place-items-center pointer-coarse:h-11 pointer-coarse:w-11">
+          <input type="checkbox" aria-label={`Sélectionner ${name}`} checked={checked} onChange={(event) => onCheck(event.target.checked)} className="h-4 w-4 accent-primary-600" />
+        </label>
       </td>
       <td className="max-w-[20rem] px-3 py-3">
         <div className="flex items-start gap-2.5">
           <Avatar contact={row} />
           <div className="min-w-0">
-            <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline">
+            <Link href={`/crm/${row.id}`} prefetch={false} className="font-medium text-ink-900 underline-offset-4 hover:text-primary-700 hover:underline pointer-coarse:inline-block pointer-coarse:py-3">
               {name}
             </Link>
             {row.company && row.company !== name ? <p className="truncate text-xs text-ink-700">{row.company}</p> : null}
@@ -525,12 +583,12 @@ function ContactRow({ row, index, now, checked, onCheck }: { row: ContactListRow
       </td>
       <td className="px-3 py-3 text-ink-700">
         {row.email ? (
-          <a href={`mailto:${row.email}`} className="block max-w-[14rem] truncate underline-offset-4 hover:text-primary-700 hover:underline">
+          <a href={`mailto:${row.email}`} className="block max-w-[14rem] truncate underline-offset-4 hover:text-primary-700 hover:underline pointer-coarse:py-3">
             {row.email}
           </a>
         ) : null}
         {row.phone ? (
-          <a href={`tel:${row.phone}`} className="block whitespace-nowrap underline-offset-4 hover:text-primary-700 hover:underline">
+          <a href={`tel:${row.phone}`} className="block whitespace-nowrap underline-offset-4 hover:text-primary-700 hover:underline pointer-coarse:py-3">
             {formatPhone(row.phone)}
           </a>
         ) : null}
@@ -558,6 +616,7 @@ function ContactRow({ row, index, now, checked, onCheck }: { row: ContactListRow
         </select>
         </span>
       </td>
+      {owner ? <td className="max-w-[10rem] truncate px-3 py-3 text-ink-700">{owner.name ?? <span className="text-ink-500">Non attribué</span>}</td> : null}
       <td className="max-w-[14rem] px-3 py-3">
         {due ? (
           <>

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/auth";
 import { demoUrl, getDemo, isLinkActive } from "@/lib/demos";
 import { EditDemoForm } from "./edit-demo-form";
 
@@ -10,6 +11,7 @@ export const maxDuration = 800;
 type Props = { params: Promise<{ id: string }> };
 
 export default async function EditDemoPage({ params }: Props) {
+  await requireAdmin();
   const { id } = await params;
   const demo = await getDemo(id);
   if (!demo || !demo.prospect) notFound();

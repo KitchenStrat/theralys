@@ -2,8 +2,36 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/jobs/tick",
+      "path": "/api/jobs/tick?task=emails",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=publication",
+      "schedule": "5 7 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=redaction",
+      "schedule": "20 7 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=google",
+      "schedule": "40 7 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=google-scans",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=sites-clients",
+      "schedule": "20 8 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=redaction",
+      "schedule": "20 13 * * *"
+    },
+    {
+      "path": "/api/jobs/tick?task=redaction",
+      "schedule": "20 19 * * *"
     }
   ]
 }

@@ -22,6 +22,19 @@
   --color-viz-other: #647f91;
 }
 
+/* ── Au doigt : des cibles d'au moins 44 px ──────────────────────────────────
+   Sur un écran tactile (téléphone, tablette), les boutons, champs et listes de
+   choix des écrans utilisés en déplacement (CRM, équipe, connexion,
+   invitation : ceux qui portent `data-touch`) offrent une zone d'au moins
+   44 px de haut. Rien ne change à la souris. Les commandes de taille fixe
+   (pastilles, cases à cocher, liens en forme de bouton) sont agrandies là où
+   elles sont écrites, avec la variante `pointer-coarse:` de Tailwind. */
+@media (pointer: coarse) {
+  [data-touch] :where(button, select, textarea, input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"])) {
+    min-height: 2.75rem;
+  }
+}
+
 /* ── CRM : identité des étapes, cartes et mouvements ─────────────────────────
    Chaque élément lié à une étape reçoit sa couleur par la variable --stage
    (posée par les composants, voir lib/crm/stage-style.ts). Les animations ne

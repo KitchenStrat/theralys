@@ -1,30 +1,54 @@
 /**
  * Lectures du CRM : liste filtrée et paginée, compteurs, pipeline, fiche d'un
- * prospect. Réservé au serveur. Tant que la migration 0011 n'est pas
- * appliquée, `crmAvailable` renvoie faux et la page l'explique.
+ * prospect. Réservé au serveur. Chaque lecture reçoit la personne connectée
+ * et porte sa portée dans la requête (`scope.ts`) : un commercial ne lit que
+ * ses fiches. Tant que les migrations 0011 et 0012 ne sont pas appliquées,
+ * `crmState` le dit et la page l'explique.
  */
 
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
-import { crmActivities, crmContacts, crmImports, leads, prospects, sites, type CrmActivity, type CrmContact, type Database } from "@theralys/db";
+import { crmActivities, crmContacts, crmImports, leads, prospects, sites, users, type CrmActivity, type CrmContact, type Database } from "@theralys/db";
 import { isMissingTableError } from "@/lib/api-usage";
-import { PAGE_SIZE, PIPELINE_COLUMN_LIMIT, parisDayBounds, type CrmFilters } from "./filters";
+import { isMissingSchemaError } from "@/lib/pg-errors";
+import type { CrmViewer } from "./access";
+import { PAGE_SIZE, PIPELINE_COLUMN_LIMIT, UNASSIGNED, parisDayBounds, parisMonthStart, type CrmFilters } from "./filters";
 import { CRM_STAGES, OPEN_STAGES, contactMonthlyValue, stageFromLeadStatus, type CrmStage } from "./model";
 import { cleanMultiline, cleanText, departmentOf, normalizeEmail, normalizePhone, splitFullName } from "./normalize";
+import { contactVisibleTo, visibleTo } from "./scope";
 import { NOT_TRASHED, trashCount } from "./trash";
 
 const DAY = 86_400_000;
 
-/** Les tables du CRM existent-elles ? (migration 0011) */
-export async function crmAvailable(db: Database): Promise<boolean> {
+/**
+ * Où en est la base : `needs-crm` tant que les tables du CRM manquent
+ * (migration 0011), `needs-sales` tant que manquent le propriétaire d'une
+ * fiche, l'auteur d'une ligne d'historique ou les comptes des commerciaux
+ * (migration 0012), `ready` ensuite.
+ */
+export type CrmState = "ready" | "needs-crm" | "needs-sales";
+
+export async function crmState(db: Database): Promise<CrmState> {
   try {
     await db.select({ id: crmContacts.id }).from(crmContacts).limit(1);
     await db.select({ id: crmActivities.id }).from(crmActivities).limit(1);
     await db.select({ id: crmImports.id }).from(crmImports).limit(1);
-    return true;
   } catch (error) {
-    if (isMissingTableError(error)) return false;
+    if (isMissingTableError(error)) return "needs-crm";
     throw error;
   }
+  try {
+    // Une seule requête pour les trois ajouts de la migration 0012
+    await db.execute(sql`select (select owner_id from crm_contacts limit 1), (select author_id from crm_activities limit 1), (select user_id from crm_reps limit 1)`);
+  } catch (error) {
+    if (isMissingSchemaError(error)) return "needs-sales";
+    throw error;
+  }
+  return "ready";
+}
+
+/** Le CRM est-il utilisable ? (migrations 0011 et 0012 appliquées) */
+export async function crmAvailable(db: Database): Promise<boolean> {
+  return (await crmState(db)) === "ready";
 }
 
 // ─── Reprise des demandes de la vitrine et des démos ─────────────────────────
@@ -96,10 +120,15 @@ function departmentCondition(department: string): SQL | undefined {
   return and(ilike(crmContacts.postalCode, `${department}%`), sql`${crmContacts.postalCode} ~ '^[0-9]{5}$'`);
 }
 
-/** Condition SQL d'un jeu de filtres. `ignoreStages` sert aux compteurs par étape. */
-export function buildWhere(filters: CrmFilters, now: Date, options: { ignoreStages?: boolean } = {}): SQL | undefined {
-  // Les fiches à la corbeille ne paraissent nulle part ailleurs que dans la corbeille
-  const conditions: (SQL | undefined)[] = [NOT_TRASHED];
+/**
+ * Condition SQL d'un jeu de filtres, bornée à ce que la personne a le droit
+ * de voir. `ignoreStages` sert aux compteurs par étape.
+ */
+export function buildWhere(viewer: CrmViewer, filters: CrmFilters, now: Date, options: { ignoreStages?: boolean } = {}): SQL | undefined {
+  // Les fiches à la corbeille ne paraissent nulle part ailleurs que dans la corbeille ; un commercial ne voit que les siennes
+  const conditions: (SQL | undefined)[] = [NOT_TRASHED, visibleTo(viewer)];
+  // Filtre « Commercial » : réservé à l'admin (la portée d'un commercial ne se choisit pas dans l'adresse)
+  if (viewer.role === "admin" && filters.owner) conditions.push(filters.owner === UNASSIGNED ? isNull(crmContacts.ownerId) : eq(crmContacts.ownerId, filters.owner));
   for (const token of filters.q.split(/\s+/).filter(Boolean).slice(0, 5)) {
     const digits = token.replace(/\D/g, "");
     const phoneDigits = digits.length >= 4 ? (digits.startsWith("0") ? digits.slice(1) : digits) : "";
@@ -149,7 +178,7 @@ function orderBy(sort: CrmFilters["sort"]): SQL[] {
 
 export type ContactListRow = Pick<
   CrmContact,
-  "id" | "firstName" | "lastName" | "company" | "profession" | "email" | "phone" | "city" | "postalCode" | "source" | "stage" | "tags" | "plan" | "billingPeriod" | "doNotContact" | "nextActionAt" | "nextAction" | "lastContactAt" | "createdAt" | "siteId"
+  "id" | "firstName" | "lastName" | "company" | "profession" | "email" | "phone" | "city" | "postalCode" | "source" | "stage" | "tags" | "plan" | "billingPeriod" | "doNotContact" | "nextActionAt" | "nextAction" | "lastContactAt" | "createdAt" | "siteId" | "ownerId"
 >;
 
 const LIST_COLUMNS = {
@@ -173,10 +202,11 @@ const LIST_COLUMNS = {
   lastContactAt: crmContacts.lastContactAt,
   createdAt: crmContacts.createdAt,
   siteId: crmContacts.siteId,
+  ownerId: crmContacts.ownerId,
 };
 
-export async function listContacts(db: Database, filters: CrmFilters, now: Date): Promise<{ rows: ContactListRow[]; total: number; page: number; pageCount: number }> {
-  const where = buildWhere(filters, now);
+export async function listContacts(db: Database, viewer: CrmViewer, filters: CrmFilters, now: Date): Promise<{ rows: ContactListRow[]; total: number; page: number; pageCount: number }> {
+  const where = buildWhere(viewer, filters, now);
   const [count] = await db.select({ total: sql<number>`count(*)::int` }).from(crmContacts).where(where);
   const total = count?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -191,20 +221,20 @@ export async function listContacts(db: Database, filters: CrmFilters, now: Date)
   return { rows, total, page, pageCount };
 }
 
-/** Identifiants de tous les prospects qui répondent aux filtres (actions groupées, export). */
-export async function matchingIds(db: Database, filters: CrmFilters, now: Date, limit = 20_000): Promise<string[]> {
-  const rows = await db.select({ id: crmContacts.id }).from(crmContacts).where(buildWhere(filters, now)).limit(limit);
+/** Identifiants de tous les prospects qui répondent aux filtres, dans la portée de la personne (actions groupées). */
+export async function matchingIds(db: Database, viewer: CrmViewer, filters: CrmFilters, now: Date, limit = 20_000): Promise<string[]> {
+  const rows = await db.select({ id: crmContacts.id }).from(crmContacts).where(buildWhere(viewer, filters, now)).limit(limit);
   return rows.map((row) => row.id);
 }
 
 export type StageSummary = { stage: CrmStage; count: number; monthlyValue: number };
 
 /** Nombre de prospects et valeur mensuelle par étape, pour les filtres donnés (étape mise à part). */
-export async function stageSummary(db: Database, filters: CrmFilters, now: Date): Promise<StageSummary[]> {
+export async function stageSummary(db: Database, viewer: CrmViewer, filters: CrmFilters, now: Date): Promise<StageSummary[]> {
   const rows = await db
     .select({ stage: crmContacts.stage, plan: crmContacts.plan, billingPeriod: crmContacts.billingPeriod, count: sql<number>`count(*)::int` })
     .from(crmContacts)
-    .where(buildWhere(filters, now, { ignoreStages: true }))
+    .where(buildWhere(viewer, filters, now, { ignoreStages: true }))
     .groupBy(crmContacts.stage, crmContacts.plan, crmContacts.billingPeriod);
   return CRM_STAGES.map((stage) => {
     const own = rows.filter((row) => row.stage === stage);
@@ -216,9 +246,9 @@ export async function stageSummary(db: Database, filters: CrmFilters, now: Date)
 
 export type PipelineColumn = StageSummary & { cards: ContactListRow[] };
 
-export async function pipelineColumns(db: Database, filters: CrmFilters, now: Date): Promise<PipelineColumn[]> {
-  const summary = await stageSummary(db, filters, now);
-  const base = buildWhere(filters, now, { ignoreStages: true });
+export async function pipelineColumns(db: Database, viewer: CrmViewer, filters: CrmFilters, now: Date): Promise<PipelineColumn[]> {
+  const summary = await stageSummary(db, viewer, filters, now);
+  const base = buildWhere(viewer, filters, now, { ignoreStages: true });
   // Le tableau montre les étapes en cours : gagner ou perdre une affaire la sort des colonnes
   const columns = await Promise.all(
     OPEN_STAGES.map(async (stage) => {
@@ -241,47 +271,56 @@ export type ImportSummary = { id: string; filename: string; format: string; sour
 
 export type CrmFacets = { sources: Facet[]; professions: Facet[]; cities: Facet[]; departments: Facet[]; tags: Facet[]; imports: ImportSummary[] };
 
-export async function loadFacets(db: Database): Promise<CrmFacets> {
+/** Listes importées, la plus récente d'abord, avec ce qu'il en reste dans le CRM. */
+function listImports(db: Database): Promise<ImportSummary[]> {
+  return db
+    .select({
+      id: crmImports.id,
+      filename: crmImports.filename,
+      format: crmImports.format,
+      source: crmImports.source,
+      createdAt: crmImports.createdAt,
+      totalRows: crmImports.totalRows,
+      createdCount: crmImports.createdCount,
+      updatedCount: crmImports.updatedCount,
+      skippedCount: crmImports.skippedCount,
+      // Table nommée en toutes lettres : dans la sous-requête, « id » seul désignerait la colonne de crm_contacts
+      contacts: sql<number>`(select count(*)::int from crm_contacts c where c.import_id = "crm_imports"."id" and c.stage not like 'trash:%')`,
+    })
+    .from(crmImports)
+    .orderBy(desc(crmImports.createdAt))
+    .limit(60);
+}
+
+/** Critères proposés : ceux des fiches que la personne voit. Les listes importées ne sont proposées qu'à l'admin. */
+export async function loadFacets(db: Database, viewer: CrmViewer): Promise<CrmFacets> {
   const count = sql<number>`count(*)::int`;
+  const living = and(NOT_TRASHED, visibleTo(viewer));
   const [sources, professions, cities, postalCodes, tags, imports] = await Promise.all([
-    db.select({ value: crmContacts.source, count }).from(crmContacts).where(NOT_TRASHED).groupBy(crmContacts.source).orderBy(desc(count)).limit(60),
+    db.select({ value: crmContacts.source, count }).from(crmContacts).where(living).groupBy(crmContacts.source).orderBy(desc(count)).limit(60),
     db
       .select({ value: sql<string>`min(${crmContacts.profession})`, count })
       .from(crmContacts)
-      .where(and(NOT_TRASHED, sql`${crmContacts.profession} <> ''`))
+      .where(and(living, sql`${crmContacts.profession} <> ''`))
       .groupBy(sql`lower(${crmContacts.profession})`)
       .orderBy(desc(count))
       .limit(150),
     db
       .select({ value: sql<string>`min(${crmContacts.city})`, count })
       .from(crmContacts)
-      .where(and(NOT_TRASHED, sql`${crmContacts.city} <> ''`))
+      .where(and(living, sql`${crmContacts.city} <> ''`))
       .groupBy(sql`lower(${crmContacts.city})`)
       .orderBy(desc(count))
       .limit(300),
     db
       .select({ value: sql<string>`left(${crmContacts.postalCode}, 3)`, count })
       .from(crmContacts)
-      .where(and(NOT_TRASHED, sql`${crmContacts.postalCode} ~ '^[0-9]{5}$'`))
+      .where(and(living, sql`${crmContacts.postalCode} ~ '^[0-9]{5}$'`))
       .groupBy(sql`left(${crmContacts.postalCode}, 3)`),
-    db.execute<{ value: string; count: number }>(sql`select t.tag as value, count(*)::int as count from crm_contacts c, jsonb_array_elements_text(c.tags) as t(tag) where c.stage not like 'trash:%' group by t.tag order by count(*) desc, t.tag limit 120`),
-    db
-      .select({
-        id: crmImports.id,
-        filename: crmImports.filename,
-        format: crmImports.format,
-        source: crmImports.source,
-        createdAt: crmImports.createdAt,
-        totalRows: crmImports.totalRows,
-        createdCount: crmImports.createdCount,
-        updatedCount: crmImports.updatedCount,
-        skippedCount: crmImports.skippedCount,
-        // Table nommée en toutes lettres : dans la sous-requête, « id » seul désignerait la colonne de crm_contacts
-        contacts: sql<number>`(select count(*)::int from crm_contacts c where c.import_id = "crm_imports"."id" and c.stage not like 'trash:%')`,
-      })
-      .from(crmImports)
-      .orderBy(desc(crmImports.createdAt))
-      .limit(60),
+    db.execute<{ value: string; count: number }>(
+      sql`select t.tag as value, count(*)::int as count from crm_contacts c, jsonb_array_elements_text(c.tags) as t(tag) where c.stage not like 'trash:%' ${viewer.role === "admin" ? sql`` : sql`and c.owner_id = ${viewer.id}`} group by t.tag order by count(*) desc, t.tag limit 120`,
+    ),
+    viewer.role === "admin" ? listImports(db) : Promise.resolve<ImportSummary[]>([]),
   ]);
   // Départements : regroupés d'après les trois premiers chiffres du code postal (Corse et outre-mer compris)
   const byDepartment = new Map<string, number>();
@@ -303,11 +342,11 @@ export async function loadFacets(db: Database): Promise<CrmFacets> {
 
 export type CrmKpis = { trashed: number; total: number; open: number; overdue: number; dueToday: number; wonThisMonth: number; addedThisWeek: number; openMonthlyValue: number; winRate: number | null };
 
-export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
+/** Indicateurs du CRM, sur les fiches que la personne voit. La corbeille n'est comptée que pour l'admin. */
+export async function loadKpis(db: Database, viewer: CrmViewer, now: Date): Promise<CrmKpis> {
+  const scope = visibleTo(viewer);
   const { start, end } = parisDayBounds(now);
-  const monthStart = new Date(start.getTime());
-  const parisDay = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", day: "2-digit" }).format(now));
-  monthStart.setTime(start.getTime() - (parisDay - 1) * DAY);
+  const monthStart = parisMonthStart(now);
   const [row] = await db
     .select({
       total: sql<number>`count(*)::int`,
@@ -320,12 +359,12 @@ export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
       lost: sql<number>`count(*) filter (where ${crmContacts.stage} = 'lost')::int`,
     })
     .from(crmContacts)
-    .where(NOT_TRASHED);
-  const trashed = await trashCount(db);
+    .where(and(NOT_TRASHED, scope));
+  const trashed = viewer.role === "admin" ? await trashCount(db) : 0;
   const valued = await db
     .select({ plan: crmContacts.plan, billingPeriod: crmContacts.billingPeriod, count: sql<number>`count(*)::int` })
     .from(crmContacts)
-    .where(and(inArray(crmContacts.stage, [...OPEN_STAGES]), isNotNull(crmContacts.plan)))
+    .where(and(inArray(crmContacts.stage, [...OPEN_STAGES]), isNotNull(crmContacts.plan), scope))
     .groupBy(crmContacts.plan, crmContacts.billingPeriod);
   const closed = (row?.won ?? 0) + (row?.lost ?? 0);
   return {
@@ -343,22 +382,41 @@ export async function loadKpis(db: Database, now: Date): Promise<CrmKpis> {
 
 // ─── Fiche ───────────────────────────────────────────────────────────────────
 
+/** Une ligne d'historique et le nom de la personne qui l'a inscrite (null : avant le suivi des auteurs, ou compte supprimé). */
+export type ContactActivity = CrmActivity & { authorName: string | null };
+
 export type ContactDetail = {
   contact: CrmContact;
-  activities: CrmActivity[];
+  activities: ContactActivity[];
   site: { id: string; slug: string; name: string; type: string; status: string } | null;
   importName: string | null;
+  /** Commercial à qui la fiche est attribuée */
+  ownerName: string | null;
 };
 
-export async function loadContact(db: Database, id: string): Promise<ContactDetail | null> {
-  const [contact] = await db.select().from(crmContacts).where(eq(crmContacts.id, id)).limit(1);
+/** La fiche d'un prospect, si la personne a le droit de la voir : celle d'un autre est introuvable pour un commercial. */
+export async function loadContact(db: Database, viewer: CrmViewer, id: string): Promise<ContactDetail | null> {
+  const [contact] = await db.select().from(crmContacts).where(contactVisibleTo(viewer, id)).limit(1);
   if (!contact) return null;
-  const [activities, siteRows, importRows] = await Promise.all([
-    db.select().from(crmActivities).where(eq(crmActivities.contactId, id)).orderBy(desc(crmActivities.createdAt)).limit(300),
+  const [activities, siteRows, importRows, ownerRows] = await Promise.all([
+    db
+      .select({ activity: crmActivities, authorName: users.name })
+      .from(crmActivities)
+      .leftJoin(users, eq(users.id, crmActivities.authorId))
+      .where(eq(crmActivities.contactId, id))
+      .orderBy(desc(crmActivities.createdAt))
+      .limit(300),
     contact.siteId ? db.select({ id: sites.id, slug: sites.slug, name: sites.name, type: sites.type, status: sites.status }).from(sites).where(eq(sites.id, contact.siteId)).limit(1) : Promise.resolve([]),
     contact.importId ? db.select({ filename: crmImports.filename }).from(crmImports).where(eq(crmImports.id, contact.importId)).limit(1) : Promise.resolve([]),
+    contact.ownerId ? db.select({ name: users.name }).from(users).where(eq(users.id, contact.ownerId)).limit(1) : Promise.resolve([]),
   ]);
-  return { contact, activities, site: siteRows[0] ?? null, importName: importRows[0]?.filename ?? null };
+  return {
+    contact,
+    activities: activities.map(({ activity, authorName }) => ({ ...activity, authorName })),
+    site: siteRows[0] ?? null,
+    importName: importRows[0]?.filename ?? null,
+    ownerName: ownerRows[0]?.name ?? null,
+  };
 }
 
 /**

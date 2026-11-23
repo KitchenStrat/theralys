@@ -17,6 +17,9 @@ export type StockImage = {
   provider: "pexels" | "mock";
 };
 
+/** Délai maximal d'une recherche Pexels (ms) : au-delà, l'appelant passe au repli (image générée). */
+export const PEXELS_TIMEOUT_MS = 10_000;
+
 export interface StockImageProvider {
   readonly mode: "pexels" | "mock";
   /** Cherche une photo adaptée à la requête ; null si aucun résultat. */
@@ -44,7 +47,7 @@ export class PexelsStockProvider implements StockImageProvider {
     const data = await trackApiCall({ provider: "pexels", operation: "search", units: 1, costSource: "free" }, async () => {
       const response = await fetch(
         `https://api.pexels.com/v1/search?query=${encodeURIComponent(request.query)}&per_page=10&orientation=${orientation}`,
-        { headers: { Authorization: this.apiKey } },
+        { headers: { Authorization: this.apiKey }, signal: AbortSignal.timeout(PEXELS_TIMEOUT_MS) },
       );
       if (!response.ok) {
         throw new Error(`Pexels ${response.status}: ${(await response.text()).slice(0, 200)}`);

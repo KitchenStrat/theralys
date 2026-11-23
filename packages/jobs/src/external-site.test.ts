@@ -2246,8 +2246,8 @@ describe("refreshExternalSites", () => {
     expect(external(handle)).toMatchObject({ status: "ready", error: null, errorDetail: null, profile: NEW_PROFILE, readAt: NOW, checkedAt: NOW });
   });
 
-  it("ne relit que les sites actifs, prêts, lus sur le site lui-même et dus", async () => {
-    const ids = { active: SITE_ID, inactive: "a0000000-0000-4000-8000-000000000001", off: "a0000000-0000-4000-8000-000000000002", pasted: "a0000000-0000-4000-8000-000000000003", recent: "a0000000-0000-4000-8000-000000000004", checked: "a0000000-0000-4000-8000-000000000005", error: "a0000000-0000-4000-8000-000000000006", reading: "a0000000-0000-4000-8000-000000000007", archived: "a0000000-0000-4000-8000-000000000008", moved: "a0000000-0000-4000-8000-000000000009" };
+  it("ne relit que les sites actifs, prêts, lus sur le site lui-même et dus — ni site archivé, ni démo au lien expiré", async () => {
+    const ids = { active: SITE_ID, inactive: "a0000000-0000-4000-8000-000000000001", off: "a0000000-0000-4000-8000-000000000002", pasted: "a0000000-0000-4000-8000-000000000003", recent: "a0000000-0000-4000-8000-000000000004", checked: "a0000000-0000-4000-8000-000000000005", error: "a0000000-0000-4000-8000-000000000006", reading: "a0000000-0000-4000-8000-000000000007", archived: "a0000000-0000-4000-8000-000000000008", moved: "a0000000-0000-4000-8000-000000000009", expired: "a0000000-0000-4000-8000-00000000000a", demo: "a0000000-0000-4000-8000-00000000000b" };
     const key = (index: number) => String(index).padStart(24, "k");
     const urlOf = (name: string) => `https://www.${name}.fr`;
     const row = (name: keyof typeof ids, index: number, overrides: Row = {}) => due({ siteId: ids[name], url: urlOf(name), measureKey: key(index), ...overrides });
@@ -2265,6 +2265,8 @@ describe("refreshExternalSites", () => {
         row("reading", 8, { status: "reading", readStartedAt: minutesAgo(1) }),
         row("archived", 9),
         row("moved", 10),
+        row("expired", 11),
+        row("demo", 12),
       ],
       sites: [
         owner("active", on("active")),
@@ -2278,12 +2280,15 @@ describe("refreshExternalSites", () => {
         owner("archived", on("archived"), { status: "archived" }),
         // Réglage resté sur une autre adresse que la ligne : état douteux, on ne relit pas
         owner("moved", on("ailleurs")),
+        // Démo dont le lien a expiré : plus personne ne la regarde ; démo en cours : relue comme un client
+        owner("expired", on("expired"), { type: "demo", status: "ready", demoExpiresAt: daysAgo(1) }),
+        owner("demo", on("demo"), { type: "demo", status: "ready", demoExpiresAt: new Date(NOW.getTime() + 5 * 86_400_000) }),
       ],
     });
     const { reader, calls } = fakeReader((url) => okRead({ url, pages: PAGES }));
-    expect(await refresh(handle, reader, fakeExtractor().extractor)).toEqual({ checked: 1, changed: 0, failed: 0 });
-    expect(calls.map((call) => call.url)).toEqual([urlOf("active")]);
-    expect(handle.rows(externalSites).filter((r) => r.checkedAt !== null && (r.checkedAt as Date).getTime() === NOW.getTime()).map((r) => r.siteId)).toEqual([SITE_ID]);
+    expect(await refresh(handle, reader, fakeExtractor().extractor)).toEqual({ checked: 2, changed: 0, failed: 0 });
+    expect(calls.map((call) => call.url)).toEqual([urlOf("active"), urlOf("demo")]);
+    expect(handle.rows(externalSites).filter((r) => r.checkedAt !== null && (r.checkedAt as Date).getTime() === NOW.getTime()).map((r) => r.siteId)).toEqual([SITE_ID, ids.demo]);
   });
 
   it("au plus 5 sites par passage, les plus anciens d'abord ; les suivants attendent le passage suivant", async () => {
@@ -2306,6 +2311,20 @@ describe("refreshExternalSites", () => {
     expect(await refresh(handle, reader, extractor)).toEqual({ checked: 0, changed: 0, failed: 0 });
   });
 
+  it("lot proportionnel au parc : un trentième des sites connectés par passage quand le parc dépasse 150 sites", async () => {
+    const count = 301;
+    const siteIds = Array.from({ length: count }, (_, i) => `d0000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+    const urlOf = (i: number) => `https://www.cabinet-${i}.fr`;
+    const handle = memoryDb({
+      external: siteIds.map((siteId, i) => due({ siteId, url: urlOf(i), measureKey: String(i).padStart(24, "p"), readAt: daysAgo(40 + (i % 50)) })),
+      sites: siteIds.map((id, i) => siteRow({ id, slug: `site-${i}`, theme: themeWith({ url: urlOf(i), active: true }) })),
+    });
+    const { reader, calls } = fakeReader((url) => okRead({ url }));
+    // 301 sites à relire tous les 30 jours : 11 par passage (5 pour un petit parc) — l'échéance, ici lointaine, borne toujours
+    expect(await refresh(handle, reader, fakeExtractor().extractor, new Date(NOW.getTime() + 3_600_000))).toEqual({ checked: 11, changed: 0, failed: 0 });
+    expect(calls).toHaveLength(Math.ceil(count / EXTERNAL_SITE_LIMITS.refreshDays));
+  });
+
   it("budget de temps : un site n'est entamé que s'il reste le temps d'une lecture complète", async () => {
     const siteIds = Array.from({ length: 4 }, (_, i) => `c0000000-0000-4000-8000-00000000000${i}`);
     const urlOf = (i: number) => `https://www.cabinet-${i}.fr`;
@@ -2324,7 +2343,7 @@ describe("refreshExternalSites", () => {
     expect(await refresh(memoryDb(seed()), first.reader, fakeExtractor().extractor)).toEqual({ checked: 3, changed: 0, failed: 0 });
     expect(first.calls.map((call) => call.url)).toEqual([0, 1, 2].map(urlOf));
 
-    // Échéance commune du cron : passée ou trop proche, aucun site n'est entamé ; plus lointaine que le budget, c'est le budget qui borne
+    // Échéance du passage (cron) : passée ou trop proche, aucun site n'est entamé ; quand elle est donnée, elle seule borne le temps
     vi.setSystemTime(NOW);
     for (const deadline of [new Date(NOW.getTime() - 1), new Date(NOW.getTime() + EXTERNAL_READ_DEADLINE_MS - 1)]) {
       const none = slow(1_000);

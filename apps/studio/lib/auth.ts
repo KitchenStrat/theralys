@@ -139,9 +139,15 @@ export async function createAgencySession(siteId: string): Promise<void> {
   await setSessionCookie(token, duration);
 }
 
+/**
+ * Ferme la session. Le cookie protégé (`__Host-`) ne s'efface que par une pose
+ * vide portant les mêmes attributs : un navigateur refuse tout `Set-Cookie`
+ * de ce préfixe sans `Secure`, effacement compris — un simple `delete()` (qui
+ * n'émet pas `Secure`) laisserait la session ouverte.
+ */
 export async function destroySession(): Promise<void> {
   const store = await cookies();
-  store.delete(SESSION_COOKIE);
+  store.set(SESSION_COOKIE, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 0, path: "/" });
   if (SESSION_COOKIE !== LEGACY_SESSION_COOKIE) store.delete(LEGACY_SESSION_COOKIE);
 }
 

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { clsx } from "clsx";
+import { ArrowRightLeft, CalendarCheck, CircleCheck, Cog, Mail, Phone, StickyNote, type LucideIcon } from "lucide-react";
 import { STAGE_META, type CrmStage } from "@/lib/crm/model";
 import { STAGE_COLOR, STAGE_ICON, avatarTint, initialsOf } from "@/lib/crm/stage-style";
 
@@ -47,6 +48,27 @@ export function Avatar({ contact, size = "sm", className }: { contact: { firstNa
   return (
     <span aria-hidden style={avatarTint(contact)} className={clsx("inline-grid shrink-0 place-items-center rounded-full font-semibold tracking-tight", AVATAR[size], className)}>
       {initialsOf(contact)}
+    </span>
+  );
+}
+
+/** Historique : une tuile d'icône par nature d'événement (le libellé à côté dit la même chose en toutes lettres). */
+const KIND_ICON: Record<string, { icon: LucideIcon; tile: string }> = {
+  note: { icon: StickyNote, tile: "bg-cream-200 text-ink-700" },
+  call: { icon: Phone, tile: "bg-primary-100 text-primary-800" },
+  email: { icon: Mail, tile: "bg-info-100 text-info-500" },
+  meeting: { icon: CalendarCheck, tile: "bg-warning-100 text-ink-900" },
+  task: { icon: CircleCheck, tile: "bg-success-100 text-success-500" },
+  stage: { icon: ArrowRightLeft, tile: "bg-primary-50 text-primary-700" },
+  system: { icon: Cog, tile: "bg-cream-100 text-ink-500" },
+};
+
+/** Pastille d'une ligne d'historique (fiche d'un prospect, fil d'activité d'un commercial). Décorative. */
+export function ActivityIcon({ kind, className }: { kind: string; className?: string }) {
+  const { icon: Icon, tile } = KIND_ICON[kind] ?? KIND_ICON.system!;
+  return (
+    <span aria-hidden className={clsx("relative grid h-8 w-8 shrink-0 place-items-center rounded-full ring-4 ring-white", tile, className)}>
+      <Icon size={15} strokeWidth={2.2} />
     </span>
   );
 }

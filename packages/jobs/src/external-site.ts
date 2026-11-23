@@ -81,6 +81,7 @@ import {
 } from "@theralys/shared";
 import { usageErrorText, withApiUsage } from "@theralys/shared/usage-runtime";
 import type { DbExecutor, DbTransaction } from "./google-profile";
+import { isServedSite, proportionalBatch } from "./tick-utils";
 // Table ou colonne absente (migration non appliquée) : même détection que pour la bibliothèque Meta Ads
 import { isMetaLibrarySchemaMissing as isSchemaMissing } from "./meta-library";
 
@@ -182,9 +183,9 @@ export type ExternalReference = {
  * EXTERNAL_SITE_LIMITS.readStaleMs.
  */
 export const EXTERNAL_READ_DEADLINE_MS = 90_000;
-/** Sites relus au plus par passage de la tâche planifiée. */
+/** Sites relus au moins par passage de la tâche planifiée ; au-delà, le lot suit le parc (`proportionalBatch`). */
 export const EXTERNAL_REFRESH_BATCH = 5;
-/** Temps au plus consacré aux relectures d'un passage (ms) : la tâche est la dernière du cron quotidien. */
+/** Temps au plus consacré aux relectures d'un passage sans échéance (ms) ; le cron donne la sienne, qui fait alors foi. */
 export const EXTERNAL_REFRESH_BUDGET_MS = 300_000;
 
 const DAY_MS = 86_400_000;
@@ -1083,7 +1084,7 @@ export function selectDueExternalSites<T extends { readAt: Date | null; checkedA
 
 type RefreshCandidate = { siteId: string; readAt: Date | null; checkedAt: Date | null };
 
-/** Sites connectés, actifs et lus sur le site (pas un texte collé), dus pour une relecture. Les sites archivés ne sont plus lus. */
+/** Sites connectés, actifs et lus sur le site (pas un texte collé), dus pour une relecture. Les sites archivés et les démos au lien expiré ne sont plus lus. */
 async function dueExternalSites(db: Database, now: Date): Promise<RefreshCandidate[]> {
   const rows = await db
     .select({ siteId: externalSites.siteId, url: externalSites.url, readAt: externalSites.readAt, checkedAt: externalSites.checkedAt })
@@ -1092,16 +1093,17 @@ async function dueExternalSites(db: Database, now: Date): Promise<RefreshCandida
   if (rows.length === 0) return [];
   // L'interrupteur vit dans le thème du site (JSONB) : il est lu ici, sur les seuls sites connectés
   const owners = await db
-    .select({ id: sites.id, status: sites.status, theme: sites.theme })
+    .select({ id: sites.id, type: sites.type, status: sites.status, demoExpiresAt: sites.demoExpiresAt, theme: sites.theme })
     .from(sites)
     .where(inArray(sites.id, rows.map((row) => row.siteId)));
   const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
   const active = rows.filter((row) => {
     const owner = ownerById.get(row.siteId);
-    const setting = owner && owner.status !== "archived" ? activeExternalSite(owner.theme) : null;
+    const setting = owner && isServedSite(owner, now) ? activeExternalSite(owner.theme) : null;
     return setting !== null && isSameAddress(setting.url, row.url);
   });
-  return selectDueExternalSites(active, now);
+  // Lot proportionnel au parc : un site connecté est relu tous les `refreshDays` jours
+  return selectDueExternalSites(active, now, proportionalBatch(active.length, EXTERNAL_SITE_LIMITS.refreshDays, EXTERNAL_REFRESH_BATCH));
 }
 
 type RefreshOutcome = "unchanged" | "changed" | "failed" | "skipped";
@@ -1220,9 +1222,10 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
 
 /**
  * Tâche planifiée : relit les sites connectés dont la dernière lecture date.
- * Bornée par passage (EXTERNAL_REFRESH_BATCH sites, EXTERNAL_REFRESH_BUDGET_MS,
- * échéance `deps.deadline`) : un site n'est entamé que s'il reste le temps
- * d'une lecture complète.
+ * Bornée par passage — un lot proportionnel au parc (EXTERNAL_REFRESH_BATCH
+ * sites au moins) et l'échéance `deps.deadline` du passage, ou
+ * EXTERNAL_REFRESH_BUDGET_MS sans échéance : un site n'est entamé que s'il
+ * reste le temps d'une lecture complète.
  *
  * Seuls les sites actifs et lus sur le site lui-même sont relus (un texte
  * collé ne se relit pas). Empreinte inchangée : seule la date du contrôle est
@@ -1240,7 +1243,7 @@ async function refreshOne(db: Database, siteId: string, reader: WebsiteReader, e
  */
 export async function refreshExternalSites(db: Database, deps: ExternalSiteDeps = {}): Promise<{ checked: number; changed: number; failed: number }> {
   const report = { checked: 0, changed: 0, failed: 0 };
-  const until = Math.min(Date.now() + EXTERNAL_REFRESH_BUDGET_MS, deps.deadline?.getTime() ?? Infinity);
+  const until = deps.deadline ? deps.deadline.getTime() : Date.now() + EXTERNAL_REFRESH_BUDGET_MS;
   let due: RefreshCandidate[];
   try {
     const now = deps.now ?? new Date();

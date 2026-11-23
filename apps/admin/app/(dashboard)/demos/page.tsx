@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { crmContacts, getDb } from "@theralys/db";
 import { isMissingTableError } from "@/lib/api-usage";
+import { requireAdmin } from "@/lib/auth";
 import { isUuid } from "@/lib/crm/filters";
 import { listDemos } from "@/lib/demos";
 import { DemosPageClient } from "./demos-page-client";
@@ -30,6 +31,7 @@ async function demoPrefill(contactId: string | undefined) {
 }
 
 export default async function DemosPage({ searchParams }: Props) {
+  await requireAdmin();
   const { q, page, prospect } = await searchParams;
   const [result, prefill] = await Promise.all([listDemos({ query: q, page: page ? Number(page) : 1 }), demoPrefill(prospect)]);
 

@@ -10,17 +10,30 @@
  *   votre mois » — pour les sites avec accès réseaux sociaux et/ou fiche
  *   Google dont le mois suivant n'a encore aucun contenu sur ce canal.
  *
+ * Rattrapage : ce qui n'est pas parti le lundi (passage manqué, échéance
+ * atteinte, fournisseur en panne) part le mardi ou le mercredi ; le rappel du
+ * 25 se rattrape jusqu'au 28. `notification_log` dit qui a déjà été servi :
+ * un passage de rattrapage ne reprend que les sites sans ligne pour la
+ * période. Tout le parc est parcouru, par pages de NOTIFICATION_PAGE sites
+ * (seuls les contenus de la page en cours sont en mémoire), jusqu'à
+ * l'échéance du passage.
+ *
  * Idempotence : une ligne `notification_log` (site, kind, période) est
  * réservée AVANT l'envoi, dans une transaction courte, avec
  * `on conflict do nothing` ; si elle existe déjà (cron relancé, deux
  * instances), rien ne part. `sent` est mis à jour avec le résultat du
- * fournisseur (false en mock ou en échec : pas de seconde tentative). Une
- * exception du fournisseur (429, 5xx, délai) libère la réservation pour un
- * passage suivant seulement si aucun e-mail n'est parti ; après au moins un
- * envoi réussi, la réservation reste (`sent = true`) et l'échec restant est
- * journalisé — jamais de doublon. Les envois sont espacés de
- * SEND_SPACING_MS (limite de débit du fournisseur). La colonne `recipient`
- * ne porte que des identifiants de comptes (`user:<id>`), jamais d'adresse.
+ * fournisseur (false en mock ou en refus définitif : pas de seconde
+ * tentative). Une erreur transitoire du fournisseur (429, 5xx, délai) est
+ * relancée SEND_RETRIES fois, après l'attente qu'il demande ; si elle
+ * persiste, la réservation est libérée pour un passage de rattrapage
+ * seulement si aucun e-mail n'est parti ; après au moins un envoi réussi, la
+ * réservation reste (`sent = true`) et l'échec restant est journalisé —
+ * jamais de doublon. Après SEND_FAILURE_BREAKER sites en échec d'affilée, le
+ * passage s'arrête (fournisseur en panne). Tous les envois d'un passage sont
+ * espacés de SEND_SPACING_MS (limite de débit du fournisseur), d'un site à
+ * l'autre comme entre deux destinataires d'un même site. La colonne
+ * `recipient` ne porte que des identifiants de comptes (`user:<id>`), jamais
+ * d'adresse.
  *
  * Les décisions (jour, bornes de période, contenus, déjà envoyé), le tri par
  * jour et le rendu texte/HTML sont des fonctions pures, testées sans base.
@@ -43,22 +56,30 @@ import {
   type PlanId,
 } from "@theralys/db";
 import { captionFor, isoWeekday, type GooglePostContent, type SocialPostContent } from "@theralys/shared";
-import { createMailProvider, type MailProvider } from "@theralys/providers/mail";
+import { createMailProvider, sendMailWithRetry, type MailProvider } from "@theralys/providers/mail";
 import { withApiUsage } from "@theralys/shared/usage-runtime";
-import type { TickOptions, TickReport } from "./ticks";
+import { errorLabel, pastDeadline, sleep, tickError, tickOk, type TickOptions, type TickReport } from "./tick-utils";
 
 /** Fuseau des praticiens : jour civil des envois et bornes des périodes. */
 export const PARIS_TZ = "Europe/Paris";
-/** Sites traités au plus par passage de chaque tick de notification (cron quotidien : tout le parc en un passage). */
-export const NOTIFICATION_BATCH = 1000;
-/** Espacement minimal entre deux envois (ms) : limite de débit du fournisseur. */
+/** Sites dont les contenus sont chargés ensemble : tout le parc est parcouru, page après page, jusqu'à l'échéance. */
+export const NOTIFICATION_PAGE = 100;
+/** Espacement minimal entre deux envois d'un passage (ms) : limite de débit du fournisseur. */
 export const SEND_SPACING_MS = 500;
+/** Relances d'un envoi sur erreur transitoire du fournisseur (429, 5xx, délai dépassé). */
+export const SEND_RETRIES = 2;
+/** Sites en échec d'affilée au-delà desquels le passage s'arrête : le fournisseur est en panne, le rattrapage reprendra. */
+export const SEND_FAILURE_BREAKER = 5;
+/** Dernier jour ISO (1 = lundi) où l'e-mail hebdomadaire part encore : rattrapage le mardi et le mercredi. */
+export const WEEKLY_DIGEST_LAST_WEEKDAY = 3;
 /** `notification_log.kind` de l'e-mail hebdomadaire (période "YYYY-Www"). */
 export const WEEKLY_DIGEST_KIND = "content_weekly";
 /** `notification_log.kind` du rappel mensuel (période "YYYY-MM" du mois suivant). */
 export const MONTH_REMINDER_KIND = "month_reminder";
 /** Jour du mois (Europe/Paris) du rappel « Préparez votre mois ». */
 export const MONTH_REMINDER_DAY = 25;
+/** Dernier jour du mois où le rappel part encore : rattrapage du 26 au 28 (février compris). */
+export const MONTH_REMINDER_LAST_DAY = 28;
 /** URL publique du studio quand STUDIO_BASE_URL n'est pas définie. */
 export const DEFAULT_STUDIO_BASE_URL = "https://app.harmony-web.fr";
 
@@ -193,11 +214,23 @@ export function googleMonthUrl(base: string, monthKey: string): string {
 
 export type WeeklyDigestDecision =
   | { send: true; week: IsoWeek }
-  | { send: false; reason: "not_monday" | "no_recipient" | "no_content" | "already_sent" };
+  | { send: false; reason: "not_send_day" | "no_recipient" | "no_content" | "already_sent" };
+
+/** Jour d'envoi de l'e-mail hebdomadaire : le lundi, ou un jour de rattrapage (mardi, mercredi). `day` : jour civil Europe/Paris. */
+export function isWeeklyDigestDay(day: string): boolean {
+  return isoWeekday(day) <= WEEKLY_DIGEST_LAST_WEEKDAY;
+}
+
+/** Jour d'envoi du rappel mensuel : le 25, ou un jour de rattrapage (jusqu'au 28), Europe/Paris. */
+export function isMonthReminderDay(now: Date): boolean {
+  const day = parisDayOfMonth(now);
+  return day >= MONTH_REMINDER_DAY && day <= MONTH_REMINDER_LAST_DAY;
+}
 
 /**
- * Envoyer l'e-mail hebdomadaire ? Lundi (Europe/Paris), au moins un
- * destinataire, au moins un contenu de la semaine, pas encore envoyé.
+ * Envoyer l'e-mail hebdomadaire ? Lundi (Europe/Paris) — ou mardi, mercredi
+ * en rattrapage —, au moins un destinataire, au moins un contenu de la
+ * semaine, pas encore envoyé.
  */
 export function decideWeeklyDigest(input: {
   now: Date;
@@ -206,7 +239,7 @@ export function decideWeeklyDigest(input: {
   alreadySent: boolean;
 }): WeeklyDigestDecision {
   const day = parisDay(input.now);
-  if (isoWeekday(day) !== 1) return { send: false, reason: "not_monday" };
+  if (!isWeeklyDigestDay(day)) return { send: false, reason: "not_send_day" };
   if (input.recipients <= 0) return { send: false, reason: "no_recipient" };
   if (input.contents <= 0) return { send: false, reason: "no_content" };
   if (input.alreadySent) return { send: false, reason: "already_sent" };
@@ -220,9 +253,10 @@ export type MonthReminderDecision =
   | { send: false; reason: "not_reminder_day" | "no_recipient" | "nothing_to_prepare" | "already_sent" };
 
 /**
- * Envoyer le rappel « Préparez votre mois » ? Le 25 (Europe/Paris), au moins
- * un destinataire, au moins un canal accessible sans contenu le mois
- * suivant, pas encore envoyé. `channels` liste les canaux concernés.
+ * Envoyer le rappel « Préparez votre mois » ? Le 25 (Europe/Paris) — ou du
+ * 26 au 28 en rattrapage —, au moins un destinataire, au moins un canal
+ * accessible sans contenu le mois suivant, pas encore envoyé. `channels`
+ * liste les canaux concernés.
  */
 export function decideMonthReminder(input: {
   now: Date;
@@ -231,7 +265,7 @@ export function decideMonthReminder(input: {
   social: { access: boolean; nextMonthPosts: number };
   google: { access: boolean; nextMonthPosts: number };
 }): MonthReminderDecision {
-  if (parisDayOfMonth(input.now) !== MONTH_REMINDER_DAY) return { send: false, reason: "not_reminder_day" };
+  if (!isMonthReminderDay(input.now)) return { send: false, reason: "not_reminder_day" };
   if (input.recipients <= 0) return { send: false, reason: "no_recipient" };
   const channels: ReminderChannel[] = [];
   if (input.social.access && input.social.nextMonthPosts <= 0) channels.push("social");
@@ -498,19 +532,14 @@ export function renderMonthReminder(input: {
 
 // ─── Ticks ───────────────────────────────────────────────────────────────────
 
-/** Options des ticks de notification : fournisseur e-mail et environnement injectables (tests de fumée). */
-export type NotificationOptions = TickOptions & { mail?: MailProvider; env?: NodeJS.ProcessEnv };
+/**
+ * Options des ticks de notification : fournisseur e-mail, environnement et
+ * attente injectables (tests, test de fumée).
+ */
+export type NotificationOptions = TickOptions & { mail?: MailProvider; env?: NodeJS.ProcessEnv; sleep?: (ms: number) => Promise<void> };
 
 type Recipient = { id: string; email: string; name: string };
 type SiteRecipients = { siteId: string; type: "demo" | "client"; plan: PlanId; recipients: Recipient[] };
-
-function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
-  return opts.deadline !== undefined && nowMs > opts.deadline.getTime();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /**
  * Comptes clients des sites non archivés, groupés par site (ordre de création
@@ -561,17 +590,46 @@ async function reserveNotification(
 }
 
 /**
+ * Envois d'un passage : fournisseur, espacement commun à tous les envois (d'un
+ * site à l'autre comme entre deux destinataires), compteurs.
+ */
+type SendRun = {
+  mail: MailProvider;
+  wait: (ms: number) => Promise<void>;
+  /** Instant du dernier envoi (ms), 0 avant le premier */
+  lastSendAt: number;
+  processed: number;
+  failed: number;
+  /** Sites en échec d'affilée (remis à zéro par un site servi) */
+  streak: number;
+  lastError: string;
+};
+
+function startSendRun(opts: NotificationOptions): SendRun {
+  return { mail: opts.mail ?? createMailProvider(opts.env), wait: opts.sleep ?? sleep, lastSendAt: 0, processed: 0, failed: 0, streak: 0, lastError: "" };
+}
+
+/** Attend ce qu'il faut pour que deux envois du passage soient espacés de SEND_SPACING_MS (sans fournisseur réel, rien ne part : aucune attente). */
+async function pace(run: SendRun): Promise<void> {
+  if (run.mail.mode === "mock") return;
+  const remaining = run.lastSendAt + SEND_SPACING_MS - Date.now();
+  if (run.lastSendAt > 0 && remaining > 0) await run.wait(remaining);
+  run.lastSendAt = Date.now();
+}
+
+/**
  * Envoie un e-mail à chaque destinataire du site sous la réservation `logId`
- * (envois espacés de SEND_SPACING_MS) et inscrit le résultat (`sent` = au
- * moins un envoi réel). Une exception du fournisseur libère la réservation
- * (le passage suivant réessaiera) tant qu'aucun e-mail n'est parti ; après
- * un premier envoi réussi, la réservation est confirmée (`sent = true`) et
- * l'échec des destinataires restants est journalisé, sans nouvelle tentative
- * — un site ne reçoit jamais deux fois le même e-mail.
+ * (envois espacés, erreurs transitoires relancées SEND_RETRIES fois) et
+ * inscrit le résultat (`sent` = au moins un envoi réel). Une erreur qui
+ * persiste libère la réservation (un passage de rattrapage réessaiera) tant
+ * qu'aucun e-mail n'est parti ; après un premier envoi réussi, la
+ * réservation est confirmée (`sent = true`) et l'échec des destinataires
+ * restants est journalisé, sans nouvelle tentative — un site ne reçoit
+ * jamais deux fois le même e-mail.
  */
 async function deliver(
   db: Database,
-  mail: MailProvider,
+  run: SendRun,
   logId: string,
   recipients: Recipient[],
   render: (recipient: Recipient) => RenderedMail,
@@ -579,25 +637,65 @@ async function deliver(
 ): Promise<boolean> {
   let sent = false;
   try {
-    for (const [index, recipient] of recipients.entries()) {
-      if (index > 0) await sleep(SEND_SPACING_MS);
+    for (const recipient of recipients) {
+      await pace(run);
       const message = render(recipient);
-      const result = await mail.send({ to: recipient.email, subject: message.subject, text: message.text, html: message.html });
+      const result = await sendMailWithRetry(
+        run.mail,
+        { to: recipient.email, subject: message.subject, text: message.text, html: message.html },
+        { retries: SEND_RETRIES, sleep: run.wait },
+      );
       sent = sent || result.sent;
-      if (result.error) console.warn(`[notifications] envoi refusé par le fournisseur : ${result.error}`);
+      // Refus définitif (adresse invalide, domaine non vérifié) : le détail du fournisseur peut citer l'adresse, il n'est pas journalisé
+      if (result.error) console.warn(`[notifications] envoi refusé par le fournisseur (réservation ${logId})`);
     }
   } catch (err) {
     if (!sent) {
       await db.delete(notificationLog).where(eq(notificationLog.id, logId));
       throw err;
     }
-    console.error(
-      `[notifications] envoi partiel (réservation ${logId} conservée, destinataires restants non servis) :`,
-      err instanceof Error ? err.message : err,
-    );
+    console.error(`[notifications] envoi partiel (réservation ${logId} conservée, destinataires restants non servis) : ${errorLabel(err)}`);
   }
   await db.update(notificationLog).set({ sent, sentAt: now }).where(eq(notificationLog.id, logId));
   return sent;
+}
+
+/**
+ * Un site du passage : réservation, envoi, compteurs. Un site en échec est
+ * journalisé (identifiant du site et type d'erreur) et n'arrête pas les
+ * suivants.
+ */
+async function sendToSite(
+  db: Database,
+  run: SendRun,
+  site: SiteRecipients,
+  entry: { kind: string; periodKey: string; label: string },
+  render: (recipient: Recipient) => RenderedMail,
+  now: Date,
+): Promise<void> {
+  const logId = await reserveNotification(db, { siteId: site.siteId, kind: entry.kind, periodKey: entry.periodKey, recipient: recipientList(site.recipients) }, now);
+  if (!logId) return;
+  try {
+    await withApiUsage({ feature: "notifications", siteId: site.siteId }, () => deliver(db, run, logId, site.recipients, render, now));
+    run.processed += 1;
+    run.streak = 0;
+  } catch (err) {
+    run.failed += 1;
+    run.streak += 1;
+    run.lastError = errorLabel(err);
+    console.error(`[notifications] ${entry.label} du site ${site.siteId} non envoyé (${run.lastError})`);
+  }
+}
+
+/** Le passage doit s'arrêter : échéance atteinte, ou fournisseur en panne (SEND_FAILURE_BREAKER sites en échec d'affilée). */
+function sendRunOver(run: SendRun, opts: TickOptions): boolean {
+  return pastDeadline(opts) || run.streak >= SEND_FAILURE_BREAKER;
+}
+
+/** Rapport d'un passage d'envois : en erreur si rien n'est parti alors que des envois ont échoué, ou si le fournisseur est en panne. */
+function sendReport(task: string, run: SendRun): TickReport {
+  if (run.failed > 0 && (run.processed === 0 || run.streak >= SEND_FAILURE_BREAKER)) return tickError(task, run.lastError, run.processed, run.failed);
+  return tickOk(task, run.processed, run.failed);
 }
 
 /** Valeur de `notification_log.recipient` : identifiants de comptes, jamais d'adresse e-mail (RGPD). */
@@ -605,38 +703,8 @@ export function recipientList(recipients: readonly { id: string }[]): string {
   return recipients.map((r) => `user:${r.id}`).join(", ");
 }
 
-/**
- * Chaque lundi (Europe/Paris) : « Vos contenus de la semaine » aux comptes
- * clients des sites ayant au moins un contenu `ready` (réseaux sociaux ou
- * fiche Google) daté dans la semaine ISO en cours. Lots de
- * NOTIFICATION_BATCH sites ; s'arrête avant le site suivant une fois
- * `opts.deadline` dépassée. `processed` = sites pour lesquels un e-mail a été
- * généré (envoyé ou journalisé en mock).
- */
-export async function sendWeeklyContentDigests(now = new Date(), opts: NotificationOptions = {}): Promise<TickReport> {
-  const task = "weekly-content-digests";
-  const day = parisDay(now);
-  if (isoWeekday(day) !== 1) return { task, processed: 0 };
-  const week = isoWeekOf(day);
-  const db = getDb();
-
-  const [socialSites, googleSites, logged, candidates] = await Promise.all([
-    db
-      .selectDistinct({ siteId: socialPosts.siteId })
-      .from(socialPosts)
-      .where(and(eq(socialPosts.status, "ready"), gte(socialPosts.scheduledFor, week.monday), lte(socialPosts.scheduledFor, week.sunday))),
-    db
-      .selectDistinct({ siteId: googlePosts.siteId })
-      .from(googlePosts)
-      .where(and(eq(googlePosts.status, "ready"), gte(googlePosts.scheduledFor, week.monday), lte(googlePosts.scheduledFor, week.sunday))),
-    loggedSiteIds(db, WEEKLY_DIGEST_KIND, week.key),
-    loadSiteRecipients(db),
-  ]);
-  const withContent = new Set([...socialSites, ...googleSites].map((r) => r.siteId));
-  const due = candidates.filter((c) => withContent.has(c.siteId) && !logged.has(c.siteId)).slice(0, NOTIFICATION_BATCH);
-  if (due.length === 0) return { task, processed: 0 };
-
-  const siteIds = due.map((c) => c.siteId);
+/** Contenus `ready` de la semaine pour une page de sites, groupés par site. */
+async function loadWeekItems(db: Database, siteIds: string[], week: IsoWeek, base: string): Promise<Map<string, DigestItem[]>> {
   const [social, google] = await Promise.all([
     db.query.socialPosts.findMany({
       where: and(
@@ -657,8 +725,6 @@ export async function sendWeeklyContentDigests(now = new Date(), opts: Notificat
       columns: { id: true, siteId: true, scheduledFor: true, topic: true, content: true },
     }),
   ]);
-
-  const base = studioBaseUrl(opts.env);
   const itemsBySite = new Map<string, DigestItem[]>();
   for (const post of social) {
     itemsBySite.set(post.siteId, [...(itemsBySite.get(post.siteId) ?? []), digestItemFromSocial(post, base)]);
@@ -666,37 +732,68 @@ export async function sendWeeklyContentDigests(now = new Date(), opts: Notificat
   for (const post of google) {
     itemsBySite.set(post.siteId, [...(itemsBySite.get(post.siteId) ?? []), digestItemFromGoogle(post, base)]);
   }
+  return itemsBySite;
+}
 
-  const mail = opts.mail ?? createMailProvider(opts.env);
-  let processed = 0;
-  for (const site of due) {
-    if (pastDeadline(opts)) break;
-    const items = itemsBySite.get(site.siteId) ?? [];
-    const decision = decideWeeklyDigest({ now, recipients: site.recipients.length, contents: items.length, alreadySent: false });
-    if (!decision.send) continue;
-    const logId = await reserveNotification(
+/**
+ * Chaque lundi (Europe/Paris) : « Vos contenus de la semaine » aux comptes
+ * clients des sites ayant au moins un contenu `ready` (réseaux sociaux ou
+ * fiche Google) daté dans la semaine ISO en cours. Les sites non servis le
+ * lundi le sont le mardi ou le mercredi (`notification_log` exclut ceux qui
+ * l'ont déjà été). Tout le parc est parcouru par pages de NOTIFICATION_PAGE
+ * sites ; s'arrête avant le site suivant une fois `opts.deadline` dépassée.
+ * `processed` = sites pour lesquels un e-mail a été généré (envoyé ou
+ * journalisé en mock).
+ */
+export async function sendWeeklyContentDigests(now = new Date(), opts: NotificationOptions = {}): Promise<TickReport> {
+  const task = "weekly-content-digests";
+  const day = parisDay(now);
+  if (!isWeeklyDigestDay(day)) return tickOk(task, 0);
+  const week = isoWeekOf(day);
+  const db = getDb();
+
+  const [socialSites, googleSites, logged, candidates] = await Promise.all([
+    db
+      .selectDistinct({ siteId: socialPosts.siteId })
+      .from(socialPosts)
+      .where(and(eq(socialPosts.status, "ready"), gte(socialPosts.scheduledFor, week.monday), lte(socialPosts.scheduledFor, week.sunday))),
+    db
+      .selectDistinct({ siteId: googlePosts.siteId })
+      .from(googlePosts)
+      .where(and(eq(googlePosts.status, "ready"), gte(googlePosts.scheduledFor, week.monday), lte(googlePosts.scheduledFor, week.sunday))),
+    loggedSiteIds(db, WEEKLY_DIGEST_KIND, week.key),
+    loadSiteRecipients(db),
+  ]);
+  const withContent = new Set([...socialSites, ...googleSites].map((r) => r.siteId));
+  const due = candidates.filter((c) => withContent.has(c.siteId) && !logged.has(c.siteId));
+  if (due.length === 0) return tickOk(task, 0);
+
+  const base = studioBaseUrl(opts.env);
+  const run = startSendRun(opts);
+  for (let offset = 0; offset < due.length && !sendRunOver(run, opts); offset += NOTIFICATION_PAGE) {
+    const page = due.slice(offset, offset + NOTIFICATION_PAGE);
+    const itemsBySite = await loadWeekItems(
       db,
-      { siteId: site.siteId, kind: WEEKLY_DIGEST_KIND, periodKey: week.key, recipient: recipientList(site.recipients) },
-      now,
+      page.map((c) => c.siteId),
+      week,
+      base,
     );
-    if (!logId) continue;
-    try {
-      await withApiUsage({ feature: "notifications", siteId: site.siteId }, () =>
-        deliver(
-          db,
-          mail,
-          logId,
-          site.recipients,
-          (recipient) => renderWeeklyDigest({ firstName: firstNameOf(recipient.name), week, items, studioUrl: base }),
-          now,
-        ),
+    for (const site of page) {
+      if (sendRunOver(run, opts)) break;
+      const items = itemsBySite.get(site.siteId) ?? [];
+      const decision = decideWeeklyDigest({ now, recipients: site.recipients.length, contents: items.length, alreadySent: false });
+      if (!decision.send) continue;
+      await sendToSite(
+        db,
+        run,
+        site,
+        { kind: WEEKLY_DIGEST_KIND, periodKey: week.key, label: "e-mail hebdomadaire" },
+        (recipient) => renderWeeklyDigest({ firstName: firstNameOf(recipient.name), week, items, studioUrl: base }),
+        now,
       );
-      processed += 1;
-    } catch (err) {
-      console.error(`[notifications] e-mail hebdomadaire du site ${site.siteId} :`, err instanceof Error ? err.message : err);
     }
   }
-  return { task, processed };
+  return sendReport(task, run);
 }
 
 /**
@@ -704,11 +801,12 @@ export async function sendWeeklyContentDigests(now = new Date(), opts: Notificat
  * clients des sites avec accès réseaux sociaux (démo ou formule) sans aucun
  * contenu social non archivé le mois suivant, et/ou avec accès fiche Google
  * sans aucun post Google le mois suivant — un seul e-mail, une section par
- * canal concerné. Lots de NOTIFICATION_BATCH sites, échéance respectée.
+ * canal concerné. Les sites non servis le 25 le sont jusqu'au 28. Tout le
+ * parc est parcouru, échéance respectée.
  */
 export async function sendMonthReminders(now = new Date(), opts: NotificationOptions = {}): Promise<TickReport> {
   const task = "month-reminders";
-  if (parisDayOfMonth(now) !== MONTH_REMINDER_DAY) return { task, processed: 0 };
+  if (!isMonthReminderDay(now)) return tickOk(task, 0);
   const month = nextMonthOf(now);
   const db = getDb();
 
@@ -728,9 +826,7 @@ export async function sendMonthReminders(now = new Date(), opts: NotificationOpt
   const googlePlanned = new Set(googleSites.map((r) => r.siteId));
 
   const base = studioBaseUrl(opts.env);
-  const mail = opts.mail ?? createMailProvider(opts.env);
-  let processed = 0;
-  let started = 0;
+  const run = startSendRun(opts);
   for (const site of candidates) {
     if (logged.has(site.siteId)) continue;
     const decision = decideMonthReminder({
@@ -741,31 +837,17 @@ export async function sendMonthReminders(now = new Date(), opts: NotificationOpt
       google: { access: site.type === "demo" || hasGoogleProfile(site.plan), nextMonthPosts: googlePlanned.has(site.siteId) ? 1 : 0 },
     });
     if (!decision.send) continue;
-    if (started >= NOTIFICATION_BATCH || pastDeadline(opts)) break;
-    started += 1;
-    const logId = await reserveNotification(
-      db,
-      { siteId: site.siteId, kind: MONTH_REMINDER_KIND, periodKey: month.key, recipient: recipientList(site.recipients) },
-      now,
-    );
-    if (!logId) continue;
+    if (sendRunOver(run, opts)) break;
     const social = decision.channels.includes("social") ? socialMonthUrl(base, month.key) : null;
     const google = decision.channels.includes("google") ? googleMonthUrl(base, month.key) : null;
-    try {
-      await withApiUsage({ feature: "notifications", siteId: site.siteId }, () =>
-        deliver(
-          db,
-          mail,
-          logId,
-          site.recipients,
-          (recipient) => renderMonthReminder({ firstName: firstNameOf(recipient.name), month, social, google }),
-          now,
-        ),
-      );
-      processed += 1;
-    } catch (err) {
-      console.error(`[notifications] rappel mensuel du site ${site.siteId} :`, err instanceof Error ? err.message : err);
-    }
+    await sendToSite(
+      db,
+      run,
+      site,
+      { kind: MONTH_REMINDER_KIND, periodKey: month.key, label: "rappel mensuel" },
+      (recipient) => renderMonthReminder({ firstName: firstNameOf(recipient.name), month, social, google }),
+      now,
+    );
   }
-  return { task, processed };
+  return sendReport(task, run);
 }

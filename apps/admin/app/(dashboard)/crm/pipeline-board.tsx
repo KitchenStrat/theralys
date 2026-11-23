@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type DragEvent } from "react";
 import { clsx } from "clsx";
-import { ChevronRight, CircleX, EllipsisVertical, Plus, Trash2, TriangleAlert, Trophy, X } from "lucide-react";
+import { ChevronRight, CircleX, EllipsisVertical, Plus, Trash2, TriangleAlert, Trophy, UserRound, X } from "lucide-react";
 import { Button, Input, Label, Modal } from "@theralys/ui";
 import type { ContactListRow, PipelineColumn, StageSummary } from "@/lib/crm/data";
 import { PIPELINE_COLUMN_LIMIT, filtersHref, type CrmFilters } from "@/lib/crm/filters";
@@ -51,8 +51,28 @@ export function projectMoves(columns: PipelineColumn[], moves: Record<string, Ta
  * zones apparaissent en bas de l'écran pour la supprimer, la marquer perdue ou
  * gagnée. Le menu de la carte fait la même chose au clavier et sur écran
  * tactile. Une carte supprimée part à la corbeille, d'où elle se restaure.
+ *
+ * `canDelete` : la suppression (zone, menu) n'est proposée qu'à l'admin, et
+ * le serveur la refuse à tout autre. `owners` : noms des commerciaux, pour
+ * que l'admin lise sur chaque carte qui suit l'affaire (null : rien à dire).
  */
-export function PipelineBoard({ columns, summary, now, filters, onAdd }: { columns: PipelineColumn[]; summary: StageSummary[]; now: Date; filters: CrmFilters; onAdd: (stage: CrmStage) => void }) {
+export function PipelineBoard({
+  columns,
+  summary,
+  now,
+  filters,
+  canDelete,
+  owners,
+  onAdd,
+}: {
+  columns: PipelineColumn[];
+  summary: StageSummary[];
+  now: Date;
+  filters: CrmFilters;
+  canDelete: boolean;
+  owners: Record<string, string> | null;
+  onAdd: (stage: CrmStage) => void;
+}) {
   const router = useRouter();
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<Target | null>(null);
@@ -145,8 +165,9 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
   };
   const request = (card: ContactListRow, stage: Target) => {
     if (card.stage === stage) return;
-    if (stage === "trash") remove(card);
-    else if (stage === "lost") {
+    if (stage === "trash") {
+      if (canDelete) remove(card);
+    } else if (stage === "lost") {
       setReason("");
       setLost({ id: card.id, name: displayName(card) });
     } else move(card, stage);
@@ -193,11 +214,11 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
           {openValue > 0 ? <span className="tabular-nums"> · {euros(openValue)} par mois</span> : null}
         </p>
         <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          <Link href={filtersHref({ ...filters, view: "liste", stages: ["won"], page: 1 })} className="inline-flex items-center gap-1.5 font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline">
+          <Link href={filtersHref({ ...filters, view: "liste", stages: ["won"], page: 1 })} className="inline-flex items-center gap-1.5 font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline pointer-coarse:min-h-11">
             <StageIcon stage="won" size="xs" />
             Gagnées · <span key={closed("won")} className="crm-count tabular-nums">{closed("won").toLocaleString("fr-FR")}</span>
           </Link>
-          <Link href={filtersHref({ ...filters, view: "liste", stages: ["lost"], page: 1 })} className="inline-flex items-center gap-1.5 font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline">
+          <Link href={filtersHref({ ...filters, view: "liste", stages: ["lost"], page: 1 })} className="inline-flex items-center gap-1.5 font-medium text-ink-700 underline-offset-4 hover:text-primary-700 hover:underline pointer-coarse:min-h-11">
             <StageIcon stage="lost" size="xs" />
             Perdues · <span key={closed("lost")} className="crm-count tabular-nums">{closed("lost").toLocaleString("fr-FR")}</span>
           </Link>
@@ -235,7 +256,7 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
                       onClick={() => onAdd(column.stage)}
                       aria-label={`Ajouter une affaire à l'étape ${meta.label}`}
                       title="Ajouter une affaire ici"
-                      className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-ink-500 transition hover:rotate-90 hover:bg-primary-50 hover:text-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-ink-500 transition hover:rotate-90 hover:bg-primary-50 hover:text-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none pointer-coarse:-my-2.5 pointer-coarse:h-11 pointer-coarse:w-11"
                     >
                       <Plus size={15} strokeWidth={2.5} aria-hidden />
                     </button>
@@ -262,6 +283,8 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
                       now={now}
                       column={index}
                       row={row}
+                      canDelete={canDelete}
+                      owner={owners ? (card.ownerId ? (owners[card.ownerId] ?? "Compte supprimé") : "Non attribué") : null}
                       dragging={dragging === card.id}
                       landed={landed === card.id}
                       onDragStart={() => setDragging(card.id)}
@@ -289,15 +312,17 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
       {/* Pendant qu'une carte est tenue : la lâcher ici la supprime ou clôt l'affaire */}
       {dragging ? (
         <div className="crm-dropbar fixed inset-x-0 bottom-0 z-40 flex gap-3 border-t border-cream-200 bg-white/95 p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.1)] backdrop-blur">
-          <div
-            {...target("trash")}
-            data-drop="trash"
-            data-over={over === "trash" ? "" : undefined}
-            className={clsx("crm-dropzone flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-semibold", over === "trash" ? "border-ink-900 bg-ink-900 text-white" : "border-ink-300 bg-cream-100 text-ink-700")}
-          >
-            <Trash2 size={17} aria-hidden />
-            Supprimer
-          </div>
+          {canDelete ? (
+            <div
+              {...target("trash")}
+              data-drop="trash"
+              data-over={over === "trash" ? "" : undefined}
+              className={clsx("crm-dropzone flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-semibold", over === "trash" ? "border-ink-900 bg-ink-900 text-white" : "border-ink-300 bg-cream-100 text-ink-700")}
+            >
+              <Trash2 size={17} aria-hidden />
+              Supprimer
+            </div>
+          ) : null}
           <div
             {...target("lost")}
             data-drop="lost"
@@ -348,12 +373,12 @@ export function PipelineBoard({ columns, summary, now, filters, onAdd }: { colum
                 <button type="button" onClick={() => restore(notice.id)} className="rounded font-semibold text-primary-700 underline underline-offset-4 hover:text-primary-900">
                   Annuler
                 </button>
-                <Link href="/crm/corbeille" className="text-ink-700 underline underline-offset-4 hover:text-primary-700">
+                <Link href="/crm/corbeille" className="inline-flex items-center text-ink-700 underline underline-offset-4 hover:text-primary-700 pointer-coarse:min-h-11">
                   Voir la corbeille
                 </Link>
               </>
             )}
-            <button type="button" onClick={() => setNotice(null)} aria-label="Fermer ce message" className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-500 hover:bg-cream-100">
+            <button type="button" onClick={() => setNotice(null)} aria-label="Fermer ce message" className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-full text-ink-500 hover:bg-cream-100 pointer-coarse:h-11 pointer-coarse:w-11">
               <X size={15} aria-hidden />
             </button>
           </div>
@@ -397,6 +422,8 @@ function PipelineCard({
   now,
   column,
   row,
+  canDelete,
+  owner,
   dragging,
   landed,
   onDragStart,
@@ -407,6 +434,9 @@ function PipelineCard({
   now: Date;
   column: number;
   row: number;
+  canDelete: boolean;
+  /** Qui suit l'affaire, pour l'admin ; null quand il n'y a rien à dire (commercial, ou équipe sans commerciaux) */
+  owner: string | null;
   dragging: boolean;
   landed: boolean;
   onDragStart: () => void;
@@ -446,6 +476,13 @@ function PipelineCard({
             {name}
           </Link>
           {context ? <p className="mt-0.5 truncate text-xs text-ink-500">{context}</p> : null}
+          {owner ? (
+            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-500">
+              <UserRound size={12} aria-hidden className="shrink-0" />
+              <span className="sr-only">Suivi par </span>
+              <span className="truncate">{owner}</span>
+            </p>
+          ) : null}
         </div>
       </div>
       {card.doNotContact ? <p className="mt-1.5 text-xs font-medium text-danger-500">Ne pas contacter</p> : null}
@@ -454,7 +491,7 @@ function PipelineCard({
         <TaskStatus due={due} task={card.nextAction} />
       </div>
 
-      <label className="absolute top-1.5 right-1.5 z-10 grid h-7 w-7 place-items-center rounded-md text-ink-500 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-cream-100 [@media(hover:none)]:opacity-100">
+      <label className="absolute top-1.5 right-1.5 z-10 grid h-7 w-7 place-items-center rounded-md text-ink-500 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-cream-100 [@media(hover:none)]:opacity-100 pointer-coarse:top-0 pointer-coarse:right-0 pointer-coarse:h-11 pointer-coarse:w-11">
         <span className="sr-only">Déplacer {name} vers une autre étape</span>
         <EllipsisVertical size={16} aria-hidden />
         {/* La colonne dit déjà l'étape : le menu ne propose que les autres */}
@@ -471,7 +508,7 @@ function PipelineCard({
               {stage === "won" ? "Gagné" : STAGE_META[stage].label}
             </option>
           ))}
-          <option value="trash">Supprimer</option>
+          {canDelete ? <option value="trash">Supprimer</option> : null}
         </select>
       </label>
     </li>

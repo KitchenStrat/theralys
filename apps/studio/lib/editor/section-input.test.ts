@@ -33,9 +33,16 @@ describe("mergeSectionInput", () => {
   it("refuse un champ du mauvais type : un objet à la place d'un texte ferait planter le site", () => {
     expect(mergeSectionInput(contact, { type: "contact", phone: {} }).ok).toBe(false);
     expect(mergeSectionInput(hero, { type: "hero", paragraphs: "un seul texte" }).ok).toBe(false);
-    expect(mergeSectionInput(hero, { type: "hero", stats: [{ value: 3, label: "x" }] }).ok).toBe(false);
+    expect(mergeSectionInput(hero, { type: "hero", stats: [{ value: { n: 3 }, label: "x" }] }).ok).toBe(false);
     expect(mergeSectionInput(hero, "hero").ok).toBe(false);
     expect(mergeSectionInput(hero, [hero]).ok).toBe(false);
+  });
+
+  it("ancien contenu généré : un nombre à la place d'un texte est écrit en texte, pas refusé", () => {
+    const next = merged(hero, { type: "hero", stats: [{ value: 300, label: "Patients accompagnés" }], title: 2026 });
+    expect(next).toMatchObject({ title: "2026", stats: [{ value: "300", label: "Patients accompagnés" }] });
+    // Un objet ou un tableau à la place d'un texte reste refusé
+    expect(mergeSectionInput(hero, { type: "hero", title: ["a"] }).ok).toBe(false);
   });
 
   it("refuse les contenus démesurés", () => {

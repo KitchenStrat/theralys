@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cleanExternalProfile, externalSpecialties } from "@theralys/shared";
-import { cadenceDays, planEditorialTopics } from "./editorial";
+import { TOPICS_PER_SPECIALTY, cadenceDays, planEditorialTopics } from "./editorial";
 
 const MOTIFS = [
   { slug: "massage-sportif", title: "Massage sportif" },
@@ -147,5 +147,90 @@ describe("planification depuis le site du client (site de référence)", () => {
     }
     expect(topics.some((t) => t.motifSlug === "accompagnement-de-la-grossesse")).toBe(true);
     expect(topics.some((t) => t.motifSlug === null)).toBe(true);
+  });
+});
+
+describe("variété des sujets sur la durée", () => {
+  const TITLES = ["Massage sportif", "Réflexologie plantaire", "Massage ayurvédique", "Sophrologie", "Gestion du stress", "Troubles du sommeil"];
+  const motifsOf = (count: number) => TITLES.slice(0, count).map((title, i) => ({ slug: `specialite-${i + 1}`, title }));
+  const DATED = /\(\d{4}-\d{2}-\d{2}\)/;
+  /** Sujet de fond d'un titre : sans son prolongement (« — les idées reçues », « — volet 3 »). */
+  const baseOf = (topic: string) => topic.replace(/ — .*$/, "");
+
+  /** Deux ans de calendrier, planifiés comme le fait le cron : un passage par jour, horizon de 6 semaines, sujets déjà pris relus à chaque passage. */
+  function twoYears(opts: { motifs: { slug: string; title: string }[]; themes?: { label: string; perMonth: number }[] }) {
+    const dates = new Set<string>();
+    const topics: { topic: string; motifSlug: string | null }[] = [];
+    for (let day = 0; day < 730; day++) {
+      const from = new Date(Date.UTC(2026, 10, 24) + day * 86_400_000);
+      const added = planEditorialTopics({ ...opts, city: "Albi", plan: "scale", from, horizonWeeks: 6, existingDates: dates, existingTopics: new Set(topics.map((t) => t.topic)) });
+      for (const topic of added) {
+        dates.add(topic.scheduledFor);
+        topics.push(topic);
+      }
+    }
+    return topics;
+  }
+
+  it("chaque spécialité fournit 16 sujets de fond : un par accroche, un par angle", () => {
+    expect(TOPICS_PER_SPECIALTY).toBe(16);
+  });
+
+  it.each([
+    [1, 16],
+    [3, 48],
+    [6, 96],
+  ])("%i spécialité(s) : %i sujets de fond distincts sur deux ans, tous épuisés avant le premier prolongement, aucun titre daté", (count, distinct) => {
+    const topics = twoYears({ motifs: motifsOf(count) }).map((t) => t.topic);
+    // 4 sujets par semaine pendant 2 ans, plus l'horizon de 6 semaines
+    expect(topics.length).toBeGreaterThan(416);
+    expect(new Set(topics).size).toBe(topics.length);
+    expect(topics.filter((topic) => DATED.test(topic))).toEqual([]);
+    expect(new Set(topics.map(baseOf)).size).toBe(distinct);
+    // Avant le correctif : 12 sujets de fond quel que soit le nombre de spécialités, puis des titres suffixés d'une date
+    const firstExtended = topics.findIndex((topic) => topic.includes(" — "));
+    expect(firstExtended).toBe(distinct);
+    expect(new Set(topics.slice(0, distinct)).size).toBe(distinct);
+  });
+
+  it("produit épuisé : le sujet revient sous un nouvel angle, puis en volets numérotés — jamais avec une date", () => {
+    const topics = twoYears({ motifs: motifsOf(1) }).map((t) => t.topic);
+    const extended = topics.slice(16);
+    expect(extended.every((topic) => / — [a-zà-ÿ]/.test(topic))).toBe(true);
+    // Dix angles par sujet de fond, variés d'un sujet au suivant, avant les volets
+    const named = extended.filter((topic) => !/ — volet \d+$/.test(topic));
+    expect(named).toHaveLength(160);
+    expect(new Set(named.slice(0, 16).map((topic) => topic.replace(/^.* — /, ""))).size).toBeGreaterThan(5);
+    expect(extended.indexOf(extended.find((topic) => / — volet \d+$/.test(topic))!)).toBe(160);
+    expect(extended.at(-1)).toMatch(/ — volet \d+$/);
+  });
+
+  it("trois spécialités : chacune reçoit ses 16 sujets avant qu'aucune ne soit prolongée", () => {
+    const topics = twoYears({ motifs: motifsOf(3) });
+    const first = topics.slice(0, 48);
+    for (const motif of motifsOf(3)) expect(first.filter((t) => t.motifSlug === motif.slug)).toHaveLength(16);
+    // Ensuite, les prolongements se répartissent encore entre les trois
+    const later = topics.slice(48);
+    for (const motif of motifsOf(3)) expect(later.filter((t) => t.motifSlug === motif.slug).length).toBeGreaterThan(later.length / 6);
+  });
+
+  it("thématiques du praticien : la répartition mensuelle est tenue, chaque thématique épuise ses 16 sujets avant d'être prolongée", () => {
+    const themes = [
+      { label: "Gestion du stress", perMonth: 3 },
+      { label: "Bien dormir", perMonth: 1 },
+    ];
+    const topics = twoYears({ motifs: [], themes }).map((t) => t.topic);
+    expect(new Set(topics).size).toBe(topics.length);
+    expect(topics.filter((topic) => DATED.test(topic))).toEqual([]);
+    const stress = topics.filter((topic) => /gestion du stress/i.test(topic));
+    const sleep = topics.filter((topic) => /bien dormir/i.test(topic));
+    expect(stress.length + sleep.length).toBe(topics.length);
+    // Environ trois sujets sur quatre pour la première thématique, comme demandé (le créneau de départ varie d'un passage à l'autre)
+    expect(stress.length / topics.length).toBeGreaterThan(0.65);
+    expect(stress.length / topics.length).toBeLessThan(0.85);
+    for (const list of [stress, sleep]) {
+      expect(new Set(list.map(baseOf)).size).toBe(16);
+      expect(list.findIndex((topic) => topic.includes(" — "))).toBe(16);
+    }
   });
 });

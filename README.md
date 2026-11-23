@@ -65,24 +65,31 @@ compte déjà seedé garde un mot de passe par défaut, le seed exige
 `.env` est ignoré), refuse les valeurs par défaut et remplace celles encore en
 place (`packages/jobs/src/seed-guard.ts`).
 
-Les jobs planifiés s'exécutent avec `pnpm --filter @theralys/jobs tick` — en
-production, un cron quotidien (6 h UTC) appelle ce point d'entrée (état porté
-par Postgres, ticks idempotents, un tick en erreur ne bloque pas les suivants).
-Ticks, dans l'ordre (`packages/jobs/src/ticks.ts`) :
+Les jobs planifiés s'exécutent avec `pnpm --filter @theralys/jobs tick [groupe]` — en
+production, le cron Vercel appelle `/api/jobs/tick?task=<groupe>` une fois par jour pour
+chaque groupe, à des heures décalées (`apps/admin/vercel.json`) : chaque groupe a son
+propre budget de temps, une rédaction longue ne prive plus les tâches Google de leur
+passage. Sans `?task=`, tout s'exécute en un passage (lancement à la main). État porté par
+Postgres, tâches idempotentes ; une tâche en erreur ne bloque pas les suivantes et fait
+répondre 500 à la route (visible dans les journaux Vercel).
 
-| Tick | Rôle |
-|---|---|
-| `weekly-content-digests` | lundi (Europe/Paris) : e-mail « Vos contenus de la semaine » (réseaux sociaux + fiche Google, textes à coller et liens profonds) |
-| `month-reminders` | le 25 (Europe/Paris) : e-mail « Préparez votre mois » si le mois suivant n'a aucun contenu sur un canal accessible |
-| `editorial-calendar` | complète le calendrier de sujets du blog (horizon 6 semaines) |
-| `generate-articles` | rédige les articles J-7 (Claude ou mock) + image |
-| `publish-articles` | publie les articles planifiés à l'échéance |
-| `sync-google` | stats Search Console (mock tant que l'OAuth n'est pas branché) |
-| `sync-google-reviews` | avis des fiches reliées (Places API ; mock pour les démos) |
-| `sync-google-profiles` | fiche Google du studio : instantané + audit tous les 30 jours |
-| `collect-google-reviews` | tâches d'avis DataForSEO terminées → avis, audit, analyse IA |
-| `scheduled-google-scans` | relevés de visibilité planifiés (14 jours) |
-| `refresh-external-sites` | relit les sites des clients connectés dont la dernière lecture a 30 jours (quelques sites par passage, hors quota du praticien) ; solde les lectures interrompues |
+| Groupe (heure UTC) | Tâche | Rôle |
+|---|---|---|
+| `emails` (6 h 00) | `weekly-content-digests` | du lundi au mercredi (Europe/Paris) : e-mail « Vos contenus de la semaine » (réseaux sociaux + fiche Google) — un seul envoi par site et par semaine, rattrapé mardi ou mercredi si lundi a échoué |
+| | `month-reminders` | du 25 au 28 : e-mail « Préparez votre mois » si le mois suivant n'a aucun contenu sur un canal accessible |
+| `publication` (7 h 05) | `publish-articles` | publie les articles planifiés le jour prévu |
+| | `editorial-calendar` | complète le calendrier de sujets du blog (horizon 6 semaines) — clients et démos en cours |
+| `redaction` (7 h 20, 13 h 20, 19 h 20) | `generate-articles` | rédige les articles J-7 (Claude ou mock) + image, cinq à la fois, pour les sites **clients** non archivés ; un sujet en échec n'arrête pas les autres |
+| `google` (7 h 40) | `sync-google` | stats Search Console **simulées, démonstrations seulement** tant que la connexion réelle n'est pas ouverte |
+| | `sync-google-reviews` | avis des fiches reliées (Places API), une fois par semaine et par site client |
+| | `sync-google-profiles` | fiche Google du studio : instantané + audit tous les 30 jours |
+| | `collect-google-reviews` | tâches d'avis DataForSEO terminées → avis, audit, analyse IA |
+| `google-scans` (8 h 00) | `scheduled-google-scans` | relevés de visibilité planifiés (14 jours), lot proportionnel au parc |
+| `sites-clients` (8 h 20) | `refresh-external-sites` | relit les sites des clients connectés dont la dernière lecture a 30 jours (hors quota du praticien) ; solde les lectures interrompues |
+
+Démos expirées et clients archivés ne reçoivent plus rien (ni sujets, ni articles, ni
+avis, ni relevés). Deux passages simultanés ne rédigent pas deux fois le même sujet :
+l'article et son sujet sont écrits ensemble, sous verrou.
 
 Les deux ticks d'e-mail passent par `packages/providers/src/mail` (Resend avec
 `RESEND_API_KEY` + `MAIL_FROM`, sinon mock) et sont idempotents par
@@ -273,6 +280,50 @@ dégradé par section, un seul accent chaud.
   - Trois tables (`crm_contacts`, `crm_activities`, `crm_imports`), migration
     `0011_crm`. Tant qu&apos;elle n&apos;est pas appliquée, l&apos;onglet affiche un bandeau
     et l&apos;ancienne liste des leads.
+- **Commerciaux et onglet Équipe** : le propriétaire crée des comptes pour ses
+  commerciaux et pilote leur activité depuis l&apos;admin.
+  - **Rôle `sales`** (troisième valeur de `user_role`). Refus par défaut : tout
+    ce qui exige l&apos;admin (`requireAdmin`) reste fermé aux commerciaux ; seul le
+    CRM leur est ouvert (`requireStaff`). Le garde d&apos;entrée (`middleware.ts`,
+    règles dans `lib/staff.ts`) ne laisse passer un jeton de commercial que
+    sur `/crm` et ses fiches ; chaque page et chaque action revérifie, et relit
+    le compte en base : un compte désactivé perd l&apos;accès à sa page suivante,
+    sans attendre l&apos;expiration du jeton. Le studio (espace client) refuse ces
+    comptes.
+  - **Ce que voit un commercial** : uniquement les prospects dont il est le
+    propriétaire (`crm_contacts.owner_id`) — pipeline, liste, compteurs, fiche.
+    La borne est écrite une fois (`lib/crm/scope.ts`) et portée par chaque
+    requête SQL, lecture comme écriture ; la fiche d&apos;un autre est
+    « introuvable ». Il crée des fiches (elles lui appartiennent), les
+    modifie, les fait avancer, les étiquette, tient leur historique et leurs
+    tâches. Il ne supprime rien, n&apos;importe ni n&apos;exporte, ne voit ni la
+    corbeille ni les listes, n&apos;attribue aucune fiche et ne crée pas de démo.
+    Un doublon chez un collègue bloque la création sans rien révéler de la
+    fiche.
+  - **Invitation** : l&apos;admin crée le compte (nom, e-mail) et reçoit un lien à
+    transmettre lui-même (aucun e-mail n&apos;est envoyé). Le lien est signé avec
+    `AUTH_SECRET`, vaut 7 jours et ne sert qu&apos;une fois : il porte l&apos;empreinte
+    de l&apos;état du mot de passe, et « Nouveau lien » périme les précédents (ainsi
+    que l&apos;ancien mot de passe et les sessions ouvertes). Le jeton voyage dans
+    le fragment de l&apos;adresse (`/invitation#jeton=…`) : il n&apos;apparaît dans aucun
+    journal de requêtes.
+  - **Ce que l&apos;admin gagne dans le CRM** : colonne et filtre « Commercial »
+    (un commercial, « Non attribué »), attribution sur la fiche, à la création,
+    en action groupée et à l&apos;import d&apos;une liste ; l&apos;auteur de chaque ligne
+    d&apos;historique (`crm_activities.author_id`, admin compris).
+  - **Onglet Équipe** (`/equipe`, admin seulement) : état de chaque compte
+    (invitation en attente, actif, désactivé), dernière connexion, prospects
+    en cours, gagnés du mois et leur valeur mensuelle, activité des 7 et 30
+    derniers jours par type, tâches en retard ; nouveau lien d&apos;invitation,
+    désactivation, réattribution de tous ses prospects. La fiche d&apos;un
+    commercial (`/equipe/[id]`) détaille ses prospects par étape et le fil de
+    ses dernières activités, avec un lien vers le CRM filtré.
+  - Migration `0012_crm_sales` : valeur `sales`, table `crm_reps` (rien n&apos;est
+    ajouté à `users`), `crm_contacts.owner_id`, `crm_activities.author_id`.
+    Déployé avant elle, le code ne casse rien : la connexion et le reste de
+    l&apos;admin fonctionnent, le CRM et l&apos;onglet Équipe affichent un bandeau
+    d&apos;activation, et la création d&apos;une démo comme la conversion en client
+    continuent d&apos;écrire dans l&apos;historique du CRM, sans auteur.
 
 ## Ce que couvre la Phase 3
 
@@ -430,8 +481,9 @@ Le seed est idempotent. La CI (GitHub Actions) exécute lint + typecheck + tests
 
 Le dossier `packages/db/drizzle/` est **à jour du schéma** (`packages/db/src/schema.ts`) :
 `0000_soft_scrambler` (schéma initial), `0001_social_posts` (réseaux sociaux + les
-colonnes autrefois poussées à la main) puis `0002_social_settings` (option « Paramétrage »
-des réseaux sociaux). Les migrations s'appliquent avec **`pnpm db:migrate`**,
+colonnes autrefois poussées à la main), `0002_social_settings` (option « Paramétrage »
+des réseaux sociaux), … jusqu'à `0012_crm_sales` (comptes des commerciaux) et
+`0013_security_scale` (compteurs de tentatives, journal des accès support, index). Les migrations s'appliquent avec **`pnpm db:migrate`**,
 en local comme en production (procédure dans `DEPLOY.md`, section « Mettre à jour le schéma
 en production »), qui tient le journal `drizzle.__drizzle_migrations`. Elles sont rejouables
 (`IF NOT EXISTS`, `DO $$ … duplicate_object`) : `pnpm db:migrate` passe aussi sur une base
@@ -449,5 +501,28 @@ partagée.
 - **Job de génération** : exécuté en arrière-plan dans le process admin (`after()` de
   Next). Le passage à une file durable (Inngest / pg-boss) est prévu au kickoff de la
   Phase 2 avec les jobs planifiés du blog (J-7, publication auto).
-- **Auth admin** : sessions JWT (cookie httpOnly), mots de passe scrypt. Les onglets
-  Clients/Leads sont des placeholders jusqu'à la Phase 4.
+- **Authentification** (admin et studio) : sessions JWT en cookie `httpOnly`, sous préfixe
+  `__Host-` en production (`lib/session-cookie.ts` de chaque app ; l'ancien nom reste lu pour
+  les jetons émis avant la bascule). Le jeton porte l'empreinte du mot de passe (`pv`) et
+  chaque page ou action relit le compte en base : compte supprimé, désactivé ou mot de passe
+  changé, la session cesse à la requête suivante. Mots de passe scrypt, calculés hors du fil
+  principal ; même temps de réponse qu'un compte existe ou non. Effacer le cookie protégé se
+  fait par une pose vide avec ses attributs (`Secure` compris) — un `delete()` nu est refusé
+  par les navigateurs.
+- **Limitation des tentatives** : `hitRateLimit` (`packages/db/src/rate-limit.ts`) compte par
+  clé dans la table `rate_limits` (migration `0013`), ou en mémoire par instance tant qu'elle
+  n'existe pas. Clés hachées (ni e-mail ni IP en clair). Sert aux connexions, aux liens de mot
+  de passe, à la demande de démo, aux téléversements, aux recherches de domaine et aux
+  générations payantes de l'éditeur. La mesure d'audience, elle, compte en mémoire seulement
+  (pas d'écriture en base par page vue).
+- **Entrée de l'équipe dans l'espace d'un client** : lien signé de 2 minutes, à usage unique
+  (`jti`), inscrit dans `impersonations` (qui, quel site, quand).
+- **Contenu saisi par un praticien** : jamais de HTML libre. Les sections enregistrées par
+  l'éditeur passent par un schéma strict (`apps/studio/lib/editor/section-input.ts`) ; les
+  données structurées des sites sont sérialisées par `serializeJsonLd` (aucun `<` brut dans une
+  balise `<script>`) ; le pont de l'éditeur n'écoute que l'origine du studio, signée dans le
+  jeton d'aperçu.
+- **En-têtes** : `frame-ancestors 'none'` sur l'admin et le studio (aucun encadrement par une
+  autre page), `nosniff` et `Referrer-Policy` partout (`next.config.ts` de chaque app).
+- **Paiement** : le webhook Stripe exige la signature en production ; la formule d'un client
+  ne vient jamais d'un événement (elle se règle dans l'admin).

@@ -1,17 +1,20 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, eq, like } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { FORMULAS, getDb, planFromFormulas, sites, subscriptions, users } from "@theralys/db";
 import { requireAdmin } from "@/lib/auth";
+import { newInviteSentinel } from "@/lib/crm/invitation";
 import { createClientInvitation } from "@/lib/invitations";
 
 /**
- * Impersonation : URL signée courte durée (2 min) ouvrant le studio dans la
- * session du client — pour le support agence. Le studio marque la session
- * « mode support » et l'affiche en bannière.
+ * Impersonation : URL signée courte durée (2 min), à usage unique, ouvrant le
+ * studio dans la session du client — pour le support agence. Le studio marque
+ * la session « mode support », l'affiche en bannière et inscrit l'entrée au
+ * journal (`impersonations` : quel admin, quel site, quand).
  */
 export async function getImpersonationUrl(
   siteId: string,
@@ -34,6 +37,7 @@ export async function getImpersonationUrl(
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(clientUser.id)
+    .setJti(randomUUID())
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + 120)
     .sign(new TextEncoder().encode(secret));
@@ -44,7 +48,8 @@ export async function getImpersonationUrl(
 
 /**
  * Renvoie une invitation « créer votre mot de passe » (7 jours) — uniquement
- * tant que le client n'a pas encore activé son compte.
+ * tant que le client n'a pas encore activé son compte. Les invitations
+ * précédentes sont annulées.
  */
 export async function resendClientInvitation(
   siteId: string,
@@ -58,10 +63,20 @@ export async function resendClientInvitation(
   if (!clientUser.passwordHash.startsWith("invite:")) {
     return { error: "Compte déjà activé — le client a déjà son mot de passe" };
   }
+  // Nouvelle sentinelle : les liens envoyés jusque-là (mauvaise adresse, e-mail transféré) cessent de valoir.
+  // Écriture conditionnelle : si le client vient de choisir son mot de passe, on ne l'écrase pas.
+  const passwordHash = newInviteSentinel();
+  const rotated = await db
+    .update(users)
+    .set({ passwordHash })
+    .where(and(eq(users.id, clientUser.id), like(users.passwordHash, "invite:%")))
+    .returning({ id: users.id });
+  if (rotated.length === 0) return { error: "Compte déjà activé — le client a déjà son mot de passe" };
   const invitation = await createClientInvitation({
     userId: clientUser.id,
     email: clientUser.email,
     name: clientUser.name,
+    passwordHash,
   });
   return { setupUrl: invitation.setupUrl, emailSent: invitation.emailSent };
 }

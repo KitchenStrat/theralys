@@ -44,10 +44,10 @@ import {
   seedPassword,
 } from "./seed-guard";
 import {
-  ensureEditorialCalendars,
-  generateDueArticles,
+  ensureEditorialCalendarForSite,
+  generateDueArticlesForSite,
   publishDueArticles,
-  syncGoogleData,
+  syncGoogleDataForSite,
 } from "./ticks";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -199,11 +199,12 @@ async function main() {
   }
 
   // ── Ticks réels : calendrier à venir, rédaction J-7, publication, sync GSC ──
+  // Variantes limitées à la démo du seed : le cron, lui, ne rédige jamais pour une démo
   const reports = [
-    await ensureEditorialCalendars(now),
-    await generateDueArticles(now),
+    await ensureEditorialCalendarForSite(siteId, now),
+    await generateDueArticlesForSite(siteId, now),
     await publishDueArticles(now),
-    await syncGoogleData(now),
+    await syncGoogleDataForSite(siteId, now),
   ];
   for (const r of reports) console.log(`✔ tick ${r.task}: ${r.processed} traité(s)`);
 

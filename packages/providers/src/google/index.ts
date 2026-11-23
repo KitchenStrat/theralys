@@ -55,6 +55,20 @@ export interface GooglePlacesProvider {
 
 const PLACES_BASE = "https://places.googleapis.com/v1";
 
+/** Délai maximal d'un appel à Places (ms) : une fiche qui ne répond pas n'immobilise pas l'appelant. */
+export const PLACES_TIMEOUT_MS = 10_000;
+
+/** Réponse en erreur de Places : `status` porte le code HTTP (les journaux n'ont pas à lire le message). */
+export class GooglePlacesError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "GooglePlacesError";
+  }
+}
+
 /** Coût au barème d'un appel Places abouti (la franchise mensuelle gratuite est déduite à l'affichage, par mois et par type d'appel). */
 function placesCost(operation: GooglePlacesOperation): { units: number; costUsd: number; costSource: "tariff" } {
   return { units: 1, costUsd: GOOGLE_PLACES_OPERATIONS[operation].unitUsd, costSource: "tariff" };
@@ -80,9 +94,10 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
           "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount",
       },
       body: JSON.stringify({ textQuery: query, languageCode: "fr", regionCode: "FR" }),
+      signal: AbortSignal.timeout(PLACES_TIMEOUT_MS),
     });
     if (!response.ok) {
-      throw new Error(`Places search ${response.status}: ${(await response.text()).slice(0, 200)}`);
+      throw new GooglePlacesError(`Places search ${response.status}: ${(await response.text()).slice(0, 200)}`, response.status);
     }
     const data = (await response.json()) as {
       places?: {
@@ -119,10 +134,11 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
           "X-Goog-FieldMask":
             "id,rating,userRatingCount,reviews,photos,location,websiteUri,nationalPhoneNumber,regularOpeningHours,primaryType",
         },
+        signal: AbortSignal.timeout(PLACES_TIMEOUT_MS),
       },
     );
     if (!response.ok) {
-      throw new Error(`Places details ${response.status}: ${(await response.text()).slice(0, 200)}`);
+      throw new GooglePlacesError(`Places details ${response.status}: ${(await response.text()).slice(0, 200)}`, response.status);
     }
     const data = (await response.json()) as {
       rating?: number;
@@ -182,9 +198,9 @@ export class RealGooglePlacesProvider implements GooglePlacesProvider {
         async () => {
           const response = await fetch(
             `${PLACES_BASE}/${photoName}/media?maxWidthPx=400&skipHttpRedirect=true`,
-            { headers: { "X-Goog-Api-Key": this.apiKey } },
+            { headers: { "X-Goog-Api-Key": this.apiKey }, signal: AbortSignal.timeout(PLACES_TIMEOUT_MS) },
           );
-          if (!response.ok) throw new Error(`Places photo ${response.status}`);
+          if (!response.ok) throw new GooglePlacesError(`Places photo ${response.status}`, response.status);
           const data = (await response.json()) as { photoUri?: string };
           return data.photoUri ?? null;
         },

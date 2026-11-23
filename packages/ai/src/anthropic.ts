@@ -9,11 +9,28 @@ const DEFAULT_MODEL = "claude-opus-5";
 /** Modèle de repli quand un classificateur de sécurité décline la requête. */
 const FALLBACK_MODEL = "claude-opus-4-8";
 
+/**
+ * Délai d'attente du début de la réponse (ms), par tentative du SDK. En
+ * streaming, le SDK n'arme ce délai que jusqu'aux en-têtes de la réponse :
+ * il ne borne pas la durée du flux (voir ANTHROPIC_CALL_TIMEOUT_MS).
+ */
+export const ANTHROPIC_CONNECT_TIMEOUT_MS = 60_000;
+/** Relances du SDK sur erreur transitoire (réseau, 408, 409, 429, 5xx) avant que le flux ne commence. */
+export const ANTHROPIC_MAX_RETRIES = 2;
+/**
+ * Durée maximale d'un appel entier, flux compris (ms) : un flux qui se fige
+ * est abandonné au lieu d'immobiliser la fonction jusqu'à sa durée maximale.
+ * Large devant une rédaction normale (une à deux minutes).
+ */
+export const ANTHROPIC_CALL_TIMEOUT_MS = 300_000;
+
 export type AnthropicClientOptions = {
   apiKey: string;
   model?: string;
   /** Profondeur de réflexion (défaut : ANTHROPIC_EFFORT, sinon « high ») */
   effort?: Effort;
+  /** Durée maximale d'un appel, flux compris (ms ; défaut : ANTHROPIC_CALL_TIMEOUT_MS) */
+  timeoutMs?: number;
   /**
    * Exige des passages **gras** dans chaque texte descriptif (pages du site) :
    * une relance avec le détail des oublis si le modèle les a omis en masse.
@@ -53,7 +70,7 @@ export async function completeStructured<T>(
   userPrompt: string,
   schema: z.ZodType<T>,
 ): Promise<T> {
-  const client = new Anthropic({ apiKey: opts.apiKey });
+  const client = new Anthropic({ apiKey: opts.apiKey, timeout: ANTHROPIC_CONNECT_TIMEOUT_MS, maxRetries: ANTHROPIC_MAX_RETRIES });
   const model = opts.model ?? process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL;
   const effort = resolveEffort(opts.effort);
 
@@ -65,19 +82,23 @@ export async function completeStructured<T>(
     // un appel dont la durée estimée dépasse 10 min (max_tokens élevé).
     const started = Date.now();
     const response = await client.beta.messages
-      .stream({
-        model,
-        // Opus 5 réfléchit par défaut (adaptatif) et cette réflexion compte dans
-        // max_tokens : large marge pour ne jamais tronquer le JSON généré.
-        max_tokens: 32000,
-        output_config: { effort },
-        // Repli serveur : si un classificateur de sécurité décline la requête,
-        // l'API la rejoue sur le modèle de repli dans le même appel.
-        betas: ["server-side-fallback-2026-06-01"],
-        fallbacks: [{ model: FALLBACK_MODEL }],
-        system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
-        messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
-      })
+      .stream(
+        {
+          model,
+          // Opus 5 réfléchit par défaut (adaptatif) et cette réflexion compte dans
+          // max_tokens : large marge pour ne jamais tronquer le JSON généré.
+          max_tokens: 32000,
+          output_config: { effort },
+          // Repli serveur : si un classificateur de sécurité décline la requête,
+          // l'API la rejoue sur le modèle de repli dans le même appel.
+          betas: ["server-side-fallback-2026-06-01"],
+          fallbacks: [{ model: FALLBACK_MODEL }],
+          system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
+          messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
+        },
+        // Le délai du client ne couvre que le début de la réponse : ce signal borne l'appel entier, flux compris
+        { signal: AbortSignal.timeout(opts.timeoutMs ?? ANTHROPIC_CALL_TIMEOUT_MS) },
+      )
       .finalMessage()
       .catch(async (err: unknown) => {
         // Appel en échec (réseau, quota, 4xx/5xx) : inscrit au registre, sans coût

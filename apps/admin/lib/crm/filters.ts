@@ -22,6 +22,9 @@ export const SORT_OPTIONS = { recent: "Ajout récent", updated: "Dernière modif
 
 export type CrmView = "liste" | "pipeline";
 
+/** Filtre « Commercial » (admin) : valeur des prospects que personne ne suit. */
+export const UNASSIGNED = "none";
+
 export type CrmFilters = {
   view: CrmView;
   q: string;
@@ -32,6 +35,8 @@ export type CrmFilters = {
   department: string;
   tag: string;
   importId: string;
+  /** Commercial propriétaire : son identifiant, `UNASSIGNED`, ou rien. Réservé à l'admin (un commercial ne voit que ses fiches). */
+  owner: string;
   reach: keyof typeof REACH_OPTIONS | "";
   action: keyof typeof ACTION_OPTIONS | "";
   created: keyof typeof CREATED_OPTIONS | "";
@@ -52,6 +57,7 @@ export const EMPTY_FILTERS: CrmFilters = {
   department: "",
   tag: "",
   importId: "",
+  owner: "",
   reach: "",
   action: "",
   created: "",
@@ -87,6 +93,7 @@ export function parseFilters(params: Params): CrmFilters {
     .filter((stage, index, all) => all.indexOf(stage) === index);
   const page = Number.parseInt(read(params, "page"), 10);
   const importId = read(params, "liste");
+  const owner = read(params, "commercial");
   return {
     view: read(params, "vue") === "liste" ? "liste" : "pipeline",
     q: read(params, "q").slice(0, 120),
@@ -97,6 +104,7 @@ export function parseFilters(params: Params): CrmFilters {
     department: /^(\d{2,3}|2[AB])$/i.test(read(params, "dept")) ? read(params, "dept").toUpperCase() : "",
     tag: read(params, "tag").slice(0, 40),
     importId: isUuid(importId) ? importId : "",
+    owner: owner === UNASSIGNED || isUuid(owner) ? owner : "",
     reach: oneOf(read(params, "joindre"), REACH_OPTIONS),
     action: oneOf(read(params, "action"), ACTION_OPTIONS),
     created: oneOf(read(params, "cree"), CREATED_OPTIONS),
@@ -123,6 +131,7 @@ export function filtersToParams(filters: CrmFilters): URLSearchParams {
   set("dept", filters.department);
   set("tag", filters.tag);
   set("liste", filters.importId);
+  set("commercial", filters.owner);
   set("joindre", filters.reach);
   set("action", filters.action);
   set("cree", filters.created);
@@ -140,7 +149,7 @@ export function filtersHref(filters: CrmFilters, base = "/crm"): string {
 }
 
 /** Critères qui restreignent la liste (la vue, le tri et la page n'en sont pas). */
-const CRITERIA = ["q", "stages", "source", "profession", "city", "department", "tag", "importId", "reach", "action", "created", "touched", "plan", "dnc"] as const;
+const CRITERIA = ["q", "stages", "source", "profession", "city", "department", "tag", "importId", "owner", "reach", "action", "created", "touched", "plan", "dnc"] as const;
 export type Criterion = (typeof CRITERIA)[number];
 
 export function activeCriteria(filters: CrmFilters): Criterion[] {
@@ -153,7 +162,7 @@ export function withoutCriterion(filters: CrmFilters, criterion: Criterion): Crm
 }
 
 /** Libellé d'un critère actif, tel qu'il s'affiche sur sa pastille. */
-export function criterionLabel(filters: CrmFilters, criterion: Criterion, lists: Record<string, string> = {}): string {
+export function criterionLabel(filters: CrmFilters, criterion: Criterion, lists: Record<string, string> = {}, reps: Record<string, string> = {}): string {
   switch (criterion) {
     case "q":
       return `Recherche : « ${filters.q} »`;
@@ -171,6 +180,8 @@ export function criterionLabel(filters: CrmFilters, criterion: Criterion, lists:
       return `Étiquette : ${filters.tag}`;
     case "importId":
       return `Liste : ${lists[filters.importId] ?? "liste importée"}`;
+    case "owner":
+      return filters.owner === UNASSIGNED ? "Non attribué" : `Commercial : ${reps[filters.owner] ?? "compte supprimé"}`;
     case "reach":
       return filters.reach ? REACH_OPTIONS[filters.reach] : "";
     case "action":
@@ -197,6 +208,15 @@ export function parisDayBounds(now: Date): { start: Date; end: Date } {
   const start = parisMidnightBefore(now);
   // 26 heures plus loin, on est le lendemain à Paris quel que soit le changement d'heure
   return { start, end: parisMidnightBefore(new Date(start.getTime() + 26 * 3_600_000)) };
+}
+
+const PARIS_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", day: "2-digit" });
+
+/** Le premier du mois à minuit, heure de Paris : « ce mois-ci » se compte sur le fuseau du cabinet. */
+export function parisMonthStart(now: Date): Date {
+  const { start } = parisDayBounds(now);
+  // Midi du premier jour, à une heure près selon le changement d'heure : on retombe sur son minuit exact
+  return parisMidnightBefore(new Date(start.getTime() - (Number(PARIS_DAY.format(now)) - 1) * 86_400_000 + 12 * 3_600_000));
 }
 
 const PARIS_CLOCK = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });

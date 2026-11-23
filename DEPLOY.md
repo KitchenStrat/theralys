@@ -8,7 +8,8 @@ jour le schéma en production » à chaque nouvelle migration).
 > **Plan Vercel** : le plan **Pro (20 $/mois)** est nécessaire en production —
 > la génération IA d'une démo dure ~4-5 min (fonctions jusqu'à 800 s — plan Pro avec Fluid compute, configuré
 > dans le code ; le plan gratuit Hobby limite les fonctions à 60 s). Le cron des
-> jobs est **quotidien (6 h UTC)**, compatible Hobby. Vous pouvez faire tous les
+> jobs ne déclare que des entrées **quotidiennes** (huit, entre 6 h et 20 h UTC, voir l'étape 6) : aucune fréquence
+> horaire n'est requise ; vérifiez seulement le nombre d'entrées cron permis par votre plan. Vous pouvez faire tous les
 > tests en Hobby avec le mode mock, puis passer Pro au moment de brancher la
 > clé Anthropic.
 
@@ -118,6 +119,7 @@ En plus, sur **harmony-studio** :
 | `ANTHROPIC_API_KEY` | la même clé (régénérations depuis l'espace client) |
 | `ANTHROPIC_MODEL` | la même valeur que sur admin |
 | `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer (liens vers le studio dans l'export agenda ICS des réseaux sociaux ; même valeur que sur admin) |
+| `RESEND_API_KEY` + `MAIL_FROM` | les mêmes valeurs que sur admin — **nécessaires** pour « Mot de passe oublié » (le praticien reçoit son lien par e-mail). Sans elles, la page le dit et renvoie vers Harmony ; aucun e-mail ne part |
 
 ⚠️ Ne définissez `AI_MOCK` nulle part (il forcerait le mode mock).
 Les intégrations non configurées (fal.ai, Google, Stripe, OVH) restent en mock
@@ -163,33 +165,67 @@ chaque projet concerné) et **redéployez** (Deployments → ⋯ → Redeploy) :
 
 ## Étape 6 — Le cron des jobs (déjà câblé, à vérifier)
 
-`apps/admin/vercel.json` déclare le cron sur `/api/jobs/tick`
-(calendrier éditorial, rédaction J-7, publication auto, syncs Google : stats,
-avis, puis fiche Google du studio — audit mensuel, collecte des tâches d'avis
-DataForSEO, relevés de visibilité tous les 14 jours — et les e-mails aux
-praticiens : « Vos contenus de la semaine » chaque lundi, « Préparez votre
-mois » le 25, jours civils Europe/Paris).
+`apps/admin/vercel.json` déclare plusieurs entrées sur `/api/jobs/tick`, une
+par groupe de tâches (`?task=<groupe>`), **toutes quotidiennes** et décalées
+(heures UTC). Chaque appel a sa propre échéance (660 s sur les 800 s de la
+fonction) : une tâche longue n'empêche plus les autres de tourner.
+
+| Heure (UTC) | `?task=` | Ce qui tourne |
+|---|---|---|
+| 6 h 00 | `emails` | « Préparez votre mois » le 25, « Vos contenus de la semaine » le lundi (jours civils Europe/Paris) |
+| 7 h 05 | `publication` | publication des articles du jour, puis calendrier éditorial (6 semaines) |
+| 7 h 20, 13 h 20, 19 h 20 | `redaction` | rédaction J-7 des articles (5 rédactions à la fois) |
+| 7 h 40 | `google` | statistiques Search Console simulées des démos, avis Google (Places, une fois par semaine et par site), fiche Google (audit mensuel), collecte des tâches d'avis DataForSEO |
+| 8 h 00 | `google-scans` | relevés de visibilité (tous les 14 jours par mot-clé) |
+| 8 h 20 | `sites-clients` | relecture mensuelle des sites des clients |
+
 Vercel envoie automatiquement `Authorization: Bearer <CRON_SECRET>`.
+Un groupe inconnu est refusé (400). **Sans `?task=`**, la route exécute tout
+en un seul passage, comme avant (utile pour un lancement à la main) : chaque
+tâche reçoit alors une part de l'échéance commune.
 
-Les e-mails exigent `RESEND_API_KEY` + `MAIL_FROM` sur **harmony-admin** et la
-migration `0004_social_followup` (table `notification_log`, qui garantit qu'un
-cron relancé n'envoie pas deux fois : une ligne par site, type et période).
-Sans clé Resend, les ticks tournent en mock : les lignes `notification_log`
-sont écrites avec `sent = false` et rien ne part.
+Ce qu'il faut savoir :
 
-Cadence : **quotidienne à 6h UTC** (compatible plan Hobby — les articles étant
-rédigés 7 jours à l'avance, c'est suffisant). Une fois en Pro, vous pouvez
-passer à l'horaire en changeant `"schedule"` en `"0 * * * *"` dans ce fichier
-(les e-mails restent envoyés une fois par site et par période). Les deux ticks
-d'e-mail passent en premier dans chaque passage, avant les appels fournisseur.
-Chaque tick est isolé : un tick en erreur est journalisé (`processed: 0`) sans
-bloquer les suivants. Les ticks de la fiche Google ne dépensent rien sans
-`DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (mock) et respectent le plafond de
-5 $ par site et par mois (1 $ pour une démo) ; les dépenses réelles
-apparaissent dans la vue d'ensemble de l'admin (« Fournisseurs (DataForSEO) »).
+- **Publication le jour prévu.** Un article planifié pour le jour J porte
+  07:00 UTC ; il sort au passage `publication` du jour J (7 h 05 UTC), plus le
+  lendemain. Si vous déplacez ce passage, gardez-le après 7 h UTC : un passage
+  plus matinal publie quand même les articles du jour, mais le studio ne les
+  considère « en ligne » qu'à 7 h.
+- **Sites servis.** L'IA ne rédige que pour les sites clients non archivés ;
+  une démo garde le blog de sa création (son calendrier de sujets reste tenu
+  tant que son lien est valide). Les sites archivés et les démos au lien
+  expiré ne reçoivent plus ni article, ni synchronisation Google.
+- **Rattrapage des e-mails.** Ce qui n'est pas parti le lundi part le mardi
+  ou le mercredi ; le rappel du 25 se rattrape jusqu'au 28. Les e-mails
+  exigent `RESEND_API_KEY` + `MAIL_FROM` sur **harmony-admin** et la migration
+  `0004_social_followup` (table `notification_log`, qui garantit qu'aucun site
+  ne reçoit deux fois le même e-mail : une ligne par site, type et période).
+  Sans clé Resend, les ticks tournent en mock : les lignes `notification_log`
+  sont écrites avec `sent = false` et rien ne part.
+- **Deux passages en même temps** (cron et « Run », double livraison de
+  Vercel) : sans effet. Chaque écriture se fait sous verrou, dans une
+  transaction courte — jamais deux articles pour un même sujet, jamais deux
+  sujets le même jour.
+- **Capacité.** Un passage `redaction` écrit quelques dizaines d'articles
+  (5 à la fois, tant que l'échéance n'est pas atteinte) ; les sujets restants
+  passent au passage suivant, les plus urgents d'abord. Quand le parc grandit,
+  ajoutez des entrées `redaction` à d'autres heures dans `vercel.json`
+  (plusieurs entrées quotidiennes pour le même chemin sont permises) : rien
+  d'autre n'est à changer. Aucune entrée n'exige une fréquence horaire.
+- **Erreurs.** La réponse est `200` avec `{"ok":true,…}` quand toutes les
+  tâches ont abouti, `500` avec `{"ok":false,…}` dès qu'une tâche est en
+  erreur (les autres ont tout de même tourné). Chaque rapport porte
+  `status` (`ok` / `error`), `processed`, et le cas échéant `failed` (éléments
+  en échec) et `error` (type de l'erreur, jamais de donnée personnelle). Un
+  `500` apparaît dans l'onglet **Logs** du projet admin.
+- Les ticks de la fiche Google ne dépensent rien sans `DATAFORSEO_LOGIN` /
+  `DATAFORSEO_PASSWORD` (mock) et respectent le plafond de 5 $ par site et par
+  mois (1 $ pour une démo) ; les dépenses réelles apparaissent dans la vue
+  d'ensemble de l'admin (« Fournisseurs (DataForSEO) »).
 
-Vérification : projet admin → onglet **Cron Jobs** → « Run » → le log doit
-répondre `{"ok":true,…}`.
+Vérification : projet admin → onglet **Cron Jobs** → « Run » sur une entrée →
+le log doit répondre `{"ok":true,…}`. Pour tout exécuter d'un coup :
+`curl -H "Authorization: Bearer $CRON_SECRET" https://<admin>/api/jobs/tick`.
 
 ## Étape 7 — Plus tard, quand vous activerez chaque intégration
 
@@ -198,7 +234,7 @@ répondre `{"ok":true,…}`.
 | Images fal.ai | `FAL_API_KEY` ([fal.ai/dashboard](https://fal.ai/dashboard)) | admin + studio |
 | Photos téléversées (éditeur) | `BLOB_READ_WRITE_TOKEN` — projet **harmony-studio** → onglet Storage → Create Database → **Blob** (la variable est créée automatiquement) | studio |
 | E-mails (invitations client, contenus de la semaine, rappel mensuel) | `RESEND_API_KEY` ([resend.com](https://resend.com), gratuit jusqu'à 100 e-mails/jour) + `MAIL_FROM` (ex. `Harmony <bonjour@harmony-web.fr>`, domaine à vérifier chez Resend) — déjà listées à l'étape 3, à ne pas oublier. Sans clé : le lien d'invitation s'affiche dans l'admin, à envoyer soi-même, et les e-mails des jobs ne partent pas. | admin |
-| Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` | admin |
+| Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` (**obligatoire** : en production la route refuse tout événement non signé, et répond 503 tant que le secret n'est pas défini). Après le paiement, le praticien revient sur `https://www.harmony-web.fr/merci` — autre adresse : `WEB_BASE_URL` | admin |
 | Google (GSC + fiche) | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY` | studio + admin |
 | Avis Google réels (Places API New) | `GOOGLE_PLACES_API_KEY` (Google Cloud, « Places API (New) » activée) | studio + admin |
 | Fiche Google (section du studio) | `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` ([app.dataforseo.com](https://app.dataforseo.com) → API Access ; prépayé, ≈ 0,10 $ par relevé de visibilité, plafond 5 $ par site et par mois). Sans identifiants : données simulées. | studio + admin |
@@ -284,6 +320,74 @@ inscrit les cinq lignes du journal. Relancer `pnpm db:migrate` est toujours sans
 (no-op). Ne lancez jamais `drizzle-kit push` contre la base de production : elle
 a un journal, les évolutions passent par `pnpm db:generate` → relecture du SQL
 (gardes conservées) → commit → `pnpm db:migrate`.
+
+### Migrations `0012_crm_sales` et `0013_security_scale`
+
+Toutes deux sont additives et rejouables ; le code déployé fonctionne **avant
+comme après** (état vérifié en mode production contre une base sans elles).
+
+- **`0012_crm_sales`** — comptes des commerciaux : valeur `sales` de l'enum
+  `user_role`, table `crm_reps`, colonnes `crm_contacts.owner_id` et
+  `crm_activities.author_id`. Tant qu'elle n'est pas appliquée, le CRM et
+  l'onglet **Équipe** de l'admin affichent un message d'activation ; le reste
+  de l'admin et la connexion ne sont pas touchés.
+- **`0013_security_scale`** — table `rate_limits` (compteurs de tentatives),
+  table `impersonations` (journal des entrées de l'équipe dans l'espace d'un
+  client) et quinze index de performance. Tant qu'elle n'est pas appliquée : les
+  tentatives sont comptées en mémoire par instance (protection réelle mais
+  moins stricte), l'ouverture du studio d'un client fonctionne sans journal,
+  et les requêtes concernées restent simplement plus lentes.
+
+```sql
+-- après `pnpm db:migrate` : les deux dernières lignes du journal
+select id, created_at from drizzle.__drizzle_migrations order by id desc limit 2;
+-- 1795500000000 (0013_security_scale) et 1795400000000 (0012_crm_sales)
+select to_regclass('crm_reps'), to_regclass('rate_limits'), to_regclass('impersonations');
+-- trois noms, aucun NULL
+```
+
+## Sécurité : ce qui est en place, ce qui reste à votre main
+
+**En place dans le code** (rien à faire) :
+
+- connexions (studio et admin) limitées par compte et par adresse IP ; temps de
+  réponse identique qu'un compte existe ou non ;
+- cookies de session sous préfixe `__Host-` (un site client servi sous
+  `harmony-web.fr` ne peut pas en poser un à la place d'un utilisateur) ; les
+  sessions ouvertes avant ce changement sont reprises sans reconnexion ;
+- chaque page et chaque action relit le compte en base : compte supprimé,
+  désactivé ou mot de passe changé, la session cesse aussitôt ;
+- studio et admin ne peuvent plus être affichés dans le cadre d'une autre page ;
+- webhook de paiement : signature Stripe obligatoire en production ;
+- un praticien change son mot de passe dans **Mon compte** et le retrouve par
+  **Mot de passe oublié** (lien d'une heure, à usage unique) ;
+- l'ouverture du studio d'un client depuis l'admin est à usage unique et
+  inscrite au journal : `select created_at, admin_id, site_id from impersonations order by created_at desc;`
+
+**À vérifier de votre côté** (je n'ai pas accès aux variables Vercel) :
+
+1. **`AUTH_SECRET`** : au moins 32 caractères aléatoires (`openssl rand -base64 48`),
+   jamais la valeur d'exemple. S'il est trop court, les journaux des fonctions
+   affichent `[auth] AUTH_SECRET est trop court…` au premier appel. Le
+   remplacer déconnecte tout le monde et annule les invitations en cours
+   (à renvoyer depuis l'admin) : à faire à un moment calme.
+2. **`STRIPE_WEBHOOK_SECRET`** sur harmony-admin dès que Stripe est branché
+   (voir le tableau de l'étape 7).
+3. **`RESEND_API_KEY` et `MAIL_FROM` sur harmony-studio** pour que « Mot de
+   passe oublié » envoie son e-mail.
+4. **`CRON_SECRET`** : long et aléatoire lui aussi.
+5. Après la migration `0013`, nettoyage facultatif des connexions Google
+   simulées créées chez de vrais clients avant ce correctif (elles ne sont
+   plus affichées ni régénérées) :
+
+   ```sql
+   -- d'abord les chiffres simulés, puis la connexion factice elle-même (sites clients uniquement)
+   delete from search_query_stats where site_id in (
+     select c.site_id from google_connections c join sites s on s.id = c.site_id
+     where c.google_email = 'compte.google@exemple.fr' and s.type = 'client');
+   delete from google_connections where google_email = 'compte.google@exemple.fr'
+     and site_id in (select id from sites where type = 'client');
+   ```
 
 ## Dépannage rapide
 

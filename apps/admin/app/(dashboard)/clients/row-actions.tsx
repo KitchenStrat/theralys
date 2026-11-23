@@ -40,8 +40,11 @@ function EditSiteButton({ siteId }: { siteId: string }) {
         const popup = window.open("about:blank", "_blank");
         startTransition(async () => {
           const result = await getSiteEditorUrl(siteId);
-          if ("url" in result && popup) popup.location.href = result.url;
-          else popup?.close();
+          if ("url" in result && popup) {
+            // L'éditeur ouvert ne garde aucune prise sur l'onglet de l'admin
+            popup.opener = null;
+            popup.location.href = result.url;
+          } else popup?.close();
         });
       }}
       className={BUTTON_CLASS}

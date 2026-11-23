@@ -249,7 +249,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                 ) : null}
 
                 {erroredSites.length === 0 && lateCount === 0 ? (
-                  <p className="mt-3 text-sm text-ink-500">Aucune génération en échec, aucun article en retard. Le cron tourne toutes les heures.</p>
+                  <p className="mt-3 text-sm text-ink-500">Aucune génération en échec, aucun article en retard. Les tâches planifiées passent chaque jour.</p>
                 ) : null}
               </section>
 

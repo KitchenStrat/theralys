@@ -19,7 +19,7 @@ export type MailResult = { sent: boolean; error?: string };
  * `send` rend `{ sent: false, error }` pour un refus définitif (4xx autre que
  * 429 : adresse invalide, domaine non vérifié…) et LÈVE une erreur pour un
  * échec transitoire (429, 5xx, délai dépassé, réseau) : l'appelant peut
- * réessayer plus tard.
+ * réessayer plus tard, ou tout de suite avec `sendMailWithRetry`.
  */
 export interface MailProvider {
   mode: "resend" | "mock";
@@ -28,15 +28,55 @@ export interface MailProvider {
 
 /** Délai maximal d'un appel au fournisseur (ms). */
 export const MAIL_TIMEOUT_MS = 15_000;
+/** Relances par défaut de `sendMailWithRetry` sur échec transitoire. */
+export const MAIL_RETRIES = 2;
+/** Première attente avant une relance (ms), doublée à chaque relance quand le fournisseur n'en demande pas une. */
+export const MAIL_RETRY_BASE_MS = 1_000;
+/** Attente maximale avant une relance (ms), même si le fournisseur en demande davantage. */
+export const MAIL_RETRY_MAX_WAIT_MS = 10_000;
 
 /** Erreur transitoire du fournisseur (429, 5xx) : à réessayer, pas un refus. */
 export class MailTransientError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Attente demandée par le fournisseur (en-tête Retry-After), en ms ; null s'il n'en demande pas */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = "MailTransientError";
+  }
+}
+
+/** En-tête Retry-After en secondes → ms ; null s'il est absent ou donné sous une autre forme. */
+function retryAfterMs(response: Response): number | null {
+  const seconds = Number(response.headers.get("retry-after"));
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : null;
+}
+
+/**
+ * Envoi avec relances sur échec transitoire (toute erreur levée par `send` :
+ * 429, 5xx, délai dépassé, réseau) : `retries` relances au plus, après
+ * l'attente demandée par le fournisseur (Retry-After) ou, à défaut, une
+ * attente doublée à chaque relance — jamais plus de MAIL_RETRY_MAX_WAIT_MS.
+ * Un refus définitif est rendu tel quel, sans relance. L'erreur de la
+ * dernière tentative est levée si toutes échouent.
+ */
+export async function sendMailWithRetry(
+  provider: MailProvider,
+  message: MailMessage,
+  opts: { retries?: number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<MailResult> {
+  const retries = opts.retries ?? MAIL_RETRIES;
+  const wait = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await provider.send(message);
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      const asked = err instanceof MailTransientError ? err.retryAfterMs : null;
+      await wait(Math.min(MAIL_RETRY_MAX_WAIT_MS, asked ?? MAIL_RETRY_BASE_MS * 2 ** attempt));
+    }
   }
 }
 
@@ -75,7 +115,7 @@ export class ResendMailProvider implements MailProvider {
     });
     if (response.status === 429 || response.status >= 500) {
       const detail = (await response.text()).slice(0, 300);
-      throw new MailTransientError(`Resend ${response.status} (transitoire): ${detail}`, response.status);
+      throw new MailTransientError(`Resend ${response.status} (transitoire): ${detail}`, response.status, retryAfterMs(response));
     }
     if (!response.ok) {
       const detail = (await response.text()).slice(0, 300);

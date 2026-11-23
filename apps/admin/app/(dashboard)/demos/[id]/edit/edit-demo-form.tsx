@@ -83,8 +83,11 @@ export function EditDemoForm({ demo }: { demo: DemoData }) {
     setOpeningEditor(true);
     void getSiteEditorUrl(demo.siteId).then((result) => {
       setOpeningEditor(false);
-      if ("url" in result && popup) popup.location.href = result.url;
-      else popup?.close();
+      if ("url" in result && popup) {
+        // L'éditeur ouvert ne garde aucune prise sur l'onglet de l'admin
+        popup.opener = null;
+        popup.location.href = result.url;
+      } else popup?.close();
     });
   }
   const [motifs, setMotifs] = useState(demo.highlightedMotifs);

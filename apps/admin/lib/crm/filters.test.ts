@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { csvCell, exportCsv, EXPORT_HEADERS, type ExportRow } from "./export";
-import { EMPTY_FILTERS, activeCriteria, criterionLabel, filtersHref, filtersToParams, parisDayBounds, parseFilters, withoutCriterion } from "./filters";
+import { EMPTY_FILTERS, UNASSIGNED, activeCriteria, criterionLabel, filtersHref, filtersToParams, parisDayBounds, parseFilters, withoutCriterion } from "./filters";
 import { dateInputValue, dueDateFromInput, dueLabel } from "./format";
 import { TRASH_PREFIX, isTrashed, stageOf } from "./model";
 import { matchProfession } from "./professions";
@@ -17,6 +17,7 @@ describe("filtres de la liste, portés par l'adresse", () => {
       dept: "2a",
       tag: "salon",
       liste: "b6bed027-6656-4734-926f-501605751fdc",
+      commercial: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
       joindre: "email",
       action: "overdue",
       cree: "30",
@@ -37,6 +38,7 @@ describe("filtres de la liste, portés par l'adresse", () => {
       department: "2A",
       tag: "salon",
       importId: "b6bed027-6656-4734-926f-501605751fdc",
+      owner: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
       reach: "email",
       action: "overdue",
       created: "30",
@@ -72,6 +74,19 @@ describe("filtres de la liste, portés par l'adresse", () => {
     expect(criterionLabel(filters, "action")).toBe("Tâche en retard");
     expect(withoutCriterion(filters, "stages")).toMatchObject({ stages: [], q: "albi", page: 1 });
     expect(activeCriteria(EMPTY_FILTERS)).toEqual([]);
+  });
+
+  it("filtre « Commercial » : un compte, « non attribué », rien d'autre", () => {
+    const rep = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+    expect(parseFilters({ commercial: rep }).owner).toBe(rep);
+    expect(parseFilters({ commercial: "none" }).owner).toBe(UNASSIGNED);
+    expect(parseFilters({ commercial: "tous" }).owner).toBe("");
+    expect(parseFilters({ commercial: "' or 1=1 --" }).owner).toBe("");
+    expect(filtersHref({ ...EMPTY_FILTERS, view: "liste", owner: rep })).toBe(`/crm?vue=liste&commercial=${rep}`);
+    expect(activeCriteria({ ...EMPTY_FILTERS, owner: UNASSIGNED })).toEqual(["owner"]);
+    expect(criterionLabel({ ...EMPTY_FILTERS, owner: UNASSIGNED }, "owner")).toBe("Non attribué");
+    expect(criterionLabel({ ...EMPTY_FILTERS, owner: rep }, "owner", {}, { [rep]: "Julie Martin" })).toBe("Commercial : Julie Martin");
+    expect(withoutCriterion({ ...EMPTY_FILTERS, owner: rep }, "owner").owner).toBe("");
   });
 });
 

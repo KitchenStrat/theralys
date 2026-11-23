@@ -1,9 +1,10 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, lt, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   PLAN_COMPLETE,
@@ -99,7 +100,7 @@ async function refreshReviewsFromPlace(
 
 /** Création d'une démo : prospect + site puis job de génération asynchrone. */
 export async function createDemo(input: unknown): Promise<DemoFormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const parsed = demoFormSchema.safeParse(input);
   if (!parsed.success) {
     return { error: parsed.error.errors[0]?.message ?? "Formulaire invalide" };
@@ -146,7 +147,7 @@ export async function createDemo(input: unknown): Promise<DemoFormState> {
 
   // Démo créée depuis une fiche du CRM : la fiche est reliée à sa démo et avance dans le pipeline
   if (data.crmContactId) {
-    await linkContactToDemo(db, data.crmContactId, { prospectId: prospect!.id, siteId: site!.id, siteName: site!.name });
+    await linkContactToDemo(db, { id: admin.id, role: admin.role }, data.crmContactId, { prospectId: prospect!.id, siteId: site!.id, siteName: site!.name });
   }
 
   // Chaque démo alimente le pipeline commercial (reprise dans le CRM à sa prochaine ouverture)
@@ -318,7 +319,10 @@ export async function regenerateDemo(siteId: string): Promise<void> {
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site || site.type !== "demo") throw new Error("Démo introuvable");
 
-  await db
+  // Passage à « en génération » en une seule écriture conditionnelle : un double clic (ou deux onglets) ne lance
+  // qu'UNE génération — deux générations simultanées se marchent dessus (pages supprimées puis réinsérées deux
+  // fois, appels au modèle en double). Une génération restée bloquée plus de 15 minutes peut être relancée.
+  const started = await db
     .update(sites)
     .set({
       status: "generating",
@@ -328,9 +332,10 @@ export async function regenerateDemo(siteId: string): Promise<void> {
       demoExpiresAt: new Date(Date.now() + 30 * 86_400_000),
       updatedAt: new Date(),
     })
-    .where(eq(sites.id, siteId));
+    .where(and(eq(sites.id, siteId), eq(sites.type, "demo"), or(ne(sites.status, "generating"), lt(sites.updatedAt, new Date(Date.now() - 15 * 60_000)))))
+    .returning({ id: sites.id });
 
-  after(() => runGenerationJob(siteId));
+  if (started.length > 0) after(() => runGenerationJob(siteId));
 
   revalidatePath("/demos");
   revalidatePath(`/demos/${siteId}/edit`);
@@ -357,7 +362,7 @@ async function availableSlug(base: string): Promise<string> {
 export async function getSiteEditorUrl(
   siteId: string,
 ): Promise<{ url: string } | { error: string }> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const db = getDb();
   const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
   if (!site) return { error: "Site introuvable" };
@@ -365,12 +370,15 @@ export async function getSiteEditorUrl(
   const secret = process.env.AUTH_SECRET;
   if (!secret) return { error: "AUTH_SECRET manquante" };
 
+  // Lien à usage unique (`jti`), au nom de l'admin qui l'ouvre : l'entrée est inscrite au journal côté studio
   const token = await new SignJWT({
     purpose: "studio-impersonation",
     agency: true,
+    impersonator: admin.id,
     siteId: site.id,
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setJti(randomUUID())
     .setIssuedAt()
     .setExpirationTime(Math.floor(Date.now() / 1000) + 120)
     .sign(new TextEncoder().encode(secret));

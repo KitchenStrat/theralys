@@ -54,7 +54,8 @@ import type { PlanId } from "./plans";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "client"]);
+// Ordre de la base : « sales » (commerciaux du back-office) a été ajouté après coup (migration 0012)
+export const userRoleEnum = pgEnum("user_role", ["admin", "client", "sales"]);
 export const genderEnum = pgEnum("gender", ["feminin", "masculin"]);
 export const siteTypeEnum = pgEnum("site_type", ["demo", "client"]);
 export const siteStatusEnum = pgEnum("site_status", [
@@ -123,7 +124,10 @@ export const googleScanTriggerEnum = pgEnum("google_scan_trigger", ["manual", "s
 export const googleScanStatusEnum = pgEnum("google_scan_status", ["running", "done", "error"]);
 export const googleReviewTaskStatusEnum = pgEnum("google_review_task_status", ["pending", "done", "error"]);
 
-// ─── Utilisateurs (admin agence / client praticien) ──────────────────────────
+// ─── Utilisateurs (admin agence / client praticien / commercial) ─────────────
+// Aucune colonne ne s'ajoute ici sans précaution : drizzle les sélectionne toutes, et la connexion de l'admin
+// comme celle des clients échoueraient tant que la migration n'est pas appliquée. Ce qui est propre à un rôle
+// vit dans une table à part (`crm_reps` pour les commerciaux).
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -191,7 +195,11 @@ export const sites = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("sites_type_created_idx").on(t.type, t.createdAt)],
+  (t) => [
+    index("sites_type_created_idx").on(t.type, t.createdAt),
+    // Rapprochement des leads et du CRM avec les sites (jointures par fiche praticien)
+    index("sites_prospect_idx").on(t.prospectId),
+  ],
 );
 
 // ─── Pages (contenu structuré en sections typées, jamais de HTML libre) ──────
@@ -243,6 +251,8 @@ export const blogArticles = pgTable(
   (t) => [
     uniqueIndex("blog_articles_site_slug_idx").on(t.siteId, t.slug),
     index("blog_articles_site_status_idx").on(t.siteId, t.status, t.publishAt),
+    // Publication planifiée : tous les sites à la fois, par état et par date
+    index("blog_articles_status_publish_idx").on(t.status, t.publishAt),
   ],
 );
 
@@ -279,7 +289,11 @@ export const editorialCalendarEntries = pgTable(
     articleId: uuid("article_id").references(() => blogArticles.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("editorial_entries_site_date_idx").on(t.siteId, t.scheduledFor)],
+  (t) => [
+    index("editorial_entries_site_date_idx").on(t.siteId, t.scheduledFor),
+    // File de rédaction : les sujets à rédiger de tous les sites, par date
+    index("editorial_entries_status_date_idx").on(t.status, t.scheduledFor),
+  ],
 );
 
 // ─── Statistiques (tracking maison) ──────────────────────────────────────────
@@ -301,7 +315,11 @@ export const analyticsEvents = pgTable(
     origin: text("origin"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("analytics_site_type_time_idx").on(t.siteId, t.type, t.occurredAt)],
+  (t) => [
+    index("analytics_site_type_time_idx").on(t.siteId, t.type, t.occurredAt),
+    // Statistiques d'une période, tous types d'événements confondus (accueil du studio)
+    index("analytics_site_time_idx").on(t.siteId, t.occurredAt),
+  ],
 );
 
 // ─── Site internet du client (« site de référence ») ─────────────────────────
@@ -371,7 +389,11 @@ export const notificationLog = pgTable(
     sent: boolean("sent").notNull().default(false),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("notification_log_site_kind_period_idx").on(t.siteId, t.kind, t.periodKey)],
+  (t) => [
+    uniqueIndex("notification_log_site_kind_period_idx").on(t.siteId, t.kind, t.periodKey),
+    // Qui a déjà reçu l'e-mail de la période (rattrapage des jours suivants)
+    index("notification_log_kind_period_idx").on(t.kind, t.periodKey),
+  ],
 );
 
 // ─── Google (OAuth par client, Phase 2) ──────────────────────────────────────
@@ -418,7 +440,11 @@ export const googleReviews = pgTable(
     /** Analyse IA (sentiment, thèmes, réponse proposée), null tant que non analysé */
     analysis: jsonb("analysis").$type<GoogleReviewAnalysis>(),
   },
-  (t) => [index("google_reviews_site_idx").on(t.siteId)],
+  (t) => [
+    index("google_reviews_site_idx").on(t.siteId),
+    // Dernière synchronisation des avis d'un site (une par semaine)
+    index("google_reviews_site_synced_idx").on(t.siteId, t.syncedAt),
+  ],
 );
 
 export const searchQueryStats = pgTable(
@@ -487,17 +513,21 @@ export const domains = pgTable("domains", {
 
 // ─── Leads (Phase 4) ─────────────────────────────────────────────────────────
 
-export const leads = pgTable("leads", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  source: text("source").notNull().default("demo"), // demo | landing | referral…
-  status: leadStatusEnum("status").notNull().default("new"),
-  prospectId: uuid("prospect_id").references(() => prospects.id),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    source: text("source").notNull().default("demo"), // demo | landing | referral…
+    status: leadStatusEnum("status").notNull().default("new"),
+    prospectId: uuid("prospect_id").references(() => prospects.id),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("leads_prospect_idx").on(t.prospectId)],
+);
 
 // ─── CRM (prospection et cycle de vente, back-office agence) ─────────────────
 
@@ -556,6 +586,8 @@ export const crmContacts = pgTable(
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     prospectId: uuid("prospect_id").references(() => prospects.id, { onDelete: "set null" }),
     siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+    // Commercial à qui la fiche est attribuée (null : non attribuée, visible de l'admin seul) — migration 0012
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -566,6 +598,10 @@ export const crmContacts = pgTable(
     index("crm_contacts_next_action_idx").on(t.nextActionAt),
     index("crm_contacts_import_idx").on(t.importId),
     uniqueIndex("crm_contacts_lead_id_unique").on(t.leadId),
+    index("crm_contacts_owner_idx").on(t.ownerId, t.stage),
+    // Synchronisation des leads à chaque ouverture du CRM, et passage en « gagné » à la conversion
+    index("crm_contacts_prospect_idx").on(t.prospectId),
+    index("crm_contacts_site_idx").on(t.siteId),
   ],
 );
 
@@ -582,12 +618,68 @@ export const crmActivities = pgTable(
     // Tâches : échéance et date de réalisation
     dueAt: timestamp("due_at", { withTimezone: true }),
     doneAt: timestamp("done_at", { withTimezone: true }),
+    // Qui a inscrit la ligne, admin ou commercial (null : avant la migration 0012, ou compte supprimé)
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("crm_activities_contact_idx").on(t.contactId, t.createdAt),
     index("crm_activities_due_idx").on(t.dueAt),
+    index("crm_activities_author_idx").on(t.authorId, t.createdAt),
   ],
+);
+
+/**
+ * Compte d'un commercial du back-office (utilisateur de rôle `sales`) : ce
+ * qui lui est propre vit ici, pas dans `users`. Sans ligne ici, ou avec
+ * `disabledAt` renseigné, le compte n'ouvre rien.
+ */
+export const crmReps = pgTable("crm_reps", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Sécurité (limitation des tentatives, accès de l'équipe aux espaces clients) ───
+
+/**
+ * Compteurs de tentatives (connexion, création de mot de passe, demande de
+ * démo, téléversements, générations) : une ligne par clé, partagée entre
+ * toutes les instances. La clé est une empreinte — ni e-mail ni adresse IP en
+ * clair. Lue et écrite par `rate-limit.ts`, qui compte en mémoire tant que la
+ * table n'existe pas.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull().default(0),
+    resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("rate_limits_reset_idx").on(t.resetAt)],
+);
+
+/**
+ * Journal des entrées de l'équipe dans l'espace d'un client (« ouvrir le
+ * studio » depuis l'admin). Une ligne par lien utilisé : qui, dans quel site,
+ * quand. La clé est l'identifiant unique du lien (`jti`) — un lien ne sert
+ * qu'une fois, le rejouer ne trouve plus de place ici.
+ */
+export const impersonations = pgTable(
+  "impersonations",
+  {
+    jti: text("jti").primaryKey(),
+    /** L'admin qui a ouvert l'espace (null si son compte a été supprimé depuis). */
+    adminId: uuid("admin_id").references(() => users.id, { onDelete: "set null" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("impersonations_site_time_idx").on(t.siteId, t.createdAt)],
 );
 
 // ─── Réseaux sociaux (contenus prêts à poster, studio) ───────────────────────
@@ -621,7 +713,11 @@ export const socialPosts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("social_posts_site_date_idx").on(t.siteId, t.scheduledFor)],
+  (t) => [
+    index("social_posts_site_date_idx").on(t.siteId, t.scheduledFor),
+    // E-mail « vos contenus de la semaine » : sélection de tous les sites par état et par date
+    index("social_posts_status_date_idx").on(t.status, t.scheduledFor),
+  ],
 );
 
 /**
@@ -712,7 +808,11 @@ export const googleRankScans = pgTable(
     error: text("error"),
     scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("google_rank_scans_keyword_time_idx").on(t.keywordId, t.scannedAt)],
+  (t) => [
+    index("google_rank_scans_keyword_time_idx").on(t.keywordId, t.scannedAt),
+    // Quota mensuel de relevés et dernier relevé d'un site
+    index("google_rank_scans_site_time_idx").on(t.siteId, t.scannedAt),
+  ],
 );
 
 /** Posts Google prêts à publier (calendrier + demandes), même moteur que social_posts. */
@@ -741,7 +841,10 @@ export const googlePosts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("google_posts_site_date_idx").on(t.siteId, t.scheduledFor)],
+  (t) => [
+    index("google_posts_site_date_idx").on(t.siteId, t.scheduledFor),
+    index("google_posts_status_date_idx").on(t.status, t.scheduledFor),
+  ],
 );
 
 /**
@@ -763,7 +866,11 @@ export const googleUsage = pgTable(
     requests: integer("requests").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("google_usage_site_month_idx").on(t.siteId, t.month)],
+  (t) => [
+    index("google_usage_site_month_idx").on(t.siteId, t.month),
+    // Dernier passage d'une tâche pour un site (synchronisation des avis)
+    index("google_usage_kind_site_time_idx").on(t.kind, t.siteId, t.createdAt),
+  ],
 );
 
 // ─── Registre des appels API (pilotage des coûts) ───────────────────────────
@@ -1005,3 +1112,4 @@ export type CrmContact = typeof crmContacts.$inferSelect;
 export type NewCrmContact = typeof crmContacts.$inferInsert;
 export type CrmActivity = typeof crmActivities.$inferSelect;
 export type CrmImport = typeof crmImports.$inferSelect;
+export type CrmRep = typeof crmReps.$inferSelect;

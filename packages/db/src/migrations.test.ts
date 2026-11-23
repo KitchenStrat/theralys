@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, 0012_crm_sales et 0013_security_scale, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -65,6 +65,8 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0009_external_sites",
       "0010_billing_periods",
       "0011_crm",
+      "0012_crm_sales",
+      "0013_security_scale",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -310,5 +312,53 @@ describe("0011_crm : prospects, historique et listes importées", () => {
     expect(indexes).toHaveLength(8);
     for (const index of indexes) expect(index).toMatch(/^CREATE (UNIQUE )?INDEX IF NOT EXISTS /);
     expect(indexes.some((s) => s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS "crm_contacts_lead_id_unique" ON "crm_contacts"'))).toBe(true);
+  });
+});
+
+describe("0012_crm_sales : commerciaux, propriétaire d'un prospect, auteur d'une ligne d'historique", () => {
+  const statements = statementsOf("0012_crm_sales");
+
+  it("rôle « sales », table crm_reps, deux colonnes, trois clés étrangères, deux index — rien d'autre", () => {
+    expect(statements).toHaveLength(9);
+    expect(statements[0]).toBe(`ALTER TYPE "public"."user_role" ADD VALUE IF NOT EXISTS 'sales';`);
+    const tables = statements.filter((s) => s.startsWith("CREATE TABLE"));
+    expect(tables.map((s) => /CREATE TABLE IF NOT EXISTS "([^"]+)"/.exec(s)?.[1])).toEqual(["crm_reps"]);
+    for (const column of ['"user_id" uuid PRIMARY KEY NOT NULL', '"disabled_at" timestamp with time zone,', '"last_login_at" timestamp with time zone,', '"created_at" timestamp with time zone DEFAULT now() NOT NULL']) {
+      expect(tables[0], column).toContain(column);
+    }
+    expect(statements.filter((s) => /ADD COLUMN/.test(s))).toEqual([
+      'ALTER TABLE "crm_contacts" ADD COLUMN IF NOT EXISTS "owner_id" uuid;',
+      'ALTER TABLE "crm_activities" ADD COLUMN IF NOT EXISTS "author_id" uuid;',
+    ]);
+  });
+
+  it("la table users ne reçoit aucune colonne : la connexion de l'admin et des clients ne dépend pas de cette migration", () => {
+    // drizzle sélectionne toutes les colonnes de `users` : une colonne absente de la base ferait échouer chaque connexion
+    expect(statements.some((s) => /ALTER TABLE "users"/.test(s))).toBe(false);
+    // La valeur ajoutée à l'enum n'est utilisée nulle part dans la migration (PostgreSQL le refuserait dans la même transaction)
+    expect(statements.slice(1).some((s) => /'sales'/.test(s))).toBe(false);
+  });
+
+  it("colonnes facultatives : les fiches et l'historique existants restent valides, sans valeur à rétro-remplir", () => {
+    for (const statement of statements.filter((s) => /ADD COLUMN/.test(s))) {
+      expect(statement).not.toContain("NOT NULL");
+      expect(statement).not.toContain("DEFAULT");
+    }
+  });
+
+  it("clés étrangères gardées : un compte supprimé emporte sa ligne crm_reps, ses prospects et son historique restent", () => {
+    const constraints = statements.filter((s) => s.includes("ADD CONSTRAINT"));
+    expect(constraints).toHaveLength(3);
+    for (const constraint of constraints) expect(constraint).toMatch(/^DO \$\$ BEGIN ALTER TABLE .+EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;$/s);
+    expect(constraints.some((s) => /"crm_reps_user_id_users_id_fk" FOREIGN KEY \("user_id"\) REFERENCES "public"\."users"\("id"\) ON DELETE cascade/.test(s))).toBe(true);
+    expect(constraints.some((s) => /"crm_contacts_owner_id_users_id_fk" FOREIGN KEY \("owner_id"\) REFERENCES "public"\."users"\("id"\) ON DELETE set null/.test(s))).toBe(true);
+    expect(constraints.some((s) => /"crm_activities_author_id_users_id_fk" FOREIGN KEY \("author_id"\) REFERENCES "public"\."users"\("id"\) ON DELETE set null/.test(s))).toBe(true);
+  });
+
+  it("index gardés : les fiches d'un commercial par étape, son activité par date", () => {
+    expect(statements.filter((s) => /^CREATE (UNIQUE )?INDEX/.test(s))).toEqual([
+      'CREATE INDEX IF NOT EXISTS "crm_contacts_owner_idx" ON "crm_contacts" USING btree ("owner_id","stage");',
+      'CREATE INDEX IF NOT EXISTS "crm_activities_author_idx" ON "crm_activities" USING btree ("author_id","created_at");',
+    ]);
   });
 });

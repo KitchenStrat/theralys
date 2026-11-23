@@ -22,6 +22,8 @@ export function OpenStudioButton({ siteId }: { siteId: string }) {
           setError(false);
           const result = await getImpersonationUrl(siteId);
           if ("url" in result && popup) {
+            // L'espace du client ne garde aucune prise sur l'onglet de l'admin
+            popup.opener = null;
             popup.location.href = result.url;
           } else {
             popup?.close();

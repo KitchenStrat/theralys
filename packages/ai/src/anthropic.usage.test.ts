@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { setApiUsageSink, setApiUsageSinkFactory, withApiUsage, type ResolvedApiUsageEvent } from "@theralys/shared/usage-runtime";
-import { completeStructured } from "./anthropic";
+import { ANTHROPIC_CALL_TIMEOUT_MS, ANTHROPIC_CONNECT_TIMEOUT_MS, ANTHROPIC_MAX_RETRIES, completeStructured } from "./anthropic";
 
 // ─── SDK Anthropic simulé ────────────────────────────────────────────────────
 // `completeStructured` crée son client (`new Anthropic({ apiKey })`) puis appelle
@@ -12,6 +12,8 @@ type Scripted = { message?: Record<string, unknown>; error?: unknown; delayMs?: 
 const sdk = vi.hoisted(() => ({
   script: [] as Scripted[],
   requests: [] as Record<string, unknown>[],
+  /** Options de requête passées au SDK (second argument de `stream`) */
+  options: [] as ({ signal?: AbortSignal } | undefined)[],
   clients: [] as Record<string, unknown>[],
 }));
 
@@ -19,8 +21,9 @@ vi.mock("@anthropic-ai/sdk", () => {
   class FakeAnthropic {
     readonly beta = {
       messages: {
-        stream: (params: Record<string, unknown>) => {
+        stream: (params: Record<string, unknown>, options?: { signal?: AbortSignal }) => {
           sdk.requests.push(params);
+          sdk.options.push(options);
           const next = sdk.script.shift();
           return {
             finalMessage: async () => {
@@ -80,6 +83,7 @@ function run(opts: Partial<Parameters<typeof completeStructured>[0]> = {}) {
 beforeEach(() => {
   sdk.script.length = 0;
   sdk.requests.length = 0;
+  sdk.options.length = 0;
   sdk.clients.length = 0;
   // Le modèle et la profondeur de réflexion ne dépendent pas de l'environnement de la machine
   vi.stubEnv("ANTHROPIC_MODEL", undefined);
@@ -102,7 +106,7 @@ describe("completeStructured — registre des appels API", () => {
     expect(result).toEqual(VALID);
     expect(sdk.requests).toHaveLength(1);
     expect(sdk.requests[0]).toMatchObject({ model: "claude-opus-5", output_config: { effort: "high" }, fallbacks: [{ model: "claude-opus-4-8" }] });
-    expect(sdk.clients).toEqual([{ apiKey: API_KEY }]);
+    expect(sdk.clients).toEqual([{ apiKey: API_KEY, timeout: ANTHROPIC_CONNECT_TIMEOUT_MS, maxRetries: ANTHROPIC_MAX_RETRIES }]);
     expect(events).toHaveLength(1);
     const { createdAt, durationMs, ...event } = events[0]!;
     expect(event).toEqual({
@@ -378,5 +382,35 @@ describe("completeStructured — registre des appels API", () => {
     await expect(run()).resolves.toEqual(VALID);
     await expect(run()).rejects.toBe(failure);
     expect(warn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("completeStructured — délais", () => {
+  it("client : délai d'attente et relances explicites ; chaque appel porte un signal qui borne le flux entier", async () => {
+    sdk.script.push({ message: message("pas du json") }, { message: message(json(VALID)) });
+    await run();
+    // Valeurs en millisecondes (unité du SDK TypeScript) ; le délai du client ne couvre que le début de la réponse
+    expect(sdk.clients).toEqual([{ apiKey: API_KEY, timeout: 60_000, maxRetries: 2 }]);
+    expect(ANTHROPIC_CALL_TIMEOUT_MS).toBe(300_000);
+    // Une tentative, un signal : la relance pour JSON invalide repart avec un délai entier
+    expect(sdk.options).toHaveLength(2);
+    for (const options of sdk.options) {
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      expect(options?.signal?.aborted).toBe(false);
+    }
+    expect(sdk.options[0]!.signal).not.toBe(sdk.options[1]!.signal);
+  });
+
+  it("`timeoutMs` : délai propre à un appelant ; le flux qui le dépasse est abandonné et l'échec inscrit au registre", async () => {
+    const events = capture();
+    sdk.script.push({ delayMs: 40, message: message(json(VALID)) });
+    const pending = run({ timeoutMs: 10 });
+    // Le SDK simulé ne lit pas le signal : on vérifie qu'il est bien armé pour 10 ms
+    const signal = sdk.options[0]!.signal!;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error).name).toBe("TimeoutError");
+    await pending;
+    expect(events).toHaveLength(1);
   });
 });

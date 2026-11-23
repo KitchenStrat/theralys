@@ -86,14 +86,14 @@ import { GOOGLE_REVIEWS_BATCH, createGoogleReviewsAnalyzer, fallbackReviewAnalys
 import { DataForSeoError, createLocalSearchProvider, type GoogleReviewItem } from "@theralys/providers/dataforseo";
 import { createGooglePlacesProvider, type GooglePlacesProvider } from "@theralys/providers/google";
 import { loadGoogleBrief, publicSiteUrl } from "./google-brief";
-import type { TickOptions, TickReport } from "./ticks";
+import { pastDeadline, proportionalBatch, servedSite, tickOk, type TickOptions, type TickReport } from "./tick-utils";
 import { withApiUsage } from "@theralys/shared/usage-runtime";
 
 /** Plafond mensuel d'une démo (audit + avis + quelques relevés), USD. */
 export const GOOGLE_DEMO_BUDGET_USD = 1;
-/** Sites synchronisés par passage du tick `syncGoogleProfiles`. */
+/** Sites synchronisés au moins par passage du tick `syncGoogleProfiles` ; au-delà, le lot suit le parc (`proportionalBatch`). */
 export const GOOGLE_SYNC_BATCH = 25;
-/** Mots-clés relevés par passage du tick `runScheduledGoogleScans` (≈ 49 requêtes et jusqu'à une minute chacun). */
+/** Mots-clés relevés au moins par passage du tick `runScheduledGoogleScans` (≈ 49 requêtes et jusqu'à une minute chacun) ; au-delà, le lot suit le parc. */
 export const GOOGLE_SCAN_BATCH = 8;
 /** Âge d'une tâche d'avis encore en attente au-delà duquel elle est abandonnée (jours). */
 export const GOOGLE_REVIEW_TASK_MAX_AGE_DAYS = 3;
@@ -117,7 +117,8 @@ const ERROR_MESSAGE_MAX = 300;
  * `meta_media` : recherches de visuels d'annonces chez le fournisseur
  * (`requests` = recherches, coût réel ; plafond mensuel par site, hors
  * budget Google) ; `meta_media_pending` : réservation en cours, soldée en
- * `meta_media` à la fin du lot.
+ * `meta_media` à la fin du lot. `places_reviews` : synchronisation Places des
+ * avis d'un site (coût 0, 0 requête : repère de fraîcheur de `syncGoogleReviews`).
  */
 export type GoogleUsageKind =
   | "business_info"
@@ -129,7 +130,8 @@ export type GoogleUsageKind =
   | "meta_analysis"
   | "meta_regen"
   | "meta_media"
-  | "meta_media_pending";
+  | "meta_media_pending"
+  | "places_reviews";
 
 export type GoogleBudget = {
   month: string;
@@ -282,10 +284,8 @@ export function gridPointFrom(
   };
 }
 
-/** Le tick a dépassé son échéance : plus aucun site / mot-clé / tâche n'est entamé. */
-export function pastDeadline(opts: TickOptions, nowMs = Date.now()): boolean {
-  return opts.deadline !== undefined && nowMs > opts.deadline.getTime();
-}
+// Le tick a dépassé son échéance : plus aucun site / mot-clé / tâche n'est entamé (défini avec les outils communs des tâches)
+export { pastDeadline };
 
 // ─── Aides communes ──────────────────────────────────────────────────────────
 
@@ -1026,15 +1026,17 @@ async function generateGoogleReviewReplyAttributed(
   }
 }
 
-// ─── Ticks (appelés par runAllTicks, quotidien 6 h UTC) ──────────────────────
+// ─── Ticks (appelés par runTicks, groupes « google » et « google-scans » du cron) ──
 
 /**
- * Sites éligibles (démo ou formule Scale, fiche reliée, non archivés) dont la
- * dernière tentative et le dernier audit facturé datent de plus de 30 jours
- * (`selectDueSites`) : syncGoogleProfile. Lots de GOOGLE_SYNC_BATCH, jamais
- * tentés d'abord. Sans fournisseur réel (DataForSEO ou Places), seules les
- * démos sont synchronisées (mock) : les sites clients n'entament pas le lot.
- * S'arrête avant le site suivant une fois `opts.deadline` dépassée.
+ * Sites éligibles (démo en cours ou formule Scale, fiche reliée, ni archivés
+ * ni démo au lien expiré) dont la dernière tentative et le dernier audit
+ * facturé datent de plus de 30 jours (`selectDueSites`) : syncGoogleProfile.
+ * Lot proportionnel au parc (un trentième des sites éligibles par passage,
+ * GOOGLE_SYNC_BATCH au moins), jamais tentés d'abord. Sans fournisseur réel
+ * (DataForSEO ou Places), seules les démos sont synchronisées (mock) : les
+ * sites clients n'entament pas le lot. S'arrête avant le site suivant une
+ * fois `opts.deadline` dépassée.
  */
 export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {}): Promise<TickReport> {
   const db = getDb();
@@ -1062,7 +1064,8 @@ export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {
         isNotNull(prospects.googlePlaceId),
         // Fiches factices (démos créées sans clé Places) ignorées dès qu'un fournisseur réel existe
         hasRealGoogleProvider() ? notLike(prospects.googlePlaceId, "mock-%") : undefined,
-        ne(sites.status, "archived"),
+        // Ni site archivé, ni démo dont le lien a expiré : plus personne ne les regarde
+        servedSite(now),
         googleAccessCondition(),
         clientsAllowed ? undefined : eq(sites.type, "demo"),
       ),
@@ -1071,7 +1074,7 @@ export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {
   const due = selectDueSites(
     rows.map((r) => ({ site: r.site, attemptAt: dateOrNull(r.attemptAt), billedAt: dateOrNull(r.billedAt) })),
     now,
-    GOOGLE_SYNC_BATCH,
+    proportionalBatch(rows.length, GOOGLE_PROFILE_SYNC_INTERVAL_DAYS, GOOGLE_SYNC_BATCH),
   );
 
   let processed = 0;
@@ -1087,7 +1090,7 @@ export async function syncGoogleProfiles(now = new Date(), opts: TickOptions = {
       await recordGoogleUsage(db, site.id, "sync_attempt", 0, 0, now).catch(() => undefined);
     }
   }
-  return { task: "sync-google-profiles", processed };
+  return tickOk("sync-google-profiles", processed);
 }
 
 /**
@@ -1175,14 +1178,16 @@ export async function collectGoogleReviewTasks(now = new Date(), opts: TickOptio
       await retryLater(task, message);
     }
   }
-  return { task: "collect-google-reviews", processed };
+  return tickOk("collect-google-reviews", processed);
 }
 
 /**
  * Mots-clés actifs (sites éligibles, fiche reliée avec position connue, au
  * plus GOOGLE_KEYWORDS_MAX par site) dont la dernière tentative de relevé —
  * tous statuts — date de plus de GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS
- * (`selectDueKeywords`) : runGoogleScan(scheduled). Lots de GOOGLE_SCAN_BATCH,
+ * (`selectDueKeywords`) : runGoogleScan(scheduled). Les sites archivés et les
+ * démos au lien expiré ne sont plus relevés. Lot proportionnel au parc (un
+ * quatorzième des mots-clés suivis par passage, GOOGLE_SCAN_BATCH au moins),
  * jamais relevés d'abord. S'arrête avant le mot-clé suivant une fois
  * `opts.deadline` dépassée.
  */
@@ -1204,7 +1209,7 @@ export async function runScheduledGoogleScans(now = new Date(), opts: TickOption
         eq(googleKeywords.active, true),
         isNotNull(prospects.googlePlaceId),
         hasRealGoogleProvider() ? notLike(prospects.googlePlaceId, "mock-%") : undefined,
-        ne(sites.status, "archived"),
+        servedSite(now),
         googleAccessCondition(),
         // Position de la fiche connue : le dernier audit du site porte un instantané avec `location`
         sql`exists (
@@ -1215,10 +1220,14 @@ export async function runScheduledGoogleScans(now = new Date(), opts: TickOption
         )`,
       ),
     );
+  // Mots-clés suivis : au plus GOOGLE_KEYWORDS_MAX par site, comme `selectDueKeywords` les retient
+  const perSite = new Map<string, number>();
+  for (const row of rows) perSite.set(row.site.id, Math.min(GOOGLE_KEYWORDS_MAX, (perSite.get(row.site.id) ?? 0) + 1));
+  const tracked = [...perSite.values()].reduce((sum, count) => sum + count, 0);
   const due = selectDueKeywords(
     rows.map((r) => ({ keyword: r.keyword, site: r.site, siteId: r.site.id, position: r.keyword.position, attemptAt: dateOrNull(r.attemptAt) })),
     now,
-    GOOGLE_SCAN_BATCH,
+    proportionalBatch(tracked, GOOGLE_SCHEDULED_SCAN_INTERVAL_DAYS, GOOGLE_SCAN_BATCH),
   );
 
   let processed = 0;
@@ -1232,5 +1241,5 @@ export async function runScheduledGoogleScans(now = new Date(), opts: TickOption
       console.error(`[google-scan] ${site.slug} « ${keyword.keyword} » :`, errorMessage(err));
     }
   }
-  return { task: "scheduled-google-scans", processed };
+  return tickOk("scheduled-google-scans", processed);
 }

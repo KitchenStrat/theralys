@@ -51,6 +51,9 @@ const FAL_MODELS = {
   high: "fal-ai/flux-pro/v1.1-ultra",
 } as const;
 
+/** Délai maximal d'une génération d'image (ms) : FLUX répond en quelques secondes, une requête pendue n'immobilise pas l'appelant. */
+export const FAL_TIMEOUT_MS = 60_000;
+
 /** Ratios acceptés par FLUX Pro Ultra (pas de dimensions libres sur ce modèle). */
 const ULTRA_RATIOS = ["21:9", "16:9", "4:3", "3:2", "1:1", "2:3", "3:4", "9:16", "9:21"] as const;
 
@@ -99,6 +102,7 @@ export class FalImageProvider implements ImageProvider {
             num_images: 1,
             enable_safety_checker: true,
           }),
+          signal: AbortSignal.timeout(FAL_TIMEOUT_MS),
         });
         if (!response.ok) {
           throw new Error(`fal.ai ${response.status}: ${(await response.text()).slice(0, 300)}`);

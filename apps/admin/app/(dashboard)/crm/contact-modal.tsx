@@ -8,6 +8,7 @@ import { Button, FieldHint, Input, Label, Modal, Select } from "@theralys/ui";
 import { euros } from "@/lib/crm/format";
 import { CRM_STAGES, STAGE_META, contactMonthlyValue, isPlanInterest, type CrmStage } from "@/lib/crm/model";
 import { formatPhone } from "@/lib/crm/normalize";
+import type { RepOption } from "@/lib/crm/team";
 import { saveContact } from "./actions";
 
 export type ContactFormValues = {
@@ -29,12 +30,18 @@ export type ContactFormValues = {
   plan: string;
   billingPeriod: string;
   doNotContact: boolean;
+  /** À la création par l'admin : commercial à qui attribuer la fiche (vide : non attribuée) */
+  ownerId?: string;
 };
 
-const EMPTY: ContactFormValues = { firstName: "", lastName: "", company: "", profession: "", email: "", phone: "", website: "", address: "", postalCode: "", city: "", notes: "", tags: "", source: "manual", stage: "new", plan: "", billingPeriod: "", doNotContact: false };
+const EMPTY: ContactFormValues = { firstName: "", lastName: "", company: "", profession: "", email: "", phone: "", website: "", address: "", postalCode: "", city: "", notes: "", tags: "", source: "manual", stage: "new", plan: "", billingPeriod: "", doNotContact: false, ownerId: "" };
 
-/** Création ou modification d'une fiche. À la création, un doublon probable est signalé avant d'enregistrer. */
-export function ContactModal({ open, onClose, initial, defaultStage }: { open: boolean; onClose: () => void; initial?: ContactFormValues; defaultStage?: CrmStage }) {
+/**
+ * Création ou modification d'une fiche. À la création, un doublon probable
+ * est signalé avant d'enregistrer. `reps` (admin) : de quoi attribuer la
+ * fiche dès sa création ; un commercial, lui, crée toujours pour lui-même.
+ */
+export function ContactModal({ open, onClose, initial, defaultStage, reps }: { open: boolean; onClose: () => void; initial?: ContactFormValues; defaultStage?: CrmStage; reps?: RepOption[] }) {
   const router = useRouter();
   const editing = Boolean(initial?.id);
   const [values, setValues] = useState<ContactFormValues>(initial ?? EMPTY);
@@ -117,6 +124,21 @@ export function ContactModal({ open, onClose, initial, defaultStage }: { open: b
               </Select>
             </div>
           )}
+          {!editing && reps && reps.some((rep) => !rep.disabled) ? (
+            <div className="sm:col-span-3">
+              <Label htmlFor="crm-contact-owner">Commercial</Label>
+              <Select id="crm-contact-owner" value={values.ownerId ?? ""} onChange={(event) => set("ownerId", event.target.value)}>
+                <option value="">Non attribué</option>
+                {reps
+                  .filter((rep) => !rep.disabled)
+                  .map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          ) : null}
           <div>
             <Label htmlFor="crm-contact-plan">Formule envisagée</Label>
             <Select

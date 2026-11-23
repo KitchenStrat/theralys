@@ -25,10 +25,19 @@ const IMAGE = 3_600_000;
 
 const IMAGE_SOURCE = /^(https:\/\/[^\s<>"']+|\/[^\s<>"']*|data:image\/(jpeg|png|webp|avif);base64,[A-Za-z0-9+/=]+)$/;
 
-const short = z.string().max(SHORT);
-const text = z.string().max(TEXT);
-const body = z.string().max(BODY);
-const icon = z.string().max(40);
+/**
+ * Champ texte. Un nombre ou un booléen y est accepté et écrit en texte : un
+ * contenu généré peut porter « 300 » sans guillemets là où l'on attend un
+ * texte, et l'éditeur le renvoie tel quel — ce n'est pas une raison de refuser
+ * l'enregistrement de la page. Un objet ou un tableau, eux, sont refusés.
+ */
+const textField = (max: number) =>
+  z.preprocess((value) => (typeof value === "number" || typeof value === "boolean" ? String(value) : value), z.string().max(max));
+
+const short = textField(SHORT);
+const text = textField(TEXT);
+const body = textField(BODY);
+const icon = textField(40);
 
 /** Image : vide (retirée), bien formée, ou identique à une image déjà enregistrée dans la section. */
 function imageField(known: ReadonlySet<string>) {
@@ -40,7 +49,7 @@ function imageField(known: ReadonlySet<string>) {
 
 const card = z.object({ icon: icon.optional(), title: short, text: text });
 
-function schemaFor(type: Section["type"], knownImages: ReadonlySet<string>) {
+function schemaFor(type: Section["type"], knownImages: ReadonlySet<string>, knownSlugs: ReadonlySet<string>) {
   const image = imageField(knownImages);
   switch (type) {
     case "hero":
@@ -64,7 +73,11 @@ function schemaFor(type: Section["type"], knownImages: ReadonlySet<string>) {
         items: z
           .array(
             z.object({
-              slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(120),
+              // Adresse de la page de spécialité : celle déjà enregistrée, ou un identifiant d'URL bien formé
+              slug: z
+                .string()
+                .max(120)
+                .refine((value) => knownSlugs.has(value) || /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value), "Adresse de page invalide"),
               title: short,
               excerpt: text,
               imageUrl: image.optional(),
@@ -106,8 +119,8 @@ function schemaFor(type: Section["type"], knownImages: ReadonlySet<string>) {
       return z.object({
         title: short,
         address: short,
-        phone: z.string().max(60),
-        email: z.string().max(200),
+        phone: textField(60),
+        email: textField(200),
         hours: z.array(z.object({ label: short, value: short })).max(20),
         note: text,
         infoCards: z.array(card).max(20),
@@ -148,7 +161,8 @@ function withoutNulls(value: unknown): unknown {
   return value;
 }
 
-export type SectionMerge = { ok: true; section: Section } | { ok: false };
+/** `field` : chemin du premier champ refusé (« items.2.title »), pour le journal — jamais sa valeur. */
+export type SectionMerge = { ok: true; section: Section } | { ok: false; field?: string };
 
 /**
  * Fusionne ce que l'éditeur envoie dans la section enregistrée.
@@ -162,8 +176,9 @@ export function mergeSectionInput(current: Section, incoming: unknown): SectionM
   const raw = incoming as Record<string, unknown>;
   if (raw.type !== current.type) return { ok: true, section: current };
 
-  const parsed = schemaFor(current.type, knownImagesOf(current)).partial().safeParse(withoutNulls(raw));
-  if (!parsed.success) return { ok: false };
+  const knownSlugs = new Set(current.type === "specialties" ? current.items.map((item) => item.slug) : []);
+  const parsed = schemaFor(current.type, knownImagesOf(current), knownSlugs).partial().safeParse(withoutNulls(raw));
+  if (!parsed.success) return { ok: false, field: parsed.error.issues[0]?.path.join(".") };
 
   const next = { ...current, ...parsed.data } as Section;
   if (raw.hidden === true) next.hidden = true;

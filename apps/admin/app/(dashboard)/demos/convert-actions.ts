@@ -29,7 +29,8 @@ const convertSchema = z.object({
   /** Formules souscrites : Site, Scale, ou les deux */
   formulas: z.array(z.enum(FORMULAS)).min(1, "Choisissez au moins une formule"),
   period: z.enum(BILLING_PERIODS),
-  clientEmail: z.string().trim().email("Email invalide"),
+  // En minuscules : une adresse ne donne qu'un compte, quelle que soit la casse saisie
+  clientEmail: z.string().trim().toLowerCase().email("Email invalide"),
 });
 
 export type ConversionResult =
@@ -68,7 +69,7 @@ async function periodStorable(period: BillingPeriod): Promise<boolean> {
  * studio.
  */
 export async function convertDemoToClient(input: unknown): Promise<ConversionResult> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const parsed = convertSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.errors[0]?.message ?? "Formulaire invalide" };
   const { siteId, period, clientEmail } = parsed.data;
@@ -84,70 +85,68 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
   }
 
   const db = getDb();
-  const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) });
-  if (!site || site.type !== "demo") return { error: "Démo introuvable" };
-  if (await db.query.users.findFirst({ where: eq(users.email, clientEmail) })) {
-    return { error: "Un compte existe déjà avec cet email" };
-  }
-  const prospect = site.prospectId
-    ? await db.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
-    : null;
-
   const billing = createBillingProvider();
-  const subscription = await billing.startSubscription({
-    siteId,
-    plan,
-    period,
-    customerEmail: clientEmail,
-    customerName: prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name,
-  });
 
-  // Compte créé SANS mot de passe utilisable : le client choisit le sien via
-  // le lien d'invitation (sentinelle « invite: » — verifyPassword échoue toujours).
-  const [clientUser] = await db
-    .insert(users)
-    .values({
-      email: clientEmail,
-      passwordHash: `invite:${randomBytes(16).toString("hex")}`,
-      role: "client",
-      name: prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name,
-      siteId,
-    })
-    .returning();
+  // Tout ou rien, et une seule conversion à la fois pour une démo : le verrou (tenu jusqu'à la fin de la
+  // transaction) fait attendre un second clic, qui trouve ensuite la démo déjà convertie. Si une écriture
+  // échoue, rien n'est gardé — pas de compte créé sans abonnement, pas de démo bloquée par un compte orphelin.
+  const converted = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`convert:${siteId}`}))`);
+    const site = await tx.query.sites.findFirst({ where: eq(sites.id, siteId) });
+    if (!site || site.type !== "demo") return { ok: false as const, error: "Démo introuvable" };
+    const [taken] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${clientEmail}`).limit(1);
+    if (taken) return { ok: false as const, error: "Un compte existe déjà avec cet email" };
+    const prospect = site.prospectId
+      ? await tx.query.prospects.findFirst({ where: eq(prospects.id, site.prospectId) })
+      : null;
+    const clientName = prospect ? `${prospect.firstName} ${prospect.lastName}` : site.name;
 
-  await db
-    .insert(subscriptions)
-    .values({
-      siteId,
+    const subscription = await billing.startSubscription({ siteId, plan, period, customerEmail: clientEmail, customerName: clientName });
+
+    // Compte créé SANS mot de passe utilisable : le client choisit le sien via
+    // le lien d'invitation (sentinelle « invite: » — verifyPassword échoue toujours).
+    const [clientUser] = await tx
+      .insert(users)
+      .values({
+        email: clientEmail,
+        passwordHash: `invite:${randomBytes(16).toString("hex")}`,
+        role: "client",
+        name: clientName,
+        siteId,
+      })
+      .returning();
+
+    const billingState = {
       plan,
       billingPeriod: period,
       status: subscription.status,
       stripeCustomerId: subscription.stripeCustomerId,
       stripeSubscriptionId: subscription.stripeSubscriptionId,
       currentPeriodEnd: subscription.currentPeriodEnd,
-    })
-    .onConflictDoUpdate({
-      target: subscriptions.siteId,
-      set: {
-        plan,
-        billingPeriod: period,
-        status: subscription.status,
-        stripeCustomerId: subscription.stripeCustomerId,
-        stripeSubscriptionId: subscription.stripeSubscriptionId,
-        currentPeriodEnd: subscription.currentPeriodEnd,
-      },
-    });
+    };
+    await tx
+      .insert(subscriptions)
+      .values({ siteId, ...billingState })
+      .onConflictDoUpdate({ target: subscriptions.siteId, set: billingState });
 
-  await db
-    .update(sites)
-    .set({
-      type: "client",
-      status: "published",
-      plan,
-      demoExpiresAt: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(sites.id, siteId));
+    await tx
+      .update(sites)
+      .set({
+        type: "client",
+        status: "published",
+        plan,
+        demoExpiresAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(sites.id, siteId));
+
+    // Pipeline commercial : le lead de ce prospect est gagné
+    if (site.prospectId) await tx.update(leads).set({ status: "won" }).where(eq(leads.prospectId, site.prospectId));
+
+    return { ok: true as const, site, clientUser: clientUser!, subscription };
+  });
+  if (!converted.ok) return { error: converted.error };
+  const { site, clientUser, subscription } = converted;
 
   // Jamais de données simulées chez un client : les exemples gardés pendant la démo sur une veille de démonstration sont retirés
   try {
@@ -157,16 +156,20 @@ export async function convertDemoToClient(input: unknown): Promise<ConversionRes
     console.error("[conversion] purge de la bibliothèque Meta Ads en échec", { siteId, err });
   }
 
-  // Pipeline commercial : le lead de ce prospect est gagné
+  // Fiche du CRM : passée en « gagné » (hors transaction : un incident ici ne défait pas la conversion)
   if (site.prospectId) {
-    await db.update(leads).set({ status: "won" }).where(eq(leads.prospectId, site.prospectId));
-    await markProspectWon(db, site.prospectId, siteId);
+    try {
+      await markProspectWon(db, { id: admin.id, role: admin.role }, site.prospectId, siteId);
+    } catch (err) {
+      console.error("[conversion] fiche CRM non mise à jour", { siteId, erreur: err instanceof Error ? err.name : "erreur" });
+    }
   }
 
   const invitation = await createClientInvitation({
-    userId: clientUser!.id,
+    userId: clientUser.id,
     email: clientEmail,
-    name: clientUser!.name,
+    name: clientUser.name,
+    passwordHash: clientUser.passwordHash,
   });
 
   // Pas de revalidatePath ici : la page d'édition de la démo n'existe plus

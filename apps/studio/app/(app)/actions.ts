@@ -34,7 +34,7 @@ import {
   type GenerationInput,
 } from "@theralys/ai";
 import { createGooglePlacesProvider, type GooglePlaceResult } from "@theralys/providers/google";
-import { ensureEditorialCalendars, syncGoogleData } from "@theralys/jobs";
+import { ensureEditorialCalendarForSite, syncGoogleDataForSite } from "@theralys/jobs";
 import {
   signPreviewToken,
   THEME_PRESETS,
@@ -246,7 +246,8 @@ export async function connectGoogle(): Promise<{ error?: string } | void> {
       scopes: ["webmasters.readonly", "business.manage"],
     });
   }
-  await syncGoogleData();
+  // Ce site seulement : l'action d'un praticien ne réécrit jamais les statistiques des autres
+  await syncGoogleDataForSite(session.siteId);
   await completeOnboardingTask("connect_google");
   revalidatePath("/");
   // La carte « Visibilité Google » vit en tête de l'onglet Visibilité de Fiche Google
@@ -514,7 +515,10 @@ export async function regenerateMotifPage(input: unknown): Promise<{ error?: str
     // Blog : les sujets pas encore rédigés de ce motif sont re-planifiés avec
     // le nouveau titre (calendrier éditorial du back office)
     await dropPlannedEntries(site.id, slug);
-    await ensureEditorialCalendars();
+    // Calendrier de CE site seulement (le passage planifié s'occupe des autres) ; un incident ici ne fait pas
+    // dire « la régénération a échoué » alors que la page est régénérée
+    const calendar = await ensureEditorialCalendarForSite(site.id);
+    if (calendar.status === "error") console.warn("[motif] calendrier éditorial non mis à jour :", calendar.error ?? "erreur");
   } catch (err) {
     console.error("[motif] régénération impossible :", err);
     return { error: "La régénération a échoué — réessayez dans un instant." };
@@ -662,7 +666,11 @@ export async function savePageSections(input: unknown): Promise<{ error?: string
   const merged: Section[] = [];
   for (const [i, section] of current.entries()) {
     const result = mergeSectionInput(section, incoming[i]);
-    if (!result.ok) return { error: "Contenu invalide" };
+    if (!result.ok) {
+      // Pour le diagnostic : quelle section et quel champ, jamais le contenu
+      console.warn("[editor] enregistrement refusé", { siteId: session.siteId, pageId: page.id, section: section.type, champ: result.field ?? "forme" });
+      return { error: "Contenu invalide" };
+    }
     merged.push(result.section);
   }
 
@@ -1210,11 +1218,8 @@ async function runMotifGeneration(siteId: string, slug: string): Promise<void> {
     }
     await patchGeneratingMotifs(siteId, (list) => list.filter((g) => g.slug !== slug));
     // Blog : sujets d'articles pour ce nouveau motif (best-effort)
-    try {
-      await ensureEditorialCalendars();
-    } catch (err) {
-      console.warn("[motif] calendrier éditorial non mis à jour :", err);
-    }
+    const calendar = await ensureEditorialCalendarForSite(siteId);
+    if (calendar.status === "error") console.warn("[motif] calendrier éditorial non mis à jour :", calendar.error ?? "erreur");
   } catch (err) {
     console.error(`[motif] génération de « ${slug} » impossible :`, err);
     await patchGeneratingMotifs(siteId, (list) =>

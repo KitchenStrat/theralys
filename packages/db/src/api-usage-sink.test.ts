@@ -20,6 +20,10 @@ vi.mock("pg", () => ({
     constructor(options: Record<string, unknown>) {
       pg.pools.push(options);
     }
+    // Le vrai pool est un émetteur d'événements : le client y écoute les connexions inactives perdues
+    on() {
+      return this;
+    }
   },
 }));
 
@@ -281,7 +285,7 @@ describe("getDb — pose du puits", () => {
     await recordApiUsage({ provider: "vercel", operation: "domain_attach" });
     expect(explicit).toHaveLength(1);
     expect(pg.inserted).toHaveLength(0);
-    expect(pg.pools).toEqual([{ connectionString: DATABASE_URL, max: 10 }]);
+    expect(pg.pools).toEqual([{ connectionString: DATABASE_URL, max: 10, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 }]);
   });
 });
 
@@ -311,7 +315,7 @@ describe("chargement du module — fabrique du puits", () => {
     vi.stubEnv("DATABASE_URL", DATABASE_URL);
     await withApiUsage({ feature: "prospecting" }, () => recordApiUsage({ provider: "google_places", operation: "text_search", units: 1, costUsd: 0.035 }));
     expect(hasApiUsageSink()).toBe(true);
-    expect(pg.pools).toEqual([{ connectionString: DATABASE_URL, max: 10 }]);
+    expect(pg.pools).toEqual([{ connectionString: DATABASE_URL, max: 10, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 }]);
     expect(pg.inserted).toHaveLength(1);
     expect(pg.inserted[0]!.values).toMatchObject({ provider: "google_places", operation: "text_search", feature: "prospecting", siteId: null, units: 1, costUsd: 0.035, costSource: "tariff" });
     await recordApiUsage({ provider: "google_places", operation: "place_details", units: 1, costUsd: 0.025 });

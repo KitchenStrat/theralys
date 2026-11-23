@@ -7,9 +7,9 @@ import { parseFilters } from "@/lib/crm/filters";
 
 export const dynamic = "force-dynamic";
 
-/** Export CSV des prospects qui répondent aux filtres de l'adresse (tous, sans pagination). */
+/** Export CSV des prospects qui répondent aux filtres de l'adresse (tous, sans pagination). Réservé à l'admin. */
 export async function GET(request: Request) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const filters = parseFilters(new URL(request.url).searchParams);
   const now = new Date();
   const rows = await getDb()
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       createdAt: crmContacts.createdAt,
     })
     .from(crmContacts)
-    .where(buildWhere(filters, now))
+    .where(buildWhere({ id: admin.id, role: admin.role }, filters, now))
     .orderBy(desc(crmContacts.createdAt))
     .limit(50_000);
   const stamp = new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(now);
