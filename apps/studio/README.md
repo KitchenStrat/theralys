@@ -127,7 +127,9 @@ l'invite à raconter une situation), et peut donner une note sur 5.
 - Enregistré dans `product_feedback` (migration 0016) par
   `app/(app)/_avis/actions.ts` ; dix avis par cabinet et par jour.
 - Rien n'est proposé tant que la table n'existe pas (`lib/feedback.ts`,
-  vérifiée au plus une fois par minute), ni à l'équipe en mode support.
+  vérifiée au plus une fois par minute). L'équipe en mode support voit
+  l'espace comme le praticien, en aperçu : l'envoi y est désactivé (un avis ne
+  s'écrit pas à sa place).
 - Lu dans l'admin, onglet « Avis clients ».
 
 ### Photos des visuels

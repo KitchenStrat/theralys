@@ -85,7 +85,8 @@ export const SECTIONS: Record<SectionKey, SectionDef> = {
     icon: Newspaper,
     // En publication automatique, un article paraît à sa date même sans relecture : la phrase ne promet pas de validation préalable
     purpose: "Les articles de votre blog : nous les écrivons, vous pouvez les relire et les modifier avant leur parution.",
-    group: "visibilite",
+    // Le blog vit sur le site : les deux entrées se suivent, au-dessus de « Me faire connaître »
+    group: "mon-site",
     gradient: { name: "Lagon", from: "#01A2B9", to: "#0A88CC", deepFrom: "#017F95", deepTo: "#09669A" },
     tint: { soft: "#EDF9FF", ink: "#003E52", accent: "#027495" },
   },
@@ -172,10 +173,14 @@ export const SECTION_ORDER: readonly SectionKey[] = [
   "compte",
 ];
 
-/** Groupes de la barre latérale, intitulés par objectif. */
-export const SECTION_GROUPS: readonly { key: SectionGroupKey; label: string; sections: readonly SectionKey[] }[] = [
-  { key: "mon-site", label: "Mon site", sections: ["mon-site"] },
-  { key: "visibilite", label: "Me faire connaître", sections: ["publications", "reseaux-sociaux", "fiche-google"] },
+/**
+ * Groupes de la barre latérale, intitulés par objectif. `heading: false` : le
+ * groupe se lit sans intitulé (ses entrées suivent l'Accueil) ; son nom reste
+ * celui du groupe pour les lecteurs d'écran.
+ */
+export const SECTION_GROUPS: readonly { key: SectionGroupKey; label: string; sections: readonly SectionKey[]; heading?: boolean }[] = [
+  { key: "mon-site", label: "Mon site et mon blog", sections: ["mon-site", "publications"], heading: false },
+  { key: "visibilite", label: "Me faire connaître", sections: ["reseaux-sociaux", "fiche-google"] },
   { key: "publicite", label: "Publicité", sections: ["google-ads", "meta-ads"] },
   { key: "apprendre", label: "Apprendre", sections: ["academie"] },
 ];

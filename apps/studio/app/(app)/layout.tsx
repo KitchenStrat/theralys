@@ -26,9 +26,9 @@ async function logoutAction() {
  * reçoit les visites déjà vues par ce site, et ne propose rien de lui-même à
  * l'équipe en mode support.
  *
- * « Votre avis » est ouvert à chaque praticien, quelle que soit sa formule ;
- * il ne se propose pas à l'équipe en mode support (elle n'écrit pas d'avis à
- * la place du praticien), ni tant que sa table n'existe pas.
+ * « Votre avis » est ouvert à chaque praticien, quelle que soit sa formule,
+ * dès que sa table existe. L'équipe en mode support le voit comme lui, en
+ * aperçu : elle n'écrit pas d'avis à sa place, l'envoi est désactivé.
  */
 export default async function StudioLayout({ children }: { children: ReactNode }) {
   const session = await requireClient();
@@ -37,7 +37,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
 
   return (
     <TourProvider siteKey={site.id} seen={seenTours} support={session.impersonated} firstName={session.name.split(" ")[0] || undefined}>
-    <FeedbackProvider enabled={feedbackOpen && !session.impersonated}>
+    <FeedbackProvider enabled={feedbackOpen} preview={session.impersonated}>
     <AppShell
       sections={allowedSections({
         publications: demo || hasBlog(site.plan),

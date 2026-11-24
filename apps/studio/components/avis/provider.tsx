@@ -35,8 +35,8 @@ const FeedbackContext = createContext<FeedbackContextValue | null>(null);
 
 /**
  * L'accès à la fenêtre « Votre avis » ; `null` quand l'espace n'est pas ouvert
- * (migration pas encore appliquée, session de l'équipe en mode support, pages
- * d'aperçu) : rien ne le propose alors.
+ * (migration pas encore appliquée, pages d'aperçu) : rien ne le propose
+ * alors.
  */
 export function useFeedback(): FeedbackContextValue | null {
   return useContext(FeedbackContext);
@@ -56,7 +56,16 @@ type FormError = { field: "message" | "form"; message: string };
  * le bandeau de l'accueil et la fenêtre elle-même. Ouvert à chaque praticien,
  * quelle que soit sa formule.
  */
-export function FeedbackProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+export function FeedbackProvider({
+  enabled,
+  preview = false,
+  children,
+}: {
+  enabled: boolean;
+  /** Session de l'équipe en mode support : l'espace se montre comme au praticien, mais rien n'est envoyé */
+  preview?: boolean;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   // Chaque ouverture repart d'une fenêtre neuve, réglée sur l'outil de la page en cours
@@ -77,13 +86,13 @@ export function FeedbackProvider({ enabled, children }: { enabled: boolean; chil
     <FeedbackContext.Provider value={value}>
       {children}
       <Modal open={open} onClose={close} title="Votre avis sur Harmony" size="lg" plain>
-        <FeedbackForm key={session} pathname={pathname} onClose={close} />
+        <FeedbackForm key={session} pathname={pathname} preview={preview} onClose={close} />
       </Modal>
     </FeedbackContext.Provider>
   );
 }
 
-function FeedbackForm({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+function FeedbackForm({ pathname, preview, onClose }: { pathname: string; preview: boolean; onClose: () => void }) {
   const [kind, setKind] = useState<FeedbackKind>("idea");
   const [topic, setTopic] = useState<FeedbackTopic>(() => feedbackTopicForPath(pathname));
   const [message, setMessage] = useState("");
@@ -97,6 +106,7 @@ function FeedbackForm({ pathname, onClose }: { pathname: string; onClose: () => 
   const messageError = error?.field === "message" ? error.message : null;
 
   function submit() {
+    if (preview) return;
     setError(null);
     if (length < FEEDBACK_MESSAGE_MIN) {
       setError({ field: "message", message: "Encore quelques mots : racontez-nous la situation, c'est ce qui nous aide à améliorer Harmony." });
@@ -300,11 +310,17 @@ function FeedbackForm({ pathname, onClose }: { pathname: string; onClose: () => 
             </p>
           ) : null}
 
+          {preview ? (
+            <p role="note" data-testid="avis-apercu" className="rounded-ds-md bg-ds-warning-100 px-3.5 py-2.5 text-ds-body text-ds-warning-900">
+              Mode support : vous voyez cet espace comme votre client. L&apos;envoi est désactivé — un avis ne s&apos;écrit pas à sa place.
+            </p>
+          ) : null}
+
           <div className="flex flex-wrap items-center justify-end gap-3 border-t border-ds-ink-200 pt-5">
             <Button type="button" variant="quiet" onClick={onClose}>
-              Annuler
+              {preview ? "Fermer" : "Annuler"}
             </Button>
-            <Button type="submit" loading={sending} icon={<Send size={18} aria-hidden />} data-testid="avis-envoyer">
+            <Button type="submit" loading={sending} disabled={preview} icon={<Send size={18} aria-hidden />} data-testid="avis-envoyer">
               Envoyer mon avis
             </Button>
           </div>

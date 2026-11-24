@@ -150,8 +150,8 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
         const keys = group.sections.filter((key) => allowed.has(key));
         const first = keys[0];
         if (!first) return null;
-        // Un groupe réduit à une entrée du même nom ne répète pas son intitulé
-        const heading = !(keys.length === 1 && SECTIONS[first].label === group.label);
+        // Un groupe sans intitulé (« Mon site » et son blog), ou réduit à une entrée du même nom, ne l'affiche pas
+        const heading = group.heading !== false && !(keys.length === 1 && SECTIONS[first].label === group.label);
         const headingId = `${headingBase}-${group.key}`;
         return (
           <div key={group.key} data-tour={`nav-groupe-${group.key}`} className={heading ? "mt-4" : "mt-1"}>
