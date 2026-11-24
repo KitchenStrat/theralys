@@ -7,6 +7,8 @@ export type Database = NodePgDatabase<typeof schema>;
 
 declare global {
   var __theralysPool: Pool | undefined;
+  /** Pools des autres exemplaires du pilote chargés dans le même processus (voir `sharedPool`). */
+  var __theralysExtraPools: unknown[] | undefined;
 }
 
 /**
@@ -29,16 +31,44 @@ function createPool(connectionString: string): Pool {
 }
 
 /**
- * Client partagé — pool unique par processus (survit au HMR de Next en dev).
+ * Pool de cet exemplaire du pilote, partagé par tout le processus (il survit
+ * au HMR de Next en dev).
+ *
+ * Un build Next peut embarquer deux exemplaires de `pg` et de Drizzle dans le
+ * même processus (pages et actions d'un côté, routes d'API de l'autre). Or
+ * Drizzle ne réserve une connexion à une transaction que si le pool reçu est
+ * une instance de SA classe `Pool` : avec le pool de l'autre exemplaire,
+ * `begin`, les requêtes et `commit` partaient chacun sur une connexion
+ * quelconque — transaction sans effet, verrou consultatif jamais rendu,
+ * écriture perdue quand elle tombait sur une connexion laissée ouverte. Un
+ * pool n'est donc réutilisé que par l'exemplaire qui l'a créé ; l'autre
+ * ouvre le sien.
+ */
+function sharedPool(connectionString: string): Pool {
+  const known = globalThis.__theralysPool;
+  if (!known) {
+    const pool = createPool(connectionString);
+    globalThis.__theralysPool = pool;
+    return pool;
+  }
+  if (known instanceof Pool) return known;
+  const extras = (globalThis.__theralysExtraPools ??= []);
+  const own = extras.find((candidate): candidate is Pool => candidate instanceof Pool);
+  if (own) return own;
+  const pool = createPool(connectionString);
+  extras.push(pool);
+  return pool;
+}
+
+/**
+ * Client partagé — un pool par processus et par exemplaire du pilote.
  */
 export function getDb(): Database {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL manquante : copier .env.example vers .env et l'adapter.");
   }
-  const pool = globalThis.__theralysPool ?? createPool(connectionString);
-  globalThis.__theralysPool = pool;
-  const db = drizzle(pool, { schema });
+  const db = drizzle(sharedPool(connectionString), { schema });
   // Registre des appels API : dès qu'une base existe, chaque appel fournisseur s'y inscrit
   if (!hasApiUsageSink()) setApiUsageSink(apiUsageSink(db));
   return db;
