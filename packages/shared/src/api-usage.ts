@@ -148,6 +148,7 @@ export const API_FEATURE_IDS = [
   "notifications",
   "domains",
   "client_site",
+  "sales_assistant",
 ] as const;
 export type ApiFeatureId = (typeof API_FEATURE_IDS)[number];
 
@@ -163,6 +164,7 @@ export const API_FEATURE_LABELS: Record<ApiFeatureId, string> = {
   notifications: "E-mails",
   domains: "Domaines",
   client_site: "Site du client",
+  sales_assistant: "Assistant commercial",
 };
 
 /** Libellé d'une fonctionnalité enregistrée ; « Non attribué » quand l'appel n'en portait pas (ou une valeur inconnue). */

@@ -22,13 +22,17 @@ export const PUBLIC_PATHS: readonly string[] = ["/login", "/invitation", "/decon
 
 const CONTACT_PATH = /^\/crm\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** La base de questions et d'objections, commune à l'équipe. */
+const KNOWLEDGE_PATH = "/crm/questions";
+
 /**
- * Un commercial n'ouvre que le CRM et ses fiches. Refus par défaut : tout
- * autre chemin (corbeille et export du CRM compris) lui est fermé, y compris
- * ceux qui seront ajoutés plus tard sans être inscrits ici.
+ * Un commercial n'ouvre que le CRM, ses fiches et la base de questions.
+ * Refus par défaut : tout autre chemin (corbeille et export du CRM compris)
+ * lui est fermé, y compris ceux qui seront ajoutés plus tard sans être
+ * inscrits ici.
  */
 export function salesMayOpen(pathname: string): boolean {
-  return pathname === "/crm" || CONTACT_PATH.test(pathname);
+  return pathname === "/crm" || pathname === KNOWLEDGE_PATH || CONTACT_PATH.test(pathname);
 }
 
 /** Où envoyer une requête selon le rôle porté par le jeton : laisser passer, vers le CRM, ou vers la connexion. */

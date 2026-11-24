@@ -4,13 +4,17 @@ import { requireStaff } from "@/lib/auth";
 import type { CrmViewer } from "@/lib/crm/access";
 import { crmState, listContacts, loadFacets, loadKpis, pipelineColumns, stageSummary, syncLeadsIntoCrm } from "@/lib/crm/data";
 import { parseFilters } from "@/lib/crm/filters";
+import { knowledgeCounts, knowledgeState } from "@/lib/crm/knowledge/store";
 import { listRepOptions } from "@/lib/crm/team";
 import { LeadsClient } from "../leads/leads-client";
 import { CrmClient } from "./crm-client";
 import { SalesActivationNotice } from "./activation-notice";
+import { AskBox } from "./questions/ask-box";
 
 export const metadata = { title: "CRM" };
 export const dynamic = "force-dynamic";
+// L'encart « Une question sur Harmony ? » attend la réponse de l'assistant : quelques secondes, parfois plus d'une minute
+export const maxDuration = 120;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -64,14 +68,29 @@ export default async function CrmPage({ searchParams }: { searchParams: SearchPa
   // Le filtre « Commercial » n'existe que pour l'admin
   const filters = admin ? parsed : { ...parsed, owner: "" };
   const now = new Date();
-  const [kpis, facets, summary, list, columns, reps] = await Promise.all([
+  const [kpis, facets, summary, list, columns, reps, knowledge] = await Promise.all([
     loadKpis(db, viewer, now),
     loadFacets(db, viewer),
     stageSummary(db, viewer, filters, now),
     filters.view === "liste" ? listContacts(db, viewer, filters, now) : Promise.resolve(null),
     filters.view === "pipeline" ? pipelineColumns(db, viewer, filters, now) : Promise.resolve(null),
     admin ? listRepOptions(db) : Promise.resolve([]),
+    // L'encart de l'assistant n'apparaît qu'une fois sa base en place (migration 0014)
+    knowledgeState(db).then((ready) => (ready === "ready" ? knowledgeCounts(db) : null)),
   ]);
 
-  return <CrmClient role={viewer.role} filters={filters} kpis={kpis} facets={facets} summary={summary} list={list} columns={columns} reps={reps} nowIso={now.toISOString()} />;
+  return (
+    <CrmClient
+      role={viewer.role}
+      filters={filters}
+      kpis={kpis}
+      facets={facets}
+      summary={summary}
+      list={list}
+      columns={columns}
+      reps={reps}
+      nowIso={now.toISOString()}
+      assistant={knowledge ? <AskBox compact total={knowledge.total} /> : null}
+    />
+  );
 }

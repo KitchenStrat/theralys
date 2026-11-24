@@ -45,6 +45,14 @@ export type AnthropicClientOptions = {
    * second appel, à la suite de nos propres consignes.
    */
   untrustedInput?: boolean;
+  /**
+   * Marketing éthique (défaut : appliqué) : les règles sont ajoutées au prompt
+   * et toute la sortie est relue. À `false` pour un texte qui n'est pas
+   * destiné au public d'un praticien — l'assistant de l'équipe commerciale
+   * parle du produit, dont le vocabulaire (« diagnostic » d'une campagne…)
+   * serait refusé par ces règles écrites pour le soin.
+   */
+  ethics?: boolean;
 };
 
 const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -73,6 +81,7 @@ export async function completeStructured<T>(
   const client = new Anthropic({ apiKey: opts.apiKey, timeout: ANTHROPIC_CONNECT_TIMEOUT_MS, maxRetries: ANTHROPIC_MAX_RETRIES });
   const model = opts.model ?? process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL;
   const effort = resolveEffort(opts.effort);
+  const ethics = opts.ethics !== false;
 
   let feedback = "";
   let lastError: Error | null = null;
@@ -93,7 +102,7 @@ export async function completeStructured<T>(
           // l'API la rejoue sur le modèle de repli dans le même appel.
           betas: ["server-side-fallback-2026-06-01"],
           fallbacks: [{ model: FALLBACK_MODEL }],
-          system: `${systemPrompt}\n\n${ETHICAL_PROMPT_RULES}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
+          system: `${systemPrompt}${ethics ? `\n\n${ETHICAL_PROMPT_RULES}` : ""}\n\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises de code.`,
           messages: [{ role: "user", content: feedback ? `${userPrompt}\n\n${feedback}` : userPrompt }],
         },
         // Le délai du client ne couvre que le début de la réponse : ce signal borne l'appel entier, flux compris
@@ -134,7 +143,7 @@ export async function completeStructured<T>(
     try {
       const raw: unknown = parseModelJson(text);
       const parsed = schema.parse(raw);
-      const compliance = checkEthicalComplianceDeep(parsed);
+      const compliance = ethics ? checkEthicalComplianceDeep(parsed) : { ok: true as const, violations: [] };
       if (!compliance.ok) {
         // Texte d'un tiers dans le prompt : seules les règles enfreintes sont nommées (libellés de notre liste), sans extrait
         const details = opts.untrustedInput

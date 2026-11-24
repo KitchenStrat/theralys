@@ -52,9 +52,11 @@ export type CrmClientProps = {
   list: ListResult | null;
   columns: PipelineColumn[] | null;
   nowIso: string;
+  /** L'encart « Une question sur Harmony ? », posé entre les indicateurs et les prospects (absent tant que sa base n'est pas en place) */
+  assistant?: ReactNode;
 };
 
-export function CrmClient({ role, reps, filters, kpis, facets, summary, list, columns, nowIso }: CrmClientProps) {
+export function CrmClient({ role, reps, filters, kpis, facets, summary, list, columns, nowIso, assistant }: CrmClientProps) {
   const admin = role === "admin";
   const repNames = useMemo(() => Object.fromEntries(reps.map((rep) => [rep.id, rep.name])), [reps]);
   const router = useRouter();
@@ -117,6 +119,8 @@ export function CrmClient({ role, reps, filters, kpis, facets, summary, list, co
         <Kpi icon={Trophy} color={STAGE_COLOR.won} label="Gagnés ce mois" value={kpis.wonThisMonth.toLocaleString("fr-FR")} hint={kpis.winRate === null ? "aucune affaire close" : `${Math.round(kpis.winRate * 100)} % des affaires closes`} href={filtersHref({ ...EMPTY_FILTERS, view: "liste", stages: ["won"] })} />
         <Kpi icon={Wallet} color={STAGE_COLOR.qualified} label="Valeur en cours" value={`${euros(kpis.openMonthlyValue)}`} hint="par mois, formules envisagées" className="col-span-2 lg:col-span-1" />
       </div>
+
+      {assistant ? <div className="mt-5">{assistant}</div> : null}
 
       {empty ? (
         <Card className="mt-6 p-10 text-center">

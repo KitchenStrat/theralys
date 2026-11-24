@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, 0012_crm_sales et 0013_security_scale, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, 0012_crm_sales, 0013_security_scale et 0014_crm_knowledge, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -67,6 +67,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0011_crm",
       "0012_crm_sales",
       "0013_security_scale",
+      "0014_crm_knowledge",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -360,5 +361,34 @@ describe("0012_crm_sales : commerciaux, propriétaire d'un prospect, auteur d'un
       'CREATE INDEX IF NOT EXISTS "crm_contacts_owner_idx" ON "crm_contacts" USING btree ("owner_id","stage");',
       'CREATE INDEX IF NOT EXISTS "crm_activities_author_idx" ON "crm_activities" USING btree ("author_id","created_at");',
     ]);
+  });
+});
+
+describe("0014_crm_knowledge : base de connaissances de l'équipe commerciale", () => {
+  const statements = statementsOf("0014_crm_knowledge");
+  const count = (re: RegExp) => statements.filter((s) => re.test(s)).length;
+
+  it("2 tables, 4 clés étrangères, 6 index — et rien qui touche à l'existant", () => {
+    expect(count(/^CREATE TABLE IF NOT EXISTS "crm_knowledge(_asks)?"/)).toBe(2);
+    expect(count(/ADD CONSTRAINT "[^"]+" FOREIGN KEY/)).toBe(4);
+    expect(count(/^CREATE INDEX IF NOT EXISTS "crm_knowledge/)).toBe(6);
+    expect(statements).toHaveLength(12);
+    // Aucune colonne ajoutée ni retirée ailleurs : le CRM d'avant la migration continue de fonctionner
+    expect(statements.some((s) => /ADD COLUMN|DROP |ALTER TYPE/.test(s))).toBe(false);
+  });
+
+  it("une fiche survit au compte qui l'a posée ou validée ; son journal part avec elle", () => {
+    const fk = (name: string) => statements.find((s) => s.includes(`ADD CONSTRAINT "${name}"`)) ?? "";
+    expect(fk("crm_knowledge_author_id_users_id_fk")).toContain("ON DELETE set null");
+    expect(fk("crm_knowledge_validated_by_users_id_fk")).toContain("ON DELETE set null");
+    expect(fk("crm_knowledge_asks_user_id_users_id_fk")).toContain("ON DELETE set null");
+    expect(fk("crm_knowledge_asks_entry_id_crm_knowledge_id_fk")).toContain("ON DELETE cascade");
+  });
+
+  it("valeurs par défaut : une fiche naît en réponse de l'assistant, posée une fois", () => {
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "crm_knowledge" ')) ?? "";
+    expect(table).toContain(`"status" text DEFAULT 'ai' NOT NULL`);
+    expect(table).toContain(`"kind" text DEFAULT 'question' NOT NULL`);
+    expect(table).toContain(`"asked_count" integer DEFAULT 1 NOT NULL`);
   });
 });

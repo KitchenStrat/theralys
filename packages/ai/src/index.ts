@@ -8,6 +8,7 @@ export * from "./google-profile";
 export * from "./google-ads";
 export * from "./meta-ads";
 export * from "./external-site";
+export * from "./sales-assistant";
 export * from "./images";
 export * from "./stock";
 export { buildMotifPlan } from "./mock/generator";

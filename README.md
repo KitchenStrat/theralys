@@ -325,6 +325,35 @@ dégradé par section, un seul accent chaud.
     d&apos;activation, et la création d&apos;une démo comme la conversion en client
     continuent d&apos;écrire dans l&apos;historique du CRM, sans auteur.
 
+- **Assistant et base de questions du CRM** (`/crm/questions`, admin et
+  commerciaux) : un encart « Une question ou une objection sur Harmony ? »,
+  posé dans le CRM et en tête de la base, où l'on écrit la question comme le
+  praticien l'a dite. L'assistant rend une fiche — la question reformulée, sa
+  rubrique, ce qu'on peut dire au téléphone, les faits à l'appui — qui rejoint
+  la base commune.
+  - **Ce qu'il sait, et rien d'autre** : la définition du produit
+    (`lib/crm/knowledge/product.ts`, écrite depuis `@theralys/db` : formules,
+    prix, économies, engagement), le texte de la page publique, relu au plus
+    une fois par heure (`landing.ts` ; les témoignages d'illustration et le
+    formulaire en sont écartés) et les fiches validées par l'admin, qui font
+    foi. Ce que ces sources ne disent pas n'est pas inventé : la fiche part
+    « À vérifier ».
+  - **Une base qui ne se remplit pas de doublons** : une question déjà posée
+    dans les mêmes mots (casse, accents et ponctuation mis à part) rend sa
+    fiche sans appel au modèle ; une question que l'assistant reconnaît
+    rejoint la fiche existante. Chaque question posée est inscrite au journal
+    (`crm_knowledge_asks`) : « Mes questions », nombre de fois posée, et pour
+    l'admin les questions de chacun sur 30 jours.
+  - **Qui fait quoi** : tout le monde lit toute la base, pose des questions et
+    peut demander une vérification ; l'admin corrige, valide, écrit ses
+    propres fiches et supprime. Une fiche validée n'est jamais remplacée par
+    l'assistant.
+  - Appel au modèle : `packages/ai/src/sales-assistant.ts` (effort « medium »,
+    sans les règles de marketing éthique des textes publics), 40 questions
+    nouvelles par heure et par personne, coûts inscrits sous « Assistant
+    commercial ». Migration `0014_crm_knowledge` ; déployé avant elle, le code
+    n'affiche ni l'encart ni la base, et ne casse rien.
+
 ## Ce que couvre la Phase 3
 
 - **Conversion démo → site client** (admin, activation manuelle) : depuis la page
@@ -482,8 +511,9 @@ Le seed est idempotent. La CI (GitHub Actions) exécute lint + typecheck + tests
 Le dossier `packages/db/drizzle/` est **à jour du schéma** (`packages/db/src/schema.ts`) :
 `0000_soft_scrambler` (schéma initial), `0001_social_posts` (réseaux sociaux + les
 colonnes autrefois poussées à la main), `0002_social_settings` (option « Paramétrage »
-des réseaux sociaux), … jusqu'à `0012_crm_sales` (comptes des commerciaux) et
-`0013_security_scale` (compteurs de tentatives, journal des accès support, index). Les migrations s'appliquent avec **`pnpm db:migrate`**,
+des réseaux sociaux), … jusqu'à `0012_crm_sales` (comptes des commerciaux),
+`0013_security_scale` (compteurs de tentatives, journal des accès support, index) et
+`0014_crm_knowledge` (base de questions et d'objections de l'équipe commerciale). Les migrations s'appliquent avec **`pnpm db:migrate`**,
 en local comme en production (procédure dans `DEPLOY.md`, section « Mettre à jour le schéma
 en production »), qui tient le journal `drizzle.__drizzle_migrations`. Elles sont rejouables
 (`IF NOT EXISTS`, `DO $$ … duplicate_object`) : `pnpm db:migrate` passe aussi sur une base

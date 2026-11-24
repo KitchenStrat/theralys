@@ -16,14 +16,15 @@ describe("qui entre dans le back-office, et où", () => {
     expect(homeFor("sales")).toBe("/crm");
   });
 
-  it("un commercial n'ouvre que le CRM et ses fiches", () => {
+  it("un commercial n'ouvre que le CRM, ses fiches et la base de questions", () => {
     expect(salesMayOpen("/crm")).toBe(true);
     expect(salesMayOpen(CONTACT)).toBe(true);
     expect(salesMayOpen(CONTACT.toUpperCase().replace("/CRM/", "/crm/"))).toBe(true);
+    expect(salesMayOpen("/crm/questions")).toBe(true);
   });
 
   it("tout le reste lui est fermé, corbeille et export du CRM compris", () => {
-    for (const path of ["/", "/clients", "/demos", "/demos/b6bed027-6656-4734-926f-501605751fdc/edit", "/leads", "/couts", "/equipe", "/equipe/b6bed027-6656-4734-926f-501605751fdc", "/crm/corbeille", "/crm/export", "/crm/", `${CONTACT}/`, `${CONTACT}/export`, "/crm/import", "/crmx", "/crm/../clients", "/une-page-ajoutee-plus-tard"]) {
+    for (const path of ["/", "/clients", "/demos", "/demos/b6bed027-6656-4734-926f-501605751fdc/edit", "/leads", "/couts", "/equipe", "/equipe/b6bed027-6656-4734-926f-501605751fdc", "/crm/corbeille", "/crm/export", "/crm/", `${CONTACT}/`, `${CONTACT}/export`, "/crm/import", "/crmx", "/crm/../clients", "/crm/questions/", "/crm/questions/export", "/crm/questionsx", "/une-page-ajoutee-plus-tard"]) {
       expect(salesMayOpen(path), path).toBe(false);
     }
   });
@@ -33,6 +34,7 @@ describe("qui entre dans le back-office, et où", () => {
     expect(routeFor("admin", "/equipe")).toBe("pass");
     expect(routeFor("sales", "/crm")).toBe("pass");
     expect(routeFor("sales", CONTACT)).toBe("pass");
+    expect(routeFor("sales", "/crm/questions")).toBe("pass");
     expect(routeFor("sales", "/clients")).toBe("crm");
     expect(routeFor("sales", "/crm/corbeille")).toBe("crm");
     expect(routeFor("sales", "/")).toBe("crm");

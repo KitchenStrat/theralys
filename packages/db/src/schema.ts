@@ -643,6 +643,73 @@ export const crmReps = pgTable("crm_reps", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Base de connaissances de l'équipe commerciale ───────────────────────────
+
+/**
+ * Une question ou une objection entendue au téléphone, et sa réponse : la
+ * base commune du CRM, lue par l'admin et par chaque commercial. Une fiche
+ * naît d'une question posée à l'assistant (ou de la main de l'admin) ; la
+ * reposer n'en crée pas une autre (`question_key`, `asked_count`).
+ */
+export const crmKnowledge = pgTable(
+  "crm_knowledge",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** La question, reformulée pour servir de titre à la fiche */
+    question: text("question").notNull(),
+    /** Sa forme réduite (minuscules, sans accent ni ponctuation) : retrouve une question déjà posée */
+    questionKey: text("question_key").notNull(),
+    kind: text("kind").notNull().default("question"), // question | objection
+    category: text("category").notNull().default("autre"),
+    /** Ce qu'on répond au téléphone */
+    reply: text("reply").notNull().default(""),
+    /** Les faits qui appuient la réponse */
+    details: text("details").notNull().default(""),
+    // ai : réponse de l'assistant, non relue · review : à vérifier ou à compléter par l'admin · validated : relue ou écrite par l'admin
+    status: text("status").notNull().default("ai"),
+    /** Combien de fois la question a été posée */
+    askedCount: integer("asked_count").notNull().default(1),
+    /** Qui l'a posée en premier (null : compte supprimé) */
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    validatedBy: uuid("validated_by").references(() => users.id, { onDelete: "set null" }),
+    validatedAt: timestamp("validated_at", { withTimezone: true }),
+    lastAskedAt: timestamp("last_asked_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("crm_knowledge_category_idx").on(t.category, t.askedCount),
+    index("crm_knowledge_key_idx").on(t.questionKey),
+    index("crm_knowledge_status_idx").on(t.status, t.lastAskedAt),
+  ],
+);
+
+/**
+ * Chaque fois qu'une question est posée : par qui, dans quels mots, pour
+ * quelle fiche. Sert à retrouver une question déjà posée mot pour mot, à
+ * montrer à chacun ses propres questions, et à l'admin ce que son équipe
+ * rencontre le plus.
+ */
+export const crmKnowledgeAsks = pgTable(
+  "crm_knowledge_asks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entryId: uuid("entry_id")
+      .notNull()
+      .references(() => crmKnowledge.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** La question telle qu'elle a été saisie */
+    asked: text("asked").notNull(),
+    askedKey: text("asked_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("crm_knowledge_asks_entry_idx").on(t.entryId, t.createdAt),
+    index("crm_knowledge_asks_user_idx").on(t.userId, t.createdAt),
+    index("crm_knowledge_asks_key_idx").on(t.askedKey),
+  ],
+);
+
 // ─── Sécurité (limitation des tentatives, accès de l'équipe aux espaces clients) ───
 
 /**
@@ -1113,3 +1180,5 @@ export type NewCrmContact = typeof crmContacts.$inferInsert;
 export type CrmActivity = typeof crmActivities.$inferSelect;
 export type CrmImport = typeof crmImports.$inferSelect;
 export type CrmRep = typeof crmReps.$inferSelect;
+export type CrmKnowledgeEntry = typeof crmKnowledge.$inferSelect;
+export type CrmKnowledgeAsk = typeof crmKnowledgeAsks.$inferSelect;

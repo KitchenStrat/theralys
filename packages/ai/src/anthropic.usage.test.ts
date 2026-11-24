@@ -197,6 +197,20 @@ describe("completeStructured — registre des appels API", () => {
     ]);
   });
 
+  it("`ethics: false` (assistant de l'équipe commerciale) : ni règles de marketing éthique dans les consignes, ni relecture de la sortie", async () => {
+    capture();
+    const product = { titre: "Google Ads", texte: "Un diagnostic de vos campagnes, puis un plan d'action." };
+    sdk.script.push({ message: message(json(product)) });
+    await expect(completeStructured({ apiKey: API_KEY, ethics: false }, SYSTEM, PROMPT, schema)).resolves.toEqual(product);
+    expect(sdk.requests).toHaveLength(1);
+    expect(sdk.requests[0]!.system).not.toContain("MARKETING ÉTHIQUE");
+    expect(sdk.requests[0]!.system).toContain("Réponds UNIQUEMENT avec un objet JSON valide");
+    // Par défaut, le même texte est refusé (« diagnostic ») et les règles sont dans les consignes
+    sdk.script.push({ message: message(json(product)) }, { message: message(json(VALID)) });
+    await expect(run()).resolves.toEqual(VALID);
+    expect(sdk.requests[1]!.system).toContain("MARKETING ÉTHIQUE");
+  });
+
   it("oubli massif du gras (option `emphasis`) : la relance de mise en forme est un second appel facturé ; sans l'option, un seul appel", async () => {
     const events = capture();
     const pageSchema = z.object({ titre: z.string(), paragraphs: z.array(z.string()) });

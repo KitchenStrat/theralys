@@ -14,6 +14,12 @@ clients et des publications.
   requête, `lib/crm/scope.ts`). `app/(dashboard)/equipe/` — comptes et
   activité des commerciaux, admin seulement. `app/invitation/` — page publique
   où un commercial choisit son mot de passe. Détail dans le README racine.
+- `app/(dashboard)/crm/questions/` et `lib/crm/knowledge/` — l'assistant du
+  CRM et la base commune de questions et d'objections : `ask.ts` (une
+  question, de bout en bout), `product.ts` et `landing.ts` (ce que l'assistant
+  sait), `store.ts` (la base), `model.ts` (rubriques, états, filtres). Tests
+  sur une vraie base : `lib/crm/knowledge/ask.db.test.ts` (ignorés sans
+  `ADMIN_TEST_DATABASE_URL`).
 - `lib/auth.ts` — `requireAdmin` (admin seulement, le défaut de toute page ou
   action) et `requireStaff` (admin ou commercial actif, pour le CRM).
 - `app/api/` — dont `api/jobs/tick`, déclenché chaque jour à 6h UTC par le

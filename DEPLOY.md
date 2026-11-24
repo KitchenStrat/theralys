@@ -346,6 +346,28 @@ select to_regclass('crm_reps'), to_regclass('rate_limits'), to_regclass('imperso
 -- trois noms, aucun NULL
 ```
 
+### Migration `0014_crm_knowledge`
+
+Additive et rejouable elle aussi : deux tables nouvelles, `crm_knowledge` (les
+fiches de la base de questions et d'objections) et `crm_knowledge_asks` (le
+journal de chaque question posée à l'assistant du CRM). Rien de l'existant
+n'est modifié. Tant qu'elle n'est pas appliquée, l'encart « Une question ou
+une objection sur Harmony ? » n'apparaît pas dans le CRM et la page
+`/crm/questions` affiche un message d'activation ; le CRM, l'onglet Équipe et
+le reste de l'admin fonctionnent comme avant (état vérifié en mode production
+contre une base sans elle).
+
+```sql
+select to_regclass('crm_knowledge'), to_regclass('crm_knowledge_asks');
+-- deux noms, aucun NULL
+```
+
+L'assistant répond avec le modèle déjà configuré sur **harmony-admin**
+(`ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`) : aucune variable à ajouter. Ses
+appels apparaissent dans **API & coûts** sous « Assistant commercial ». Il lit
+la page publique à l'adresse `WEB_BASE_URL` si elle est définie sur
+harmony-admin, sinon `https://www.harmony-web.fr`.
+
 ## Sécurité : ce qui est en place, ce qui reste à votre main
 
 **En place dans le code** (rien à faire) :
