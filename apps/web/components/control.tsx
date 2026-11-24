@@ -1,5 +1,5 @@
 import { type CSSProperties } from "react";
-import { BadgeCheck, Eye, KeyRound, MapPinned, Send, Sparkles } from "lucide-react";
+import { Eye, MapPinned, Send, Sparkles } from "lucide-react";
 import carte from "@/assets/captures/detail-carte.webp";
 import prochaines from "@/assets/captures/detail-prochaines.webp";
 import visuelA from "@/assets/captures/visuel-reseaux.webp";
@@ -118,29 +118,6 @@ export function Control() {
             <div aria-hidden className="relative mx-auto mt-6 h-44 w-52 overflow-hidden rounded-2xl ring-1 ring-white/15 md:mt-0 md:h-48">
               <Capture src={carte} alt="" sizes="210px" className="h-full object-cover" />
             </div>
-          </article>
-
-          <article data-revealclassName="bento md:col-span-3">
-            <span className="bento-icon">
-              <KeyRound size={20} aria-hidden />
-            </span>
-            <h3 className="font-display mt-4 text-2xl font-bold">Vos comptes restent les vôtres</h3>
-            <p className="mt-2 leading-relaxed text-white/75">
-              Google, Meta&nbsp;: <strong className="font-semibold text-white">vous restez propriétaire</strong>. Vos budgets vont aux plateformes.
-            </p>
-          </article>
-
-          <article data-reveal style={{ "--rv-delay": "90ms" } as CSSProperties} className="bento md:col-span-3">
-            <span className="bento-icon">
-              <BadgeCheck size={20} aria-hidden />
-            </span>
-            <h3 className="font-display mt-4 text-2xl font-bold">Un lecteur de site qui se présente</h3>
-            <p className="mt-2 leading-relaxed text-white/75">
-              Il lit vos pages publiques <strong className="font-semibold text-white">sous son nom</strong>.{" "}
-              <a href="/robot" className="focus-ring-dark rounded font-semibold text-primary-300 underline underline-offset-4 hover:text-white">
-                Ce que fait notre lecteur
-              </a>
-            </p>
           </article>
         </div>
       </div>
