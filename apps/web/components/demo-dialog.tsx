@@ -6,8 +6,8 @@ import { DemoFormCard } from "./demo-form";
 
 /**
  * La demande de démo, à portée de main : tout bouton « démo » de la page
- * (un lien vers `#demo`) ouvre cette fenêtre au lieu de faire défiler jusqu'au
- * formulaire du bas de page. Sans JavaScript, ou dans un navigateur sans
+ * (un lien vers `#demo`, ou vers `/#demo` depuis une page de contenu) ouvre
+ * cette fenêtre au lieu de mener au formulaire du bas de l'accueil. Sans JavaScript, ou dans un navigateur sans
  * `<dialog>`, les mêmes liens mènent au formulaire du bas : rien n'est perdu.
  *
  * `<dialog>` natif : le focus reste dans la fenêtre, Échap la ferme, le reste
@@ -24,7 +24,7 @@ export function DemoDialog() {
     // En phase de capture : avant le défilement en douceur des liens internes, qui laisse alors la main
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href="#demo"]');
+      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href="#demo"], a[href="/#demo"]');
       const box = dialog.current;
       if (!link || !box || typeof box.showModal !== "function") return;
       event.preventDefault();

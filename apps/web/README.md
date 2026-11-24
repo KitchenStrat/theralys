@@ -112,6 +112,42 @@ pas des informaticiens — plutôt que les réflexes d'une page générée.
   témoignages (provisoires).
 - `public/logos/` — logos des plateformes du bandeau.
 
+## Blog et pages par métier
+
+Des pages de contenu, pour être trouvé sur Google par les praticiens qui
+cherchent un site ou des conseils. Elles sont calmes (aucune animation au
+défilement), tout leur texte est dans le code de la page, et chaque bouton
+« démo » y ouvre la même fenêtre que sur l'accueil.
+
+| Adresse | Page | Fichier |
+| --- | --- | --- |
+| `/blog` | thématiques, article à la une, tous les articles, guides par métier | `app/blog/page.tsx` |
+| `/blog/categorie/<thématique>` | les articles d'une thématique | `app/blog/categorie/[slug]/page.tsx` |
+| `/blog/<article>` | un article : sommaire, sections, questions fréquentes, articles liés | `app/blog/[slug]/page.tsx` |
+| `/creation-site-internet` | l'entrée vers les pages par métier | `app/creation-site-internet/page.tsx` |
+| `/creation-site-internet-<métier>` | une page par métier | `app/[slug]/page.tsx` |
+
+- **Les contenus sont des données** : `content/blog.ts` (thématiques, format
+  d'un article), `content/articles/` (les articles, inscrits dans `ARTICLES`
+  de `index.ts` — le premier est « à la une ») et `content/professions.ts`
+  (une fiche par métier ; `featured` la place dans la colonne « Par métier »
+  du pied de page). Ajouter un article ou un métier, c'est ajouter une entrée :
+  la page, les listes, le pied de page et le plan du site suivent.
+- **Écriture** : `**gras**` et liens internes `[libellé](/adresse)` dans les
+  textes. Mêmes règles que le reste de la vitrine — rien d'inventé, aucun
+  résultat promis — et la prudence sur le cadre de chaque métier (en cas de
+  doute, renvoyer vers l'ordre, la fédération ou l'école).
+- **L'offre vient du produit** : prix, nombre de pages et d'articles des pages
+  par métier sont lus dans `@theralys/db/plans` (`components/pages/offer.tsx`),
+  comme la grille des tarifs.
+- **Référencement** : chaque page porte son titre, sa description, son adresse
+  canonique (en `www`) et ses données structurées (`lib/site.ts`) ;
+  `app/sitemap.ts` et `app/robots.ts` annoncent toutes les pages. Le pied de
+  page, le même partout, recense tous les métiers et toutes les thématiques.
+- `components/pages/` — le cadre commun (`shell.tsx` : en-tête, bandeau de
+  titre, fil d'Ariane, cartes, questions), la mise en forme des textes
+  (`prose.tsx`) et les sections (`sections.tsx`, `offer.tsx`).
+
 ## Captures d'écran
 
 Les images de `assets/captures/` sont prises sur le studio local, compte de

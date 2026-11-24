@@ -16,7 +16,13 @@ const LINKS = [
 /** Espace client du studio (application séparée). */
 const STUDIO_URL = "https://app.harmony-web.fr";
 
-export function Header() {
+/**
+ * `home` : sur l'accueil, les liens mènent aux sections de la page. Ailleurs
+ * (blog, pages par métier), les mêmes liens ramènent à l'accueil, section
+ * comprise.
+ */
+export function Header({ home = true }: { home?: boolean }) {
+  const to = (anchor: string) => (home ? anchor : `/${anchor}`);
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -63,14 +69,14 @@ export function Header() {
         )}
       >
         <div className={clsx("flex items-center justify-between gap-2 px-4 sm:px-5", floating ? "h-14" : "h-16")}>
-          <a href="#" className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-lg text-2xl" aria-label="Harmony, retour en haut de page">
+          <a href={home ? "#" : "/"} className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-lg text-2xl" aria-label={home ? "Harmony, retour en haut de page" : "Harmony, retour à l'accueil"}>
             <Brand onDark={onDark} />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Navigation principale">
             {LINKS.map((link) => (
               <a
                 key={link.href}
-                href={link.href}
+                href={to(link.href)}
                 className={clsx(
                   "inline-flex min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium transition",
                   onDark ? "focus-ring-dark text-white/90 hover:bg-white/15 hover:text-white" : "focus-ring text-ink-700 hover:bg-primary-100/70 hover:text-primary-700",
@@ -91,7 +97,7 @@ export function Header() {
               Espace client
             </a>
             <a
-              href="#demo"
+              href={to("#demo")}
               className="cta focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full bg-primary-600 px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700 lg:px-5"
             >
               {/* Sur un petit téléphone, la barre garde la place du menu */}
@@ -122,7 +128,7 @@ export function Header() {
             {LINKS.map((link) => (
               <li key={link.href}>
                 <a
-                  href={link.href}
+                  href={to(link.href)}
                   onClick={() => setOpen(false)}
                   className="focus-ring block rounded-xl px-3 py-3 text-base font-medium text-ink-900 transition hover:bg-primary-100/70"
                 >
