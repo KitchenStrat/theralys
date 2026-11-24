@@ -8,6 +8,7 @@ import { Kinetic } from "./kinetic";
 import { TOOLS, type Tool } from "./tools";
 import { rich } from "./rich";
 import { fr } from "./typo";
+import { SectionCta } from "./section-cta";
 
 /** Durée d'affichage d'un outil quand la visite défile seule. */
 const STEP_SECONDS = 9;
@@ -241,6 +242,9 @@ export function Tour() {
             })}
           </div>
         </div>
+
+        {/* Un bouton de démo à la fin de chaque grande section */}
+        <SectionCta text="Ces outils, préparés pour votre pratique et votre ville." label="Voir ma démo personnalisée" />
       </div>
     </section>
   );

@@ -4,6 +4,7 @@ import { Brand } from "./brand";
 import { Kinetic } from "./kinetic";
 import { TOOLS } from "./tools";
 import { rich } from "./rich";
+import { SectionCta } from "./section-cta";
 
 const BENEFITS: { icon: LucideIcon; title: string; text: string }[] = [
   {
@@ -127,6 +128,9 @@ export function Solution() {
             ))}
           </ul>
         </div>
+
+        {/* Un bouton de démo à la fin de chaque grande section */}
+        <SectionCta grid text="Envie de voir tout cela réuni pour votre cabinet ?" />
       </div>
     </section>
   );

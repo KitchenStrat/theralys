@@ -20,3 +20,4 @@ export * from "./api-usage";
 export * from "./external-site";
 export * from "./rate-limit";
 export * from "./feedback";
+export * from "./demo-request";

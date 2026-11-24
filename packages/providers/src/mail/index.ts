@@ -80,12 +80,17 @@ export async function sendMailWithRetry(
   }
 }
 
+/** L'API de Resend. `RESEND_API_URL` la remplace dans un environnement d'essai (serveur local qui joue Resend). */
+export const RESEND_API_URL = "https://api.resend.com";
+
 export class ResendMailProvider implements MailProvider {
   mode = "resend" as const;
   constructor(
     private readonly apiKey: string,
     private readonly from: string,
     private readonly fetchImpl: typeof fetch = fetch,
+    /** Adresse de l'API (sans barre finale) ; autre que celle de Resend seulement pour un environnement d'essai */
+    private readonly baseUrl: string = RESEND_API_URL,
   ) {}
 
   async send(message: MailMessage): Promise<MailResult> {
@@ -98,7 +103,7 @@ export class ResendMailProvider implements MailProvider {
   }
 
   private async sendOnce(message: MailMessage): Promise<MailResult> {
-    const response = await this.fetchImpl("https://api.resend.com/emails", {
+    const response = await this.fetchImpl(`${this.baseUrl}/emails`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -138,6 +143,8 @@ export function createMailProvider(env: NodeJS.ProcessEnv = process.env): MailPr
     return new ResendMailProvider(
       env.RESEND_API_KEY,
       env.MAIL_FROM ?? "Harmony <onboarding@resend.dev>",
+      fetch,
+      (env.RESEND_API_URL || RESEND_API_URL).replace(/\/+$/, ""),
     );
   }
   return new MockMailProvider();

@@ -764,3 +764,42 @@ body {
   .tour-panel.is-active .tour-point,
   .tour-panel.is-active .tour-shot { animation: none; }
 }
+
+/* ─── Fenêtre de la demande de démo ──────────────────────────────────────────
+   `<dialog>` natif, ouvert par tout lien vers `#demo`. Carte centrée sur
+   ordinateur, feuille montant du bas de l'écran sur téléphone. */
+.demo-dialog {
+  width: min(100% - 2rem, 34rem);
+  max-width: none;
+  max-height: min(100dvh - 2rem, 46rem);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 1.75rem;
+  background: #fff;
+  color: var(--color-ink-700);
+  box-shadow: var(--shadow-pop);
+}
+.demo-dialog::backdrop {
+  background: rgb(7 21 34 / 0.62);
+  backdrop-filter: blur(3px);
+}
+.demo-dialog[open] { animation: demo-dialog-in 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes demo-dialog-in {
+  from { opacity: 0; translate: 0 14px; }
+}
+@media (max-width: 639px) {
+  .demo-dialog {
+    width: 100%;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: 1.75rem 1.75rem 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-dialog[open] { animation: none; }
+}
+/* La page ne défile pas sous la fenêtre ouverte */
+html:has(.demo-dialog[open]) { overflow: hidden; }

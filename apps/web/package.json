@@ -12,6 +12,8 @@
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "@theralys/db": "workspace:*",
+    "@theralys/providers": "workspace:*",
+    "@theralys/shared": "workspace:*",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.44.0",
     "gsap": "^3.15.1",

@@ -64,6 +64,28 @@ pas des informaticiens — plutôt que les réflexes d'une page générée.
   `control` (« Vous gardez la main »), `method` (frise et semaine type),
   `own-site` (« Déjà un site ? »), `testimonials`, `band`, `pricing`, `roi-calculator`
   (simulateur de rentabilité), `faq`, `demo-form`.
+- **Demander une démo** — tout bouton « démo » de la page est un lien vers
+  `#demo` : `components/demo-dialog.tsx` l'intercepte et ouvre le formulaire
+  dans une fenêtre (`<dialog>` natif), sans faire défiler jusqu'au bas de
+  page. Sans JavaScript, le même lien mène au formulaire du bas
+  (`demo-form.tsx`), qui reste en place. Le formulaire tient en quatre champs
+  (nom et téléphone obligatoires, métier, ville) ; la demande partie, il
+  propose des précisions facultatives (e-mail, site actuel, un mot sur la
+  pratique) qui complètent la même demande (`app/actions.ts` :
+  `requestDemo`, puis `completeDemoRequest`). Relectures partagées et testées
+  dans `packages/shared/src/demo-request.ts`.
+- `components/section-cta.tsx` — l'appel à l'action de fin de section : une
+  phrase et le bouton de démo, à la fin de `solution`, `tour`, `control`,
+  `method` et `own-site`. Sur téléphone, il n'y a jamais plus de quatre écrans
+  sans bouton de démo dans le contenu.
+- **Estimation par e-mail** — à la fin du simulateur, « Recevoir mon
+  estimation par e-mail » envoie les hypothèses et le calcul à l'adresse
+  saisie (`emailEstimate`), puis inscrit une demande « simulateur » dans le
+  CRM. Le calcul est refait côté serveur (`packages/db/src/estimate.ts`, que
+  la page partage) ; l'e-mail ne contient aucun texte saisi par le visiteur.
+  Deux envois par adresse et par jour, cinq par connexion et par heure. Le
+  bloc n'apparaît que si `RESEND_API_KEY` est définie sur ce projet au moment
+  de la construction : la page ne promet pas un e-mail qui ne partirait pas.
 - `components/billing-period.tsx` — la durée de facturation et les formules
   cochées dans les tarifs (l'une, l'autre ou les deux, jamais aucune),
   partagées avec le simulateur : celui-ci calcule sur le prix de ce choix.
@@ -228,8 +250,11 @@ et ne défile pas en mouvement réduit.
 pnpm --filter @theralys/web dev   # http://localhost:3003 (depuis la racine)
 ```
 
-La page est statique. Seul le formulaire de démo écrit en base (`leads`) : il
-lui faut `DATABASE_URL`.
+La page est statique. La demande de démo et l'estimation par e-mail écrivent
+en base (`leads`) : il leur faut `DATABASE_URL`. L'estimation par e-mail
+demande en plus `RESEND_API_KEY` et `MAIL_FROM` (sans elles, le bloc n'est pas
+affiché) ; `RESEND_API_URL` désigne un faux service d'envoi pour les essais
+locaux.
 
 ## Déploiement
 

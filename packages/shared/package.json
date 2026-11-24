@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./crypto": "./src/crypto.ts",
-    "./usage-runtime": "./src/usage-runtime.ts"
+    "./usage-runtime": "./src/usage-runtime.ts",
+    "./demo-request": "./src/demo-request.ts"
   },
   "scripts": {
     "lint": "eslint src",

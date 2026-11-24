@@ -25,7 +25,7 @@ export function Hero() {
           className="font-display text-[2.5rem] leading-[1.06] font-bold text-balance text-white sm:text-5xl md:text-[4.1rem]"
         >
           <Kinetic>
-            Tout le digital de votre cabinet, enfin réuni
+            Plus de patients grâce à Google, sans y passer vos soirées
           </Kinetic>
         </h1>
         <p
@@ -39,12 +39,8 @@ export function Hero() {
         </p>
       </div>
 
-      {/* Les outils, d'un coup d'œil : ils tournent autour de Harmony comme les anneaux d'une planète,
-          et chaque pastille ouvre l'outil dans la visite guidée */}
-      <ToolOrbit onDark className="relative mt-5" />
-
       <div className="relative mx-auto max-w-4xl px-5 text-center">
-        <div data-reveal data-intro="actions" className="mt-5 flex flex-wrap items-center justify-center gap-3">
+        <div data-reveal data-intro="actions" className="mt-7 flex flex-wrap items-center justify-center gap-3">
           <a
             href="#demo"
             className="cta focus-ring inline-flex items-center rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-black/20 transition-[background-color,scale] hover:bg-primary-700 active:scale-[0.98]"
@@ -71,6 +67,12 @@ export function Hero() {
           ))}
         </ul>
       </div>
+
+
+      {/* Les outils, d'un coup d'œil : ils tournent autour de Harmony comme les anneaux d'une planète,
+          et chaque pastille ouvre l'outil dans la visite guidée. Sous les boutons : sur un téléphone, la demande de
+          démo se voit dès le premier écran, l'illustration vient ensuite. */}
+      <ToolOrbit onDark className="relative mt-6" />
 
       </div>
 

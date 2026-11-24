@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition, type CSSProperties, type FormEvent } from "react";
-import { requestDemo } from "@/app/actions";
+import { useEffect, useRef, useState, useTransition, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { callablePhone } from "@theralys/shared/demo-request";
+import { completeDemoRequest, requestDemo } from "@/app/actions";
 import { rich } from "./rich";
 import { Kinetic } from "./kinetic";
 import montagnes from "@/assets/photos/montagnes.jpg";
@@ -22,26 +23,220 @@ const STEPS = [
   },
 ];
 
-export function DemoForm() {
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, startTransition] = useTransition();
+const INPUT =
+  "w-full rounded-xl border border-ink-300 bg-white px-4 py-3 text-base text-ink-900 placeholder:text-ink-500 outline-none transition focus:border-primary-600 focus:ring-4 focus:ring-primary-200 aria-[invalid=true]:border-[#b91c1c]";
+const LABEL = "mb-1.5 block text-sm font-medium text-ink-700";
+const SUBMIT =
+  "focus-ring w-full rounded-full bg-primary-600 py-4 text-base font-semibold text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700 disabled:opacity-60";
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+type FieldError = { field: "name" | "phone" | "email" | "form"; message: string };
+
+function Check() {
+  return (
+    <span className="pop-in mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success-100">
+      <svg viewBox="0 0 24 24" className="h-7 w-7 text-success-500" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+        <path className="check-draw" pathLength={1} d="m5 12.5 4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
+function Required() {
+  return (
+    <>
+      {" "}
+      <span aria-hidden>*</span>
+      <span className="sr-only"> (obligatoire)</span>
+    </>
+  );
+}
+
+/** Piège anti-robots, invisible pour les humains. */
+function Trap() {
+  return <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />;
+}
+
+/**
+ * La demande de démo, en deux temps : quatre champs pour être rappelé (le nom
+ * et le téléphone suffisent), puis, la demande partie, des précisions
+ * facultatives pour préparer la démo. La même carte sert dans la fenêtre
+ * ouverte par les boutons « démo » et en bas de page.
+ */
+export function DemoFormCard({ idPrefix, title, onClose }: { idPrefix: string; title: ReactNode; onClose?: () => void }) {
+  const [step, setStep] = useState<"form" | "details" | "done">("form");
+  const [ref, setRef] = useState<string | null>(null);
+  const [error, setError] = useState<FieldError | null>(null);
+  const [busy, startTransition] = useTransition();
+  const received = useRef<HTMLHeadingElement>(null);
+  const id = (name: string) => `${idPrefix}-${name}`;
+  const errorOf = (field: FieldError["field"]) => (error?.field === field ? error.message : null);
+
+  // L'étape change : le titre de la nouvelle étape reçoit le focus (clavier, lecteurs d'écran)
+  useEffect(() => {
+    if (step !== "form") received.current?.focus({ preventScroll: true });
+  }, [step]);
+
+  function fail(form: HTMLFormElement, next: FieldError) {
+    setError(next);
+    if (next.field !== "form") form.querySelector<HTMLElement>(`[name="${next.field}"]`)?.focus();
+  }
+
+  function onRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (String(data.name ?? "").trim().length < 2) return fail(form, { field: "name", message: "Indiquez votre nom." });
+    if (!callablePhone(String(data.phone ?? ""))) return fail(form, { field: "phone", message: "Indiquez un numéro de téléphone valide (10 chiffres)." });
+    startTransition(async () => {
+      try {
+        const outcome = await requestDemo(data);
+        if (!outcome.ok) return fail(form, { field: outcome.field, message: outcome.error });
+        setRef(outcome.ref);
+        setStep(outcome.ref ? "details" : "done");
+      } catch {
+        setError({ field: "form", message: "Votre demande n'a pas pu partir — vérifiez votre connexion et réessayez." });
+      }
+    });
+  }
+
+  function onDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
     startTransition(async () => {
-      const outcome = await requestDemo(data);
-      if (outcome.ok) setSent(true);
-      else setError(outcome.error);
+      try {
+        const outcome = await completeDemoRequest({ ...data, ref });
+        if (!outcome.ok) return fail(form, { field: outcome.field, message: outcome.error });
+        setStep("done");
+      } catch {
+        setError({ field: "form", message: "Vos précisions n'ont pas pu partir — vérifiez votre connexion et réessayez." });
+      }
     });
   }
 
-  const inputClass =
-    "w-full rounded-xl border border-ink-300 bg-white px-4 py-3 text-base text-ink-900 placeholder:text-ink-500 outline-none transition focus:border-primary-600 focus:ring-4 focus:ring-primary-200";
+  if (step === "form") {
+    return (
+      <form onSubmit={onRequest} noValidate data-demo-step="form">
+        {title}
+        <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4">
+          <div className="col-span-2">
+            <label htmlFor={id("name")} className={LABEL}>
+              Votre nom
+              <Required />
+            </label>
+            <input id={id("name")} name="name" required autoComplete="name" placeholder="Claire Dupont" aria-invalid={errorOf("name") ? true : undefined} aria-describedby={errorOf("name") ? id("name-error") : undefined} className={INPUT} />
+            {errorOf("name") ? (
+              <p id={id("name-error")} role="alert" className="mt-1.5 text-sm font-medium text-[#b91c1c]">
+                {errorOf("name")}
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <label htmlFor={id("profession")} className={LABEL}>
+              Votre métier
+            </label>
+            <input id={id("profession")} name="profession" autoComplete="organization-title" placeholder="Sophrologue" className={`${INPUT} min-w-0`} />
+          </div>
+          <div>
+            <label htmlFor={id("city")} className={LABEL}>
+              Votre ville
+            </label>
+            <input id={id("city")} name="city" autoComplete="address-level2" placeholder="Albi" className={`${INPUT} min-w-0`} />
+          </div>
+          <div className="col-span-2">
+            <label htmlFor={id("phone")} className={LABEL}>
+              Votre téléphone
+              <Required />
+            </label>
+            <input id={id("phone")} name="phone" type="tel" inputMode="tel" required autoComplete="tel" placeholder="06 12 34 56 78" aria-invalid={errorOf("phone") ? true : undefined} aria-describedby={errorOf("phone") ? id("phone-error") : undefined} className={INPUT} />
+            {errorOf("phone") ? (
+              <p id={id("phone-error")} role="alert" className="mt-1.5 text-sm font-medium text-[#b91c1c]">
+                {errorOf("phone")}
+              </p>
+            ) : null}
+          </div>
+          <Trap />
+        </div>
+        {errorOf("form") ? (
+          <p role="alert" className="mt-4 text-base font-medium text-[#b91c1c]">
+            {errorOf("form")}
+          </p>
+        ) : null}
+        <button type="submit" disabled={busy} className={`${SUBMIT} mt-6`}>
+          {busy ? "Envoi en cours…" : "Recevoir ma démo gratuite"}
+        </button>
+        <p className="mt-3 text-center text-sm text-ink-500">Gratuit, sans engagement. Nous vous rappelons pour vous la présenter.</p>
+      </form>
+    );
+  }
 
+  return (
+    <div data-demo-step={step}>
+      <div role="status" className="text-center">
+        <Check />
+        <h3 ref={received} tabIndex={-1} className="font-display mt-4 text-2xl font-bold text-ink-900 outline-none">
+          {step === "done" && ref ? <>Merci, c&apos;est ajouté&nbsp;!</> : <>Demande bien reçue&nbsp;!</>}
+        </h3>
+        <p className="mx-auto mt-2 max-w-sm leading-relaxed text-ink-700">Nous préparons votre démo personnalisée et vous rappelons très vite pour vous la présenter.</p>
+      </div>
+
+      {step === "details" ? (
+        <form onSubmit={onDetails} noValidate className="mt-6 border-t border-cream-200 pt-6">
+          <p className="font-title text-lg font-bold text-ink-900">
+            Pour une démo qui vous ressemble <span className="text-base font-medium text-ink-500">(facultatif)</span>
+          </p>
+          <div className="mt-4 grid gap-4">
+            <div>
+              <label htmlFor={id("email")} className={LABEL}>
+                Votre e-mail
+              </label>
+              <input id={id("email")} name="email" type="email" autoComplete="email" placeholder="vous@exemple.fr" aria-invalid={errorOf("email") ? true : undefined} aria-describedby={errorOf("email") ? id("email-error") : undefined} className={INPUT} />
+              {errorOf("email") ? (
+                <p id={id("email-error")} role="alert" className="mt-1.5 text-sm font-medium text-[#b91c1c]">
+                  {errorOf("email")}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <label htmlFor={id("site")} className={LABEL}>
+                Votre site actuel, si vous en avez un
+              </label>
+              <input id={id("site")} name="currentSite" inputMode="url" autoComplete="url" placeholder="www.mon-cabinet.fr" className={INPUT} />
+            </div>
+            <div>
+              <label htmlFor={id("message")} className={LABEL}>
+                Un mot sur votre pratique
+              </label>
+              <textarea id={id("message")} name="message" rows={3} maxLength={2000} placeholder="Sophrologie, gestion du stress et sommeil, en cabinet et à distance…" className={INPUT} />
+            </div>
+            <Trap />
+          </div>
+          {errorOf("form") ? (
+            <p role="alert" className="mt-4 text-base font-medium text-[#b91c1c]">
+              {errorOf("form")}
+            </p>
+          ) : null}
+          <button type="submit" disabled={busy} className={`${SUBMIT} mt-6`}>
+            {busy ? "Envoi en cours…" : "Ajouter ces précisions"}
+          </button>
+          {onClose ? (
+            <button type="button" onClick={onClose} className="focus-ring mt-2 w-full rounded-full py-3 text-base font-semibold text-ink-700 hover:text-ink-900">
+              Plus tard
+            </button>
+          ) : null}
+        </form>
+      ) : onClose ? (
+        <button type="button" onClick={onClose} className={`${SUBMIT} mt-7`}>
+          Fermer
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function DemoForm() {
   return (
     <section id="demo" className="relative overflow-hidden py-24">
       {/* Brume du matin sur les montagnes, très éclaircie : le formulaire reste au premier plan */}
@@ -77,112 +272,11 @@ export function DemoForm() {
 
         <div
           data-reveal
+          data-testid="demo-bas-de-page"
           style={{ "--rv-delay": "180ms" } as CSSProperties}
-          className="rounded-3xl border border-cream-200 bg-white p-8 shadow-[var(--shadow-pop)]"
+          className="rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-pop)] sm:p-8"
         >
-          {sent ? (
-            <div role="status" className="py-10 text-center">
-              <span className="pop-in mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-100">
-                <svg viewBox="0 0 24 24" className="h-8 w-8 text-success-500" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
-                  <path
-                    className="check-draw"
-                    pathLength={1}
-                    d="m5 12.5 4.5 4.5L19 7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              <h3 className="font-display mt-5 text-2xl font-bold text-ink-900">
-                Demande bien reçue&nbsp;!
-              </h3>
-              <p className="mx-auto mt-2 max-w-sm leading-relaxed text-ink-700">
-                Nous préparons votre démo personnalisée et revenons vers vous très vite
-                pour vous la présenter.
-              </p>
-            </div>
-          ) : (
-            <form onSubmit={onSubmit} noValidate>
-              <h3 className="font-title text-xl font-bold text-ink-900">
-                Demander ma démo gratuite
-              </h3>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label htmlFor="lead-name" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Votre nom <span aria-hidden>*</span>
-                    <span className="sr-only"> (obligatoire)</span>
-                  </label>
-                  <input id="lead-name" name="name" required autoComplete="name" placeholder="Claire Dupont" className={inputClass} />
-                </div>
-                <div>
-                  <label htmlFor="lead-profession" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Profession
-                  </label>
-                  <input id="lead-profession" name="profession" placeholder="Sophrologue" className={inputClass} />
-                </div>
-                <div>
-                  <label htmlFor="lead-city" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Ville
-                  </label>
-                  <input id="lead-city" name="city" placeholder="Albi" className={inputClass} />
-                </div>
-                <div>
-                  <label htmlFor="lead-email" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    E-mail
-                  </label>
-                  <input id="lead-email" name="email" type="email" autoComplete="email" placeholder="vous@exemple.fr" className={inputClass} />
-                </div>
-                <div>
-                  <label htmlFor="lead-phone" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Téléphone
-                  </label>
-                  <input id="lead-phone" name="phone" type="tel" autoComplete="tel" placeholder="06 12 34 56 78" className={inputClass} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label htmlFor="lead-site" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Votre site actuel, si vous en avez un
-                  </label>
-                  <input id="lead-site" name="currentSite" inputMode="url" autoComplete="url" placeholder="www.mon-cabinet.fr" className={inputClass} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label htmlFor="lead-message" className="mb-1.5 block text-sm font-medium text-ink-700">
-                    Un mot sur votre pratique (facultatif)
-                  </label>
-                  <textarea
-                    id="lead-message"
-                    name="message"
-                    rows={3}
-                    placeholder="Sophrologie, gestion du stress et sommeil, en cabinet et à distance…"
-                    className={inputClass}
-                  />
-                </div>
-                {/* Piège anti-robots, invisible pour les humains */}
-                <input
-                  type="text"
-                  name="website"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  aria-hidden="true"
-                  className="hidden"
-                />
-              </div>
-              {error ? (
-                <p role="alert" className="mt-4 text-base font-medium text-[#b91c1c]">
-                  {error}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={busy}
-                className="focus-ring mt-6 w-full rounded-full bg-primary-600 py-4 text-base font-semibold text-white shadow-md shadow-black/15 transition-[background-color,border-color,color,scale] active:scale-[0.98] hover:bg-primary-700 disabled:opacity-60"
-              >
-                {busy ? "Envoi en cours…" : "Recevoir ma démo gratuite"}
-              </button>
-              <p className="mt-3 text-center text-sm text-ink-500">
-                Gratuit, sans engagement. Vos coordonnées servent uniquement à vous recontacter.
-              </p>
-            </form>
-          )}
+          <DemoFormCard idPrefix="lead" title={<h3 className="font-title text-xl font-bold text-ink-900">Demander ma démo gratuite</h3>} />
         </div>
       </div>
     </section>

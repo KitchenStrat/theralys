@@ -121,6 +121,12 @@ En plus, sur **harmony-studio** :
 | `STUDIO_BASE_URL` | `https://harmony-studio.vercel.app` pour commencer (liens vers le studio dans l'export agenda ICS des réseaux sociaux ; même valeur que sur admin) |
 | `RESEND_API_KEY` + `MAIL_FROM` | les mêmes valeurs que sur admin — **nécessaires** pour « Mot de passe oublié » (le praticien reçoit son lien par e-mail). Sans elles, la page le dit et renvoie vers Harmony ; aucun e-mail ne part |
 
+**harmony-web** (la vitrine) : `DATABASE_URL` pour les demandes de démo, et
+`RESEND_API_KEY` + `MAIL_FROM` (les mêmes valeurs que sur admin) pour
+« Recevoir mon estimation par e-mail », à la fin du simulateur. Sans elles, ce
+bloc n'est pas affiché — tout le reste de la page fonctionne. La page étant
+préparée à la construction, redéployez après avoir ajouté ces variables.
+
 ⚠️ Ne définissez `AI_MOCK` nulle part (il forcerait le mode mock).
 Les intégrations non configurées (fal.ai, Google, Stripe, OVH) restent en mock
 automatiquement — vous les activerez plus tard en ajoutant leurs clés.

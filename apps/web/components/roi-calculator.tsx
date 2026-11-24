@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, useTransition, type CSSProperties, type FormEvent } from "react";
+import { ESTIMATE_BOUNDS, ESTIMATE_PERIOD_PHRASES, estimateEuros as euros, estimatePlural as plural, roiComparison, roiFigures } from "@theralys/db/estimate";
 import type { BillingPeriod } from "@theralys/db/plans";
+import { emailEstimate } from "@/app/actions";
 import { useBillingPeriod, type FormulaChoice } from "./billing-period";
 import { Kinetic } from "./kinetic";
 
@@ -14,21 +16,12 @@ import { Kinetic } from "./kinetic";
  * Le prix de l'abonnement est celui de la durée de facturation choisie dans la
  * grille tarifaire, juste au-dessus : passer en mensuel ou sur 3 ans là-haut
  * change le montant et le seuil de rentabilité ici.
+ *
+ * Les bornes et le calcul viennent de `@theralys/db/estimate`, que l'e-mail
+ * « Recevoir mon estimation » partage : la page et l'e-mail disent la même
+ * chose.
  */
-const PRICE = { min: 30, max: 150, step: 5, default: 60 };
-const PATIENTS = { min: 1, max: 40, step: 1, default: 10 };
-const SESSIONS = { min: 1, max: 10, step: 1, default: 3 };
-
-/** La durée telle qu'elle se lit après « votre abonnement » ou « au tarif Scale ». */
-const PERIOD_PHRASES: Record<BillingPeriod, string> = {
-  monthly: "en mensuel",
-  quarterly: "en trimestriel",
-  annual: "en annuel",
-  triennial: "sur 3 ans",
-};
-
-const euros = (n: number) => `${Math.round(n).toLocaleString("fr-FR")}\u00a0€`;
-const plural = (n: number, one: string, many: string) => `${n.toLocaleString("fr-FR")} ${n > 1 ? many : one}`;
+const { price: PRICE, patients: PATIENTS, sessions: SESSIONS } = ESTIMATE_BOUNDS;
 
 function Slider({
   id,
@@ -88,11 +81,14 @@ function Slider({
 export function RoiCalculator({
   prices,
   labels,
+  byEmail = false,
 }: {
   /** Le prix par mois de chaque choix (une formule seule, ou les deux) sur chacune des durées de facturation */
   prices: Record<FormulaChoice, { id: BillingPeriod; price: number }[]>;
   /** Le nom de chaque choix : « Site », « Scale », « Site + Scale » */
   labels: Record<FormulaChoice, string>;
+  /** L'estimation peut partir par e-mail (service d'envoi configuré) : sinon, la page ne le propose pas */
+  byEmail?: boolean;
 }) {
   // Le calcul suit le choix fait dans les tarifs : les formules cochées, sur la durée choisie
   const { period, choice } = useBillingPeriod();
@@ -100,17 +96,15 @@ export function RoiCalculator({
   const offered = prices[choice];
   const current = offered.find((entry) => entry.id === period) ?? offered.find((entry) => entry.id === "annual") ?? offered[0];
   const monthlyCost = current?.price ?? 0;
-  const periodPhrase = current ? PERIOD_PHRASES[current.id] : "";
+  const periodPhrase = current ? ESTIMATE_PERIOD_PHRASES[current.id] : "";
   // La synthèse n'est annoncée que pendant qu'on manipule le simulateur, pas quand la durée change depuis les tarifs
   const [engaged, setEngaged] = useState(false);
-  const [price, setPrice] = useState(PRICE.default);
-  const [patients, setPatients] = useState(PATIENTS.default);
-  const [sessions, setSessions] = useState(SESSIONS.default);
+  const [price, setPrice] = useState<number>(PRICE.default);
+  const [patients, setPatients] = useState<number>(PATIENTS.default);
+  const [sessions, setSessions] = useState<number>(SESSIONS.default);
 
-  const revenue = price * patients * sessions;
-  // Nombre de séances qui couvrent un mois d'abonnement
-  const breakEven = Math.max(1, Math.ceil(monthlyCost / price));
-  const ratio = revenue / monthlyCost;
+  // Le revenu, le nombre de séances qui couvrent un mois d'abonnement, et leur rapport
+  const { revenue, breakEven, ratio } = roiFigures(price, patients, sessions, monthlyCost);
   // Les deux barres partagent la même échelle : la plus longue des deux fait 100 %
   const scale = Math.max(revenue, monthlyCost);
   const revenueBar = Math.max(3, (revenue / scale) * 100);
@@ -222,8 +216,7 @@ export function RoiCalculator({
               Avec ces hypothèses, {plural(patients, "nouveau patient", "nouveaux patients")} par mois{" "}
               {patients > 1 ? "représentent" : "représente"}{" "}
               <strong className="font-bold">
-                {ratio >= 1.5 ? `environ ${Math.round(ratio).toLocaleString("fr-FR")} fois` : ratio >= 1 ? "plus que" : "moins que"} le prix de
-                l&apos;abonnement
+                {roiComparison(ratio)} le prix de l&apos;abonnement
               </strong>
               .
             </p>
@@ -237,11 +230,94 @@ export function RoiCalculator({
           </div>
         </div>
 
+        {byEmail && current ? <EstimateByEmail estimate={{ price, patients, sessions, choice, period: current.id }} /> : null}
+
         <p data-reveal className="mx-auto mt-8 max-w-2xl text-center text-sm leading-relaxed text-ink-500">
           Simulation sur vos propres hypothèses, au tarif {planLabel} {periodPhrase} ({euros(monthlyCost)} par mois). Harmony ne
           promet pas un nombre de patients&nbsp;: vos résultats dépendent de votre ville, de votre spécialité et de la concurrence.
         </p>
       </div>
     </section>
+  );
+}
+
+/**
+ * « Recevoir mon estimation par e-mail » : les hypothèses en cours partent
+ * avec l'adresse ; le calcul est refait côté serveur avant l'envoi.
+ */
+function EstimateByEmail({ estimate }: { estimate: { price: number; patients: number; sessions: number; choice: FormulaChoice; period: BillingPeriod } }) {
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startTransition] = useTransition();
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const email = String(data.email ?? "").trim();
+    if (!/^\S+@\S+\.\S{2,}$/.test(email)) {
+      setError("Indiquez une adresse e-mail valide.");
+      form.querySelector<HTMLInputElement>('input[name="email"]')?.focus();
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const outcome = await emailEstimate({ email, website: data.website, estimate });
+        if (outcome.ok) setSentTo(email);
+        else setError(outcome.error);
+      } catch {
+        setError("L'envoi a échoué — vérifiez votre connexion et réessayez.");
+      }
+    });
+  }
+
+  const SHELL = "mx-auto mt-6 max-w-5xl rounded-3xl border border-cream-200 bg-white p-5 shadow-[var(--shadow-card)] md:px-8 md:py-6";
+  if (sentTo) {
+    return (
+      <p role="status" data-testid="estimation-envoyee" className={`${SHELL} text-base leading-relaxed text-ink-900`}>
+        C&apos;est parti&nbsp;: votre estimation arrive à <strong className="font-semibold break-all">{sentTo}</strong>. Pensez à regarder vos courriers indésirables.
+      </p>
+    );
+  }
+  return (
+    <form onSubmit={onSubmit} noValidate data-reveal data-testid="estimation-par-email" className={`${SHELL} grid items-center gap-x-8 gap-y-3 lg:grid-cols-[1fr_1.05fr]`}>
+      <div>
+        <label htmlFor="sim-email" className="font-title text-lg font-bold text-ink-900">
+          Recevoir mon estimation par e-mail
+        </label>
+        <p id="sim-email-note" className="mt-1 text-sm leading-relaxed text-ink-500">
+          Vos hypothèses et le calcul, à garder sous la main. Un conseiller peut vous recontacter à ce sujet.
+        </p>
+      </div>
+      <div>
+        <div className="flex flex-col gap-2.5 sm:flex-row">
+          <input
+            id="sim-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="vous@exemple.fr"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "sim-email-error sim-email-note" : "sim-email-note"}
+            className="min-h-12 w-full min-w-0 flex-1 rounded-full border border-ink-300 bg-white px-5 py-3 text-base text-ink-900 placeholder:text-ink-500 outline-none transition focus:border-primary-600 focus:ring-4 focus:ring-primary-200"
+          />
+          {/* Piège anti-robots, invisible pour les humains */}
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+          <button
+            type="submit"
+            disabled={busy}
+            className="focus-ring min-h-12 shrink-0 rounded-full border border-primary-600 bg-white px-6 py-3 text-base font-semibold text-primary-800 transition-[background-color,scale] hover:bg-primary-50 active:scale-[0.98] disabled:opacity-60"
+          >
+            {busy ? "Envoi…" : "Envoyer"}
+          </button>
+        </div>
+        {error ? (
+          <p id="sim-email-error" role="alert" className="mt-2 text-sm font-medium text-[#b91c1c]">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </form>
   );
 }

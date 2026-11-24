@@ -33,7 +33,11 @@
     "DATAFORSEO_MOCK",
     "EXTERNAL_SITE_MOCK",
     "EXTERNAL_SITE_BOT_URL",
-    "EXTERNAL_SITE_BOT_UA"
+    "EXTERNAL_SITE_BOT_UA",
+    "RESEND_API_KEY",
+    "RESEND_API_URL",
+    "MAIL_FROM",
+    "WEB_BASE_URL"
   ],
   "tasks": {
     "build": {

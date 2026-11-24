@@ -3,6 +3,7 @@ import { Mail, MapPin, Newspaper, Share2, type LucideIcon } from "lucide-react";
 import { Timeline } from "./timeline";
 import { rich } from "./rich";
 import { Kinetic } from "./kinetic";
+import { SectionCta } from "./section-cta";
 
 const STEPS = [
   {
@@ -106,6 +107,9 @@ export function Method() {
             </div>
           </div>
         </div>
+
+        {/* Un bouton de démo à la fin de chaque grande section */}
+        <SectionCta text="La première étape prend une minute." label="Demander ma démo" />
       </div>
     </section>
   );

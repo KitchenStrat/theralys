@@ -4,6 +4,7 @@ import siteExistant from "@/assets/captures/site-existant.webp";
 import { Kinetic } from "./kinetic";
 import { BrowserFrame, Capture, PhoneFrame } from "./frames";
 import { rich } from "./rich";
+import { SectionCta } from "./section-cta";
 
 const STEPS = [
   { title: "Connecter", text: "Indiquez **l'adresse de votre site**." },
@@ -83,6 +84,9 @@ export function OwnSite() {
             </PhoneFrame>
           </div>
         </div>
+
+        {/* Un bouton de démo à la fin de chaque grande section */}
+        <SectionCta grid text="Gardez votre site, et voyez ce que Harmony y ajoute." />
       </div>
     </section>
   );

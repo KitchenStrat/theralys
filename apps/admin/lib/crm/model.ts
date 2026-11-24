@@ -60,6 +60,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   manual: "Saisie manuelle",
   import: "Liste importée",
   landing: "Demande sur la vitrine",
+  simulator: "Estimation du simulateur",
   demo: "Démo créée",
   referral: "Parrainage",
 };

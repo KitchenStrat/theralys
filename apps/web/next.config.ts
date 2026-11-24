@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
-  transpilePackages: ["@theralys/db", "@theralys/shared"],
+  transpilePackages: ["@theralys/db", "@theralys/shared", "@theralys/providers"],
   serverExternalPackages: ["pg"],
   // Captures d'écran de la vitrine : AVIF d'abord, WebP en repli
   images: { formats: ["image/avif", "image/webp"] },

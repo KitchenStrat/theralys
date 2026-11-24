@@ -61,6 +61,26 @@ describe("createMailProvider", () => {
     log.mockRestore();
     expect(createMailProvider({ RESEND_API_KEY: "re_x" } as NodeJS.ProcessEnv).mode).toBe("resend");
   });
+
+  it("l'adresse de l'API est celle de Resend, sauf environnement d'essai qui en désigne une autre", async () => {
+    const fetchImpl = fetchReturning(200, "{}");
+    await new ResendMailProvider("re_test", "Harmony <bonjour@harmony-web.fr>", fetchImpl, "http://localhost:3099").send(message);
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toBe("http://localhost:3099/emails");
+    const seen: string[] = [];
+    const original = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      seen.push(String(url));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    try {
+      await createMailProvider({ RESEND_API_KEY: "re_x", RESEND_API_URL: "http://localhost:3099/" } as unknown as NodeJS.ProcessEnv).send(message);
+      await createMailProvider({ RESEND_API_KEY: "re_x", RESEND_API_URL: "" } as unknown as NodeJS.ProcessEnv).send(message);
+      await createMailProvider({ RESEND_API_KEY: "re_x" } as NodeJS.ProcessEnv).send(message);
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(seen).toEqual(["http://localhost:3099/emails", "https://api.resend.com/emails", "https://api.resend.com/emails"]);
+  });
 });
 
 describe("sendMailWithRetry", () => {

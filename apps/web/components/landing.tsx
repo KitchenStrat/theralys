@@ -20,6 +20,7 @@ import {
 import { Band } from "./band";
 import { BillingPeriodProvider } from "./billing-period";
 import { Control } from "./control";
+import { DemoDialog } from "./demo-dialog";
 import { DemoForm } from "./demo-form";
 import { Faq } from "./faq";
 import { Footer } from "./footer";
@@ -54,7 +55,7 @@ import { Tour } from "./tour";
  *   tels sur la page tant qu'ils n'ont pas été remplacés par de vrais retours
  *   (cf. `PROVISIONAL` dans `testimonials.tsx`).
  */
-export function Landing() {
+export function Landing({ estimateByEmail = false }: { /** L'estimation du simulateur peut partir par e-mail (service d'envoi configuré) */ estimateByEmail?: boolean }) {
   const pricesOf = (plan: PlanId): PlanPeriod[] =>
     planPeriods(plan).map((period) => ({
       id: period,
@@ -125,12 +126,14 @@ export function Landing() {
         <Band />
         <BillingPeriodProvider>
           <Pricing formulas={formulas} totals={totals} periods={periods} minCommitmentMonths={MIN_COMMITMENT_MONTHS} />
-          <RoiCalculator prices={totals} labels={labels} />
+          <RoiCalculator prices={totals} labels={labels} byEmail={estimateByEmail} />
         </BillingPeriodProvider>
         <Faq />
         <DemoForm />
       </main>
       <Footer />
+      {/* Tout bouton « démo » de la page ouvre cette fenêtre */}
+      <DemoDialog />
     </>
   );
 }

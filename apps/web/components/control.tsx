@@ -10,6 +10,7 @@ import { ScrollWords } from "./scroll-words";
 import { Capture } from "./frames";
 import cabinet from "@/assets/photos/cabinet.jpg";
 import { PhotoBackdrop } from "./photo-backdrop";
+import { SectionCta } from "./section-cta";
 
 /**
  * « Vous gardez la main » : les règles du produit, dites sans détour. Chaque
@@ -120,6 +121,9 @@ export function Control() {
             </div>
           </article>
         </div>
+
+        {/* Un bouton de démo à la fin de chaque grande section */}
+        <SectionCta dark text="Vous gardez la main, dès la démo." />
       </div>
     </section>
   );
