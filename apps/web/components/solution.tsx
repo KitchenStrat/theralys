@@ -74,33 +74,49 @@ export function Solution() {
           </ul>
         </div>
 
-        {/* Tout part de Harmony : les sept outils, chacun relié au centre */}
+        {/*
+          Tout part de Harmony : les sept outils, chacun relié au centre. Le schéma vit une fois entré à l'écran
+          (cf. `MotionDirector`) : les deux orbites tournent en sens contraires, un trait de lumière part de Harmony
+          vers chaque outil à tour de rôle, l'outil lui répond, le cœur émet une onde. Sans mouvement, il est posé.
+        */}
         <div data-hub className="relative mx-auto aspect-square w-full max-w-[34rem]">
-          <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="absolute inset-0 h-full w-full">
+          {/* Chaque orbite a son calque : c'est le calque entier qui tourne */}
+          <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="hub-ring absolute inset-0 h-full w-full">
             <circle cx={CENTER} cy={CENTER} r={RADIUS} className="hub-orbit" />
-            <circle cx={CENTER} cy={CENTER} r={132} className="hub-orbit hub-orbit--inner" />
-            {/* Une liaison par outil, à sa couleur : elle se trace depuis Harmony à l'entrée dans l'écran (cf. `MotionDirector`) */}
+          </svg>
+          <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="hub-ring hub-ring--inner absolute inset-0 h-full w-full">
+            <circle cx={CENTER} cy={CENTER} r={132} className="hub-orbit" />
+          </svg>
+          <svg aria-hidden viewBox={`0 0 ${SIZE} ${SIZE}`} className="absolute inset-0 h-full w-full">
+            {/* Une liaison par outil, à sa couleur : elle se trace depuis Harmony à l'entrée dans l'écran */}
             {NODES.map(({ tool, path }) => (
               <path key={tool.id} d={path} className="hub-line" style={{ stroke: tool.colors.from }} />
+            ))}
+            {/* Le trait de lumière qui la parcourt ensuite, de Harmony vers l'outil */}
+            {NODES.map(({ tool, path }) => (
+              <path key={tool.id} d={path} className="hub-beam" style={{ stroke: tool.colors.from }} />
             ))}
           </svg>
 
           <div className="absolute top-1/2 left-1/2 grid h-[27%] w-[27%] -translate-x-1/2 -translate-y-1/2 place-items-center">
+            {/* Deux ondes, l'une après l'autre, derrière le cœur */}
+            <span aria-hidden className="hub-pulse" />
+            <span aria-hidden className="hub-pulse hub-pulse--late" />
             <span className="hub-core grid h-full w-full place-items-center rounded-full text-[clamp(0.95rem,3.4vw,1.5rem)]">
               <Brand onDark />
             </span>
           </div>
 
           <ul aria-label="Les outils réunis dans Harmony">
-            {NODES.map(({ tool, x, y }) => (
+            {NODES.map(({ tool, x, y }, index) => (
               <li
                 key={tool.id}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
                 style={{ left: `${(x / SIZE) * 100}%`, top: `${(y / SIZE) * 100}%` }}
               >
                 <span
-                  className="hub-node flex flex-col items-center gap-1.5 rounded-2xl border border-cream-200 bg-white px-2 py-2 text-center shadow-[var(--shadow-card)] sm:px-3 sm:py-2.5"
-                  style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to } as CSSProperties}
+                  className="hub-node flex flex-col items-center gap-1.5 rounded-2xl border border-cream-200 bg-white px-2 py-2 text-center sm:px-3 sm:py-2.5"
+                  style={{ "--t-from": tool.colors.from, "--t-to": tool.colors.to, "--i": index } as CSSProperties}
                 >
                   <span className="tool-chip grid h-9 w-9 place-items-center rounded-xl sm:h-11 sm:w-11">
                     <tool.icon size={20} strokeWidth={2.1} aria-hidden />

@@ -16,8 +16,12 @@ import { DURATION, EASE, MEDIA, ScrollTrigger, gsap, useGSAP } from "./gsap";
  *                             jouée au chargement (titre, texte, anneau des
  *                             outils, boutons, capture de l'espace client)
  *   [data-hub]                schéma « tout au même endroit » : les liaisons
- *                             se tracent depuis Harmony, puis chaque outil se
- *                             pose au bout de la sienne
+ *                             se tracent depuis Harmony, chaque outil se pose
+ *                             au bout de la sienne, puis le schéma vit tant
+ *                             qu'il est à l'écran — un trait de lumière part
+ *                             vers chaque outil à tour de rôle (les orbites,
+ *                             les ondes du cœur et le flottement des outils
+ *                             sont dans la feuille de style, sous `data-live`)
  *   [data-week]               semaine type : les contenus arrivent jour
  *                             après jour
  *   a[href^="#"]              lien interne : la page défile en douceur jusqu'à
@@ -128,17 +132,64 @@ export function MotionDirector() {
         },
       });
 
-      // ── Schéma des outils : les liaisons se tracent, puis les outils se posent ──
+      // ── Schéma des outils : les liaisons se tracent, les outils se posent, puis le schéma vit ──
+      const cleanups: (() => void)[] = [];
       for (const hub of gsap.utils.toArray<HTMLElement>("[data-hub]")) {
-        const lines = hub.querySelectorAll(".hub-line");
-        const nodes = hub.querySelectorAll(".hub-node");
+        const lines = gsap.utils.toArray<SVGPathElement>(".hub-line", hub);
+        const beams = gsap.utils.toArray<SVGPathElement>(".hub-beam", hub);
+        const nodes = gsap.utils.toArray<HTMLElement>(".hub-node", hub);
         const core = hub.querySelector(".hub-core");
+
+        // Un trait de lumière part de Harmony et file vers un outil ; à son arrivée, l'outil lui répond d'un halo
+        const send = (index: number) => {
+          const timeline = gsap.timeline();
+          const beam = beams[index];
+          const node = nodes[index];
+          if (!beam || !node) return timeline;
+          return timeline
+            // Rien n'est posé avant son tour : au repos, le trait reste invisible
+            .fromTo(beam, { drawSVG: "0% 0%", opacity: 1 }, { drawSVG: "8% 34%", duration: 0.3, ease: "power1.in", immediateRender: false })
+            .to(beam, { drawSVG: "74% 100%", duration: 0.55, ease: "none" })
+            .to(beam, { drawSVG: "100% 100%", opacity: 0, duration: 0.2, ease: "power1.out" })
+            .fromTo(node, { scale: 1, "--glow": 0 }, { scale: 1.07, "--glow": 1, duration: 0.22, ease: "power2.out", immediateRender: false }, "-=0.3")
+            .to(node, { scale: 1, "--glow": 0, duration: 0.7, ease: "power2.out", clearProps: "transform" });
+        };
+        // À tour de rôle, dans le sens des aiguilles, puis un temps de repos avant le tour suivant
+        const loop = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 1.1 });
+        nodes.forEach((_, index) => loop.add(send(index), index * 0.6));
+
+        // Le schéma ne vit qu'à l'écran : hors de vue, la boucle et les animations de la feuille de style attendent
+        let entered = false;
+        const live = (on: boolean) => {
+          hub.dataset.live = String(on);
+          if (on) loop.play();
+          else loop.pause();
+        };
+        const watch = ScrollTrigger.create({ trigger: hub, start: "top bottom", end: "bottom top", onToggle: (self) => entered && live(self.isActive) });
         gsap
-          .timeline({ scrollTrigger: { trigger: hub, start: "top 72%", once: true } })
+          .timeline({ scrollTrigger: { trigger: hub, start: "top 72%", once: true }, onComplete: () => ((entered = true), live(watch.isActive)) })
           .fromTo(core, { scale: 0.8, opacity: 0 }, { scale: 1, opacity: 1, clearProps: CLEAR })
           .fromTo(hub.querySelectorAll(".hub-orbit"), { opacity: 0 }, { opacity: 1, duration: DURATION.scene }, 0.1)
           .fromTo(lines, { drawSVG: "0% 0%" }, { drawSVG: "0% 100%", duration: 0.8, stagger: 0.07 }, 0.25)
           .fromTo(nodes, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.5, stagger: 0.07, clearProps: CLEAR }, 0.6);
+
+        // Outil visé à la souris : sa liaison s'allume (le reste est dans la feuille de style)
+        const lineOf = (target: EventTarget | null) => {
+          const node = (target as Element | null)?.closest?.<HTMLElement>(".hub-node");
+          return node ? (lines[nodes.indexOf(node)] ?? null) : null;
+        };
+        const onOver = (event: PointerEvent) => {
+          if (event.pointerType === "mouse") lineOf(event.target)?.setAttribute("data-on", "");
+        };
+        const onOut = (event: PointerEvent) => lineOf(event.target)?.removeAttribute("data-on");
+        hub.addEventListener("pointerover", onOver);
+        hub.addEventListener("pointerout", onOut);
+        cleanups.push(() => {
+          hub.removeEventListener("pointerover", onOver);
+          hub.removeEventListener("pointerout", onOut);
+          lines.forEach((line) => line.removeAttribute("data-on"));
+          delete hub.dataset.live;
+        });
       }
 
       // ── Semaine type : les contenus arrivent jour après jour ──────────────
@@ -149,6 +200,8 @@ export function MotionDirector() {
           { opacity: 1, x: 0, duration: 0.5, stagger: 0.12, clearProps: CLEAR, scrollTrigger: { trigger: week, start: "top 70%", once: true } },
         );
       }
+
+      return () => cleanups.forEach((cleanup) => cleanup());
     });
 
     // ── Liens internes : défilement en douceur, piloté par GSAP ─────────────
