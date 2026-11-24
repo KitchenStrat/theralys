@@ -114,6 +114,30 @@ comprises.
   `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (section Fiche Google, sinon
   données simulées, `DATAFORSEO_MOCK=1` pour forcer le mock).
 
+### Photos des visuels
+
+- **Origine choisie par le praticien** (Paramétrage, première étape : « Les
+  photos générées viennent d'où ? ») : IA, banque d'images, ou mixte (l'une
+  puis l'autre, d'un contenu au suivant). Le choix est enregistré dans
+  `social_visual_settings` (migration 0015) ; sans ligne, banque d'images.
+- **Quand** : après la rédaction, à la préparation d'un mois, à une demande
+  sur mesure et à une régénération (`lib/social/photos.ts` →
+  `sourceSocialPhotos`, `packages/ai/src/social-photos.ts`). Chaque visuel
+  qui porte une photo en reçoit une choisie pour son sujet. Ne sont jamais
+  remplacées : la photo envoyée par le praticien et la couverture de l'article
+  qu'un contenu annonce. Sans résultat (ou sans clé pour l'origine choisie),
+  le visuel garde la photo du site — jamais une illustration factice.
+- **Sa propre photo** : dans la fenêtre d'un contenu, « Mettre ma photo »
+  l'envoie (`/api/upload`) et la pose en fond (`setSocialPostPhoto`). Une
+  carte de couleur ou de texte devient alors un « photo-titre » et se
+  souvient de son modèle (`content.plainTemplate`) pour le retrouver si la
+  photo est retirée ; elle reste en place quand le contenu est régénéré.
+  L'origine de chaque photo est notée sur la diapositive
+  (`slides[0].imageOrigin` : `site`, `stock`, `ai`, `upload`) et dite dans la
+  fenêtre.
+- **Demande sur mesure** : le champ « Sur quel sujet ? Quelles
+  instructions ? » accepte jusqu'à 400 caractères (sujet et consignes).
+
 ## Fiche Google
 
 Section `app/(app)/fiche-google/` (formule Scale, `hasGoogleProfile`, démos

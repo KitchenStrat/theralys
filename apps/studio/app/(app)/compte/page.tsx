@@ -84,7 +84,6 @@ export default async function AccountPage() {
         "Contenus réseaux sociaux prêts à poster (visuels et légendes)",
         "Google Ads : analyse, mots-clés et plan d'action",
         "Meta Ads : veille, annonces et plan vidéo",
-        "Académie",
       ],
     },
   ];

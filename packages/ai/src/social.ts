@@ -102,6 +102,12 @@ export type FinalizedPost = {
   /** ≤ 70 caractères, affiché dans le calendrier */
   topic: string;
   content: SocialPostContent;
+  /**
+   * Le plan voulait une photo que le site n'a pas : le visuel est rendu sans
+   * elle (« affirmation »), et l'appelant peut lui en fournir une
+   * (`sourceSocialPhotos`). Indication de passage, jamais enregistrée.
+   */
+  photoWanted?: boolean;
 };
 
 export type SocialGenerator = {
@@ -740,8 +746,9 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
       }),
     ];
   }
-  // Template photo sans photo résolue → variante sans photo
-  if (template === "photo-titre" && !slides[0]?.imageUrl) template = "affirmation";
+  // Template photo sans photo résolue → variante sans photo (l'appelant peut encore en fournir une)
+  const photoWanted = template === "photo-titre" && !slides[0]?.imageUrl;
+  if (photoWanted) template = "affirmation";
 
   // Texte alternatif : template rétrogradé, photo retirée (ou ajoutée en repli), citation réécrite → écrit par le code
   const draftHadPhoto = TEMPLATE_ACCEPTS_PHOTO[draft.template] && Boolean(slidesIn[0]?.imageRef ?? fallbackRef);
@@ -796,6 +803,7 @@ function finalizeOne(draft: SocialPostDraft, frame: PostFrame, ctx: PostContext)
       voice: brief.voice,
       generator: ctx.generator,
     },
+    ...(photoWanted ? { photoWanted: true } : {}),
   };
 }
 

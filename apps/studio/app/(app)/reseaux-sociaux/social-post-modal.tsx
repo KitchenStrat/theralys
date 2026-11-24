@@ -14,6 +14,8 @@ import {
   ExternalLink,
   FileArchive,
   FileText,
+  ImageOff,
+  ImageUp,
   Info,
   RotateCcw,
   Save,
@@ -24,7 +26,9 @@ import { FieldHint, Input, Modal, Segmented, Select } from "@theralys/ui";
 import {
   captionFor,
   GOOGLE_REPLY_TONES,
+  SOCIAL_IMAGE_ORIGIN_LABELS,
   SOCIAL_NETWORKS,
+  SOCIAL_PHOTO_DATA_URI_MAX_CHARS,
   SOCIAL_POST_INSTRUCTIONS_MAX,
   SOCIAL_SIZES,
   type SocialNetwork,
@@ -49,6 +53,7 @@ import {
   markSocialPostPublished,
   regenerateSocialPost,
   rescheduleSocialPost,
+  setSocialPostPhoto,
   updateSocialCaption,
 } from "./actions";
 import {
@@ -103,7 +108,8 @@ function networksFor(format: SocialCalendarItem["format"]) {
 }
 
 /** Où afficher un message d'erreur : au plus près de l'action qui a échoué. */
-type ErrorPlace = "caption" | "copy" | "regen" | "publish" | "manage";
+type ErrorPlace = "caption" | "copy" | "regen" | "publish" | "manage" | "photo";
+const PHOTO_TOO_HEAVY = "Cette photo est trop lourde pour être posée sur un visuel ici : choisissez-en une plus légère (moins de 150 Ko).";
 /** Action en cours parmi celles qui partagent la même transition (un seul indicateur à la fois). */
 type RunKind = "publish" | "date" | "remove";
 
@@ -219,6 +225,11 @@ function PostModalBody({
     wasRegenerating.current = regenerating;
   }, [regenerating]);
 
+  // Photo de fond : le praticien peut toujours mettre la sienne (envoi du fichier, puis pose sur le visuel)
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
+  const [changingPhoto, startChangingPhoto] = useTransition();
+
   const isCarousel = item.format === "carousel";
   const published = item.status === "published";
   // Un contenu « nouvel article » est lié à son créneau : il se refait depuis « Préparer le mois », pas ici
@@ -315,6 +326,60 @@ function PostModalBody({
     });
   }
 
+  /** Le visuel a changé : l'aperçu est rechargé, l'état du contenu relu. */
+  function photoChanged(message: string) {
+    setSlide(0);
+    setLoadedUrl(null);
+    setErrorUrl(null);
+    setRetry((r) => r + 1);
+    setPhotoMessage(message);
+    router.refresh();
+  }
+
+  function sendPhoto(file: File) {
+    setError(null);
+    setPhotoMessage(null);
+    startChangingPhoto(async () => {
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const response = await fetch("/api/upload", { method: "POST", body: form });
+        const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!response.ok || !data.url) {
+          setError({ place: "photo", message: data.error ?? "L'envoi de la photo a échoué — réessayez." });
+          return;
+        }
+        // Sans stockage de fichiers (environnement de test), la photo revient embarquée dans son adresse : au-delà
+        // d'une petite taille, elle ne peut pas être posée sur un visuel — dit ici, sans l'envoyer une seconde fois
+        if (data.url.startsWith("data:") && data.url.length > SOCIAL_PHOTO_DATA_URI_MAX_CHARS) {
+          setError({ place: "photo", message: PHOTO_TOO_HEAVY });
+          return;
+        }
+        const result = await setSocialPostPhoto({ postId: item.id, imageUrl: data.url });
+        if (result.error) {
+          setError({ place: "photo", message: result.error });
+          return;
+        }
+        photoChanged("Votre photo est en place.");
+      } catch {
+        setError({ place: "photo", message: "L'envoi de la photo a échoué — vérifiez votre connexion et réessayez." });
+      }
+    });
+  }
+
+  function removePhoto() {
+    setError(null);
+    setPhotoMessage(null);
+    startChangingPhoto(async () => {
+      const result = await setSocialPostPhoto({ postId: item.id, imageUrl: null });
+      if (result.error) {
+        setError({ place: "photo", message: result.error });
+        return;
+      }
+      photoChanged("Photo retirée.");
+    });
+  }
+
   function onDownload() {
     setDownloaded(true);
     // `downloaded_at` est posé par la route : rafraîchir pour la bordure du calendrier
@@ -323,7 +388,7 @@ function PostModalBody({
 
   const download = (kind: "image" | "zip" | "pdf" | "caption" | "all") =>
     `/api/social/${item.id}/download?kind=${kind}${kind === "caption" ? "" : `&size=${size}`}`;
-  const busy = pending || savingCaption || regenerating;
+  const busy = pending || savingCaption || regenerating || changingPhoto;
   // Pourquoi « Régénérer » est désactivé (aide au survol), sinon undefined
   const regenBlocked = announcesArticle
     ? "Ce contenu annonce un nouvel article : il se régénère depuis « Préparer le mois » après l'avoir retiré."
@@ -496,6 +561,51 @@ function PostModalBody({
                     </button>
                   ))}
                 </div>
+              </div>
+            ) : null}
+
+            {/* Photo de fond : celle du visuel, que le praticien peut toujours remplacer par la sienne */}
+            {!published ? (
+              <div data-testid="photo-de-fond" data-origin={item.photo.origin ?? "aucune"} className="mt-4 rounded-ds-md p-4 ring-1 ring-ds-ink-200">
+                <h3 className="text-ds-body font-semibold text-ds-ink-900">Photo de fond</h3>
+                <p className="mt-0.5 text-ds-meta text-ds-ink-600">
+                  {item.photo.origin ? `${SOCIAL_IMAGE_ORIGIN_LABELS[item.photo.origin]}.` : item.photo.textCard ? "Ce visuel est une carte de texte, sans photo." : "Ce visuel n'a pas de photo."}{" "}
+                  {item.photo.origin === "upload"
+                    ? "Vous pouvez la changer ou la retirer."
+                    : item.photo.textCard
+                      ? "Avec votre photo, son titre et son texte se posent dessus."
+                      : `Vous pouvez mettre la vôtre${isCarousel ? " sur la couverture" : ""}.`}
+                </p>
+                <input
+                  ref={photoInput}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden
+                  data-testid="photo-fichier"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    // Le même fichier peut être choisi de nouveau après une erreur
+                    event.target.value = "";
+                    if (file) sendPhoto(file);
+                  }}
+                />
+                <div className={clsx("mt-3 flex flex-wrap items-center gap-2", TOUCH_BUTTONS_CLASS)}>
+                  <Button variant="secondary" size="sm" icon={<ImageUp size={16} aria-hidden />} disabled={busy} onClick={() => photoInput.current?.click()}>
+                    {changingPhoto ? "Mise en place…" : item.photo.origin === "upload" ? "Changer ma photo" : "Mettre ma photo"}
+                  </Button>
+                  {item.photo.origin ? (
+                    <Button variant="quiet" size="sm" icon={<ImageOff size={16} aria-hidden />} disabled={busy} onClick={removePhoto}>
+                      Retirer la photo
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-ds-meta text-ds-ink-600">JPEG, PNG ou WebP. Votre photo reste en place si vous régénérez ce contenu.</p>
+                <p aria-live="polite" className={clsx("text-ds-meta font-medium text-ds-success-700", photoMessage ? "mt-2" : "sr-only")}>
+                  {photoMessage ?? ""}
+                </p>
+                {errorAt("photo")}
               </div>
             ) : null}
           </section>

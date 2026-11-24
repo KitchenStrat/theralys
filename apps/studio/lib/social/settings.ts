@@ -7,13 +7,16 @@
  */
 
 import { eq } from "drizzle-orm";
-import { blogSettings, getDb, prospects, sites, socialSettings } from "@theralys/db";
+import { blogSettings, getDb, prospects, sites, socialSettings, socialVisualSettings } from "@theralys/db";
 import { isMissingSchemaError } from "./data";
 import {
+  DEFAULT_SOCIAL_PHOTO_SOURCE,
   DEFAULT_SOCIAL_VOICE,
   SOCIAL_POST_DAYS,
   cleanSocialInstructions,
+  isSocialPhotoSource,
   normalizePostDays,
+  type SocialPhotoSource,
   type SocialVoice,
 } from "@theralys/shared";
 
@@ -37,7 +40,17 @@ export type SocialSettingsView = {
   postDays: number[];
   /** Vrai si le praticien a enregistré ses réglages (ligne `social_settings`) */
   saved: boolean;
+  /** D'où viennent les photos préparées pour les visuels (IA, banque d'images, les deux) */
+  photoSource: SocialPhotoSource;
+  /**
+   * Faux tant que la migration 0015 n'est pas appliquée : le réglage n'est
+   * alors pas proposé, et les visuels gardent les photos du site, comme avant.
+   */
+  photoSourceAvailable: boolean;
 };
+
+/** Réglage des photos tel que lu en base : `null` sans ligne, `undefined` tant que la table n'existe pas. */
+export type VisualSettingsRow = { photoSource: unknown } | null | undefined;
 
 const VOICE_COLUMNS = {
   voiceDesignation: true,
@@ -64,13 +77,20 @@ export function resolveSocialSettings(input: {
   social: SocialSettingsRow | null;
   blog: VoiceColumns | null;
   prospectGender: SocialVoice["accord"] | null;
+  /** Réglage des photos ; absent ou `undefined` : la table n'existe pas encore */
+  visual?: VisualSettingsRow;
 }): SocialSettingsView {
+  const photos = {
+    photoSource: isSocialPhotoSource(input.visual?.photoSource) ? input.visual.photoSource : DEFAULT_SOCIAL_PHOTO_SOURCE,
+    photoSourceAvailable: input.visual !== undefined,
+  };
   if (input.social) {
     return {
       voice: voiceOf(input.social),
       instructions: cleanSocialInstructions(input.social.instructions),
       postDays: normalizePostDays(Array.isArray(input.social.postDays) ? input.social.postDays : null),
       saved: true,
+      ...photos,
     };
   }
   return {
@@ -80,13 +100,14 @@ export function resolveSocialSettings(input: {
     instructions: "",
     postDays: [...SOCIAL_POST_DAYS],
     saved: false,
+    ...photos,
   };
 }
 
 /** Réglages effectifs d'un site (3 lectures courtes, en parallèle). */
 export async function getSocialSettings(siteId: string): Promise<SocialSettingsView> {
   const db = getDb();
-  const [social, blog, [owner]] = await Promise.all([
+  const [social, blog, [owner], visual] = await Promise.all([
     // Tant que la migration 0002 n'est pas appliquée en production, la section
     // continue de fonctionner avec les réglages par défaut
     db.query.socialSettings
@@ -106,10 +127,19 @@ export async function getSocialSettings(siteId: string): Promise<SocialSettingsV
       .leftJoin(prospects, eq(prospects.id, sites.prospectId))
       .where(eq(sites.id, siteId))
       .limit(1),
+    // Tant que la migration 0015 n'est pas appliquée : réglage non proposé, photos du site comme avant
+    db.query.socialVisualSettings
+      .findFirst({ where: eq(socialVisualSettings.siteId, siteId), columns: { photoSource: true } })
+      .then((row): VisualSettingsRow => row ?? null)
+      .catch((err: unknown): VisualSettingsRow => {
+        if (!isMissingSchemaError(err)) throw err;
+        return undefined;
+      }),
   ]);
   return resolveSocialSettings({
     social: social ?? null,
     blog: blog ?? null,
     prospectGender: owner?.gender ?? null,
+    visual,
   });
 }

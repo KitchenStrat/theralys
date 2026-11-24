@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from "reac
 import { clsx } from "clsx";
 import { ArrowRight, Check, Info, Lightbulb, Sparkles } from "lucide-react";
 import { FieldHint, Input, Label, Select } from "@theralys/ui";
-import { SOCIAL_REQUESTS_PER_MONTH, type SocialFormat } from "@theralys/shared";
+import { SOCIAL_REQUESTS_PER_MONTH, SOCIAL_REQUEST_TOPIC_MAX, type SocialFormat } from "@theralys/shared";
 import {
   Badge,
   Button,
@@ -22,7 +22,7 @@ import { formatDayFr, monthNameFr, ofMonthFr } from "@/lib/calendar";
 import type { SocialRequestUsage } from "@/lib/social/data";
 import type { SocialSwatch } from "@/lib/social/render/theme";
 import { requestSocialPost } from "./actions";
-import { CustomIcon, ErrorNote, FIELD_CLASS, FormatTile } from "./social-ui";
+import { CustomIcon, ErrorNote, FIELD_CLASS, FormatTile, TEXTAREA_CLASS } from "./social-ui";
 
 const FORMAT_OPTIONS: { value: SocialFormat; label: string }[] = [
   { value: "static", label: "Statique — 1 visuel" },
@@ -196,19 +196,20 @@ export function RequestBar({
         {/* Les champs restent montés pendant la création : leur saisie est conservée si elle échoue */}
         <div hidden={creating} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
           <div className="sm:col-span-2 xl:col-span-1">
-            <Label htmlFor="social-topic">Sur quel sujet ? *</Label>
-            <Input
+            <Label htmlFor="social-topic">Sur quel sujet ? Quelles instructions ? *</Label>
+            <textarea
               id="social-topic"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="Ex. : le sommeil avant la rentrée, une idée reçue sur l'hypnose…"
-              maxLength={200}
+              placeholder="Ex. : le sommeil avant la rentrée, en trois conseils simples, sur un ton léger…"
+              maxLength={SOCIAL_REQUEST_TOPIC_MAX}
               required
               minLength={3}
+              rows={3}
               disabled={disabled}
-              className={FIELD_CLASS}
+              className={clsx(TEXTAREA_CLASS, "min-h-24")}
             />
-            <FieldHint>Plus c&apos;est précis, mieux c&apos;est. Vous pouvez citer une de vos spécialités.</FieldHint>
+            <FieldHint>Dites le sujet, puis ce que vous voulez y trouver : angle, ton, points à citer, une de vos spécialités.</FieldHint>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 text-ds-meta font-semibold text-ds-section-ink">
                 <Lightbulb size={15} aria-hidden />

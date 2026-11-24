@@ -13,7 +13,9 @@ import {
   sizesFor,
   socialSlotsForMonth,
   SOCIAL_REQUESTS_PER_MONTH,
+  isTextCard,
   type SocialFormat,
+  type SocialImageOrigin,
   type SocialPillar,
   type SocialSize,
   type SocialSlot,
@@ -48,6 +50,8 @@ export type SocialCalendarItem = {
   altText: string;
   note?: string;
   slides: { role: string; title: string; body: string; hasImage: boolean }[];
+  /** Photo de fond du visuel : d'où elle vient (null : aucune) ; `textCard` : une carte de texte, qui se pose sur la photo qu'on lui donne */
+  photo: { origin: SocialImageOrigin | null; textCard: boolean };
   sourceRefs: SocialSourceRef[];
   /** ISO 8601 */
   downloadedAt: string | null;
@@ -127,6 +131,8 @@ function toCalendarItem(post: CalendarRow, accentColor: string): SocialCalendarI
       body: s.body,
       hasImage: Boolean(s.imageUrl),
     })),
+    // Une photo sans origine notée date d'avant ce champ : elle venait du site
+    photo: { origin: post.content.slides[0]?.imageUrl ? (post.content.slides[0].imageOrigin ?? "site") : null, textCard: isTextCard(template) },
     sourceRefs: post.content.sourceRefs,
     downloadedAt: post.downloadedAt?.toISOString() ?? null,
     publishedAt: post.publishedAt?.toISOString() ?? null,

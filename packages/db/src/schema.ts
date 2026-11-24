@@ -808,6 +808,22 @@ export const socialSettings = pgTable("social_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("social_settings_site_id_idx").on(t.siteId)]);
 
+/**
+ * Réglages des visuels des réseaux sociaux qui ne tiennent pas à la voix :
+ * l'origine des photos préparées (IA, banque d'images, les deux). Table à
+ * part de `social_settings`, que plusieurs lectures et l'enregistrement du
+ * Paramétrage lisent ou écrivent en entier : rien ne lui est ajouté, ils
+ * fonctionnent avant comme après la migration 0015. Sans ligne ici : banque
+ * d'images.
+ */
+export const socialVisualSettings = pgTable("social_visual_settings", {
+  siteId: uuid("site_id")
+    .primaryKey()
+    .references(() => sites.id, { onDelete: "cascade" }),
+  photoSource: text("photo_source").notNull().default("stock"), // ai | stock | mixed
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Fiche Google (studio : audit, visibilité, avis, posts) ──────────────────
 
 /**
@@ -1159,6 +1175,7 @@ export type SocialPost = typeof socialPosts.$inferSelect;
 export type NewSocialPost = typeof socialPosts.$inferInsert;
 export type SocialSettings = typeof socialSettings.$inferSelect;
 export type NewSocialSettings = typeof socialSettings.$inferInsert;
+export type SocialVisualSettings = typeof socialVisualSettings.$inferSelect;
 export type SitePlan = PlanId;
 export type GoogleProfileAudit = typeof googleProfileAudits.$inferSelect;
 export type GoogleKeyword = typeof googleKeywords.$inferSelect;

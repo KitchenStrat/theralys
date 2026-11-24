@@ -237,6 +237,13 @@ export type SectionAccess = {
   site?: boolean;
 };
 
+/**
+ * L'Académie n'est pas encore ouverte : sa section reste définie (couleurs,
+ * page), mais elle n'apparaît nulle part dans la navigation et son adresse
+ * renvoie à l'accueil. Passer à `true` la rouvre partout.
+ */
+export const ACADEMY_OPEN: boolean = false;
+
 /** Sections à afficher pour une formule, dans l'ordre de la navigation. */
 export function allowedSections(access: SectionAccess): SectionKey[] {
   const open: Record<SectionKey, boolean> = {
@@ -247,7 +254,7 @@ export function allowedSections(access: SectionAccess): SectionKey[] {
     "fiche-google": access.google,
     "google-ads": access.googleAds,
     "meta-ads": access.metaAds,
-    academie: true,
+    academie: ACADEMY_OPEN,
     compte: true,
   };
   return SECTION_ORDER.filter((key) => open[key]);

@@ -8,10 +8,11 @@ import {
   hasSocialMedia,
   socialPosts,
   socialSettings,
+  socialVisualSettings,
   type NewSocialPost,
   type PlanId,
 } from "@theralys/db";
-import { checkEthicalCompliance, createSocialGenerator } from "@theralys/ai";
+import { applyCoverPhoto, checkEthicalCompliance, createSocialGenerator, removeCoverPhoto } from "@theralys/ai";
 import {
   cleanSocialInstructions,
   EMPTY_SOCIAL_ASSETS,
@@ -21,10 +22,13 @@ import {
   normalizePostDays,
   SOCIAL_FORMATS,
   SOCIAL_INSTRUCTIONS_MAX,
+  SOCIAL_PHOTO_SOURCES,
   SOCIAL_POST_INSTRUCTIONS_MAX,
   SOCIAL_REGENERATIONS_PER_MONTH,
   SOCIAL_REQUESTS_PER_MONTH,
+  SOCIAL_REQUEST_TOPIC_MAX,
   type SocialFormat,
+  type SocialTemplate,
 } from "@theralys/shared";
 import { requireClient } from "@/lib/auth";
 import { parisDay, shiftIsoDay } from "@/lib/calendar";
@@ -40,6 +44,7 @@ import {
   type DbTransaction,
   isMissingSchemaError,
 } from "@/lib/social/data";
+import { keepUploadedPhoto, uploadedPhotoVerdict, withSourcedPhotos } from "@/lib/social/photos";
 import { ownedSocialPost } from "@/lib/social/post-access";
 import { getSocialRegenerationUsage, recordSocialRegeneration } from "@/lib/social/regen";
 import { recentGoogleTopics } from "@/lib/google/posts";
@@ -146,13 +151,15 @@ export async function planSocialMonth(
       recentTopicsAcrossChannels(site.id, now),
     ]);
     const generator = attributeApiUsage(createSocialGenerator(), { feature: "social", siteId: site.id });
-    const posts = await generator.planMonth(brief, {
+    const planned = await generator.planMonth(brief, {
       month,
       slots: initial.freeSlots,
       recentTopics,
       photosById,
       refsById,
     });
+    // Photos des visuels d'après le réglage du Paramétrage (IA, banque d'images, les deux)
+    const posts = await withSourcedPhotos(site, settings, brief.practitioner, planned, `plan:${month}`);
 
     // 3. Transaction courte : verrou repris, créneaux encore libres recalculés, insertion de ceux-là seulement
     const result = await db.transaction(async (tx) => {
@@ -211,7 +218,7 @@ const requestSchema = z.object({
     .string()
     .trim()
     .min(3, "Décrivez votre sujet en quelques mots")
-    .max(200, "200 caractères maximum"),
+    .max(SOCIAL_REQUEST_TOPIC_MAX, `${SOCIAL_REQUEST_TOPIC_MAX} caractères maximum`),
   format: z.enum(SOCIAL_FORMATS),
   accentColor: z
     .string()
@@ -275,11 +282,12 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
     });
     if (duplicate) return { postId: duplicate.id };
 
+    const settings = await getSocialSettings(site.id);
     const [{ brief, photosById, refsById }, recentTopics] = await Promise.all([
-      loadSocialBrief(site.id),
+      loadSocialBrief(site.id, { settings }),
       recentTopicsAcrossChannels(site.id, now),
     ]);
-    const post = await generator.generateRequest(brief, {
+    const drafted = await generator.generateRequest(brief, {
       topic,
       format,
       accentHex: accentColor,
@@ -288,6 +296,8 @@ export async function requestSocialPost(input: unknown): Promise<{ error?: strin
       photosById,
       refsById,
     });
+    // Photo du visuel d'après le réglage du Paramétrage
+    const [post = drafted] = await withSourcedPhotos(site, settings, brief.practitioner, [drafted], `request:${started}`);
 
     // Insertion sérialisée par site : le quota est recompté juste avant d'écrire
     const inserted = await db.transaction(async (tx) => {
@@ -359,6 +369,8 @@ const socialSettingsSchema = z.object({
     .min(1)
     .max(7)
     .transform((days) => normalizePostDays(days)),
+  /** Absent tant que le réglage n'est pas proposé (migration 0015) */
+  photoSource: z.enum(SOCIAL_PHOTO_SOURCES).optional(),
 });
 
 /**
@@ -405,6 +417,21 @@ export async function saveSocialSettings(
     }
     console.error("[social] enregistrement des réglages échoué", { siteId: site.id, err });
     return { error: "L'enregistrement a échoué — réessayez dans un instant." };
+  }
+  // Origine des photos : table à part (migration 0015). Si elle manque encore, les autres réglages sont enregistrés quand même.
+  if (parsed.data.photoSource) {
+    const visual = { photoSource: parsed.data.photoSource, updatedAt: new Date() };
+    try {
+      await getDb()
+        .insert(socialVisualSettings)
+        .values({ siteId: site.id, ...visual })
+        .onConflictDoUpdate({ target: socialVisualSettings.siteId, set: visual });
+    } catch (err) {
+      if (!isMissingSchemaError(err)) {
+        console.error("[social] enregistrement de l'origine des photos échoué", { siteId: site.id, err });
+        return { error: "L'origine des photos n'a pas pu être enregistrée — réessayez dans un instant." };
+      }
+    }
   }
   revalidatePath(PATH);
   return {};
@@ -490,6 +517,56 @@ export async function archiveSocialPost(postId: string): Promise<{ error?: strin
     .set({ status: "archived", assets: EMPTY_SOCIAL_ASSETS, updatedAt: new Date() })
     .where(eq(socialPosts.id, post.id));
 
+  await deleteRenders(post.assets);
+  revalidatePath(PATH);
+  return {};
+}
+
+// ─── Photo de fond d'un contenu ──────────────────────────────────────────────
+
+const photoSchema = z.object({
+  postId: z.string().uuid(),
+  /** Adresse rendue par l'envoi de fichiers ; `null` : retirer la photo */
+  imageUrl: z.string().max(400_000).nullable(),
+});
+
+const PHOTO_PUBLISHED = "Ce contenu est déjà publié : annulez la publication pour changer sa photo.";
+
+/**
+ * « Mettre ma photo » / « Retirer la photo » : le praticien remplace la photo
+ * de fond d'un contenu par la sienne, quelle que soit l'origine choisie dans
+ * le Paramétrage. Seule une adresse rendue par l'envoi de fichiers de
+ * l'espace client est acceptée. Un visuel sans photo (carte de couleur ou
+ * de texte) devient « photo-titre » en recevant une photo, et retrouve son
+ * modèle en la perdant ; les rendus déjà faits sont jetés.
+ */
+export async function setSocialPostPhoto(input: unknown): Promise<{ error?: string }> {
+  const session = await requireClient();
+  const parsed = photoSchema.safeParse(input);
+  if (!parsed.success) return { error: "Requête invalide." };
+  const post = await activePost(session.siteId, parsed.data.postId);
+  if (!post) return { error: NOT_FOUND };
+  if (post.status === "published") return { error: PHOTO_PUBLISHED };
+  const { imageUrl } = parsed.data;
+  if (imageUrl !== null) {
+    const verdict = uploadedPhotoVerdict(imageUrl);
+    if (verdict === "too-heavy") return { error: "Cette photo est trop lourde pour être posée sur un visuel ici : choisissez-en une plus légère (moins de 150 Ko)." };
+    if (verdict !== "ok") return { error: "Cette photo n'a pas pu être lue : envoyez-la de nouveau." };
+  }
+
+  // Le texte alternatif suit le visuel : il lui faut le prénom et le métier du praticien
+  const settings = await getSocialSettings(session.siteId);
+  const { brief } = await loadSocialBrief(session.siteId, { settings });
+  const current = { template: post.template as SocialTemplate, content: post.content };
+  const next = imageUrl === null ? removeCoverPhoto(current, brief.practitioner) : applyCoverPhoto(current, { url: imageUrl, origin: "upload" }, brief.practitioner);
+  if (next === current) return {};
+
+  const [updated] = await getDb()
+    .update(socialPosts)
+    .set({ template: next.template, content: next.content, assets: EMPTY_SOCIAL_ASSETS, downloadedAt: null, updatedAt: new Date() })
+    .where(and(eq(socialPosts.id, post.id), eq(socialPosts.siteId, session.siteId), ne(socialPosts.status, "archived")))
+    .returning({ id: socialPosts.id });
+  if (!updated) return { error: NOT_FOUND };
   await deleteRenders(post.assets);
   revalidatePath(PATH);
   return {};
@@ -607,7 +684,7 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
       recentTopicsAcrossChannels(site.id, now),
     ]);
     const briefForRegen = { ...brief, voice: { ...brief.voice, tone: parsed.data.tone } };
-    const regenerated = await generator.generateRequest(briefForRegen, {
+    const redrafted = await generator.generateRequest(briefForRegen, {
       topic: post.request ?? post.topic,
       format: post.format as SocialFormat,
       accentHex: post.accentColor,
@@ -617,6 +694,9 @@ export async function regenerateSocialPost(input: unknown): Promise<{ error?: st
       refsById,
       ...(instructions === "" ? {} : { instructions }),
     });
+    // La photo envoyée par le praticien pour ce contenu reste la sienne ; sinon, photo d'après le réglage du Paramétrage
+    const own = keepUploadedPhoto(post.content, redrafted, brief.practitioner);
+    const [regenerated = own.post] = own.kept ? [own.post] : await withSourcedPhotos(site, settings, brief.practitioner, [redrafted], `regen:${post.id}:${started}`);
 
     // 3. Transaction courte sous verrou par site : quota recompté, contenu remplacé et régénération inscrite ensemble
     const outcome = await db.transaction(async (tx) => {

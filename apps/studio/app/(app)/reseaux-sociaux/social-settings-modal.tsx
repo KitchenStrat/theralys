@@ -4,13 +4,20 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { ArrowLeft, ArrowRight, CalendarCheck, Check, Info, Lightbulb, Plus } from "lucide-react";
-import { FieldHint, Modal } from "@theralys/ui";
-import { SOCIAL_INSTRUCTIONS_MAX, type SocialVoice } from "@theralys/shared";
+import { FieldHint, Modal, Segmented } from "@theralys/ui";
+import { SOCIAL_INSTRUCTIONS_MAX, SOCIAL_PHOTO_SOURCES, SOCIAL_PHOTO_SOURCE_LABELS, type SocialPhotoSource, type SocialVoice } from "@theralys/shared";
 import { Button, ProgressBar } from "@/components/ds";
 import type { SocialSettingsView } from "@/lib/social/settings";
-import { VoiceFields, type VoiceValue } from "../voice-fields";
+import { SEGMENTED_SIZE, VoiceFields, WizardRow, type VoiceValue } from "../voice-fields";
 import { saveSocialSettings } from "./actions";
 import { ErrorNote, ModalHeader, TEXTAREA_CLASS, TOUCH_BUTTONS_CLASS } from "./social-ui";
+
+/** Ce que chaque choix change, dit sous le sélecteur. */
+const PHOTO_SOURCE_HELP: Record<SocialPhotoSource, string> = {
+  ai: "Chaque photo est créée par une IA, d'après le sujet du contenu.",
+  stock: "De vraies photos, choisies dans une banque d'images d'après le sujet du contenu.",
+  mixed: "Une fois une vraie photo de banque d'images, une fois une photo créée par IA.",
+};
 
 const STEPS = [
   {
@@ -73,6 +80,7 @@ export function SocialSettingsModal({
   const [voice, setVoice] = useState<VoiceValue>(() => toVoiceValue(initial.voice));
   const [instructions, setInstructions] = useState(initial.instructions);
   const [days, setDays] = useState<number[]>(initial.postDays);
+  const [photoSource, setPhotoSource] = useState<SocialPhotoSource>(initial.photoSource);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<SaveError | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,6 +99,7 @@ export function SocialSettingsModal({
     setVoice(toVoiceValue(current.voice));
     setInstructions(current.instructions);
     setDays(current.postDays);
+    setPhotoSource(current.photoSource);
   }, [open]);
 
   // Terme refusé : le curseur revient dans les consignes pour reformuler
@@ -139,6 +148,8 @@ export function SocialSettingsModal({
         tone: voice.voiceTone,
         instructions,
         postDays: days,
+        // Proposé seulement une fois le réglage en place (migration 0015)
+        ...(initial.photoSourceAvailable ? { photoSource } : {}),
       });
       if (result.error) {
         setError({ message: result.error, ...(result.field ? { field: result.field } : {}) });
@@ -194,6 +205,24 @@ export function SocialSettingsModal({
                 setVoice(next);
               }}
             />
+            {/* Origine des photos des visuels : après la voix, avec sa propre ligne */}
+            {initial.photoSourceAvailable ? (
+              <div className="border-t border-ds-ink-200 pt-5" data-testid="origine-photos">
+                <WizardRow label="Les photos générées viennent d'où ?">
+                  <Segmented
+                    aria-label="Les photos générées viennent d'où ?"
+                    className={SEGMENTED_SIZE}
+                    options={SOCIAL_PHOTO_SOURCES.map((source) => ({ value: source, label: SOCIAL_PHOTO_SOURCE_LABELS[source] }))}
+                    value={photoSource}
+                    onChange={(next) => {
+                      setError(null);
+                      setPhotoSource(next);
+                    }}
+                  />
+                </WizardRow>
+                <p className="mt-2 text-ds-meta text-ds-ink-600">{PHOTO_SOURCE_HELP[photoSource]} Sur chaque contenu, vous pouvez toujours mettre votre propre photo.</p>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

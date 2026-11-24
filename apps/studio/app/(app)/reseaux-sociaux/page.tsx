@@ -49,7 +49,7 @@ export default async function SocialPage({ searchParams }: Props) {
       >
         Ajoutez la formule <strong className="font-semibold text-ds-ink-900">Scale</strong> pour recevoir chaque
         mois vos contenus réseaux sociaux prêts à poster — visuels dans vos couleurs, carrousels, stories et
-        légendes — préparés à partir de votre site, avec la fiche Google, la publicité et l&apos;Académie.
+        légendes — préparés à partir de votre site, avec la fiche Google et la publicité.
       </SectionUnavailable>
     );
   }

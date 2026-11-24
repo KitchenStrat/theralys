@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm, 0012_crm_sales, 0013_security_scale et 0014_crm_knowledge, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm … 0014_crm_knowledge et 0015_social_visuals, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -68,6 +68,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0012_crm_sales",
       "0013_security_scale",
       "0014_crm_knowledge",
+      "0015_social_visuals",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -390,5 +391,18 @@ describe("0014_crm_knowledge : base de connaissances de l'équipe commerciale", 
     expect(table).toContain(`"status" text DEFAULT 'ai' NOT NULL`);
     expect(table).toContain(`"kind" text DEFAULT 'question' NOT NULL`);
     expect(table).toContain(`"asked_count" integer DEFAULT 1 NOT NULL`);
+  });
+});
+
+describe("0015_social_visuals : origine des photos des visuels", () => {
+  const statements = statementsOf("0015_social_visuals");
+
+  it("une table et sa clé étrangère — `social_settings` n'est pas touchée", () => {
+    expect(statements).toHaveLength(2);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "social_visual_settings"')) ?? "";
+    expect(table).toContain(`"photo_source" text DEFAULT 'stock' NOT NULL`);
+    expect(table).toContain('"site_id" uuid PRIMARY KEY NOT NULL');
+    expect(statements[1]).toContain('REFERENCES "public"."sites"("id") ON DELETE cascade');
+    expect(statements.some((s) => /"social_settings"|ADD COLUMN|ALTER TYPE/.test(s))).toBe(false);
   });
 });

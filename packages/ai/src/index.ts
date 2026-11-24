@@ -4,6 +4,7 @@ export * from "./generate-site";
 export * from "./article";
 export { TONE_LABEL, designationLabel, readerLabel, voiceBricks, type VoiceBricks } from "./voice";
 export * from "./social";
+export * from "./social-photos";
 export * from "./google-profile";
 export * from "./google-ads";
 export * from "./meta-ads";

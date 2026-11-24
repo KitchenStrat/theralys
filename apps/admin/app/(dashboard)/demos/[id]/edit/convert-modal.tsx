@@ -25,7 +25,7 @@ const euros = (value: number) => `${value.toLocaleString("fr-FR")} €`;
 /** Ce qu'ouvre chaque formule, en une ligne */
 const FORMULA_HINTS: Record<FormulaId, string> = {
   site: "Le site hébergé, 6 pages de spécialités et le blog (208 articles par an).",
-  scale: "Fiche Google, réseaux sociaux, Google Ads, Meta Ads et Académie. Sans le site.",
+  scale: "Fiche Google, réseaux sociaux, Google Ads et Meta Ads. Sans le site.",
 };
 
 /** « Annuel — 98 € TTC/mois, soit 1 176 € tous les ans » */

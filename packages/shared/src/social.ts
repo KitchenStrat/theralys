@@ -162,6 +162,71 @@ export function cleanSocialInstructions(text: string | null | undefined): string
     .trim();
 }
 
+/**
+ * Longueur maximale d'une demande « sur mesure » : le sujet, et les
+ * instructions que le praticien y ajoute (angle, ton, points à citer).
+ */
+export const SOCIAL_REQUEST_TOPIC_MAX = 400;
+
+// ─── Photos des visuels ──────────────────────────────────────────────────────
+
+/**
+ * D'où viennent les photos préparées pour les visuels (réglage du
+ * Paramétrage) : générées par IA, prises dans une banque d'images, ou l'un et
+ * l'autre en alternance. Quel que soit ce choix, le praticien peut remplacer
+ * la photo d'un contenu par la sienne.
+ */
+export const SOCIAL_PHOTO_SOURCES = ["ai", "stock", "mixed"] as const;
+export type SocialPhotoSource = (typeof SOCIAL_PHOTO_SOURCES)[number];
+
+/** Sans réglage enregistré : de vraies photos, sans coût. */
+export const DEFAULT_SOCIAL_PHOTO_SOURCE: SocialPhotoSource = "stock";
+
+export const SOCIAL_PHOTO_SOURCE_LABELS: Record<SocialPhotoSource, string> = {
+  ai: "IA",
+  stock: "Banque d'images",
+  mixed: "Mixte",
+};
+
+export function isSocialPhotoSource(value: unknown): value is SocialPhotoSource {
+  return typeof value === "string" && (SOCIAL_PHOTO_SOURCES as readonly string[]).includes(value);
+}
+
+/**
+ * D'où vient la photo d'une diapositive : le site du praticien, la banque
+ * d'images, l'IA, ou une photo qu'il a envoyée lui-même pour ce contenu.
+ */
+export const SOCIAL_IMAGE_ORIGINS = ["site", "stock", "ai", "upload"] as const;
+export type SocialImageOrigin = (typeof SOCIAL_IMAGE_ORIGINS)[number];
+
+export const SOCIAL_IMAGE_ORIGIN_LABELS: Record<SocialImageOrigin, string> = {
+  site: "Photo de votre site",
+  stock: "Photo de banque d'images",
+  ai: "Photo générée par IA",
+  upload: "Votre photo",
+};
+
+/**
+ * Un visuel de ce modèle reçoit une photo d'ambiance quand le plan en veut
+ * une : les modèles à photo, et « affirmation », qui devient « photo-titre »
+ * dès qu'il en reçoit une (même contenu, même mise en page — cf. le rendu de
+ * `photo-titre`).
+ */
+export function templateCarriesPhoto(template: SocialTemplate): boolean {
+  return TEMPLATE_ACCEPTS_PHOTO[template] || template === "affirmation";
+}
+
+/**
+ * Carte de texte (question-réponse, liste, infos pratiques, avis) : elle n'a
+ * pas de photo. Si le praticien pose la sienne dessus, elle devient un
+ * « photo-titre » — son titre et son texte sur la photo — et se souvient de
+ * son modèle (`SocialPostContent.plainTemplate`) pour le retrouver si la
+ * photo est retirée.
+ */
+export function isTextCard(template: SocialTemplate): boolean {
+  return !TEMPLATE_ACCEPTS_PHOTO[template] && template !== "affirmation";
+}
+
 // ─── Types JSON stockés (social_posts.content / assets) ──────────────────────
 
 export type SocialSlide = {
@@ -174,6 +239,8 @@ export type SocialSlide = {
   badge?: string;
   /** URL résolue depuis photosById (jamais envoyée au modèle) */
   imageUrl?: string;
+  /** D'où vient cette photo ; absent sur les contenus d'avant ce champ (photo du site) */
+  imageOrigin?: SocialImageOrigin;
 };
 
 export type SocialSourceRef = {
@@ -203,6 +270,11 @@ export type SocialPostContent = {
   generator: "anthropic" | "mock";
   /** Jours de publication (ISO) en vigueur à la préparation du mois (source calendar) */
   planDays?: number[];
+  /**
+   * Modèle du visuel avant que le praticien n'y pose sa photo (il est alors
+   * rendu en « photo-titre ») : il le retrouve si la photo est retirée.
+   */
+  plainTemplate?: SocialTemplate;
 };
 
 export type SocialRender = {

@@ -8,6 +8,7 @@ import {
   camelHashtag,
   GOOGLE_POST_INSTRUCTIONS_MAX,
   SOCIAL_POST_INSTRUCTIONS_MAX,
+  SOCIAL_REQUEST_TOPIC_MAX,
   type SocialFormat,
   type SocialPillar,
   type SocialSiteBrief,
@@ -184,7 +185,7 @@ function publishedOn(brief: SocialSiteBrief, articleId: string | undefined): str
 /**
  * Demande du praticien telle qu'insérée dans le prompt : une seule ligne, sans
  * caractère de contrôle ni chevron (qui pourrait refermer la balise
- * <demande>), ≤ 200 caractères.
+ * <demande>), ≤ SOCIAL_REQUEST_TOPIC_MAX caractères.
  */
 export function normalizeRequestTopic(topic: string): string {
   let out = "";
@@ -192,7 +193,7 @@ export function normalizeRequestTopic(topic: string): string {
     const code = ch.codePointAt(0) ?? 0;
     out += code < 0x20 || code === 0x7f || ch === "<" || ch === ">" ? " " : ch;
   }
-  return out.replace(/\s+/g, " ").trim().slice(0, 200);
+  return out.replace(/\s+/g, " ").trim().slice(0, SOCIAL_REQUEST_TOPIC_MAX);
 }
 
 /**

@@ -1,6 +1,8 @@
 import { ArrowRight, GraduationCap, HeartHandshake, Lock, MessageCircle, Search, type LucideIcon } from "lucide-react";
+import { redirect } from "next/navigation";
 import { hasAcademy } from "@theralys/db";
 import { Card, EmptyState, IconBadge, LinkButton, PageHeader, Stagger, StatusPill } from "@/components/ds";
+import { ACADEMY_OPEN } from "@/components/ds/sections";
 import { requireClient } from "@/lib/auth";
 import { getSite } from "@/lib/data";
 
@@ -16,6 +18,8 @@ const THEMES: { label: string; icon: LucideIcon }[] = [
 
 export default async function AcademyPage() {
   const session = await requireClient();
+  // Section pas encore ouverte : son adresse, tapée ou gardée en favori, ramène à l'accueil
+  if (!ACADEMY_OPEN) redirect("/");
   const site = await getSite(session.siteId);
   // Les démos présentent l'offre complète ; les clients suivent leur formule
   const access = site.type === "demo" || hasAcademy(site.plan);

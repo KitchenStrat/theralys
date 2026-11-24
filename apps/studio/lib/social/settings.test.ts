@@ -25,6 +25,8 @@ describe("resolveSocialSettings", () => {
       instructions: "",
       postDays: [2, 5],
       saved: false,
+      photoSource: "stock",
+      photoSourceAvailable: false,
     });
     expect(resolveSocialSettings({ social: null, blog: null, prospectGender: null }).voice.accord).toBe("feminin");
   });
@@ -43,7 +45,24 @@ describe("resolveSocialSettings", () => {
       instructions: "Terminer par une question.\n\nNe jamais citer de tarif.",
       postDays: [1, 4],
       saved: true,
+      photoSource: "stock",
+      photoSourceAvailable: false,
     });
+  });
+
+  it("origine des photos : celle qui est enregistrée ; sans ligne, banque d'images ; tant que la table manque, le réglage n'est pas proposé", () => {
+    const of = (visual: { photoSource: unknown } | null | undefined) => {
+      const view = resolveSocialSettings({ social: null, blog: null, prospectGender: null, visual });
+      return [view.photoSource, view.photoSourceAvailable];
+    };
+    expect(of({ photoSource: "ai" })).toEqual(["ai", true]);
+    expect(of({ photoSource: "mixed" })).toEqual(["mixed", true]);
+    expect(of(null)).toEqual(["stock", true]);
+    // Valeur inconnue en base : la valeur par défaut, sans casser la page
+    expect(of({ photoSource: "peinture" })).toEqual(["stock", true]);
+    expect(of(undefined)).toEqual(["stock", false]);
+    // Le réglage des photos ne dépend pas de la voix enregistrée
+    expect(resolveSocialSettings({ social: { ...social, postDays: [...social.postDays] }, blog, prospectGender: null, visual: { photoSource: "ai" } })).toMatchObject({ saved: true, photoSource: "ai", photoSourceAvailable: true });
   });
 
   it("jsonb inattendu (null, objet, valeurs hors 1..7) : retour aux jours par défaut ; consignes null → chaîne vide", () => {

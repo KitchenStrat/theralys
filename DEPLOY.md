@@ -232,6 +232,7 @@ le log doit répondre `{"ok":true,…}`. Pour tout exécuter d'un coup :
 | Intégration | Variables à ajouter | Où |
 |---|---|---|
 | Images fal.ai | `FAL_API_KEY` ([fal.ai/dashboard](https://fal.ai/dashboard)) | admin + studio |
+| Banque d'images Pexels | `PEXELS_API_KEY` ([pexels.com/api](https://www.pexels.com/api/), gratuit) — photos des pages, des articles et des visuels des réseaux sociaux | admin + studio |
 | Photos téléversées (éditeur) | `BLOB_READ_WRITE_TOKEN` — projet **harmony-studio** → onglet Storage → Create Database → **Blob** (la variable est créée automatiquement) | studio |
 | E-mails (invitations client, contenus de la semaine, rappel mensuel) | `RESEND_API_KEY` ([resend.com](https://resend.com), gratuit jusqu'à 100 e-mails/jour) + `MAIL_FROM` (ex. `Harmony <bonjour@harmony-web.fr>`, domaine à vérifier chez Resend) — déjà listées à l'étape 3, à ne pas oublier. Sans clé : le lien d'invitation s'affiche dans l'admin, à envoyer soi-même, et les e-mails des jobs ne partent pas. | admin |
 | Stripe | `STRIPE_SECRET_KEY`, puis webhook `https://admin.harmony-web.fr/api/stripe/webhook` (événements `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_failed`) → `STRIPE_WEBHOOK_SECRET` (**obligatoire** : en production la route refuse tout événement non signé, et répond 503 tant que le secret n'est pas défini). Après le paiement, le praticien revient sur `https://www.harmony-web.fr/merci` — autre adresse : `WEB_BASE_URL` | admin |
@@ -367,6 +368,28 @@ L'assistant répond avec le modèle déjà configuré sur **harmony-admin**
 appels apparaissent dans **API & coûts** sous « Assistant commercial ». Il lit
 la page publique à l'adresse `WEB_BASE_URL` si elle est définie sur
 harmony-admin, sinon `https://www.harmony-web.fr`.
+
+### Migration `0015_social_visuals`
+
+Additive et rejouable : une table nouvelle, `social_visual_settings` (l'origine
+des photos des visuels des réseaux sociaux, choisie dans le Paramétrage : IA,
+banque d'images ou les deux). `social_settings` n'est pas modifiée. Tant
+qu'elle n'est pas appliquée, la question « Les photos générées viennent
+d'où ? » n'est pas proposée et les visuels gardent les photos du site, comme
+avant ; tout le reste de la section fonctionne (état vérifié en mode
+production contre une base sans elle).
+
+```sql
+select to_regclass('social_visual_settings');
+-- un nom, pas NULL
+```
+
+Pour que chaque origine donne ses photos, **harmony-studio** doit porter les
+clés des deux services : `PEXELS_API_KEY` (banque d'images) et `FAL_API_KEY`
+(IA). Sans la clé d'une origine, aucun visuel ne reçoit d'illustration
+factice : il garde la photo du site. Les photos envoyées par les praticiens
+vont dans le stockage `BLOB_READ_WRITE_TOKEN` du studio, comme celles de
+l'éditeur.
 
 ## Sécurité : ce qui est en place, ce qui reste à votre main
 
