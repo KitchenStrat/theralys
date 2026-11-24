@@ -51,7 +51,7 @@ function isIdempotent(stmt: string): boolean {
 }
 
 describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () => {
-  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm … 0014_crm_knowledge et 0015_social_visuals, fichiers présents", () => {
+  it("référence 0000_soft_scrambler … 0010_billing_periods puis 0011_crm … 0015_social_visuals et 0016_product_feedback, fichiers présents", () => {
     expect(journal.entries.map((e) => e.tag)).toEqual([
       "0000_soft_scrambler",
       "0001_social_posts",
@@ -69,6 +69,7 @@ describe("journal des migrations (packages/db/drizzle/meta/_journal.json)", () =
       "0013_security_scale",
       "0014_crm_knowledge",
       "0015_social_visuals",
+      "0016_product_feedback",
     ]);
     for (const entry of journal.entries) {
       expect(fs.existsSync(path.join(folder, `${entry.tag}.sql`)), entry.tag).toBe(true);
@@ -404,5 +405,26 @@ describe("0015_social_visuals : origine des photos des visuels", () => {
     expect(table).toContain('"site_id" uuid PRIMARY KEY NOT NULL');
     expect(statements[1]).toContain('REFERENCES "public"."sites"("id") ON DELETE cascade');
     expect(statements.some((s) => /"social_settings"|ADD COLUMN|ALTER TYPE/.test(s))).toBe(false);
+  });
+});
+
+describe("0016_product_feedback : avis des praticiens sur le produit", () => {
+  const statements = statementsOf("0016_product_feedback");
+
+  it("une table, ses deux clés étrangères et ses deux index — rien d'existant n'est touché", () => {
+    expect(statements).toHaveLength(5);
+    const table = statements.find((s) => s.startsWith('CREATE TABLE IF NOT EXISTS "product_feedback"')) ?? "";
+    expect(table).toContain('"site_id" uuid NOT NULL');
+    expect(table).toContain('"message" text NOT NULL');
+    expect(table).toContain(`"status" text DEFAULT 'new' NOT NULL`);
+    expect(table).toContain('"contact_ok" boolean DEFAULT false NOT NULL');
+    // La note est facultative
+    expect(table).toContain('"rating" integer,');
+    expect(statements.filter((s) => s.includes("ADD CONSTRAINT")).map((s) => /REFERENCES "public"\."(\w+)"\("id"\) ON DELETE ([a-z ]+) ON UPDATE/.exec(s)?.slice(1, 3))).toEqual([
+      ["sites", "cascade"],
+      ["users", "set null"],
+    ]);
+    expect(statements.filter((s) => s.startsWith("CREATE INDEX IF NOT EXISTS")).length).toBe(2);
+    expect(statements.some((s) => /ADD COLUMN|ALTER TYPE|DROP /.test(s))).toBe(false);
   });
 });

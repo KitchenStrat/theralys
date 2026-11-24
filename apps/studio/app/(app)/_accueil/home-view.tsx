@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import type { AnalyticsSource } from "@theralys/shared";
+import { FeedbackBand } from "@/components/avis";
 import { SetupChecklist, Stagger, type SectionKey } from "@/components/ds";
 import { TourAutoStart } from "@/components/visite";
 import { remainingSetupTasks, type NextStep, type SetupTask } from "@/lib/accueil";
@@ -133,6 +134,9 @@ export function HomeView({ firstName, period, stats, site, awaitingMeasure, soci
       </div>
 
       <Shortcuts sections={sections} />
+
+      {/* « Votre avis » : ouvert à toutes les formules ; ne rend rien tant que l'espace n'est pas ouvert */}
+      <FeedbackBand />
     </Stagger>
     </>
   );

@@ -114,6 +114,22 @@ comprises.
   `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` (section Fiche Google, sinon
   données simulées, `DATAFORSEO_MOCK=1` pour forcer le mock).
 
+### « Votre avis » (toutes formules)
+
+Chaque praticien peut nous dire ce qui améliorerait Harmony, quelle que soit
+sa formule : « Donner mon avis » dans le menu (barre latérale, feuille « Plus »
+du téléphone) et un bandeau en bas de l'accueil ouvrent la même fenêtre
+(`components/avis`). Il y choisit la nature de son avis (une idée, un problème,
+un manque, ce qui lui plaît), l'outil concerné — présélectionné d'après la page
+en cours —, écrit quelques phrases (20 caractères au moins : la question posée
+l'invite à raconter une situation), et peut donner une note sur 5.
+
+- Enregistré dans `product_feedback` (migration 0016) par
+  `app/(app)/_avis/actions.ts` ; dix avis par cabinet et par jour.
+- Rien n'est proposé tant que la table n'existe pas (`lib/feedback.ts`,
+  vérifiée au plus une fois par minute), ni à l'équipe en mode support.
+- Lu dans l'admin, onglet « Avis clients ».
+
 ### Photos des visuels
 
 - **Origine choisie par le praticien** (Paramétrage, première étape : « Les

@@ -513,8 +513,9 @@ Le dossier `packages/db/drizzle/` est **à jour du schéma** (`packages/db/src/s
 colonnes autrefois poussées à la main), `0002_social_settings` (option « Paramétrage »
 des réseaux sociaux), … jusqu'à `0012_crm_sales` (comptes des commerciaux),
 `0013_security_scale` (compteurs de tentatives, journal des accès support, index) et
-`0014_crm_knowledge` (base de questions et d'objections de l'équipe commerciale) et
-`0015_social_visuals` (origine des photos des visuels des réseaux sociaux). Les migrations s'appliquent avec **`pnpm db:migrate`**,
+`0014_crm_knowledge` (base de questions et d'objections de l'équipe commerciale),
+`0015_social_visuals` (origine des photos des visuels des réseaux sociaux) et
+`0016_product_feedback` (avis des praticiens sur le produit). Les migrations s'appliquent avec **`pnpm db:migrate`**,
 en local comme en production (procédure dans `DEPLOY.md`, section « Mettre à jour le schéma
 en production »), qui tient le journal `drizzle.__drizzle_migrations`. Elles sont rejouables
 (`IF NOT EXISTS`, `DO $$ … duplicate_object`) : `pnpm db:migrate` passe aussi sur une base

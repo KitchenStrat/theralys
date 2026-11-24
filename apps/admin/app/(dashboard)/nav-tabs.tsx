@@ -10,6 +10,7 @@ const TABS = [
   { href: "/couts", label: "API & coûts" },
   { href: "/demos", label: "Démos" },
   { href: "/clients", label: "Clients" },
+  { href: "/avis", label: "Avis clients" },
   { href: "/crm", label: "CRM" },
   { href: "/equipe", label: "Équipe" },
 ];

@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 import { hasBlog, hasGoogleAds, hasGoogleProfile, hasMetaAds, hasSite, hasSocialMedia } from "@theralys/db";
 import { activeExternalSite } from "@theralys/shared";
 import { AppShell, allowedSections } from "@/components/ds";
+import { FeedbackProvider } from "@/components/avis";
 import { TourProvider } from "@/components/visite";
 import { destroySession, requireClient } from "@/lib/auth";
 import { getSite, publicSiteUrl } from "@/lib/data";
+import { feedbackAvailable } from "@/lib/feedback";
 import { readSeenTours } from "@/lib/visite/data";
 
 async function logoutAction() {
@@ -23,14 +25,19 @@ async function logoutAction() {
  * La coquille est enveloppée par le chef d'orchestre des visites guidées : il
  * reçoit les visites déjà vues par ce site, et ne propose rien de lui-même à
  * l'équipe en mode support.
+ *
+ * « Votre avis » est ouvert à chaque praticien, quelle que soit sa formule ;
+ * il ne se propose pas à l'équipe en mode support (elle n'écrit pas d'avis à
+ * la place du praticien), ni tant que sa table n'existe pas.
  */
 export default async function StudioLayout({ children }: { children: ReactNode }) {
   const session = await requireClient();
-  const [site, seenTours] = await Promise.all([getSite(session.siteId), readSeenTours(session.siteId)]);
+  const [site, seenTours, feedbackOpen] = await Promise.all([getSite(session.siteId), readSeenTours(session.siteId), feedbackAvailable()]);
   const demo = site.type === "demo";
 
   return (
     <TourProvider siteKey={site.id} seen={seenTours} support={session.impersonated} firstName={session.name.split(" ")[0] || undefined}>
+    <FeedbackProvider enabled={feedbackOpen && !session.impersonated}>
     <AppShell
       sections={allowedSections({
         publications: demo || hasBlog(site.plan),
@@ -48,6 +55,7 @@ export default async function StudioLayout({ children }: { children: ReactNode }
     >
       {children}
     </AppShell>
+    </FeedbackProvider>
     </TourProvider>
   );
 }

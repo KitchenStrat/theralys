@@ -1,10 +1,11 @@
 "use client";
 
 import { clsx } from "clsx";
-import { ChevronRight, Compass, Ellipsis, ExternalLink, LogOut, X } from "lucide-react";
+import { ChevronRight, Compass, Ellipsis, ExternalLink, LogOut, MessageSquareHeart, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useFeedback } from "@/components/avis/provider";
 import { useTour } from "@/components/visite/provider";
 import { Badge } from "../badge";
 import { SectionBadge } from "../icon-badge";
@@ -28,6 +29,7 @@ const SLOT =
 export function MobileNav({ sections, siteHref, logoutAction, userName, badges, hrefs }: ShellNavProps) {
   const pathname = usePathname();
   const tour = useTour();
+  const feedback = useFeedback();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const sheetId = useId();
@@ -204,6 +206,25 @@ export function MobileNav({ sections, siteHref, logoutAction, userName, badges, 
                     <Compass size={18} aria-hidden />
                   </span>
                   <span className="flex-1">Visite guidée</span>
+                </button>
+              </li>
+            ) : null}
+            {feedback ? (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // La feuille se referme d'abord : la fenêtre ne s'ouvre jamais sous elle
+                    dialogRef.current?.close();
+                    feedback.open();
+                  }}
+                  className="flex min-h-14 w-full items-center gap-3.5 rounded-ds-md px-2.5 text-left text-base font-medium text-ds-ink-800 ds-focus"
+                  data-testid="avis-ouvrir-mobile"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[0.625rem] bg-ds-brand-50 text-ds-brand-700">
+                    <MessageSquareHeart size={18} aria-hidden />
+                  </span>
+                  <span className="flex-1">Donner mon avis</span>
                 </button>
               </li>
             ) : null}

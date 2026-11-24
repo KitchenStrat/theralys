@@ -824,6 +824,42 @@ export const socialVisualSettings = pgTable("social_visual_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Avis des praticiens sur le produit ──────────────────────────────────────
+
+/**
+ * « Votre avis » : ce qu'un praticien nous dit du produit depuis son espace
+ * client, quelle que soit sa formule (une idée, un problème, un manque, ce qui
+ * lui plaît). Lu par l'équipe dans l'admin. Table à part : rien d'existant
+ * n'en dépend ; tant que la migration 0016 n'est pas appliquée, l'espace
+ * client ne propose simplement pas de donner son avis.
+ */
+export const productFeedback = pgTable(
+  "product_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    /** L'auteur ; l'avis reste si son compte disparaît */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    kind: text("kind").notNull().default("idea"), // idea | problem | missing | praise
+    topic: text("topic").notNull().default("general"), // l'outil concerné (FEEDBACK_TOPICS)
+    rating: integer("rating"), // 1..5, facultative
+    message: text("message").notNull(),
+    /** Le praticien accepte d'être recontacté à ce sujet */
+    contactOk: boolean("contact_ok").notNull().default(false),
+    /** Page de l'espace client d'où l'avis a été donné (chemin seul) */
+    page: text("page"),
+    status: text("status").notNull().default("new"), // new | read | done
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("product_feedback_status_idx").on(t.status, t.createdAt),
+    index("product_feedback_site_idx").on(t.siteId, t.createdAt),
+  ],
+);
+
 // ─── Fiche Google (studio : audit, visibilité, avis, posts) ──────────────────
 
 /**
@@ -1199,3 +1235,4 @@ export type CrmImport = typeof crmImports.$inferSelect;
 export type CrmRep = typeof crmReps.$inferSelect;
 export type CrmKnowledgeEntry = typeof crmKnowledge.$inferSelect;
 export type CrmKnowledgeAsk = typeof crmKnowledgeAsks.$inferSelect;
+export type ProductFeedback = typeof productFeedback.$inferSelect;

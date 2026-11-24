@@ -391,6 +391,24 @@ factice : il garde la photo du site. Les photos envoyées par les praticiens
 vont dans le stockage `BLOB_READ_WRITE_TOKEN` du studio, comme celles de
 l'éditeur.
 
+### Migration `0016_product_feedback`
+
+Additive et rejouable : une table nouvelle, `product_feedback` (les avis des
+praticiens sur le produit). Rien d'existant n'est modifié. Tant qu'elle n'est
+pas appliquée, « Donner mon avis » n'apparaît dans aucun espace client et la
+page **Avis clients** de l'admin affiche un message d'activation ; tout le
+reste fonctionne (état vérifié en mode production contre une base sans elle).
+Une fois appliquée, l'espace s'ouvre de lui-même dans la minute, sans
+redéploiement.
+
+```sql
+select to_regclass('product_feedback');
+-- un nom, pas NULL
+```
+
+Aucune variable à ajouter. Les avis se lisent dans l'admin, onglet **Avis
+clients** (réservé à l'admin : un commercial n'y a pas accès).
+
 ## Sécurité : ce qui est en place, ce qui reste à votre main
 
 **En place dans le code** (rien à faire) :

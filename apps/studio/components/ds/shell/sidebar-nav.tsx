@@ -1,10 +1,11 @@
 "use client";
 
 import { clsx } from "clsx";
-import { Compass, ExternalLink, LogOut } from "lucide-react";
+import { Compass, ExternalLink, LogOut, MessageSquareHeart } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
+import { useFeedback } from "@/components/avis/provider";
 import { useTour } from "@/components/visite/provider";
 import { Badge } from "../badge";
 import {
@@ -91,6 +92,7 @@ function NavItem({
 export function SidebarNav({ sections, siteHref, logoutAction, userName, badges, hrefs }: ShellNavProps) {
   const pathname = usePathname();
   const tour = useTour();
+  const feedback = useFeedback();
   const navRef = useRef<HTMLElement>(null);
   const indicatorRef = useRef<HTMLSpanElement>(null);
   const headingBase = useId();
@@ -180,6 +182,17 @@ export function SidebarNav({ sections, siteHref, logoutAction, userName, badges,
                   <Compass size={18} aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1 truncate">Visite guidée</span>
+              </button>
+            </li>
+          ) : null}
+          {/* « Votre avis » : ouvert à toutes les formules ; absent tant que l'espace n'est pas ouvert */}
+          {feedback ? (
+            <li>
+              <button type="button" onClick={feedback.open} className={clsx(ROW, "w-full text-left")} data-ds-section="accueil" data-testid="avis-ouvrir">
+                <span className="grid size-9 shrink-0 place-items-center rounded-[0.625rem] bg-ds-brand-50 text-ds-brand-700">
+                  <MessageSquareHeart size={18} aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1 truncate">Donner mon avis</span>
               </button>
             </li>
           ) : null}

@@ -20,6 +20,10 @@ clients et des publications.
   sait), `store.ts` (la base), `model.ts` (rubriques, états, filtres). Tests
   sur une vraie base : `lib/crm/knowledge/ask.db.test.ts` (ignorés sans
   `ADMIN_TEST_DATABASE_URL`).
+- `app/(dashboard)/avis/` et `lib/feedback.ts` — « Avis clients » : ce que
+  les praticiens disent du produit depuis leur espace client (« Donner mon
+  avis », toutes formules), à lire puis à marquer lu ou pris en compte. Admin
+  seulement ; table `product_feedback` (migration 0016).
 - `lib/auth.ts` — `requireAdmin` (admin seulement, le défaut de toute page ou
   action) et `requireStaff` (admin ou commercial actif, pour le CRM).
 - `app/api/` — dont `api/jobs/tick`, déclenché chaque jour à 6h UTC par le
