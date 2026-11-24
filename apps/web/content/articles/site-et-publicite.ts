@@ -17,6 +17,7 @@ export const pagesSite: Article = {
       blocks: [
         "En haut de page, trois informations : ce que vous faites, pour qui, et où. Juste dessous, un bouton pour prendre rendez-vous.",
         "L'accueil n'a pas à tout raconter. Il oriente : vers vos accompagnements, vers le déroulé d'une séance, vers vos tarifs.",
+        "Sous ce premier écran, trois blocs suffisent : vos accompagnements, quelques avis, et les informations pratiques — adresse, horaires, tarifs. Tout le reste a sa propre page.",
       ],
     },
     {
@@ -35,6 +36,23 @@ export const pagesSite: Article = {
       ],
     },
     {
+      title: "Ce que chaque page doit contenir",
+      blocks: [
+        "Quel que soit son sujet, une page utile suit le même fil.",
+        {
+          list: [
+            "**Un titre** qui dit le sujet et le lieu.",
+            "**Deux phrases** qui montrent que vous avez compris la situation de la personne.",
+            "**Ce que vous proposez**, concrètement, sans vocabulaire de spécialiste.",
+            "**Le déroulé** : durée, nombre de séances habituel, tarif ou lien vers les tarifs.",
+            "**Un bouton de rendez-vous**, en haut et en bas.",
+          ],
+          ordered: true,
+        },
+        "Visez une page qui se lit en deux minutes. Si elle déborde, c'est souvent qu'elle traite deux sujets : faites-en deux pages.",
+      ],
+    },
+    {
       title: "« Comment se passe une séance »",
       blocks: [
         "La page que tout le monde lit avant d'appeler. Durée, lieu, tenue, ce que l'on fait, ce que l'on ressent, ce qui se passe ensuite.",
@@ -46,6 +64,7 @@ export const pagesSite: Article = {
       blocks: [
         "On choisit une personne. Un portrait, votre parcours en quelques lignes, votre formation, ce qui vous a mené à ce métier.",
         "Restez simple : trois paragraphes et une vraie photo valent mieux qu'une liste de certificats.",
+        "Ajoutez ce qui situe votre sérieux : votre école, votre fédération ou votre syndicat, votre assurance professionnelle. Une ligne chacun suffit.",
       ],
     },
     {
@@ -63,6 +82,43 @@ export const pagesSite: Article = {
       ],
     },
     {
+      title: "Écrire pour être lu",
+      blocks: [
+        "Sur un écran, on ne lit pas : on parcourt. Aidez le regard.",
+        {
+          list: [
+            "Des **paragraphes de trois lignes** au plus.",
+            "Des **intertitres** qui se comprennent seuls, comme une table des matières.",
+            "Des **mots simples** : « mal de dos » plutôt que « lombalgie », sauf si vos patients emploient le terme.",
+            "Le **« vous »** plutôt que le « nous » : la page parle de la personne, pas du cabinet.",
+          ],
+        },
+        "Un test simple : lisez seulement les titres et les mots en gras. Si l'essentiel y est, la page est bonne.",
+      ],
+    },
+    {
+      title: "Les photos",
+      blocks: [
+        "On choisit un praticien autant qu'une pratique, et l'on veut voir où l'on va. Trois photos font l'essentiel : un portrait de vous, la pièce où vous recevez, l'entrée du cabinet.",
+        "Préférez des photos réelles, même imparfaites, aux images de banques : le galet posé sur le sable, tout le monde l'a déjà vu. Une lumière du jour et un cadrage simple suffisent.",
+        { note: "Si une personne apparaît sur une photo, il vous faut son accord écrit. Pour un patient, abstenez-vous." },
+      ],
+    },
+    {
+      title: "Sur téléphone d'abord",
+      blocks: [
+        "La plupart de vos visiteurs vous lisent sur un téléphone. Ouvrez votre site sur le vôtre, et vérifiez quatre choses.",
+        {
+          list: [
+            "Le texte se lit sans zoomer.",
+            "Le bouton de rendez-vous est visible sans faire défiler.",
+            "Le numéro s'appelle d'un toucher.",
+            "Le menu tient en cinq ou six entrées.",
+          ],
+        },
+      ],
+    },
+    {
       title: "Ce que l'on peut oublier",
       blocks: [
         {
@@ -75,11 +131,30 @@ export const pagesSite: Article = {
         },
       ],
     },
+    {
+      title: "Dans quel ordre s'y prendre",
+      blocks: [
+        "Inutile de tout écrire avant d'ouvrir le site. Un ordre qui marche :",
+        {
+          list: [
+            "L'accueil, les tarifs et le contact : le site peut être en ligne.",
+            "La page « Comment se passe une séance ».",
+            "Vos deux accompagnements les plus fréquents.",
+            "Votre présentation, avec un portrait.",
+            "Les pages par motif suivantes, une par mois.",
+          ],
+          ordered: true,
+        },
+        "Avec Harmony, cette première version est préparée pour vous à partir de votre pratique et de votre ville : vous la relisez et vous l'ajustez, au lieu de partir d'une page blanche.",
+      ],
+    },
   ],
   faq: [
     { q: "Combien de pages faut-il au minimum ?", a: "Cinq suffisent pour démarrer : accueil, une page d'accompagnement, déroulé d'une séance, tarifs, contact. Les pages par motif s'ajoutent ensuite, une à une." },
     { q: "Faut-il un blog dès le départ ?", a: "Non. Mieux vaut un site court et complet qu'un blog vide. Le blog vient quand les pages principales sont en place." },
     { q: "Qui écrit les textes ?", a: "Vous connaissez votre pratique mieux que personne, mais l'écriture prend du temps. Avec Harmony, les textes de votre site sont préparés à partir de votre activité et de votre ville, puis vous les ajustez en quelques clics." },
+    { q: "Faut-il une page par ville ?", a: "Seulement si vous recevez réellement à plusieurs adresses : une page par lieu, avec l'accès et les horaires. Des pages créées pour des villes où vous n'exercez pas n'apportent rien de durable." },
+    { q: "Dois-je afficher mes diplômes ?", a: "Oui, simplement : votre formation et votre école, sur la page de présentation. Deux lignes suffisent ; le détail peut rester sur demande." },
   ],
   related: ["combien-coute-site-internet-therapeute", "referencement-local-therapeute", "quoi-ecrire-blog-cabinet"],
 };
@@ -114,10 +189,25 @@ export const coutSite: Article = {
       ],
     },
     {
+      title: "Ce que les devis ne disent pas",
+      blocks: [
+        {
+          list: [
+            "**Les modifications** : changer un tarif, ajouter un horaire, publier une photo. Sont-elles comprises, ou facturées à l'heure ?",
+            "**Le renouvellement** du nom de domaine et de l'hébergement, chaque année.",
+            "**Les textes** : qui les écrit ? Un site livré avec du faux texte n'est pas un site fini.",
+            "**La sortie** : si vous arrêtez, que deviennent votre nom de domaine et vos contenus ?",
+          ],
+        },
+        "Demandez ces quatre réponses par écrit avant de signer. Un prestataire sérieux les donne sans hésiter.",
+      ],
+    },
+    {
       title: "Le faire soi-même",
       blocks: [
         "Les outils de création en ligne coûtent quelques dizaines d'euros par mois, et permettent un résultat propre. Tout le reste vous revient : structure, textes, référencement, mises à jour.",
         "C'est un bon choix si vous aimez cela et si vous avez du temps. C'est un mauvais calcul si le site reste inachevé pendant six mois.",
+        "Avant de vous lancer, écrivez la liste des pages et bloquez les créneaux dans votre agenda. Un site que l'on fera « quand on aura le temps » ne sort jamais.",
       ],
     },
     {
@@ -132,6 +222,7 @@ export const coutSite: Article = {
       blocks: [
         "Une agence apporte une équipe : graphiste, rédacteur, référenceur. Le budget monte en conséquence, souvent à plusieurs milliers d'euros, avec parfois un forfait mensuel de suivi.",
         "Pertinent pour un cabinet à plusieurs praticiens ou un centre. Souvent surdimensionné pour un praticien seul.",
+        "Lisez le contrat de suivi avec autant d'attention que le devis de création : c'est lui que vous paierez le plus longtemps.",
       ],
     },
     {
@@ -143,10 +234,44 @@ export const coutSite: Article = {
       ],
     },
     {
+      title: "Comparer sur trois ans, pas sur le premier mois",
+      blocks: [
+        "Un site vit plusieurs années. Le bon calcul additionne ce que vous payez au départ et ce que vous paierez ensuite, sur trois ans.",
+        "Un site réglé une fois paraît moins cher, jusqu'au jour où il faut le mettre à jour, le sécuriser ou le refaire. Un abonnement paraît plus cher, jusqu'à ce que l'on compte ce qu'il comprend : hébergement, maintenance, contenus.",
+        "Posez les deux colonnes côte à côte, avec vos propres chiffres. Et ajoutez la ligne que l'on oublie toujours : **vos heures**. Une soirée par semaine passée sur le site a un prix, celui des séances que vous ne donnez pas ou du repos que vous ne prenez pas.",
+      ],
+    },
+    {
+      title: "Les signaux qui doivent alerter",
+      blocks: [
+        {
+          list: [
+            "Un **nom de domaine que vous ne pourriez pas reprendre** en partant : demandez comment se passe le transfert.",
+            "Une **première place promise** sur Google : personne ne peut la garantir.",
+            "Un **engagement long sans prix public**, ni conditions de sortie écrites.",
+            "Un site dit **« optimisé »** sans que l'on vous explique ce qui a été fait, concrètement.",
+          ],
+        },
+      ],
+    },
+    {
       title: "Comment savoir si c'est rentable",
       blocks: [
         "Rapportez le coût mensuel au prix d'une séance. Si le site vous amène deux ou trois nouveaux patients par mois, et que chacun revient quelques fois, le calcul est vite fait.",
         "Notre [simulateur de rentabilité](/#simulateur) le fait avec vos propres chiffres : tarif, nouveaux patients, séances par patient. Il ne promet rien ; il vous montre le seuil à partir duquel le site se paie.",
+      ],
+    },
+    {
+      title: "Choisir selon votre situation",
+      blocks: [
+        "Il n'y a pas de réponse universelle. Trois situations, trois choix raisonnables.",
+        {
+          list: [
+            "**Vous débutez, avec peu de budget et du temps** : faites-le vous-même, avec un nom de domaine à vous, en commençant par cinq pages.",
+            "**Vous êtes installé et le temps vous manque** : une solution qui prend en charge le site et ses contenus vous rend vos soirées.",
+            "**Vous êtes plusieurs praticiens**, avec une identité à construire : un indépendant ou une agence, sur un cahier des charges précis.",
+          ],
+        },
       ],
     },
   ],
@@ -154,6 +279,8 @@ export const coutSite: Article = {
     { q: "Un site gratuit, est-ce une bonne idée ?", a: "Pour tester, oui. Pour un cabinet, les limites arrivent vite : adresse au nom de la plateforme, publicités, peu de maîtrise du référencement. Un nom de domaine à vous est la première dépense utile." },
     { q: "Que coûte un site une fois en ligne ?", a: "Au minimum le nom de domaine et l'hébergement, chaque année. S'y ajoutent les mises à jour et les contenus, que vous faites vous-même, que vous payez à la demande, ou qui sont compris dans un abonnement." },
     { q: "Le référencement est-il compris dans le prix d'un site ?", a: "Rarement. Un site « optimisé » a une structure correcte ; cela ne remplace ni la fiche Google, ni les pages par motif, ni les articles. Demandez toujours ce que le mot recouvre." },
+    { q: "Puis-je changer de solution plus tard ?", a: "Oui, à condition de pouvoir emporter votre nom de domaine : c'est lui qui porte votre référencement. Posez la question avant tout engagement, quelle que soit la formule." },
+    { q: "Faut-il payer en plus pour apparaître sur Google ?", a: "Non. Apparaître dans les résultats naturels est gratuit. Ce qui se paie, c'est le travail qui vous y fait progresser — pages, contenus, fiche Google — ou la publicité, qui reste facultative." },
   ],
   related: ["pages-site-therapeute", "referencement-local-therapeute", "google-ads-therapeute"],
 };
@@ -178,6 +305,20 @@ export const reseauxSociaux: Article = {
       ],
     },
     {
+      title: "Soigner son profil avant de publier",
+      blocks: [
+        "Un visiteur décide en quelques secondes s'il s'abonne ou s'il repart. Trois éléments font le travail.",
+        {
+          list: [
+            "**La photo** : votre visage, net et souriant. Pas un logo.",
+            "**La biographie** : votre métier, votre ville, à qui vous vous adressez. « Sophrologue à Albi. J'accompagne le stress et le sommeil. »",
+            "**Le lien** : vers la prise de rendez-vous ou vers votre site.",
+          ],
+        },
+        "Sur Instagram, épinglez trois publications en haut du profil : qui vous êtes, comment se passe une séance, comment réserver. C'est la vitrine que verra chaque nouveau visiteur.",
+      ],
+    },
+    {
       title: "Les cinq formats qui servent un cabinet",
       blocks: [
         {
@@ -194,11 +335,54 @@ export const reseauxSociaux: Article = {
       ],
     },
     {
+      title: "Carrousel, story, vidéo : à quoi sert chaque format",
+      blocks: [
+        {
+          list: [
+            "**Le carrousel** explique : trois à six images qui se lisent comme une petite fiche. C'est le format que l'on enregistre.",
+            "**La story** montre le quotidien, puis disparaît : un créneau libre, les coulisses, une question posée à vos abonnés.",
+            "**La vidéo courte** fait découvrir : trente secondes face à la caméra pour répondre à une question touchent des personnes qui ne vous suivent pas encore.",
+            "**L'image simple** rappelle : une phrase, un conseil, une information pratique.",
+          ],
+        },
+      ],
+    },
+    {
+      title: "Écrire une légende qui se lit",
+      blocks: [
+        "La première ligne décide si l'on lit la suite. Posez-y la situation : « Vous vous réveillez à 3 heures, et impossible de vous rendormir ? »",
+        "Ensuite : une idée par publication, des phrases courtes, des retours à la ligne. Terminez par une invitation simple — enregistrer la publication, poser une question, consulter le lien du profil.",
+        "Quelques mots-dièse suffisent, précis et locaux : votre pratique, votre ville, le thème. En aligner trente n'apporte rien.",
+      ],
+    },
+    {
+      title: "Recycler plutôt que tout inventer",
+      blocks: [
+        "Vous n'avez pas à trouver une idée neuve à chaque publication. Un seul sujet fait plusieurs contenus.",
+        {
+          list: [
+            "Un **article de blog** devient un carrousel en cinq images.",
+            "Une **question fréquente** devient une story, avec un sondage.",
+            "Un **conseil** donné en séance devient une courte vidéo.",
+            "Une **publication qui a bien marché** se reprend six mois plus tard, reformulée.",
+          ],
+        },
+        "Le même contenu peut paraître sur Instagram et sur Facebook : les deux publics ne se recoupent qu'en partie.",
+      ],
+    },
+    {
       title: "Un rythme que vous tiendrez",
       blocks: [
         "Deux publications par semaine suffisent. Le piège, c'est de publier tous les jours pendant un mois, puis plus rien.",
         "Préparez le mois d'un coup : une heure pour choisir les sujets, une autre pour les visuels et les légendes. Ensuite, il ne reste qu'à poster.",
         { note: "Avec la formule Scale de Harmony, vos publications du mois sont préparées pour vous — visuels, carrousels, stories, légendes. Vous les téléchargez et vous les postez depuis vos comptes : rien n'est publié à votre place." },
+      ],
+    },
+    {
+      title: "Répondre, sans y passer ses soirées",
+      blocks: [
+        "Un commentaire laissé sans réponse décourage le suivant. Répondez à tous, brièvement, dans la journée ou le lendemain.",
+        "Fixez-vous un cadre : dix minutes par jour, à heure fixe, plutôt qu'un œil sur le téléphone entre chaque séance. Et quand une question devient personnelle, la réponse est toujours la même : « Parlons-en en séance », avec le lien de rendez-vous.",
       ],
     },
     {
@@ -220,6 +404,7 @@ export const reseauxSociaux: Article = {
       blocks: [
         "Le lien de votre profil doit mener à la prise de rendez-vous ou à votre site, pas à une page d'accueil générale. Reprenez dans votre biographie votre métier et votre ville : c'est ce que l'on cherche.",
         "Enfin, mesurez ce qui compte : non pas les mentions « j'aime », mais les visites du site et les prises de contact venues des réseaux.",
+        "Les statistiques de votre compte professionnel montrent les publications enregistrées et partagées. Ce sont elles qui indiquent ce qui intéresse vraiment vos abonnés.",
       ],
     },
   ],
@@ -227,6 +412,8 @@ export const reseauxSociaux: Article = {
     { q: "Faut-il se montrer en vidéo ?", a: "Ce n'est pas obligatoire. Des visuels soignés et des textes clairs font déjà beaucoup. Si vous êtes à l'aise, une courte vidéo où vous répondez à une question crée un vrai lien." },
     { q: "Les réseaux sociaux remplacent-ils un site ?", a: "Non. Un compte ne vous appartient pas, n'apparaît pas sur les recherches locales de Google et ne se lit pas comme un site. Les réseaux rassurent ; le site et la fiche Google font trouver." },
     { q: "Faut-il payer pour être vu ?", a: "Pas pour commencer. La publicité sur Facebook et Instagram devient utile pour une occasion précise : un atelier, une ouverture, une offre de découverte." },
+    { q: "Faut-il un compte professionnel ?", a: "Oui. Il est gratuit, donne accès aux statistiques et permet d'afficher vos coordonnées. Gardez votre compte personnel pour votre vie privée." },
+    { q: "Combien de temps avant d'en voir l'effet ?", a: "Comptez en mois plutôt qu'en semaines, et ne jugez pas au nombre d'abonnés : regardez les visites du site et les prises de contact venues des réseaux." },
   ],
   related: ["quoi-ecrire-blog-cabinet", "google-ads-therapeute", "obtenir-avis-google-therapeute"],
 };
@@ -258,6 +445,20 @@ export const googleAds: Article = {
       ],
     },
     {
+      title: "Comment une campagne se présente",
+      blocks: [
+        "Trois niveaux, à connaître pour ne pas se perdre.",
+        {
+          list: [
+            "**La campagne** fixe le budget quotidien et la zone géographique.",
+            "**Le groupe d'annonces** réunit des mots-clés proches et les annonces qui y répondent : un groupe par motif.",
+            "**L'annonce** est ce que la personne voit : des titres, deux lignes de description, et l'adresse de la page d'arrivée.",
+          ],
+        },
+        "Pour un cabinet, une seule campagne sur le réseau de recherche, deux ou trois groupes et quelques mots-clés chacun : c'est suffisant, et cela reste lisible.",
+      ],
+    },
+    {
       title: "Choisir ses mots-clés",
       blocks: [
         "Visez des recherches qui disent une intention : le métier ou le besoin, suivi de la ville. « Sophrologue Albi », « hypnose arrêt tabac Albi ».",
@@ -265,10 +466,39 @@ export const googleAds: Article = {
       ],
     },
     {
+      title: "Écrire une annonce honnête, donc efficace",
+      blocks: [
+        "Une bonne annonce reprend les mots de la recherche et dit ce qui se passe après le clic.",
+        {
+          list: [
+            "**Le titre** : le motif et la ville. « Sophrologie et sommeil à Albi ».",
+            "**La description** : ce que vous proposez, la durée d'une séance, comment réserver.",
+            "**La page d'arrivée** : la même promesse que l'annonce, et un bouton de rendez-vous visible.",
+          ],
+        },
+        "Ajoutez votre numéro et votre adresse en complément d'annonce : ils s'affichent sous le texte et rendent le contact immédiat.",
+      ],
+    },
+    {
       title: "Fixer un budget, et s'y tenir",
       blocks: [
         "Vous fixez un montant par jour ; Google ne le dépasse pas sur le mois. Le prix d'un clic dépend de la concurrence dans votre ville et votre métier : il varie beaucoup d'un cabinet à l'autre.",
         "Commencez petit, sur une seule campagne et une zone resserrée autour du cabinet. Laissez tourner trois à quatre semaines avant de juger : les premiers jours ne disent rien.",
+        "Prévoyez aussi du temps : une demi-heure par semaine pour lire les termes de recherche et ajuster. Une campagne laissée seule dérive.",
+      ],
+    },
+    {
+      title: "Les réglages qui font fondre un budget",
+      blocks: [
+        {
+          list: [
+            "**Les mots-clés en requête large**, qui diffusent l'annonce sur des recherches voisines sans rapport avec votre cabinet.",
+            "**Une zone trop grande** : personne ne traverse le département pour une séance. Ciblez les communes d'où viennent déjà vos patients.",
+            "**Les partenaires de recherche et le réseau Display**, souvent cochés par défaut : décochez-les pour rester sur les recherches Google.",
+            "**Les recommandations automatiques**, appliquées sans être lues : elles augmentent souvent la dépense avant la pertinence.",
+          ],
+        },
+        "Une fois par semaine, ouvrez la liste des **termes de recherche** réellement tapés. Chaque terme hors sujet devient un mot-clé à exclure.",
       ],
     },
     {
@@ -279,11 +509,19 @@ export const googleAds: Article = {
       ],
     },
     {
+      title: "Les professions qui ne peuvent pas faire de publicité",
+      blocks: [
+        "Avant les règles de Google, il y a celles de votre métier. Les professions de santé dotées d'un ordre — médecins, kinésithérapeutes, sages-femmes, pédicures-podologues, entre autres — ont un code de déontologie qui interdit d'acheter un référencement prioritaire. Pour elles, Google Ads est exclu.",
+        "Si votre pratique dépend d'un ordre, d'une fédération ou d'un syndicat, vérifiez leurs règles avant de lancer une campagne.",
+      ],
+    },
+    {
       title: "Juger la rentabilité",
       blocks: [
         "Ne regardez ni les clics ni les impressions. Une seule question : **combien coûte un nouveau patient venu de la publicité ?**",
         "Divisez la dépense du mois par le nombre de rendez-vous qu'elle a amenés. Comparez à ce qu'un patient représente pour vous, en comptant les séances suivantes. Si le compte est bon, continuez ; sinon, corrigez ou arrêtez.",
         { note: "Cela suppose de savoir d'où viennent vos rendez-vous. Sans suivi des clics sur la prise de rendez-vous, on pilote à l'aveugle." },
+        "Fixez un seuil avant de commencer : ce que vous acceptez de dépenser pour un nouveau patient. Sans ce repère décidé à froid, on prolonge par habitude une campagne qui ne rapporte pas, ou l'on coupe trop tôt une campagne qui démarre.",
       ],
     },
     {
@@ -298,6 +536,8 @@ export const googleAds: Article = {
     { q: "Quel budget prévoir pour commencer ?", a: "Un budget modeste et stable vaut mieux qu'un gros budget sur une semaine. Le bon montant dépend du prix des clics dans votre ville : c'est le diagnostic de départ qui le dit." },
     { q: "Puis-je gérer Google Ads seul ?", a: "Oui, avec un peu de méthode : une campagne, peu de mots-clés, une page d'arrivée précise, un suivi mensuel. Le plus difficile est de résister aux réglages automatiques qui élargissent la diffusion." },
     { q: "Et la publicité sur Facebook et Instagram ?", a: "Elle fonctionne autrement : on ne répond pas à une recherche, on se montre à un public. Elle convient pour faire connaître un atelier ou une offre de découverte, moins pour un besoin urgent." },
+    { q: "Faut-il un site pour faire de la publicité ?", a: "Oui, et une page précise par annonce. Envoyer des clics payés vers une page d'accueil générale est la façon la plus sûre de les perdre." },
+    { q: "Que se passe-t-il si j'arrête ?", a: "Les annonces cessent de s'afficher aussitôt, et les visites qu'elles amenaient s'arrêtent avec elles. C'est la grande différence avec le référencement naturel, dont les effets durent." },
   ],
   related: ["referencement-local-therapeute", "instagram-facebook-therapeute", "agenda-qui-ne-se-remplit-pas"],
 };
@@ -315,10 +555,26 @@ export const agenda: Article = {
   ],
   sections: [
     {
+      title: "Partir des chiffres que vous avez déjà",
+      blocks: [
+        "Avant de chercher ce qui manque, regardez ce que vous savez. Trois chiffres, même approximatifs, orientent tout le reste.",
+        {
+          list: [
+            "**Combien de nouvelles personnes** vous ont contacté le mois dernier ?",
+            "**D'où venaient-elles** : recommandation, Google, réseaux sociaux, un confrère ?",
+            "**Combien ont pris rendez-vous**, et combien sont revenues ?",
+          ],
+        },
+        "Si personne ne vous contacte, le problème est la visibilité. Si l'on vous contacte sans réserver, il est dans la réponse ou dans le tarif. Si l'on vient une fois sans revenir, il est ailleurs encore — et aucune publicité n'y changera rien.",
+        "Demandez simplement à chaque nouveau patient comment il vous a trouvé, et notez-le. En trois mois, vous saurez où mettre votre énergie.",
+      ],
+    },
+    {
       title: "1. Vous trouve-t-on ?",
       blocks: [
         "Ouvrez une fenêtre de navigation privée et tapez votre métier suivi de votre ville. Êtes-vous sur la carte ? Dans les premiers résultats ?",
         "Si non, le chantier est là : [votre fiche Google](/blog/fiche-google-therapeute) d'abord, vos pages par motif ensuite.",
+        "Faites aussi l'essai avec deux ou trois motifs — « sophrologie sommeil » suivi de votre ville, par exemple. Si vous n'apparaissez que sur votre nom, on ne vous trouve qu'en vous connaissant déjà.",
       ],
     },
     {
@@ -326,6 +582,7 @@ export const agenda: Article = {
       blocks: [
         "Montrez votre page d'accueil cinq secondes à quelqu'un qui ne vous connaît pas, puis demandez-lui ce que vous proposez et pour qui. S'il hésite, vos visiteurs aussi.",
         "Un titre clair, votre ville, un bouton de rendez-vous : le haut de page doit répondre à ces trois points sans faire défiler.",
+        "Relisez aussi vos premières lignes : parlent-elles de la personne et de sa difficulté, ou de vous et de vos diplômes ? Celui qui hésite veut d'abord se reconnaître.",
       ],
     },
     {
@@ -340,6 +597,7 @@ export const agenda: Article = {
             "Répondez-vous dans la journée aux messages ?",
           ],
         },
+        "Testez aussi votre répondeur : annonce-t-il votre nom, ce que vous faites, et quand vous rappelez ? Un message qui dit « je vous rappelle dans la journée » retient une personne qui, sinon, appelle le cabinet suivant.",
       ],
     },
     {
@@ -347,6 +605,7 @@ export const agenda: Article = {
       blocks: [
         "Deux cabinets voisins, l'un avec des avis récents et une photo du praticien, l'autre sans rien : le choix est fait avant la lecture.",
         "Un portrait, quelques avis, vos tarifs affichés et le déroulé d'une séance lèvent l'essentiel des hésitations. Voir [comment obtenir des avis sans insister](/blog/obtenir-avis-google-therapeute).",
+        "Vérifiez enfin ce que l'on voit de vous ailleurs : une fiche d'annuaire abandonnée, un profil sans photo, une ancienne adresse. Ces détails font douter.",
       ],
     },
     {
@@ -354,6 +613,44 @@ export const agenda: Article = {
       blocks: [
         "Le bouche-à-oreille reste la première source de nouveaux patients pour beaucoup de cabinets. Il s'entretient : des cartes à l'accueil, un mot aux professionnels de santé du quartier, une présence aux événements locaux.",
         "Votre site sert aussi à cela : la personne à qui l'on vous a recommandé tape votre nom, et décide en vous lisant.",
+        "Faites la liste de cinq professionnels du quartier qui reçoivent le même public que vous, et allez vous présenter. Un échange de dix minutes vaut souvent des mois de publications.",
+      ],
+    },
+    {
+      title: "Et vos créneaux ?",
+      blocks: [
+        "Un agenda peut sembler vide parce que ses créneaux ne correspondent pas à la vie de vos patients. Ceux qui travaillent cherchent le soir, le samedi matin ou la pause de midi.",
+        "Regardez à quels moments tombent vos rendez-vous actuels, et les demandes que vous avez dû refuser. Ouvrir un seul créneau tardif par semaine change parfois davantage qu'un mois de communication.",
+      ],
+    },
+    {
+      title: "Garder le lien avec ceux qui vous connaissent",
+      blocks: [
+        "Trouver un nouveau patient demande plus d'efforts que de rester présent à l'esprit de ceux qui sont déjà venus.",
+        {
+          list: [
+            "**Proposez le rendez-vous suivant** en fin de séance, quand un suivi a du sens.",
+            "**Envoyez un rappel** la veille : il réduit les oublis.",
+            "**Donnez des nouvelles** deux ou trois fois par an — un atelier, un nouvel horaire — à ceux qui ont accepté d'en recevoir.",
+            "**Remerciez** la personne qui vous a recommandé : elle recommencera.",
+          ],
+        },
+        { note: "Pour écrire à vos patients, il vous faut leur accord. Une case à cocher sur votre fiche de première séance suffit." },
+      ],
+    },
+    {
+      title: "Un plan sur quatre semaines",
+      blocks: [
+        {
+          list: [
+            "**Semaine 1** : faites les cinq vérifications, et notez ce qui manque.",
+            "**Semaine 2** : complétez votre fiche Google, corrigez le haut de votre page d'accueil.",
+            "**Semaine 3** : simplifiez la prise de rendez-vous, affichez vos tarifs.",
+            "**Semaine 4** : demandez vos premiers avis, reprenez contact avec votre réseau.",
+          ],
+          ordered: true,
+        },
+        "Ensuite seulement, mesurez. Si les demandes n'ont pas bougé après deux ou trois mois de ce régime, la publicité devient la bonne question.",
       ],
     },
     {
@@ -368,6 +665,8 @@ export const agenda: Article = {
     { q: "Combien de temps pour remplir un agenda ?", a: "Il n'y a pas de délai universel : cela dépend de votre ville, de votre spécialité et de votre ancienneté. Ce qui se contrôle, c'est le travail fait chaque mois, et ses effets se mesurent." },
     { q: "Faut-il baisser ses tarifs ?", a: "Rarement. Un agenda vide tient plus souvent à un défaut de visibilité ou de clarté qu'au prix. Vérifiez d'abord les cinq points." },
     { q: "Les plateformes de réservation suffisent-elles ?", a: "Elles facilitent la prise de rendez-vous, mais vous placent à côté de vos confrères. Elles complètent un site et une fiche Google ; elles ne les remplacent pas." },
+    { q: "Je viens de m'installer : est-ce normal que ce soit calme ?", a: "Oui. Une patientèle se construit sur des mois : le bouche-à-oreille et le référencement ont besoin de temps. Profitez de ce calme pour soigner votre fiche Google, votre site et votre réseau local." },
+    { q: "Faut-il proposer une première séance à prix réduit ?", a: "C'est un choix personnel. Si vous le faites, limitez-le dans le temps et dites-le clairement ; un tarif juste et affiché rassure souvent davantage qu'une remise." },
   ],
   related: ["fiche-google-therapeute", "obtenir-avis-google-therapeute", "google-ads-therapeute"],
 };

@@ -23,13 +23,16 @@ export const DELIVERS: readonly string[] = [
   `**Un blog qui se remplit** : ${site.blogArticlesPerWeek} articles par semaine, rédigés à partir de vos spécialités et de votre ville. Vous pouvez relire, modifier ou retirer chacun d'eux.`,
   "**Nom de domaine, hébergement, certificat de sécurité** : la technique est gérée pour vous.",
   "**Vos statistiques** : visiteurs, clics sur la prise de rendez-vous, appels et provenance de chaque visite.",
-  "Avec la formule Scale : **fiche Google, réseaux sociaux et publicité**, préparés dans le même espace.",
 ];
 
-export function HarmonyDelivers({ tone = "white" }: { tone?: "white" | "cream" }) {
+const SCALE = "Avec la formule Scale : **fiche Google, réseaux sociaux et publicité**, préparés dans le même espace.";
+/** Profession à ordre : la publicité payante n'est pas pour elle, on ne la lui présente pas. */
+const SCALE_ORDERED = "Avec la formule Scale : **le suivi de votre fiche Google et des contenus pour vos réseaux sociaux**, préparés dans le même espace. Vous restez seul juge de ce que votre déontologie permet de publier.";
+
+export function HarmonyDelivers({ tone = "white", ordered = false }: { tone?: "white" | "cream"; /** Profession dotée d'un ordre (cf. `Profession.ordered`) */ ordered?: boolean }) {
   return (
     <Section tone={tone} title="Ce que Harmony met en place" intro="Vous n'avez ni à écrire, ni à installer, ni à maintenir. Le travail arrive prêt, et **vous gardez la main** sur tout ce qui paraît.">
-      <Checklist items={DELIVERS} />
+      <Checklist items={[...DELIVERS, ordered ? SCALE_ORDERED : SCALE]} />
     </Section>
   );
 }
@@ -41,7 +44,7 @@ const TILES: { plan: PlanId; text: string }[] = [
 ];
 
 /** « Quel budget prévoir » : les formules et leur prix, lus dans la grille des tarifs. */
-export function Budget({ title, tone = "cream" }: { title: string; tone?: "white" | "cream" }) {
+export function Budget({ title, tone = "cream", ordered = false }: { title: string; tone?: "white" | "cream"; /** Profession dotée d'un ordre (cf. `Profession.ordered`) */ ordered?: boolean }) {
   return (
     <WideSection tone={tone} title={title} intro="Pas de devis à attendre : les prix sont publics, et les frais de création sont offerts.">
       <ul className="grid gap-5 md:grid-cols-3">
@@ -58,7 +61,8 @@ export function Budget({ title, tone = "cream" }: { title: string; tone?: "white
         ))}
       </ul>
       <p className="mt-6 text-base leading-relaxed text-ink-700">
-        Engagement de {MIN_COMMITMENT_MONTHS} mois minimum. Les budgets publicitaires se règlent directement à Google ou à Meta.{" "}
+        Engagement de {MIN_COMMITMENT_MONTHS} mois minimum.{" "}
+        {ordered ? "La partie publicitaire de la formule Scale ne vous concerne pas : votre déontologie l'écarte." : "Les budgets publicitaires se règlent directement à Google ou à Meta."}{" "}
         <a href="/#tarifs" className="focus-ring rounded font-semibold text-primary-700 underline decoration-primary-300 underline-offset-4 hover:text-primary-800">
           Voir le détail des tarifs
         </a>
@@ -67,7 +71,9 @@ export function Budget({ title, tone = "cream" }: { title: string; tone?: "white
   );
 }
 
-const PLAN_90: { days: string; title: string; items: string[] }[] = [
+type PlanStep = { days: string; title: string; items: string[] };
+
+const PLAN_90: PlanStep[] = [
   {
     days: "Jours 1 à 30",
     title: "Poser les bases",
@@ -97,8 +103,23 @@ const PLAN_90: { days: string; title: string; items: string[] }[] = [
   },
 ];
 
+/** Le même plan pour une profession à ordre : ni avis sollicités, ni publicité payante. */
+const PLAN_90_ORDERED: PlanStep[] = PLAN_90.map((step) => ({
+  ...step,
+  items: step.items.map((item) =>
+    item.startsWith("Vous demandez un avis")
+      ? "Vous complétez vos informations pratiques d'après les questions que l'on vous pose."
+      : item.startsWith("Vous publiez régulièrement")
+        ? "Vous tenez votre fiche Google à jour : horaires, congés, nouveaux créneaux."
+        : item.startsWith("Si la demande manque")
+          ? "Vous ajoutez les pages d'activité qui manquent encore."
+          : item,
+  ),
+}));
+
 /** « Votre plan sur 90 jours » : le travail, mois par mois — pas un résultat promis. */
-export function NinetyDays() {
+export function NinetyDays({ ordered = false }: { /** Profession dotée d'un ordre (cf. `Profession.ordered`) */ ordered?: boolean }) {
+  const plan = ordered ? PLAN_90_ORDERED : PLAN_90;
   return (
     <section className="relative isolate overflow-hidden bg-night-900 text-white">
       <div aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(50rem_24rem_at_100%_0%,rgb(14_151_221/0.22),transparent_62%)]" />
@@ -106,7 +127,7 @@ export function NinetyDays() {
         <h2 className="font-display text-3xl leading-[1.15] font-bold text-balance sm:text-[2.35rem]">Votre plan sur 90 jours</h2>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-white/80">Trois mois pour installer une présence qui travaille pour vous, dans l&apos;ordre où chaque étape sert la suivante.</p>
         <ol className="mt-10 grid gap-5 md:grid-cols-3">
-          {PLAN_90.map((step) => (
+          {plan.map((step) => (
             <li key={step.days} className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 sm:p-7">
               <p className="text-sm font-semibold text-primary-300">{step.days}</p>
               <h3 className="font-title mt-2 text-xl font-bold">{step.title}</h3>
@@ -127,9 +148,9 @@ export function NinetyDays() {
   );
 }
 
-/** Liens vers les pages des autres métiers. */
-export function OtherProfessions({ current, title = "Sites internet pour d'autres métiers", tone = "cream" }: { current?: Profession; title?: string; tone?: "white" | "cream" }) {
-  const others = PROFESSIONS.filter((profession) => profession.slug !== current?.slug);
+/** Liens vers les pages des métiers voisins (la même famille), puis vers la liste complète. */
+export function OtherProfessions({ current, title = "Sites internet pour des métiers voisins", tone = "cream" }: { current?: Profession; title?: string; tone?: "white" | "cream" }) {
+  const others = PROFESSIONS.filter((profession) => profession.slug !== current?.slug && (!current || profession.family === current.family));
   return (
     <WideSection tone={tone} title={title}>
       <ul className="flex flex-wrap gap-2.5">

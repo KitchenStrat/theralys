@@ -10,6 +10,16 @@
  * fiche renvoie le praticien vers son ordre, sa fédération ou son école.
  */
 
+import { MORE_PROFESSIONS } from "./professions-more";
+
+export const PROFESSION_FAMILIES = [
+  { id: "bien-etre", label: "Médecines douces et bien-être", intro: "Des pratiques que l'on découvre par curiosité ou par recommandation : votre site explique, rassure, et reste mesuré." },
+  { id: "accompagnement", label: "Psychologie et accompagnement", intro: "Des métiers de la parole et de la relation, où la confiance se joue avant le premier rendez-vous." },
+  { id: "sante", label: "Santé et paramédical", intro: "Des professions réglementées, parfois dotées d'un ordre : votre site informe, dans le cadre de vos règles professionnelles." },
+] as const;
+
+export type ProfessionFamilyId = (typeof PROFESSION_FAMILIES)[number]["id"];
+
 export type Profession = {
   /** Fin de l'adresse : `/creation-site-internet-<slug>` */
   slug: string;
@@ -22,6 +32,14 @@ export type Profession = {
   a: string;
   /** Dans la colonne « Par métier » du pied de page */
   featured?: boolean;
+  /** Famille de métiers, pour ranger la page « Création de site internet » */
+  family: ProfessionFamilyId;
+  /**
+   * Profession de santé dotée d'un ordre et d'un code de déontologie qui
+   * encadre la communication : ni référencement payant ni témoignages. La
+   * page n'y propose donc ni publicité ni recueil d'avis.
+   */
+  ordered?: boolean;
   /** Description pour les moteurs de recherche (150 caractères au plus) */
   description: string;
   /** Phrase d'introduction, sous le titre */
@@ -36,13 +54,14 @@ export type Profession = {
   faq: { q: string; a: string }[];
 };
 
-export const PROFESSIONS: readonly Profession[] = [
+const FIRST_PROFESSIONS: readonly Profession[] = [
   {
     slug: "osteopathe",
     name: "ostéopathe",
     plural: "ostéopathes",
     of: "d'ostéopathe",
     a: "un ostéopathe",
+    family: "sante",
     featured: true,
     description: "Un site d'ostéopathe créé et référencé pour vous : pages par motif, fiche Google, prise de rendez-vous. Démo personnalisée gratuite.",
     hook: "On vous cherche d'abord par proximité, souvent dans l'urgence. Votre site doit **apparaître près de chez vous**, rassurer en dix secondes et **mener au rendez-vous**.",
@@ -100,6 +119,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "hypnothérapeutes",
     of: "d'hypnothérapeute",
     a: "un hypnothérapeute",
+    family: "bien-etre",
     featured: true,
     description: "Un site d'hypnothérapeute qui rassure et qui se trouve : pages par motif, déroulé d'une séance, fiche Google. Démo personnalisée gratuite.",
     hook: "L'hypnose intrigue autant qu'elle inquiète. Votre site doit **lever les doutes avant le premier appel** et se placer sur les motifs que l'on tape vraiment.",
@@ -157,6 +177,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "sophrologues",
     of: "de sophrologue",
     a: "un sophrologue",
+    family: "bien-etre",
     featured: true,
     description: "Un site de sophrologue créé et référencé pour vous : pages par accompagnement, séances en groupe ou en entreprise, fiche Google. Démo gratuite.",
     hook: "On vous cherche tantôt par votre métier, tantôt par un besoin qui ne le nomme pas. Votre site doit **être là dans les deux cas**.",
@@ -214,6 +235,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "naturopathes",
     of: "de naturopathe",
     a: "un naturopathe",
+    family: "bien-etre",
     featured: true,
     description: "Un site de naturopathe créé et référencé pour vous : pages par motif, bilan de vitalité, ateliers, fiche Google. Démo personnalisée gratuite.",
     hook: "Vos futurs clients lisent beaucoup avant de consulter. Votre site doit **répondre à leurs questions** et montrer une pratique sérieuse, dans un cadre clair.",
@@ -271,6 +293,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "psychothérapeutes et psychopraticiens",
     of: "de psychothérapeute",
     a: "un psychothérapeute",
+    family: "accompagnement",
     featured: true,
     description: "Un site de psychothérapeute ou de psychopraticien, sobre et rassurant : approches, premières séances, cadre, fiche Google. Démo gratuite.",
     hook: "Écrire à un thérapeute est un pas difficile. Votre site doit **faire baisser cette marche** : dire qui vous êtes, comment vous travaillez, et comment prendre contact simplement.",
@@ -328,6 +351,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "réflexologues",
     of: "de réflexologue",
     a: "un réflexologue",
+    family: "bien-etre",
     featured: true,
     description: "Un site de réflexologue créé et référencé pour vous : séances, publics, bons cadeaux, fiche Google. Démo personnalisée gratuite.",
     hook: "Beaucoup de gens ne savent pas ce qu'est la réflexologie. Votre site doit **l'expliquer simplement** et donner envie d'essayer.",
@@ -385,6 +409,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "kinésiologues",
     of: "de kinésiologue",
     a: "un kinésiologue",
+    family: "bien-etre",
     description: "Un site de kinésiologue qui explique votre pratique et se place sur vos accompagnements : enfants, stress, apprentissages. Démo gratuite.",
     hook: "Votre métier se confond souvent avec un autre. Votre site doit **dire clairement ce que vous faites**, pour qui, et comment.",
     search: {
@@ -441,6 +466,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "praticiens reiki",
     of: "de praticien reiki",
     a: "un praticien reiki",
+    family: "bien-etre",
     description: "Un site de praticien reiki clair et rassurant : séances, initiations, cadre de la pratique, fiche Google. Démo personnalisée gratuite.",
     hook: "Le reiki attire et interroge. Votre site doit **rassurer sans survendre** : dire simplement ce qu'est une séance, et ce qu'elle n'est pas.",
     search: {
@@ -497,6 +523,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "praticiens shiatsu",
     of: "de praticien shiatsu",
     a: "un praticien shiatsu",
+    family: "bien-etre",
     description: "Un site de praticien shiatsu créé et référencé pour vous : séances, publics, shiatsu en entreprise, fiche Google. Démo gratuite.",
     hook: "Le shiatsu se découvre souvent par hasard. Votre site doit **l'expliquer en quelques lignes** et montrer à qui il s'adresse.",
     search: {
@@ -553,6 +580,7 @@ export const PROFESSIONS: readonly Profession[] = [
     plural: "professeurs de yoga",
     of: "de professeur de yoga",
     a: "un professeur de yoga",
+    family: "bien-etre",
     description: "Un site de professeur de yoga créé et référencé pour vous : planning des cours, tarifs, stages, cours en ligne, fiche Google. Démo gratuite.",
     hook: "On choisit un cours pour un horaire, un lieu et une personne. Votre site doit **montrer les trois d'un coup d'œil**.",
     search: {
@@ -605,7 +633,15 @@ export const PROFESSIONS: readonly Profession[] = [
   },
 ];
 
+/** Tous les métiers : ceux de ce fichier, puis ceux de `professions-more.ts`. */
+export const PROFESSIONS: readonly Profession[] = [...FIRST_PROFESSIONS, ...MORE_PROFESSIONS];
+
 export const FEATURED_PROFESSIONS = PROFESSIONS.filter((profession) => profession.featured);
+
+/** Les métiers d'une famille, dans l'ordre de la liste. */
+export function professionsIn(family: ProfessionFamilyId): Profession[] {
+  return PROFESSIONS.filter((profession) => profession.family === family);
+}
 
 /** Adresse de la page d'un métier. */
 export function professionPath(profession: Pick<Profession, "slug">): string {

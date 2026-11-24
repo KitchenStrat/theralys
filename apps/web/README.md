@@ -130,9 +130,16 @@ défilement), tout leur texte est dans le code de la page, et chaque bouton
 - **Les contenus sont des données** : `content/blog.ts` (thématiques, format
   d'un article), `content/articles/` (les articles, inscrits dans `ARTICLES`
   de `index.ts` — le premier est « à la une ») et `content/professions.ts`
-  (une fiche par métier ; `featured` la place dans la colonne « Par métier »
-  du pied de page). Ajouter un article ou un métier, c'est ajouter une entrée :
-  la page, les listes, le pied de page et le plan du site suivent.
+  avec sa suite `professions-more.ts` (une fiche par métier ; `family` la
+  range sur la page « Création de site internet », `featured` la place dans la
+  colonne « Par métier » du pied de page). Ajouter un article ou un métier,
+  c'est ajouter une entrée : la page, les listes, le pied de page et le plan
+  du site suivent.
+- **Professions à ordre** (`ordered` : kinésithérapeute, sage-femme,
+  pédicure-podologue) : leur code de déontologie interdit le référencement
+  payant et les témoignages. Leur page ne propose donc ni publicité ni recueil
+  d'avis, et le dit. Toute nouvelle profession de santé dotée d'un ordre doit
+  porter ce drapeau.
 - **Écriture** : `**gras**` et liens internes `[libellé](/adresse)` dans les
   textes. Mêmes règles que le reste de la vitrine — rien d'inventé, aucun
   résultat promis — et la prudence sur le cadre de chaque métier (en cas de

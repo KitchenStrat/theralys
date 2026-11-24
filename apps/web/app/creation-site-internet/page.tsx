@@ -6,7 +6,7 @@ import { Section, WideSection } from "@/components/pages/sections";
 import { ArticleCard, CtaBand, DemoButton, FaqList, GhostButton, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { getArticle } from "@/content/articles";
 import type { Article } from "@/content/blog";
-import { PROFESSIONS, capitalize, professionPath } from "@/content/professions";
+import { PROFESSIONS, PROFESSION_FAMILIES, professionPath, professionsIn } from "@/content/professions";
 import { ORGANIZATION_JSON_LD, absoluteUrl, breadcrumbJsonLd, faqJsonLd, pageMetadata, type Crumb } from "@/lib/site";
 
 const PATH = "/creation-site-internet";
@@ -77,24 +77,30 @@ export default function CreationPage() {
         </div>
       </PageHero>
 
-      <WideSection title="Un guide pour chaque métier" intro="Comment on vous cherche, les pages à prévoir, le cadre à respecter : choisissez votre pratique.">
-        <ul className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {PROFESSIONS.map((profession) => (
-            <li key={profession.slug}>
-              <article className="group relative flex h-full flex-col rounded-3xl border border-cream-200 bg-white p-6 shadow-[var(--shadow-card)] transition-[border-color,translate] hover:-translate-y-0.5 hover:border-primary-300">
-                <h3 className="font-title text-xl leading-snug font-bold text-ink-900">
-                  <a href={professionPath(profession)} className="focus-ring rounded after:absolute after:inset-0 after:rounded-3xl">
-                    Site internet {profession.of}
-                  </a>
-                </h3>
-                <p className="mt-3 flex-1 text-base leading-relaxed text-ink-700">{inline(profession.hook)}</p>
-                <p aria-hidden className="mt-5 text-base font-semibold text-primary-700 group-hover:text-primary-800">
-                  Voir le guide {capitalize(profession.name)}
-                </p>
-              </article>
-            </li>
+      <WideSection title="Un guide pour chaque métier" intro={`${PROFESSIONS.length} métiers, chacun avec sa page : comment on vous cherche, les pages à prévoir, le cadre à respecter.`}>
+        <div className="space-y-11">
+          {PROFESSION_FAMILIES.map((family) => (
+            <section key={family.id} aria-labelledby={`famille-${family.id}`}>
+              <h3 id={`famille-${family.id}`} className="font-title text-xl font-bold text-ink-900">
+                {family.label}
+              </h3>
+              <p className="mt-1.5 max-w-2xl text-base leading-relaxed text-ink-700">{family.intro}</p>
+              <ul className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {professionsIn(family.id).map((profession) => (
+                  <li key={profession.slug}>
+                    <a
+                      href={professionPath(profession)}
+                      data-metier={profession.slug}
+                      className="focus-ring flex min-h-14 items-center rounded-2xl border border-cream-200 bg-white px-5 py-3.5 text-[1.0625rem] leading-snug font-semibold text-ink-900 shadow-[var(--shadow-card)] transition-[border-color,color,translate] hover:-translate-y-0.5 hover:border-primary-300 hover:text-primary-800"
+                    >
+                      Site internet {profession.of}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       </WideSection>
 
       <HarmonyDelivers tone="cream" />

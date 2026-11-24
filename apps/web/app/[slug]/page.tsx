@@ -97,18 +97,24 @@ export default async function ProfessionPage({ params }: Params) {
         </ol>
       </Section>
 
-      <Section tone="cream" title="Et la publicité ?" intro="Elle amplifie un site qui convertit ; elle ne remplace pas le reste.">
+      <Section
+        tone="cream"
+        title="Et la publicité ?"
+        intro={profession.ordered ? "Votre déontologie tranche : votre visibilité se gagne sans annonce payante." : "Elle amplifie un site qui convertit ; elle ne remplace pas le reste."}
+      >
         <Callout>{profession.ads}</Callout>
-        <p className="mt-4 text-base text-ink-700">
-          <a href="/blog/google-ads-therapeute" className="focus-ring rounded font-semibold text-primary-700 underline decoration-primary-300 underline-offset-4 hover:text-primary-800">
-            Dans quels cas Google Ads vaut le coup
-          </a>
-        </p>
+        {profession.ordered ? null : (
+          <p className="mt-4 text-base text-ink-700">
+            <a href="/blog/google-ads-therapeute" className="focus-ring rounded font-semibold text-primary-700 underline decoration-primary-300 underline-offset-4 hover:text-primary-800">
+              Dans quels cas Google Ads vaut le coup
+            </a>
+          </p>
+        )}
       </Section>
 
-      <HarmonyDelivers />
-      <Budget title={`Quel budget prévoir pour un site ${profession.of}`} />
-      <NinetyDays />
+      <HarmonyDelivers ordered={profession.ordered} />
+      <Budget title={`Quel budget prévoir pour un site ${profession.of}`} ordered={profession.ordered} />
+      <NinetyDays ordered={profession.ordered} />
 
       <Section title="Questions fréquentes" intro={`Ce que l'on nous demande le plus souvent avant de lancer un site ${profession.of}.`}>
         <FaqList faq={profession.faq} />
