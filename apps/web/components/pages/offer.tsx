@@ -1,5 +1,6 @@
 import { MIN_COMMITMENT_MONTHS, PLANS, PLAN_COMPLETE, PLAN_SCALE, PLAN_SITE, planPrice, type PlanId } from "@theralys/db/plans";
 import { PROFESSIONS, professionPath, type Profession } from "@/content/professions";
+import { SectionAction } from "./cta";
 import { inline } from "./prose";
 import { Checklist, Section, WideSection } from "./sections";
 
@@ -31,7 +32,12 @@ const SCALE_ORDERED = "Avec la formule Scale : **le suivi de votre fiche Google 
 
 export function HarmonyDelivers({ tone = "white", ordered = false }: { tone?: "white" | "cream"; /** Profession dotée d'un ordre (cf. `Profession.ordered`) */ ordered?: boolean }) {
   return (
-    <Section tone={tone} title="Ce que Harmony met en place" intro="Vous n'avez ni à écrire, ni à installer, ni à maintenir. Le travail arrive prêt, et **vous gardez la main** sur tout ce qui paraît.">
+    <Section
+      tone={tone}
+      title="Ce que Harmony met en place"
+      intro="Vous n'avez ni à écrire, ni à installer, ni à maintenir. Le travail arrive prêt, et **vous gardez la main** sur tout ce qui paraît."
+      cta="Voyez-le sur votre propre cabinet : la démo est gratuite."
+    >
       <Checklist items={[...DELIVERS, ordered ? SCALE_ORDERED : SCALE]} />
     </Section>
   );
@@ -46,7 +52,7 @@ const TILES: { plan: PlanId; text: string }[] = [
 /** « Quel budget prévoir » : les formules et leur prix, lus dans la grille des tarifs. */
 export function Budget({ title, tone = "cream", ordered = false }: { title: string; tone?: "white" | "cream"; /** Profession dotée d'un ordre (cf. `Profession.ordered`) */ ordered?: boolean }) {
   return (
-    <WideSection tone={tone} title={title} intro="Pas de devis à attendre : les prix sont publics, et les frais de création sont offerts.">
+    <WideSection tone={tone} title={title} intro="Pas de devis à attendre : les prix sont publics, et les frais de création sont offerts." cta="Avant de choisir une formule, voyez votre futur site.">
       <ul className="grid gap-5 md:grid-cols-3">
         {TILES.map(({ plan, text }) => (
           <li key={plan} className="flex flex-col rounded-3xl border border-cream-200 bg-white p-7 shadow-[var(--shadow-card)]">
@@ -143,6 +149,7 @@ export function NinetyDays({ ordered = false }: { /** Profession dotée d'un ord
           ))}
         </ol>
         <p className="mt-8 max-w-3xl text-base leading-relaxed text-white/70">Le référencement naturel met quelques mois à s&apos;installer. Ce plan décrit le travail à mener ; il ne garantit pas un nombre de rendez-vous.</p>
+        <SectionAction dark text="Le premier jour commence par une démo." className="mt-12" />
       </div>
     </section>
   );

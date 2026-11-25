@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SectionAction } from "@/components/pages/cta";
 import { ArticleCard, CtaBand, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { inline } from "@/components/pages/prose";
 import { ARTICLES, articleCount, articlePath, articlesIn, categoryPath } from "@/content/articles";
@@ -72,6 +73,7 @@ export default function BlogPage() {
             <div className="mt-8">
               <ArticleCard article={featured} featured />
             </div>
+            <SectionAction text="Envie que ces conseils soient appliqués pour vous ?" />
           </div>
         </section>
       ) : null}
@@ -86,6 +88,7 @@ export default function BlogPage() {
               </li>
             ))}
           </ul>
+          <SectionAction text="Harmony écrit aussi les articles de votre cabinet." />
         </div>
       </section>
 

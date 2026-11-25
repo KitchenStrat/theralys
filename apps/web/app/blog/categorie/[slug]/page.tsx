@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { SectionAction } from "@/components/pages/cta";
 import { ArticleCard, CtaBand, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { articlePath, articlesIn, categoryPath } from "@/content/articles";
 import { BLOG_CATEGORIES, getCategory } from "@/content/blog";
@@ -60,6 +61,7 @@ export default async function CategoryPage({ params }: Params) {
               </li>
             ))}
           </ul>
+          <SectionAction text="Ces guides, Harmony les met en pratique pour votre cabinet." />
         </div>
       </section>
 

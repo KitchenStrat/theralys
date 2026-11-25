@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
+import { ARTICLE_CARDS, ArticleAside, CtaCard } from "@/components/pages/cta";
 import { Blocks, inline } from "@/components/pages/prose";
 import { ArticleCard, CtaBand, FaqList, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { ARTICLES, articlePath, categoryPath, getArticle, relatedArticles } from "@/content/articles";
@@ -84,57 +86,67 @@ export default async function ArticlePage({ params }: Params) {
         </p>
       </PageHero>
 
-      <article className="bg-white">
-        <div className="mx-auto max-w-3xl px-5 py-12 md:py-16">
-          <div className="[&>p:first-child]:mt-0 [&>p:first-child]:text-xl [&>p:first-child]:leading-relaxed [&>p:first-child]:text-ink-900">
-            <Blocks blocks={article.intro} />
-          </div>
+      <div className="bg-white">
+        <div className="mx-auto grid max-w-6xl gap-12 px-5 py-12 md:py-16 lg:grid-cols-[minmax(0,48rem)_minmax(0,1fr)]">
+          <article className="min-w-0">
+            <div className="[&>p:first-child]:mt-0 [&>p:first-child]:text-xl [&>p:first-child]:leading-relaxed [&>p:first-child]:text-ink-900">
+              <Blocks blocks={article.intro} />
+            </div>
 
-          <nav aria-label="Sommaire" className="mt-10 rounded-3xl border border-cream-200 bg-cream-100 px-6 py-6 sm:px-8">
-            <h2 className="font-title text-lg font-bold text-ink-900">Sommaire</h2>
-            <ol className="mt-3 list-decimal space-y-1 pl-5 text-[1.0625rem] marker:font-semibold marker:text-primary-700">
-              {article.sections.map((section) => (
-                <li key={section.title} className="pl-1">
-                  <a href={`#${anchorId(section.title)}`} className="focus-ring inline-flex min-h-9 items-center rounded text-ink-900 underline decoration-cream-300 underline-offset-4 hover:text-primary-700 hover:decoration-primary-400">
-                    {inline(section.title)}
+            <nav aria-label="Sommaire" className="mt-10 rounded-3xl border border-cream-200 bg-cream-100 px-6 py-6 sm:px-8">
+              <h2 className="font-title text-lg font-bold text-ink-900">Sommaire</h2>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-[1.0625rem] marker:font-semibold marker:text-primary-700">
+                {article.sections.map((section) => (
+                  <li key={section.title} className="pl-1">
+                    <a href={`#${anchorId(section.title)}`} className="focus-ring inline-flex min-h-9 items-center rounded text-ink-900 underline decoration-cream-300 underline-offset-4 hover:text-primary-700 hover:decoration-primary-400">
+                      {inline(section.title)}
+                    </a>
+                  </li>
+                ))}
+                <li className="pl-1">
+                  <a href="#questions-frequentes" className="focus-ring inline-flex min-h-9 items-center rounded text-ink-900 underline decoration-cream-300 underline-offset-4 hover:text-primary-700 hover:decoration-primary-400">
+                    Questions fréquentes
                   </a>
                 </li>
-              ))}
-              <li className="pl-1">
-                <a href="#questions-frequentes" className="focus-ring inline-flex min-h-9 items-center rounded text-ink-900 underline decoration-cream-300 underline-offset-4 hover:text-primary-700 hover:decoration-primary-400">
-                  Questions fréquentes
-                </a>
-              </li>
-            </ol>
-          </nav>
+              </ol>
+            </nav>
 
-          {article.sections.map((section) => (
-            <section key={section.title} aria-labelledby={anchorId(section.title)} className="mt-12">
-              <h2 id={anchorId(section.title)} className="font-display text-[1.75rem] leading-tight font-bold text-balance text-ink-900 sm:text-[2rem]">
-                {inline(section.title)}
+            {article.sections.map((section, index) => {
+              // Une carte toutes les trois sections, jamais après la dernière (le bandeau de fin suit de près)
+              const card = (index + 1) % 3 === 0 && index < article.sections.length - 1 ? ARTICLE_CARDS[((index + 1) / 3 - 1) % ARTICLE_CARDS.length] : undefined;
+              return (
+                <Fragment key={section.title}>
+                  <section aria-labelledby={anchorId(section.title)} className="mt-12">
+                    <h2 id={anchorId(section.title)} className="font-display text-[1.75rem] leading-tight font-bold text-balance text-ink-900 sm:text-[2rem]">
+                      {inline(section.title)}
+                    </h2>
+                    <Blocks blocks={section.blocks} />
+                  </section>
+                  {card ? <CtaCard {...card} /> : null}
+                </Fragment>
+              );
+            })}
+
+            <section aria-labelledby="questions-frequentes" className="mt-14">
+              <h2 id="questions-frequentes" className="font-display text-[1.75rem] leading-tight font-bold text-ink-900 sm:text-[2rem]">
+                Questions fréquentes
               </h2>
-              <Blocks blocks={section.blocks} />
+              <div className="mt-6">
+                <FaqList faq={article.faq} />
+              </div>
             </section>
-          ))}
 
-          <section aria-labelledby="questions-frequentes" className="mt-14">
-            <h2 id="questions-frequentes" className="font-display text-[1.75rem] leading-tight font-bold text-ink-900 sm:text-[2rem]">
-              Questions fréquentes
-            </h2>
-            <div className="mt-6">
-              <FaqList faq={article.faq} />
+            <div className="mt-14">
+              <CtaBand
+                title="Vous préférez vous concentrer sur vos séances ?"
+                text="Harmony prépare votre site, vos articles et vos contenus, et **vous gardez la main** sur tout ce qui paraît. La démo de votre futur site est gratuite."
+                secondary={{ href: "/#tarifs", label: "Voir les tarifs" }}
+              />
             </div>
-          </section>
-
-          <div className="mt-14">
-            <CtaBand
-              title="Vous préférez vous concentrer sur vos séances ?"
-              text="Harmony prépare votre site, vos articles et vos contenus, et **vous gardez la main** sur tout ce qui paraît. La démo de votre futur site est gratuite."
-              secondary={{ href: "/#tarifs", label: "Voir les tarifs" }}
-            />
-          </div>
+          </article>
+          <ArticleAside />
         </div>
-      </article>
+      </div>
 
       {related.length > 0 ? (
         <section className="bg-cream-100">

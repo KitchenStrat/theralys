@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Budget, HarmonyDelivers, NinetyDays, OtherProfessions } from "@/components/pages/offer";
 import { Callout, Checklist, Section, WideSection } from "@/components/pages/sections";
-import { ArticleCard, CtaBand, DemoButton, FaqList, GhostButton, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
+import { ArticleCard, CtaBand, FaqList, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { getArticle } from "@/content/articles";
 import type { Article } from "@/content/blog";
 import { PROFESSIONS, PROFESSION_PREFIX, capitalize, professionFromSegment, professionPath } from "@/content/professions";
@@ -61,18 +61,13 @@ export default async function ProfessionPage({ params }: Params) {
   return (
     <PageShell>
       <JsonLd data={jsonLd} />
-      <PageHero crumbs={crumbs} title={title} lead={profession.hook}>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <DemoButton />
-          <GhostButton href="/#tarifs" label="Voir les tarifs" />
-        </div>
-      </PageHero>
+      <PageHero crumbs={crumbs} title={title} lead={profession.hook} pricing />
 
       <Section title={`Comment on cherche ${profession.a} sur Google`} intro={profession.search.intro}>
         <Checklist items={profession.search.points} />
       </Section>
 
-      <Section tone="cream" title={`Les pages à prévoir sur un site ${profession.of}`} intro={profession.pages.intro}>
+      <Section tone="cream" title={`Les pages à prévoir sur un site ${profession.of}`} intro={profession.pages.intro} cta="Ces pages, Harmony les prépare pour votre cabinet.">
         <Checklist items={profession.pages.items} />
       </Section>
 
@@ -84,7 +79,11 @@ export default async function ProfessionPage({ params }: Params) {
         <Checklist items={profession.frame.items} />
       </Section>
 
-      <Section title="De quoi parler sur votre blog" intro="Des sujets qui répondent à de vraies recherches. Avec Harmony, les articles sont rédigés pour vous, sur les thématiques que vous choisissez.">
+      <Section
+        title="De quoi parler sur votre blog"
+        intro="Des sujets qui répondent à de vraies recherches. Avec Harmony, les articles sont rédigés pour vous, sur les thématiques que vous choisissez."
+        cta="Vos articles rédigés pour vous, chaque semaine."
+      >
         <ol className="space-y-3">
           {profession.topics.map((topic, index) => (
             <li key={topic} className="flex items-center gap-4 rounded-2xl border border-cream-200 bg-cream-50 px-5 py-4 text-[1.0625rem] leading-snug font-medium text-ink-900">
@@ -116,7 +115,7 @@ export default async function ProfessionPage({ params }: Params) {
       <Budget title={`Quel budget prévoir pour un site ${profession.of}`} ordered={profession.ordered} />
       <NinetyDays ordered={profession.ordered} />
 
-      <Section title="Questions fréquentes" intro={`Ce que l'on nous demande le plus souvent avant de lancer un site ${profession.of}.`}>
+      <Section title="Questions fréquentes" intro={`Ce que l'on nous demande le plus souvent avant de lancer un site ${profession.of}.`} cta="Une autre question ? Posez-la pendant votre démo.">
         <FaqList faq={profession.faq} />
       </Section>
 

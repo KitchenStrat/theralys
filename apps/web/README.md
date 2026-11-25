@@ -151,9 +151,20 @@ défilement), tout leur texte est dans le code de la page, et chaque bouton
   canonique (en `www`) et ses données structurées (`lib/site.ts`) ;
   `app/sitemap.ts` et `app/robots.ts` annoncent toutes les pages. Le pied de
   page, le même partout, recense tous les métiers et toutes les thématiques.
+- **La démo et l'accueil, toujours à portée** : ces pages reçoivent des
+  visiteurs venus de Google, qui ne connaissent pas Harmony. Chaque appel à
+  l'action porte donc deux boutons — « Demander ma démo gratuite » (la fenêtre)
+  et « Découvrir Harmony » (l'accueil) — et il y en a partout : en haut de
+  chaque page (`PageHero`), à la fin des sections (`cta` de `Section` et
+  `WideSection`), en carte toutes les trois sections d'un article, dans
+  l'encart qui suit la lecture sur grand écran (`ArticleAside`), dans le
+  bandeau de fin (`CtaBand`), et dans la barre fixe du téléphone
+  (`StickyCta`, qui s'efface en haut de page et devant le pied de page).
+  L'en-tête de ces pages commence par « Accueil ».
 - `components/pages/` — le cadre commun (`shell.tsx` : en-tête, bandeau de
-  titre, fil d'Ariane, cartes, questions), la mise en forme des textes
-  (`prose.tsx`) et les sections (`sections.tsx`, `offer.tsx`).
+  titre, fil d'Ariane, boutons, cartes, questions), la mise en forme des
+  textes (`prose.tsx`), les appels à l'action (`cta.tsx`, `sticky-cta.tsx`)
+  et les sections (`sections.tsx`, `offer.tsx`).
 
 ## Captures d'écran
 

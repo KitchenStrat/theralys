@@ -13,6 +13,15 @@ const LINKS = [
   { href: "#faq", label: "Questions" },
 ];
 
+/** Sur les pages de contenu (blog, pages par métier) : le retour à l'accueil d'abord, puis l'essentiel, et le blog. */
+const INNER_LINKS = [
+  { href: "/", label: "Accueil" },
+  { href: "/#solution", label: "La solution" },
+  { href: "/#outils", label: "Les outils" },
+  { href: "/#tarifs", label: "Tarifs" },
+  { href: "/blog", label: "Blog" },
+];
+
 /** Espace client du studio (application séparée). */
 const STUDIO_URL = "https://app.harmony-web.fr";
 
@@ -23,6 +32,7 @@ const STUDIO_URL = "https://app.harmony-web.fr";
  */
 export function Header({ home = true }: { home?: boolean }) {
   const to = (anchor: string) => (home ? anchor : `/${anchor}`);
+  const links = home ? LINKS : INNER_LINKS;
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -73,10 +83,10 @@ export function Header({ home = true }: { home?: boolean }) {
             <Brand onDark={onDark} />
           </a>
           <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Navigation principale">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <a
                 key={link.href}
-                href={to(link.href)}
+                href={link.href}
                 className={clsx(
                   "inline-flex min-h-11 items-center rounded-full px-3.5 py-2 text-sm font-medium transition",
                   onDark ? "focus-ring-dark text-white/90 hover:bg-white/15 hover:text-white" : "focus-ring text-ink-700 hover:bg-primary-100/70 hover:text-primary-700",
@@ -125,10 +135,10 @@ export function Header({ home = true }: { home?: boolean }) {
           className="border-t border-cream-200 px-3 pt-2 pb-3 lg:hidden"
         >
           <ul className="grid gap-0.5">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <li key={link.href}>
                 <a
-                  href={to(link.href)}
+                  href={link.href}
                   onClick={() => setOpen(false)}
                   className="focus-ring block rounded-xl px-3 py-3 text-base font-medium text-ink-900 transition hover:bg-primary-100/70"
                 >

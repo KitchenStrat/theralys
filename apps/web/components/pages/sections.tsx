@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
+import { SectionAction } from "./cta";
 import { inline } from "./prose";
 
 /**
@@ -7,28 +8,58 @@ import { inline } from "./prose";
  * gauche, le contenu à droite (l'un sous l'autre sur téléphone). Les fonds
  * alternent d'une section à l'autre pour rythmer la lecture.
  */
-export function Section({ title, intro, tone = "white", children }: { title: string; intro?: string; tone?: "white" | "cream"; children: ReactNode }) {
+export function Section({
+  title,
+  intro,
+  tone = "white",
+  cta,
+  children,
+}: {
+  title: string;
+  intro?: string;
+  tone?: "white" | "cream";
+  /** Phrase de l'appel à l'action de fin de section (démo et accueil) */
+  cta?: string;
+  children: ReactNode;
+}) {
   return (
     <section className={tone === "cream" ? "bg-cream-100" : "bg-white"}>
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 py-14 md:py-20 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-14">
-        <div>
-          <h2 className="font-display text-3xl leading-[1.15] font-bold text-balance text-ink-900 sm:text-[2.35rem]">{inline(title)}</h2>
-          {intro ? <p className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">{inline(intro)}</p> : null}
+      <div className="mx-auto max-w-6xl px-5 py-14 md:py-20">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-14">
+          <div>
+            <h2 className="font-display text-3xl leading-[1.15] font-bold text-balance text-ink-900 sm:text-[2.35rem]">{inline(title)}</h2>
+            {intro ? <p className="mt-4 text-lg leading-relaxed text-pretty text-ink-700">{inline(intro)}</p> : null}
+          </div>
+          <div>{children}</div>
         </div>
-        <div>{children}</div>
+        {cta ? <SectionAction text={cta} className="mt-12" /> : null}
       </div>
     </section>
   );
 }
 
 /** Une section pleine largeur : titre centré, contenu dessous (cartes, tuiles). */
-export function WideSection({ title, intro, tone = "white", children }: { title: string; intro?: string; tone?: "white" | "cream"; children: ReactNode }) {
+export function WideSection({
+  title,
+  intro,
+  tone = "white",
+  cta,
+  children,
+}: {
+  title: string;
+  intro?: string;
+  tone?: "white" | "cream";
+  /** Phrase de l'appel à l'action de fin de section (démo et accueil) */
+  cta?: string;
+  children: ReactNode;
+}) {
   return (
     <section className={tone === "cream" ? "bg-cream-100" : "bg-white"}>
       <div className="mx-auto max-w-6xl px-5 py-14 md:py-20">
         <h2 className="font-display max-w-3xl text-3xl leading-[1.15] font-bold text-balance text-ink-900 sm:text-[2.35rem]">{inline(title)}</h2>
         {intro ? <p className="mt-4 max-w-2xl text-lg leading-relaxed text-pretty text-ink-700">{inline(intro)}</p> : null}
         <div className="mt-9">{children}</div>
+        {cta ? <SectionAction text={cta} className="mt-12" /> : null}
       </div>
     </section>
   );

@@ -7,6 +7,7 @@ import { DemoDialog } from "../demo-dialog";
 import { Footer } from "../footer";
 import { Header } from "../header";
 import { inline } from "./prose";
+import { StickyCta } from "./sticky-cta";
 
 /**
  * Cadre des pages de contenu (blog, pages par métier) : le même en-tête et le
@@ -14,6 +15,11 @@ import { inline } from "./prose";
  * la fenêtre de demande de démo — tout bouton « démo » l'ouvre ici aussi.
  * Pages calmes : aucune animation au défilement, tout le texte est dans le
  * code de la page.
+ *
+ * Ces pages reçoivent des visiteurs venus de Google, qui ne connaissent pas
+ * Harmony : la demande de démo et le chemin vers l'accueil y sont toujours à
+ * portée — en haut de page, à la fin des sections, et dans la barre fixe du
+ * téléphone (`StickyCta`).
  */
 export function PageShell({ children }: { children: ReactNode }) {
   return (
@@ -24,6 +30,7 @@ export function PageShell({ children }: { children: ReactNode }) {
       <Header home={false} />
       <main id="contenu">{children}</main>
       <Footer home={false} />
+      <StickyCta />
       <DemoDialog />
     </>
   );
@@ -69,10 +76,36 @@ function Breadcrumb({ crumbs, current = true }: { crumbs: readonly Crumb[]; curr
   );
 }
 
+const PRIMARY =
+  "cta focus-ring inline-flex min-h-12 items-center rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-black/20 transition-[background-color,scale] hover:bg-primary-700 active:scale-[0.98]";
+const GHOST_DARK =
+  "focus-ring-dark inline-flex min-h-12 items-center rounded-full border border-white/40 bg-white/10 px-7 py-3.5 text-base font-semibold text-white transition-[background-color,scale] hover:bg-white/20 active:scale-[0.98]";
+const GHOST_LIGHT =
+  "focus-ring inline-flex min-h-12 items-center rounded-full border border-primary-200 bg-white px-7 py-3.5 text-base font-semibold text-primary-800 transition-[background-color,border-color,scale] hover:border-primary-400 hover:bg-primary-50 active:scale-[0.98]";
+
+/** Bouton de démo : il ouvre la fenêtre de demande (ou mène au formulaire de l'accueil sans JavaScript). */
+export function DemoButton({ label = "Demander ma démo gratuite", className = "" }: { label?: string; className?: string }) {
+  return (
+    <a href="/#demo" data-cta="demo" className={`${PRIMARY} ${className}`}>
+      {label}
+    </a>
+  );
+}
+
+/** Le chemin vers l'accueil, où Harmony est présenté : il accompagne chaque bouton de démo. */
+export function HomeButton({ dark = false, label = "Découvrir Harmony", className = "" }: { /** Sur fond sombre */ dark?: boolean; label?: string; className?: string }) {
+  return (
+    <a href="/" data-cta="accueil" className={`${dark ? GHOST_DARK : GHOST_LIGHT} ${className}`}>
+      {label}
+    </a>
+  );
+}
+
 /**
  * Haut d'une page de contenu : bandeau bleu nuit (l'en-tête fixe s'y lit en
  * blanc, comme sur l'accueil), fil d'Ariane, titre de la page, phrase
- * d'introduction, puis ce que la page ajoute (boutons, date…).
+ * d'introduction, ce que la page ajoute (date d'un article…), puis les deux
+ * boutons — la démo, et l'accueil.
  */
 export function PageHero({
   crumbs,
@@ -81,6 +114,7 @@ export function PageHero({
   children,
   narrow = false,
   titleInTrail = true,
+  pricing = false,
 }: {
   crumbs: readonly Crumb[];
   title: string;
@@ -89,52 +123,48 @@ export function PageHero({
   narrow?: boolean;
   /** Faux pour un article : son titre, long, ne se répète pas dans le fil d'Ariane juste au-dessus de lui */
   titleInTrail?: boolean;
+  /** Ajoute le lien vers les tarifs, à côté des boutons */
+  pricing?: boolean;
 }) {
   return (
     <section className="relative overflow-hidden bg-night-900 pt-28 pb-14 text-white md:pt-36 md:pb-20">
       <div aria-hidden className="absolute inset-0 bg-[radial-gradient(58rem_28rem_at_85%_-10%,rgb(14_151_221/0.3),transparent_62%),radial-gradient(40rem_22rem_at_0%_110%,rgb(106_95_214/0.2),transparent_60%)]" />
-      <div className={`relative mx-auto px-5 ${narrow ? "max-w-3xl" : "max-w-6xl"}`}>
-        <Breadcrumb crumbs={titleInTrail ? crumbs : crumbs.slice(0, -1)} current={titleInTrail} />
-        <h1 className="font-display mt-5 max-w-4xl text-[2.25rem] leading-[1.1] font-bold text-balance sm:text-5xl md:text-[3.4rem]">{inline(title, { strong: "font-bold text-white" })}</h1>
-        {lead ? <p className="mt-5 max-w-2xl text-lg leading-relaxed text-pretty text-white/85 md:text-xl">{inline(lead, { strong: "font-semibold text-white" })}</p> : null}
-        {children}
+      <div className="relative mx-auto max-w-6xl px-5">
+        <div className={narrow ? "max-w-3xl" : ""}>
+          <Breadcrumb crumbs={titleInTrail ? crumbs : crumbs.slice(0, -1)} current={titleInTrail} />
+          <h1 className="font-display mt-5 max-w-4xl text-[2.25rem] leading-[1.1] font-bold text-balance sm:text-5xl md:text-[3.4rem]">{inline(title, { strong: "font-bold text-white" })}</h1>
+          {lead ? <p className="mt-5 max-w-2xl text-lg leading-relaxed text-pretty text-white/85 md:text-xl">{inline(lead, { strong: "font-semibold text-white" })}</p> : null}
+          {children}
+          <div data-cta-group="haut-de-page" className="mt-8 flex flex-wrap items-center gap-3">
+            <DemoButton />
+            <HomeButton dark />
+            {pricing ? (
+              <a href="/#tarifs" className="focus-ring-dark inline-flex min-h-12 items-center rounded-full px-3 text-base font-semibold text-white/90 underline decoration-white/40 underline-offset-4 hover:text-white hover:decoration-white">
+                Voir les tarifs
+              </a>
+            ) : null}
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-const PRIMARY =
-  "cta focus-ring inline-flex min-h-12 items-center rounded-full bg-primary-600 px-7 py-3.5 text-base font-semibold text-white shadow-md shadow-black/20 transition-[background-color,scale] hover:bg-primary-700 active:scale-[0.98]";
-const GHOST_DARK =
-  "focus-ring-dark inline-flex min-h-12 items-center rounded-full border border-white/40 bg-white/10 px-7 py-3.5 text-base font-semibold text-white transition-[background-color,scale] hover:bg-white/20 active:scale-[0.98]";
-
-/** Bouton de démo : il ouvre la fenêtre de demande (ou mène au formulaire de l'accueil sans JavaScript). */
-export function DemoButton({ label = "Demander ma démo gratuite", className = "" }: { label?: string; className?: string }) {
-  return (
-    <a href="/#demo" className={`${PRIMARY} ${className}`}>
-      {label}
-    </a>
-  );
-}
-
-export function GhostButton({ href, label }: { href: string; label: string }) {
-  return (
-    <a href={href} className={GHOST_DARK}>
-      {label}
-    </a>
-  );
-}
-
-/** Bandeau d'appel à la démo, en fin de page ou au fil d'un article. */
+/** Bandeau d'appel à la démo, en fin de page : la démo, l'accueil, et au besoin un troisième chemin. */
 export function CtaBand({ title, text, secondary }: { title: string; text: string; secondary?: { href: string; label: string } }) {
   return (
-    <div className="relative isolate overflow-hidden rounded-3xl bg-night-900 px-6 py-10 text-white sm:px-10 md:py-12">
+    <div data-cta-group="bandeau" className="relative isolate overflow-hidden rounded-3xl bg-night-900 px-6 py-10 text-white sm:px-10 md:py-12">
       <div aria-hidden className="absolute inset-0 -z-10 bg-[radial-gradient(40rem_20rem_at_90%_0%,rgb(14_151_221/0.35),transparent_60%)]" />
       <h2 className="font-display max-w-2xl text-2xl leading-tight font-bold text-balance sm:text-3xl">{inline(title, { strong: "font-bold text-white" })}</h2>
       <p className="mt-3 max-w-2xl text-lg leading-relaxed text-white/85">{inline(text, { strong: "font-semibold text-white" })}</p>
-      <div className="mt-7 flex flex-wrap gap-3">
+      <div className="mt-7 flex flex-wrap items-center gap-3">
         <DemoButton />
-        {secondary ? <GhostButton {...secondary} /> : null}
+        <HomeButton dark />
+        {secondary ? (
+          <a href={secondary.href} className="focus-ring-dark inline-flex min-h-12 items-center rounded-full px-3 text-base font-semibold text-white/90 underline decoration-white/40 underline-offset-4 hover:text-white hover:decoration-white">
+            {secondary.label}
+          </a>
+        ) : null}
       </div>
     </div>
   );

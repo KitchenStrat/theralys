@@ -3,7 +3,7 @@ import { MIN_COMMITMENT_MONTHS } from "@theralys/db/plans";
 import { Budget, HarmonyDelivers, NinetyDays } from "@/components/pages/offer";
 import { inline } from "@/components/pages/prose";
 import { Section, WideSection } from "@/components/pages/sections";
-import { ArticleCard, CtaBand, DemoButton, FaqList, GhostButton, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
+import { ArticleCard, CtaBand, FaqList, JsonLd, PageHero, PageShell } from "@/components/pages/shell";
 import { getArticle } from "@/content/articles";
 import type { Article } from "@/content/blog";
 import { PROFESSIONS, PROFESSION_FAMILIES, professionPath, professionsIn } from "@/content/professions";
@@ -70,14 +70,13 @@ export default function CreationPage() {
   return (
     <PageShell>
       <JsonLd data={jsonLd} />
-      <PageHero crumbs={CRUMBS} title={TITLE} lead="Un site préparé pour **votre pratique et votre ville**, mis en ligne sans technique, puis nourri chaque semaine.">
-        <div className="mt-8 flex flex-wrap gap-3">
-          <DemoButton />
-          <GhostButton href="/#tarifs" label="Voir les tarifs" />
-        </div>
-      </PageHero>
+      <PageHero crumbs={CRUMBS} title={TITLE} lead="Un site préparé pour **votre pratique et votre ville**, mis en ligne sans technique, puis nourri chaque semaine." pricing />
 
-      <WideSection title="Un guide pour chaque métier" intro={`${PROFESSIONS.length} métiers, chacun avec sa page : comment on vous cherche, les pages à prévoir, le cadre à respecter.`}>
+      <WideSection
+        title="Un guide pour chaque métier"
+        intro={`${PROFESSIONS.length} métiers, chacun avec sa page : comment on vous cherche, les pages à prévoir, le cadre à respecter.`}
+        cta="Quel que soit votre métier, la démo est préparée pour votre pratique."
+      >
         <div className="space-y-11">
           {PROFESSION_FAMILIES.map((family) => (
             <section key={family.id} aria-labelledby={`famille-${family.id}`}>
@@ -105,7 +104,7 @@ export default function CreationPage() {
 
       <HarmonyDelivers tone="cream" />
 
-      <Section title="Comment cela se passe" intro="De la première demande à un site qui vit, en quatre étapes.">
+      <Section title="Comment cela se passe" intro="De la première demande à un site qui vit, en quatre étapes." cta="La première étape prend une minute.">
         <ol className="space-y-3">
           {STEPS.map((step, index) => (
             <li key={step.title} className="flex gap-4 rounded-2xl border border-cream-200 bg-white px-5 py-5 shadow-[var(--shadow-card)]">
@@ -124,7 +123,7 @@ export default function CreationPage() {
       <Budget title="Quel budget prévoir" />
       <NinetyDays />
 
-      <Section title="Questions fréquentes" intro="Ce que l'on nous demande le plus souvent avant de lancer un site.">
+      <Section title="Questions fréquentes" intro="Ce que l'on nous demande le plus souvent avant de lancer un site." cta="Une autre question ? Posez-la pendant votre démo.">
         <FaqList faq={FAQ} />
       </Section>
 
